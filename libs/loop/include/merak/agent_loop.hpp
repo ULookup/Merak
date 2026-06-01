@@ -21,6 +21,7 @@ public:
         int max_turns = 25;
         std::string system_prompt;
         std::string default_model = "gpt-4o";
+        int max_output_tokens = 4096;
         bool enable_compaction = true;
         bool enable_cache = true;
     };

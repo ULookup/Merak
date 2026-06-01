@@ -19,6 +19,19 @@ nlohmann::json AnthropicProvider::build_request_body(const ChatRequest& request)
     body["max_tokens"] = request.max_output_tokens;
     body["stream"] = true;
 
+    if (request.enable_thinking &&
+        config_.thinking.has_value() &&
+        config_.thinking->type != "disabled") {
+        const auto& thinking = *config_.thinking;
+        body["thinking"]["type"] = thinking.type;
+        if (thinking.type == "enabled") {
+            body["thinking"]["budget_tokens"] = thinking.budget_tokens;
+        }
+        if (!thinking.effort.empty()) {
+            body["output_config"]["effort"] = thinking.effort;
+        }
+    }
+
     // Anthropic 的 system prompt 是顶层字段，不在 messages 数组里
     nlohmann::json messages = nlohmann::json::array();
     for (auto& m : request.messages) {
@@ -33,6 +46,13 @@ nlohmann::json AnthropicProvider::build_request_body(const ChatRequest& request)
         // assistant 消息可能包含 tool_use content blocks
         if (m.role == "assistant" && !m.tool_calls.empty()) {
             nlohmann::json content_arr = nlohmann::json::array();
+            if (!m.provider_content_blocks_json.empty()) {
+                auto preserved_blocks = nlohmann::json::parse(
+                    m.provider_content_blocks_json);
+                for (auto& block : preserved_blocks) {
+                    content_arr.push_back(block);
+                }
+            }
             if (!m.content.empty()) {
                 nlohmann::json text_block;
                 text_block["type"] = "text";
@@ -125,6 +145,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
             std::string arguments_json; // 增量累积
         };
         std::map<int, PendingTool> pending_tools; // index → tool
+        std::map<int, nlohmann::json> preserved_content_blocks;
         std::vector<ToolCall> accumulated_tool_calls;
         std::string current_event;
         std::string current_data;
@@ -144,12 +165,15 @@ std::future<AgentResponse> AnthropicProvider::chat(
                 }
                 else if (event_type == "content_block_start") {
                     auto& block = j["content_block"];
-                    int idx = block.value("index", -1);
+                    int idx = j.value("index", -1);
                     if (block.value("type", "") == "tool_use") {
                         PendingTool pt;
                         pt.id = block.value("id", "");
                         pt.name = block.value("name", "");
                         pending_tools[idx] = std::move(pt);
+                    } else if (block.value("type", "") == "thinking" ||
+                               block.value("type", "") == "redacted_thinking") {
+                        preserved_content_blocks[idx] = block;
                     }
                 }
                 else if (event_type == "content_block_delta") {
@@ -165,6 +189,19 @@ std::future<AgentResponse> AnthropicProvider::chat(
                         if (pending_tools.count(idx)) {
                             pending_tools[idx].arguments_json +=
                                 delta.value("partial_json", "");
+                        }
+                    } else if (delta_type == "thinking_delta") {
+                        int idx = j.value("index", -1);
+                        if (preserved_content_blocks.count(idx)) {
+                            preserved_content_blocks[idx]["thinking"] =
+                                preserved_content_blocks[idx].value("thinking", "") +
+                                delta.value("thinking", "");
+                        }
+                    } else if (delta_type == "signature_delta") {
+                        int idx = j.value("index", -1);
+                        if (preserved_content_blocks.count(idx)) {
+                            preserved_content_blocks[idx]["signature"] =
+                                delta.value("signature", "");
                         }
                     }
                 }
@@ -246,6 +283,13 @@ std::future<AgentResponse> AnthropicProvider::chat(
         response.total_input_tokens = input_tokens;
         response.total_output_tokens = output_tokens;
         response.has_usage = has_usage;
+        if (!preserved_content_blocks.empty()) {
+            auto blocks = nlohmann::json::array();
+            for (auto& [_, block] : preserved_content_blocks) {
+                blocks.push_back(block);
+            }
+            response.provider_content_blocks_json = blocks.dump();
+        }
 
         stats_.total_requests++;
         return response;

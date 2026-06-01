@@ -61,6 +61,7 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
 
             ChatRequest req;
             req.model = config_.default_model;
+            req.max_output_tokens = config_.max_output_tokens;
             req.messages = context_messages;
             req.enable_cache = config_.enable_cache;
 
@@ -99,8 +100,10 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
 
                 Message assistant_msg;
                 assistant_msg.role = "assistant";
-                assistant_msg.content = response.text;
+                assistant_msg.content = llm_response.text;
                 assistant_msg.tool_calls = accumulated_tool_calls;
+                assistant_msg.provider_content_blocks_json =
+                    llm_response.provider_content_blocks_json;
                 session_history_.push_back(assistant_msg);
                 memory_->append_message(assistant_msg);
 
@@ -109,6 +112,15 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
             }
 
             transition_to(TurnState::Acting);
+
+            Message assistant_msg;
+            assistant_msg.role = "assistant";
+            assistant_msg.content = llm_response.text;
+            assistant_msg.tool_calls = accumulated_tool_calls;
+            assistant_msg.provider_content_blocks_json =
+                llm_response.provider_content_blocks_json;
+            session_history_.push_back(assistant_msg);
+            memory_->append_message(assistant_msg);
 
             auto tool_results = handle_tool_calls(accumulated_tool_calls);
 
@@ -133,6 +145,7 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
         transition_to(TurnState::Thinking);
         ChatRequest final_req;
         final_req.model = config_.default_model;
+        final_req.max_output_tokens = config_.max_output_tokens;
         final_req.messages = build_context(
             "Please provide your final answer as text. Do not use any tools.");
         final_req.tools = {};

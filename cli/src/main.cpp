@@ -31,7 +31,11 @@ static const char* SETTINGS_TEMPLATE = R"({
         "provider": "openai",
         "api_key": "sk-your-api-key-here",
         "api_base_url": "https://api.openai.com/v1",
-        "default_model": "gpt-4o"
+        "default_model": "gpt-4o",
+        "max_output_tokens": 4096,
+        "thinking": {
+            "type": "disabled"
+        }
     },
     "agent": {
         "system_prompt": "You are a helpful AI assistant. Use tools to complete tasks."
@@ -62,7 +66,11 @@ Environment variables:
   MERAK_API_KEY           API key
   MERAK_API_BASE_URL      API base URL
   MERAK_MODEL             Default model name
+  MERAK_MAX_OUTPUT_TOKENS Maximum output tokens, including thinking tokens
   MERAK_TIMEOUT_MS        Request timeout in milliseconds
+  MERAK_THINKING_TYPE     Anthropic thinking mode (disabled / adaptive / enabled)
+  MERAK_EFFORT_LEVEL      Anthropic effort level (low / medium / high / xhigh / max)
+  MERAK_THINKING_BUDGET_TOKENS  Manual thinking budget (minimum 1024)
   MERAK_SYSTEM_PROMPT     System prompt
   MERAK_PERMISSION_MODE   Permission mode (auto / ask / deny)
 
@@ -130,6 +138,7 @@ static void run_repl(
     loop_cfg.system_prompt = cfg.agent.system_prompt;
     loop_cfg.max_turns = cfg.agent.max_tool_turns;
     loop_cfg.default_model = cfg.llm.default_model;
+    loop_cfg.max_output_tokens = cfg.llm.max_output_tokens;
 
     auto loop = std::make_unique<AgentLoop>(
         loop_cfg, llm, registry, memory, ctx, comp);
@@ -232,15 +241,21 @@ int main(int argc, char* argv[]) {
 
     // ——— 1. 加载配置 ———
     auto cfg_result = ConfigLoader::load();
+    if (!cfg_result.has_value()) {
+        cli::err("Configuration error: " + std::string(cfg_result.error().what()));
+        return 1;
+    }
     bool found_config = cfg_result.has_value();
-    Config cfg = found_config ? cfg_result.value() : ConfigLoader::default_config();
+    Config cfg = cfg_result.value();
 
     if (argc > 1) {
         auto extra = ConfigLoader::load_file(argv[1]);
-        if (extra.has_value()) {
-            cfg = extra.value();
-            found_config = true;
+        if (!extra.has_value()) {
+            cli::err("Configuration error: " + std::string(extra.error().what()));
+            return 1;
         }
+        cfg = extra.value();
+        found_config = true;
     }
 
     // ——— 首次运行引导 ———
@@ -339,6 +354,7 @@ int main(int argc, char* argv[]) {
         loop_cfg.system_prompt = cfg.agent.system_prompt;
         loop_cfg.max_turns = cfg.agent.max_tool_turns;
         loop_cfg.default_model = cfg.llm.default_model;
+        loop_cfg.max_output_tokens = cfg.llm.max_output_tokens;
 
         auto loop = std::make_unique<AgentLoop>(
             loop_cfg, llm, registry, memory, ctx, comp
