@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/component/event.hpp>
 
 namespace merak::tui {
 

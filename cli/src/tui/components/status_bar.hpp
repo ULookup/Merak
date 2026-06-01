@@ -15,10 +15,10 @@ public:
 
     ftxui::Element render() {
         using namespace ftxui;
-        auto text = provider_ + " " + separatorCharacter + " "
-                   + model_ + " " + separatorCharacter + " "
-                   + token_info_;
-        return text | dim | borderLight | size(HEIGHT, EQUAL, 1);
+        auto label = provider_ + " │ "
+                    + model_ + " │ "
+                    + token_info_;
+        return text(label) | dim | borderLight | size(HEIGHT, EQUAL, 1);
     }
 };
 

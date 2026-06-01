@@ -17,6 +17,9 @@
 #include "output/cli_output.hpp"
 #include "commands/command_registry.hpp"
 #include "commands/command_router.hpp"
+#include "tui/panel.hpp"
+#include "tui/screen_manager.hpp"
+#include "tui/panels/chat_panel.hpp"
 
 using namespace merak;
 
@@ -110,6 +113,104 @@ static void do_init() {
     std::cout << "  " << dir / "settings.local.json    (user-level secrets)" << std::endl;
     std::cout << "  .merak/settings.json               (project-level, shared via git)" << std::endl;
     std::cout << "  .merak/settings.local.json         (project-level secrets)" << std::endl;
+}
+
+static void run_repl(
+    const Config& cfg,
+    std::shared_ptr<LlmProvider> llm,
+    std::shared_ptr<ToolRegistry> registry,
+    std::shared_ptr<MemoryStore> memory,
+    std::shared_ptr<ContextAssembler> ctx,
+    std::shared_ptr<Compactor> comp)
+{
+    AgentLoop::Config loop_cfg;
+    loop_cfg.system_prompt = cfg.agent.system_prompt;
+    loop_cfg.max_turns = cfg.agent.max_tool_turns;
+    loop_cfg.default_model = cfg.llm.default_model;
+
+    auto loop = std::make_unique<AgentLoop>(
+        loop_cfg, llm, registry, memory, ctx, comp);
+
+    AgentLoop::Callbacks cbs;
+    cbs.on_text_delta = [](std::string text) {
+        std::cout << text << std::flush;
+    };
+    cbs.on_tool_start = [](ToolCall tc) {
+        std::cerr << theme::run_prefix() << tc.name << std::flush;
+    };
+    cbs.on_tool_end = [](ToolResult tr) {
+        if (tr.is_error) {
+            std::cerr << " " << theme::styled(theme::ANSI_ERROR, "failed") << "\n";
+        } else {
+            std::cerr << " " << theme::styled(theme::ANSI_SUCCESS, "done") << "\n";
+        }
+    };
+    cbs.on_state_change = [](TurnState /*from*/, TurnState /*to*/) {
+        // Debug hook — muted in release
+    };
+    cbs.on_permission_ask = [](ToolCall tc) -> bool {
+        std::cerr << "\n" << theme::warn_prefix() << "Allow " << tc.name << "? (y/n) " << std::flush;
+        std::string answer;
+        std::getline(std::cin, answer);
+        return answer == "y" || answer == "yes";
+    };
+    loop->set_callbacks(cbs);
+
+    cli::section("Session");
+    std::string user_input;
+    std::cout << "\n> " << std::flush;
+
+    while (std::getline(std::cin, user_input)) {
+        if (user_input.empty()) {
+            std::cout << "> " << std::flush;
+            continue;
+        }
+        if (user_input == "/exit" || user_input == "/quit") break;
+        if (user_input == "/help") {
+            std::cerr << "\n";
+            for (auto& cmd : commands::all_commands()) {
+                std::string line = cmd.name;
+                if (cmd.arg_hint) line += " " + *cmd.arg_hint;
+                cli::kv(line, cmd.description);
+            }
+            cli::rule();
+            cli::dim("/ Cmd palette  Ctrl+O Context  F1 Help  Ctrl+D Exit");
+            std::cout << "> " << std::flush;
+            continue;
+        }
+        if (user_input == "/memory") {
+            std::cerr << "Working memory: " << memory->message_count()
+                << " messages\n" << std::flush;
+            std::cout << "> " << std::flush;
+            continue;
+        }
+        if (user_input == "/tools") {
+            std::cerr << "\n";
+            auto specs = registry->all_tools();
+            cli::section("Tools (" + std::to_string(specs.size()) + ")");
+            for (auto& spec : specs) {
+                cli::bullet(spec.name + " (" + spec.source + ")");
+            }
+            std::cout << "> " << std::flush;
+            continue;
+        }
+
+        std::cout << "\n";
+        auto response_future = loop->run(user_input);
+        auto response = response_future.get();
+
+        std::cerr << theme::styled(theme::ANSI_BORDER, "─── ")
+                  << theme::styled(theme::ANSI_DIM,
+                      std::to_string(response.total_input_tokens) + " tok in · "
+                      + std::to_string(response.total_output_tokens) + " tok out");
+        if (!response.tool_results.empty()) {
+            std::cerr << theme::styled(theme::ANSI_DIM,
+                " · " + std::to_string(response.tool_results.size()) + " tools");
+        }
+        std::cerr << theme::styled(theme::ANSI_BORDER, " ───") << "\n";
+        std::cout << "\n> " << std::flush;
+    }
+    std::cout << "\nGoodbye!" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -224,98 +325,47 @@ int main(int argc, char* argv[]) {
     auto ctx = std::make_shared<ContextAssembler>(budget, counter);
     auto comp = std::make_shared<Compactor>(llm, counter);
 
-    // ——— 6. 初始化 Loop ———
-    AgentLoop::Config loop_cfg;
-    loop_cfg.system_prompt = cfg.agent.system_prompt;
-    loop_cfg.max_turns = cfg.agent.max_tool_turns;
-    loop_cfg.default_model = cfg.llm.default_model;
+    // ——— 7. Main loop (TUI or REPL) ———
+    if (!theme::is_tty()) {
+        run_repl(cfg, llm, registry, memory, ctx, comp);
+    } else {
+        AgentLoop::Config loop_cfg;
+        loop_cfg.system_prompt = cfg.agent.system_prompt;
+        loop_cfg.max_turns = cfg.agent.max_tool_turns;
+        loop_cfg.default_model = cfg.llm.default_model;
 
-    auto loop = std::make_unique<AgentLoop>(
-        loop_cfg, llm, registry, memory, ctx, comp
-    );
+        auto loop = std::make_unique<AgentLoop>(
+            loop_cfg, llm, registry, memory, ctx, comp
+        );
 
-    // 设置回调 — 流式渲染
-    AgentLoop::Callbacks cbs;
-    cbs.on_text_delta = [](std::string text) {
-        std::cout << text << std::flush;
-    };
-    cbs.on_tool_start = [](ToolCall tc) {
-        std::cerr << theme::run_prefix() << tc.name << std::flush;
-    };
-    cbs.on_tool_end = [](ToolResult tr) {
-        if (tr.is_error) {
-            std::cerr << " " << theme::styled(theme::ANSI_ERROR, "failed") << "\n";
-        } else {
-            std::cerr << " " << theme::styled(theme::ANSI_SUCCESS, "done") << "\n";
-        }
-    };
-    cbs.on_state_change = [](TurnState from, TurnState to) {
-        // 调试用，正式版可隐藏
-    };
-    cbs.on_permission_ask = [](ToolCall tc) -> bool {
-        std::cout << "\n[Allow " << tc.name << "? (y/n)] " << std::flush;
-        std::string answer;
-        std::getline(std::cin, answer);
-        return answer == "y" || answer == "yes";
-    };
-    loop->set_callbacks(cbs);
+        auto chat = std::make_unique<tui::ChatPanel>();
+        auto* chat_ptr = chat.get();
+        tui::ScreenManager tui(std::move(chat));
 
-    // ——— 7. 主循环 ———
-    std::string user_input;
-    std::cout << "\n> " << std::flush;
+        tui.status_bar().set_provider(cfg.llm.provider);
+        tui.status_bar().set_model(cfg.llm.default_model);
+        tui.status_bar().set_token_info("0/128k");
 
-    while (std::getline(std::cin, user_input)) {
-        if (user_input.empty()) {
-            std::cout << "> " << std::flush;
-            continue;
-        }
-
-        if (user_input == "/exit" || user_input == "/quit") break;
-        if (user_input == "/help") {
-            std::cerr << "\n";
-            for (auto& cmd : commands::all_commands()) {
-                std::string line = cmd.name;
-                if (cmd.arg_hint) line += " " + *cmd.arg_hint;
-                cli::kv(line, cmd.description);
+        // Wire submit callback
+        chat_ptr->set_on_submit([&](std::string input) {
+            if (input == "/exit" || input == "/quit") {
+                return; // will be handled by ScreenManager
             }
-            cli::rule();
-            cli::dim("/ Cmd palette  Ctrl+O Context  F1 Help  Ctrl+D Exit");
-            std::cerr << std::flush;
-            std::cout << "> " << std::flush;
-            continue;
-        }
-        if (user_input == "/memory") {
-            std::cout << "Working memory: " << memory->message_count()
-                << " messages\n" << std::flush;
-            std::cout << "> " << std::flush;
-            continue;
-        }
-        if (user_input == "/tools") {
-            std::cout << "Available tools:\n";
-            for (auto& spec : registry->all_tools()) {
-                std::cout << "  - " << spec.name << " (" << spec.source << ")\n";
+            if (input == "/help" || input == "?") {
+                // Placeholder for help panel (Phase 3)
+                return;
             }
-            std::cout << std::flush;
-            std::cout << "> " << std::flush;
-            continue;
-        }
+            if (!input.starts_with("/")) {
+                auto response_future = loop->run(input);
+                auto response = response_future.get();
+                chat_ptr->add_line("");
+                tui.status_bar().set_token_info(
+                    std::to_string(response.total_input_tokens) + "/128k");
+            }
+        });
 
-        std::cout << std::endl;
-        auto response_future = loop->run(user_input);
-        auto response = response_future.get();
-
-        std::cerr << theme::styled(theme::ANSI_BORDER, "─── ")
-                  << theme::styled(theme::ANSI_DIM,
-                      std::to_string(response.total_input_tokens) + " tok in · "
-                      + std::to_string(response.total_output_tokens) + " tok out");
-        if (!response.tool_results.empty()) {
-            std::cerr << theme::styled(theme::ANSI_DIM,
-                " · " + std::to_string(response.tool_results.size()) + " tools");
-        }
-        std::cerr << theme::styled(theme::ANSI_BORDER, " ───") << "\n";
-        std::cout << "> " << std::flush;
+        tui.run();
     }
 
-    std::cout << "\nGoodbye!" << std::endl;
     return 0;
 }
