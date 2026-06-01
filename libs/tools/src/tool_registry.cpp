@@ -177,4 +177,11 @@ bool ToolRegistry::check_permission(
     return false;
 }
 
+bool ToolRegistry::requires_approval(const std::string& tool_name) const {
+    auto it = tools_.find(tool_name);
+    if (it == tools_.end()) return false;
+    return it->second->permission() == PermissionLevel::ask
+        && permission_mode_ == "ask";
+}
+
 } // namespace merak

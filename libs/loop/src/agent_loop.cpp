@@ -83,6 +83,14 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
             auto llm_response = llm_future.get();
             response.total_input_tokens += llm_response.total_input_tokens;
             response.total_output_tokens += llm_response.total_output_tokens;
+            response.has_usage = response.has_usage || llm_response.has_usage;
+            response.usage_missing = response.usage_missing || !llm_response.has_usage;
+            if (callbacks_.on_usage) {
+                callbacks_.on_usage(
+                    llm_response.total_input_tokens,
+                    llm_response.total_output_tokens,
+                    llm_response.has_usage);
+            }
 
             accumulated_tool_calls = llm_response.tool_calls;
 
@@ -139,6 +147,16 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
             });
         auto final_resp = final_future.get();
         response.text = final_resp.text;
+        response.total_input_tokens += final_resp.total_input_tokens;
+        response.total_output_tokens += final_resp.total_output_tokens;
+        response.has_usage = response.has_usage || final_resp.has_usage;
+        response.usage_missing = response.usage_missing || !final_resp.has_usage;
+        if (callbacks_.on_usage) {
+            callbacks_.on_usage(
+                final_resp.total_input_tokens,
+                final_resp.total_output_tokens,
+                final_resp.has_usage);
+        }
 
         transition_to(TurnState::Complete);
         return response;
@@ -182,6 +200,9 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
             blocked.output = "Tool '" + call.name +
                 "' blocked (3 consecutive failures). Try a different approach.";
             results.push_back(blocked);
+            if (callbacks_.on_tool_end) {
+                callbacks_.on_tool_end(blocked);
+            }
 
             Message sys_msg;
             sys_msg.role = "system";
@@ -201,6 +222,9 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
                 denied.is_error = true;
                 denied.output = "User denied permission for tool: " + call.name;
                 results.push_back(denied);
+                if (callbacks_.on_tool_end) {
+                    callbacks_.on_tool_end(denied);
+                }
                 continue;
             }
         }

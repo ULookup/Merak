@@ -39,6 +39,8 @@ struct AgentResponse {
     std::vector<ToolResult> tool_results;  // 此轮执行的所有工具结果
     int total_input_tokens = 0;            // 消耗的输入 token
     int total_output_tokens = 0;           // 消耗的输出 token
+    bool has_usage = false;                // Provider returned exact usage data
+    bool usage_missing = false;            // At least one provider response omitted usage
 };
 
 } // namespace merak

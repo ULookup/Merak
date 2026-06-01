@@ -13,6 +13,7 @@
 #include <thread>
 #include <fstream>
 #include <cstring>
+#include <functional>
 #include "theme/theme.hpp"
 #include "output/cli_output.hpp"
 #include "commands/command_registry.hpp"
@@ -20,6 +21,7 @@
 #include "tui/panel.hpp"
 #include "tui/screen_manager.hpp"
 #include "tui/panels/chat_panel.hpp"
+#include "tui/welcome.hpp"
 
 using namespace merak;
 
@@ -148,7 +150,8 @@ static void run_repl(
     cbs.on_state_change = [](TurnState /*from*/, TurnState /*to*/) {
         // Debug hook — muted in release
     };
-    cbs.on_permission_ask = [](ToolCall tc) -> bool {
+    cbs.on_permission_ask = [registry](ToolCall tc) -> bool {
+        if (!registry->requires_approval(tc.name)) return true;
         std::cerr << "\n" << theme::warn_prefix() << "Allow " << tc.name << "? (y/n) " << std::flush;
         std::string answer;
         std::getline(std::cin, answer);
@@ -274,6 +277,7 @@ int main(int argc, char* argv[]) {
     registry->register_tool(std::make_unique<tools::GlobTool>());
     registry->register_tool(std::make_unique<tools::GrepTool>());
     registry->register_tool(std::make_unique<tools::BashTool>());
+    registry->set_permission_mode(cfg.agent.permission_mode);
 
     cli::ok(std::to_string(registry->size()) + " tools loaded");
     cli::dim("(read_file, write_file, edit_file, glob, grep, bash)");
@@ -326,7 +330,7 @@ int main(int argc, char* argv[]) {
     auto comp = std::make_shared<Compactor>(llm, counter);
 
     // ——— 7. Main loop (TUI or REPL) ———
-    if (!theme::is_tty()) {
+    if (!theme::supports_tui()) {
         run_repl(cfg, llm, registry, memory, ctx, comp);
     } else {
         AgentLoop::Config loop_cfg;
@@ -344,25 +348,66 @@ int main(int argc, char* argv[]) {
 
         tui.status_bar().set_provider(cfg.llm.provider);
         tui.status_bar().set_model(cfg.llm.default_model);
-        tui.status_bar().set_token_info("0/128k");
+        tui.status_bar().set_state("Idle");
+        tui.set_system_prompt(cfg.agent.system_prompt);
 
-        // Welcome banner
-        chat_ptr->add_line("");
-        chat_ptr->add_line("    ▟██▙        ");
-        chat_ptr->add_line("   ▟█▀▀█▙       ");
-        chat_ptr->add_line("  ▟█▘  ▝█▙      ");
-        chat_ptr->add_line("  ▀▀████▀▀      ");
-        chat_ptr->add_line("    Merak       ");
-        chat_ptr->add_line("");
-        chat_ptr->add_line("  Merak Agent v0.2.0");
-        chat_ptr->add_line("  " + cfg.llm.provider + " · " + cfg.llm.default_model);
-        chat_ptr->add_line("");
-        chat_ptr->add_line("  /help for commands  / palette  Ctrl+O context  Esc back");
-        chat_ptr->add_line("  Type a message to start, or /exit to quit.");
-        chat_ptr->add_line("");
+        merak::tui::add_welcome_banner(*chat_ptr, cfg.llm.provider, cfg.llm.default_model);
+
+        auto state_label = [](TurnState state) {
+            switch (state) {
+                case TurnState::Thinking:     return "Thinking...";
+                case TurnState::Acting:       return "Running tools...";
+                case TurnState::Observing:    return "Observing...";
+                case TurnState::Responding:   return "Responding...";
+                case TurnState::ContextReady: return "Preparing context...";
+                case TurnState::Complete:     return "Idle";
+                case TurnState::Error:        return "Error";
+                case TurnState::Idle:         return "Idle";
+            }
+            return "Idle";
+        };
+
+        AgentLoop::Callbacks cbs;
+        cbs.on_text_delta = [&](std::string text) {
+            tui.post([chat_ptr, text = std::move(text)] {
+                chat_ptr->append_assistant_delta(text);
+            });
+        };
+        cbs.on_tool_start = [&](ToolCall call) {
+            tui.post([&tui, chat_ptr, call = std::move(call)] {
+                tui.record_tool_start();
+                chat_ptr->add_tool_start(call);
+                tui.status_bar().set_state("Running " + call.name + "...");
+            });
+        };
+        cbs.on_tool_end = [&](ToolResult result) {
+            tui.post([&tui, chat_ptr, result = std::move(result)] {
+                tui.record_tool_end();
+                chat_ptr->finish_tool(result);
+            });
+        };
+        cbs.on_state_change = [&](TurnState, TurnState to) {
+            tui.post([&tui, to, state_label] {
+                tui.status_bar().set_state(state_label(to));
+            });
+        };
+        cbs.on_permission_ask = [&](ToolCall call) {
+            if (!registry->requires_approval(call.name)) return true;
+            auto approval = std::make_shared<std::promise<bool>>();
+            auto future = approval->get_future();
+            tui.request_approval(call, std::move(approval));
+            return future.get();
+        };
+        cbs.on_usage = [&](int input_tokens, int output_tokens, bool has_usage) {
+            tui.post([&tui, input_tokens, output_tokens, has_usage] {
+                tui.record_usage(input_tokens, output_tokens, has_usage);
+            });
+        };
+        loop->set_callbacks(std::move(cbs));
 
         // Wire submit callback
-        chat_ptr->set_on_submit([&](std::string input) {
+        std::function<void(std::string)> handle_input;
+        handle_input = [&](std::string input) {
             if (input == "/exit" || input == "/quit") {
                 tui.exit();
                 return;
@@ -389,13 +434,34 @@ int main(int argc, char* argv[]) {
             }
             // Normal chat message
             if (!input.starts_with("/")) {
-                auto response_future = loop->run(input);
-                auto response = response_future.get();
-                chat_ptr->add_line("");
-                tui.status_bar().set_token_info(
-                    std::to_string(response.total_input_tokens) + "/128k");
+                tui.start_background([&, input = std::move(input)] {
+                    try {
+                        auto response = loop->run(input).get();
+                        tui.post([&tui, chat_ptr, response = std::move(response)] {
+                            chat_ptr->finish_assistant_response(response.text);
+                            chat_ptr->add_turn_summary(
+                                response.total_input_tokens,
+                                response.total_output_tokens,
+                                static_cast<int>(response.tool_results.size()),
+                                response.has_usage && !response.usage_missing);
+                            tui.record_turn_complete();
+                            tui.status_bar().set_state("Idle");
+                            tui.finish_background();
+                        });
+                    } catch (const std::exception& e) {
+                        tui.post([&tui, chat_ptr, error = std::string(e.what())] {
+                            chat_ptr->finish_assistant_response();
+                            chat_ptr->add_line("✗ " + error);
+                            chat_ptr->add_line("");
+                            tui.status_bar().set_state("Error");
+                            tui.finish_background();
+                        });
+                    }
+                });
             }
-        });
+        };
+        chat_ptr->set_on_submit(handle_input);
+        tui.set_on_command(handle_input);
 
         tui.run();
     }

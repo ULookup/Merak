@@ -31,6 +31,7 @@ public:
         std::function<void(ToolResult)> on_tool_end;
         std::function<void(TurnState, TurnState)> on_state_change;
         std::function<bool(ToolCall)> on_permission_ask;
+        std::function<void(int, int, bool)> on_usage;
     };
 
     AgentLoop(
