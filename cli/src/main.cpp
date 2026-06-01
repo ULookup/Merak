@@ -349,12 +349,29 @@ int main(int argc, char* argv[]) {
         // Wire submit callback
         chat_ptr->set_on_submit([&](std::string input) {
             if (input == "/exit" || input == "/quit") {
-                return; // will be handled by ScreenManager
-            }
-            if (input == "/help" || input == "?") {
-                // Placeholder for help panel (Phase 3)
                 return;
             }
+            if (input == "/help") {
+                tui.open_help();
+                return;
+            }
+            if (input == "/model") {
+                tui.open_model_selector();
+                return;
+            }
+            if (input == "/tools") {
+                tui.open_tools();
+                return;
+            }
+            if (input == "/memory") {
+                tui.open_memory();
+                return;
+            }
+            if (input == "/") {
+                tui.open_command_palette();
+                return;
+            }
+            // Normal chat message
             if (!input.starts_with("/")) {
                 auto response_future = loop->run(input);
                 auto response = response_future.get();
