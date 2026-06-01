@@ -1,0 +1,8 @@
+/build/
+/config/
+/config.json
+CMakeUserPresets.json
+.merak/
+.claude/
+/docs/
+.superpowers/

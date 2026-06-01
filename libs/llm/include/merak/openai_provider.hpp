@@ -1,0 +1,32 @@
+#pragma once
+#include <merak/llm_provider.hpp>
+#include <merak/config.hpp>
+#include <nlohmann/json.hpp>
+#include <memory>
+#include <curl/curl.h>
+
+namespace merak {
+
+class OpenAIProvider : public LlmProvider {
+public:
+    explicit OpenAIProvider(const LLMConfig& config);
+    ~OpenAIProvider() override;
+
+    std::future<AgentResponse> chat(
+        const ChatRequest& request,
+        std::function<void(StreamChunk)> on_chunk
+    ) override;
+
+    std::string name() const override { return "openai"; }
+    bool supports_caching() const override { return true; }
+    const CacheStats& cache_stats() const { return stats_; }
+
+private:
+    LLMConfig config_;
+    CacheStats stats_;
+
+    nlohmann::json build_messages(const std::vector<Message>& msgs) const;
+    nlohmann::json build_tools(const std::vector<ToolSpec>& tools) const;
+};
+
+} // namespace merak
