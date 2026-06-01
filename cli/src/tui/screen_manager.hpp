@@ -227,8 +227,8 @@ public:
             }
             return true;
         }
-        // Ctrl+D: exit
-        if (event.is_character() && event.character() == "\x04") {
+        // Ctrl+C or Ctrl+D: exit
+        if (event.is_character() && (event.character() == "\x03" || event.character() == "\x04")) {
             exit();
             return true;
         }
