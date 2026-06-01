@@ -469,7 +469,7 @@ int main(int argc, char* argv[]) {
                     } catch (const std::exception& e) {
                         tui.post([&tui, chat_ptr, error = std::string(e.what())] {
                             chat_ptr->finish_assistant_response();
-                            chat_ptr->add_line("✗ " + error);
+                            chat_ptr->add_line("✗ " + error, tui::ChatPanel::LineStyle::Error);
                             chat_ptr->add_line("");
                             tui.status_bar().set_state("Error");
                             tui.finish_background();
