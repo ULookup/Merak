@@ -7,6 +7,7 @@
 #include <merak/mcp_client.hpp>
 #include <merak/mcp_tool_wrapper.hpp>
 #include <merak/config_loader.hpp>
+#include <spdlog/spdlog.h>
 #include <iostream>
 #include <string>
 #include <memory>
@@ -333,6 +334,7 @@ int main(int argc, char* argv[]) {
     if (!theme::supports_tui()) {
         run_repl(cfg, llm, registry, memory, ctx, comp);
     } else {
+        spdlog::set_level(spdlog::level::off);
         AgentLoop::Config loop_cfg;
         loop_cfg.system_prompt = cfg.agent.system_prompt;
         loop_cfg.max_turns = cfg.agent.max_tool_turns;
