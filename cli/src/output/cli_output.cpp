@@ -3,13 +3,14 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <string_view>
 
 namespace {
 
-std::string repeat_char(const char* s, size_t n) {
+std::string repeat_char(std::string_view s, size_t n) {
     std::string out;
-    out.reserve(std::char_traits<char>::length(s) * n);
-    for (size_t i = 0; i < n; i++) out += s;
+    out.reserve(s.size() * n);
+    for (size_t i = 0; i < n; i++) out.append(s);
     return out;
 }
 
@@ -17,7 +18,15 @@ std::string repeat_char(const char* s, size_t n) {
 
 namespace merak::cli {
 
-using namespace theme;
+using theme::ok_prefix;
+using theme::warn_prefix;
+using theme::err_prefix;
+using theme::info_prefix;
+using theme::styled;
+using theme::ANSI_BOLD;
+using theme::ANSI_ACCENT;
+using theme::ANSI_DIM;
+using theme::ANSI_BORDER;
 
 void ok(const std::string& msg) {
     std::cerr << ok_prefix() << msg << "\n";
@@ -128,7 +137,9 @@ std::string byte_size(size_t bytes) {
 
 std::string truncate_path(const std::string& path, size_t max_chars) {
     if (path.size() <= max_chars) return path;
-    size_t keep = max_chars - 4;
+    // Too small to meaningfully truncate — we need at least 5 chars for "..." + tail
+    if (max_chars < 5) return std::string(max_chars, '.');
+    size_t keep = max_chars - 4; // room for "..." prefix
     size_t slash = path.rfind('/');
     if (slash != std::string::npos) {
         std::string tail = path.substr(slash);
@@ -136,6 +147,7 @@ std::string truncate_path(const std::string& path, size_t max_chars) {
             return "..." + path.substr(path.size() - keep);
         }
     }
+    if (max_chars == 0) return "";
     return path.substr(0, max_chars - 1) + "…";
 }
 
