@@ -1,14 +1,15 @@
 #include "theme.hpp"
+#include <unistd.h>
 
 namespace merak::theme {
 
 bool is_tty() {
-    return isatty(STDOUT_FILENO) != 0;
+    return isatty(STDOUT_FILENO) == 1;
 }
 
-std::string styled(const char* ansi_code, const std::string& text) {
-    if (!is_tty()) return text;
-    return std::string(ansi_code) + text + ANSI_RESET;
+std::string styled(const char* ansi_code, std::string_view text) {
+    if (!is_tty()) return std::string(text);
+    return std::string(ansi_code) + std::string(text) + ANSI_RESET;
 }
 
 std::string ok_prefix() {

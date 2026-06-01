@@ -1,6 +1,6 @@
 #pragma once
 #include <string>
-#include <unistd.h>
+#include <string_view>
 
 namespace merak::theme {
 
@@ -28,7 +28,7 @@ constexpr const char* ICON_RUN     = "○";
 
 // ── Functions ──
 bool is_tty();
-std::string styled(const char* ansi_code, const std::string& text);
+std::string styled(const char* ansi_code, std::string_view text);
 std::string ok_prefix();
 std::string err_prefix();
 std::string warn_prefix();
