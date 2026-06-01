@@ -1,5 +1,6 @@
 #pragma once
 #include "../panel.hpp"
+#include "../colors.hpp"
 #include <vector>
 #include <string>
 #include <functional>
@@ -13,7 +14,31 @@
 namespace merak::tui {
 
 class ChatPanel : public Panel {
-    std::vector<std::string> lines_;
+public:
+    enum class LineStyle {
+        Default,
+        User,
+        Assistant,
+        LightGold,
+        ToolRunning,
+        Success,
+        Error,
+        Muted,
+    };
+
+    struct Segment {
+        std::string text;
+        LineStyle style = LineStyle::Default;
+    };
+
+private:
+    struct TimelineLine {
+        std::string text;
+        LineStyle style = LineStyle::Default;
+        std::vector<Segment> segments;
+    };
+
+    std::vector<TimelineLine> lines_;
     std::string input_buffer_;
     std::string prompt_ = "> ";
     std::function<void(std::string)> on_submit_;
@@ -29,19 +54,39 @@ class ChatPanel : public Panel {
         return text.substr(0, max - 3) + "...";
     }
 
+    static ftxui::Element styled_text(const std::string& text, LineStyle style) {
+        using namespace ftxui;
+        auto element = ftxui::text(text);
+        switch (style) {
+            case LineStyle::User:        return element | color(colors::accent);
+            case LineStyle::Assistant:   return element | color(colors::white);
+            case LineStyle::LightGold:   return element | color(colors::light_gold);
+            case LineStyle::ToolRunning: return element | color(colors::info);
+            case LineStyle::Success:     return element | color(colors::success);
+            case LineStyle::Error:       return element | color(colors::error);
+            case LineStyle::Muted:       return element | color(colors::muted);
+            case LineStyle::Default:     return element;
+        }
+        return element;
+    }
+
 public:
     void set_on_submit(std::function<void(std::string)> fn) { on_submit_ = std::move(fn); }
     void set_prompt(const std::string& p) { prompt_ = p; }
 
-    void add_line(const std::string& line) {
-        lines_.push_back(line);
+    void add_line(const std::string& line, LineStyle style = LineStyle::Default) {
+        lines_.push_back({line, style, {}});
     }
 
-    void add_text(const std::string& text) {
+    void add_segments(std::vector<Segment> segments) {
+        lines_.push_back({"", LineStyle::Default, std::move(segments)});
+    }
+
+    void add_text(const std::string& text, LineStyle style = LineStyle::Default) {
         std::istringstream stream(text);
         std::string line;
         while (std::getline(stream, line)) {
-            lines_.push_back(line);
+            add_line(line, style);
         }
     }
 
@@ -56,22 +101,22 @@ public:
         if (text.empty()) return;
         assistant_rendered_ = true;
         if (!assistant_active_) {
-            lines_.push_back("✦ ");
+            add_line("✦ ", LineStyle::Assistant);
             assistant_line_ = lines_.size() - 1;
             assistant_active_ = true;
         }
         for (char c : text) {
             if (c == '\n') {
-                lines_.push_back("  ");
+                add_line("  ", LineStyle::Assistant);
                 assistant_line_ = lines_.size() - 1;
             } else if (c != '\r') {
-                lines_[assistant_line_].push_back(c);
+                lines_[assistant_line_].text.push_back(c);
             }
         }
     }
 
     void finish_assistant_response(const std::string& fallback = "") {
-        if (!assistant_rendered_ && !fallback.empty()) add_text(fallback);
+        if (!assistant_rendered_ && !fallback.empty()) add_text(fallback, LineStyle::Assistant);
         assistant_active_ = false;
     }
 
@@ -81,21 +126,22 @@ public:
         auto line = "◇ " + call.name;
         if (!detail.empty()) line += " " + detail;
         tool_lines_[call.id] = lines_.size();
-        lines_.push_back(std::move(line));
+        add_line(line, LineStyle::ToolRunning);
     }
 
     void finish_tool(const ToolResult& result) {
         auto it = tool_lines_.find(result.call_id);
         if (it == tool_lines_.end() || it->second >= lines_.size()) return;
         auto& line = lines_[it->second];
-        line.replace(0, std::string("◇").size(), result.is_error ? "✗" : "✓");
+        line.text.replace(0, std::string("◇").size(), result.is_error ? "✗" : "✓");
+        line.style = result.is_error ? LineStyle::Error : LineStyle::Success;
         if (result.is_error) {
-            line += " failed";
+            line.text += " failed";
             if (!result.output.empty()) {
-                line += ": " + truncate(result.output, 60);
+                line.text += ": " + truncate(result.output, 60);
             }
         } else {
-            line += " done";
+            line.text += " done";
         }
         tool_lines_.erase(it);
     }
@@ -104,8 +150,8 @@ public:
         auto usage = has_usage
             ? std::to_string(input_tokens) + " in · " + std::to_string(output_tokens) + " out"
             : "token usage n/a";
-        lines_.push_back("─ " + usage + " · " + std::to_string(tools) + " tools");
-        lines_.push_back("");
+        add_line("─ " + usage + " · " + std::to_string(tools) + " tools", LineStyle::Muted);
+        add_line("");
     }
 
     static std::string summarize_tool(const ToolCall& call) {
@@ -139,11 +185,20 @@ public:
         // Show last 50 lines max (scrollable)
         size_t start = lines_.size() > 50 ? lines_.size() - 50 : 0;
         for (size_t i = start; i < lines_.size(); i++) {
-            children.push_back(text(lines_[i]));
+            auto& line = lines_[i];
+            if (line.segments.empty()) {
+                children.push_back(styled_text(line.text, line.style));
+                continue;
+            }
+            Elements segments;
+            for (auto& segment : line.segments) {
+                segments.push_back(styled_text(segment.text, segment.style));
+            }
+            children.push_back(hbox(std::move(segments)));
         }
 
         if (!approval_prompt_.empty()) {
-            children.push_back(text(approval_prompt_) | color(Color::Palette256(178)) | bold);
+            children.push_back(text(approval_prompt_) | color(colors::accent) | bold);
         }
 
         auto input_line = busy_ ? "  Busy..." : prompt_ + input_buffer_ + " ";
@@ -167,7 +222,7 @@ public:
             if (on_submit_ && !input_buffer_.empty()) {
                 auto input = std::move(input_buffer_);
                 input_buffer_.clear();
-                lines_.push_back("> " + input);
+                add_line("> " + input, LineStyle::User);
                 on_submit_(std::move(input));
             }
             return true;

@@ -1,4 +1,5 @@
 #pragma once
+#include "../colors.hpp"
 #include <string>
 #include <ftxui/dom/elements.hpp>
 
@@ -44,8 +45,15 @@ public:
             ? "Σ " + format_tokens(total_input_tokens_) + " in / "
                 + format_tokens(total_output_tokens_) + " out"
             : "Σ n/a";
-        auto label = provider_ + " │ " + model_ + " │ " + state_ + " │ " + usage;
-        return text(label) | dim | borderLight | size(HEIGHT, EQUAL, 1);
+        auto state_color = colors::info;
+        if (state_ == "Idle") state_color = colors::muted;
+        if (state_ == "Error") state_color = colors::error;
+        if (state_ == "Waiting for approval...") state_color = colors::accent;
+        return hbox({
+            text(provider_ + " │ " + model_ + " │ ") | color(colors::muted),
+            text(state_) | color(state_color),
+            text(" │ " + usage) | color(colors::muted),
+        }) | borderLight | size(HEIGHT, EQUAL, 1);
     }
 };
 
