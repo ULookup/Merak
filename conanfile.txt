@@ -6,6 +6,7 @@ libpqxx/7.9.0
 openssl/3.2.0
 libcurl/8.5.0
 gtest/1.14.0
+ftxui/5.0.0
 
 [generators]
 CMakeDeps
