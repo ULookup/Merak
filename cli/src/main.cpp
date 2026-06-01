@@ -13,6 +13,10 @@
 #include <thread>
 #include <fstream>
 #include <cstring>
+#include "theme/theme.hpp"
+#include "output/cli_output.hpp"
+#include "commands/command_registry.hpp"
+#include "commands/command_router.hpp"
 
 using namespace merak;
 
@@ -136,31 +140,22 @@ int main(int argc, char* argv[]) {
 
     // ——— 首次运行引导 ———
     if (!found_config || cfg.llm.api_key.empty()) {
-        std::cout << "Merak Agent v0.1.0" << std::endl;
-        std::cout << std::endl;
-        std::cout << "No configuration found. To get started:" << std::endl;
-        std::cout << std::endl;
-        std::cout << "  1. Generate a template:" << std::endl;
-        std::cout << "     merak --init" << std::endl;
-        std::cout << std::endl;
-        std::cout << "  2. Edit ~/.merak/settings.local.json and set your API key" << std::endl;
-        std::cout << std::endl;
-        std::cout << "  3. Run merak again" << std::endl;
-        std::cout << std::endl;
-        std::cout << "  Or set environment variables:" << std::endl;
-        std::cout << "     export MERAK_API_KEY=sk-..." << std::endl;
-        std::cout << "     export MERAK_MODEL=gpt-4o" << std::endl;
-        std::cout << "     merak" << std::endl;
+        std::cerr << "\n";
+        cli::section("Merak Agent v0.2.0");
+        cli::info("No configuration found. To get started:");
+        cli::numbered(1, "Generate a template: merak --init");
+        cli::numbered(2, "Edit ~/.merak/settings.local.json and set your API key");
+        cli::numbered(3, "Run merak again");
+        cli::dim("Or set environment variables: export MERAK_API_KEY=sk-...");
         return cfg.llm.api_key.empty() ? 1 : 0;
     }
 
-    std::cout << "Merak Agent v0.1.0" << std::endl;
-    std::cout << "Provider: " << cfg.llm.provider << std::endl;
-    std::cout << "Model: " << cfg.llm.default_model << std::endl;
-    std::cout << "Memory: " << (cfg.memory.enabled ? "enabled" : "disabled") << std::endl;
-    std::cout << "MCP Servers: " << cfg.mcp_servers.size() << std::endl;
-    std::cout << "Type /help for commands, Ctrl+D to exit" << std::endl;
-    std::cout << "---" << std::endl;
+    cli::section("Merak Agent v0.2.0");
+    cli::kv("Provider", cfg.llm.provider);
+    cli::kv("Model", cfg.llm.default_model);
+    cli::kv("Memory", cfg.memory.enabled ? "enabled" : "disabled");
+    cli::kv("MCP Servers", std::to_string(cfg.mcp_servers.size()));
+    cli::rule();
 
     // ——— 2. 初始化 Provider ———
     std::shared_ptr<LlmProvider> llm;
@@ -179,7 +174,8 @@ int main(int argc, char* argv[]) {
     registry->register_tool(std::make_unique<tools::GrepTool>());
     registry->register_tool(std::make_unique<tools::BashTool>());
 
-    std::cout << "Tools loaded: " << registry->size() << std::endl;
+    cli::ok(std::to_string(registry->size()) + " tools loaded");
+    cli::dim("(read_file, write_file, edit_file, glob, grep, bash)");
 
     // ——— 3.5 MCP Server 连接 ———
     std::vector<std::shared_ptr<McpClient>> mcp_clients;
@@ -191,16 +187,13 @@ int main(int argc, char* argv[]) {
             auto import_future = registry->import_from_mcp(client);
             auto import_result = import_future.get();
             if (import_result.has_value()) {
-                std::cout << "MCP '" << mcp_cfg.name << "': "
-                    << import_result.value() << " tools" << std::endl;
+                cli::ok("MCP '" + mcp_cfg.name + "': " + std::to_string(import_result.value()) + " tools");
                 mcp_clients.push_back(client);
             } else {
-                std::cerr << "MCP '" << mcp_cfg.name << "' import failed: "
-                    << import_result.error().what() << std::endl;
+                cli::err("MCP '" + mcp_cfg.name + "' import failed: " + import_result.error().what());
             }
         } else {
-            std::cerr << "MCP '" << mcp_cfg.name << "' connect failed: "
-                << conn_result.error().what() << std::endl;
+            cli::err("MCP '" + mcp_cfg.name + "' connect failed: " + conn_result.error().what());
         }
     }
 
@@ -213,17 +206,15 @@ int main(int argc, char* argv[]) {
         try {
             auto db_result = memory->init_db();
             if (!db_result.has_value()) {
-                std::cerr << "Memory init failed: " << db_result.error().what()
-                    << " — continuing without long-term memory" << std::endl;
+                cli::warn("Memory init failed: " + std::string(db_result.error().what()));
                 cfg.memory.enabled = false;
             }
         } catch (const std::exception& e) {
-            std::cerr << "Memory init exception: " << e.what()
-                << " — continuing without long-term memory" << std::endl;
+            cli::warn("Memory init exception: " + std::string(e.what()));
             cfg.memory.enabled = false;
         }
     } else if (cfg.memory.enabled) {
-        std::cerr << "Memory disabled: no db_connection configured" << std::endl;
+        cli::warn("Memory disabled: no db_connection configured");
         cfg.memory.enabled = false;
     }
 
@@ -249,13 +240,13 @@ int main(int argc, char* argv[]) {
         std::cout << text << std::flush;
     };
     cbs.on_tool_start = [](ToolCall tc) {
-        std::cout << "\n[Tool " << tc.name << "]" << std::flush;
+        std::cerr << theme::run_prefix() << tc.name << std::flush;
     };
     cbs.on_tool_end = [](ToolResult tr) {
         if (tr.is_error) {
-            std::cout << " error: " << tr.output.substr(0, 80) << std::endl;
+            std::cerr << " " << theme::styled(theme::ANSI_ERROR, "failed") << "\n";
         } else {
-            std::cout << " done" << std::endl;
+            std::cerr << " " << theme::styled(theme::ANSI_SUCCESS, "done") << "\n";
         }
     };
     cbs.on_state_change = [](TurnState from, TurnState to) {
@@ -281,7 +272,15 @@ int main(int argc, char* argv[]) {
 
         if (user_input == "/exit" || user_input == "/quit") break;
         if (user_input == "/help") {
-            std::cout << "Commands: /exit /help /memory /tools\n" << std::flush;
+            std::cerr << "\n";
+            for (auto& cmd : commands::all_commands()) {
+                std::string line = cmd.name;
+                if (cmd.arg_hint) line += " " + *cmd.arg_hint;
+                cli::kv(line, cmd.description);
+            }
+            cli::rule();
+            cli::dim("/ Cmd palette  Ctrl+O Context  F1 Help  Ctrl+D Exit");
+            std::cerr << std::flush;
             std::cout << "> " << std::flush;
             continue;
         }
@@ -305,13 +304,16 @@ int main(int argc, char* argv[]) {
         auto response_future = loop->run(user_input);
         auto response = response_future.get();
 
-        std::cout << "\n---\n";
-        std::cout << "Tokens: " << response.total_input_tokens
-            << " in + " << response.total_output_tokens << " out";
+        std::cerr << theme::styled(theme::ANSI_BORDER, "─── ")
+                  << theme::styled(theme::ANSI_DIM,
+                      std::to_string(response.total_input_tokens) + " tok in · "
+                      + std::to_string(response.total_output_tokens) + " tok out");
         if (!response.tool_results.empty()) {
-            std::cout << " | Tools: " << response.tool_results.size();
+            std::cerr << theme::styled(theme::ANSI_DIM,
+                " · " + std::to_string(response.tool_results.size()) + " tools");
         }
-        std::cout << "\n> " << std::flush;
+        std::cerr << theme::styled(theme::ANSI_BORDER, " ───") << "\n";
+        std::cout << "> " << std::flush;
     }
 
     std::cout << "\nGoodbye!" << std::endl;
