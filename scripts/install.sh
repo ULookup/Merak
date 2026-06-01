@@ -13,20 +13,18 @@ echo "  binary  → $BIN_DIR/merak"
 echo "  config  → $CONFIG_DIR/"
 echo ""
 
-# 1. Build (if not already built)
+# 1. Configure once, then rebuild incrementally on every install
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/build"
 
-if [ ! -f "$BUILD_DIR/cli/merak-cli" ]; then
-    echo "[1/3] Building..."
+echo "[1/3] Building..."
+if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
     cmake -B "$BUILD_DIR" -S "$PROJECT_DIR" \
         -DCMAKE_TOOLCHAIN_FILE=Debug/generators/conan_toolchain.cmake \
         -DCMAKE_BUILD_TYPE=Debug
-    cmake --build "$BUILD_DIR"
-else
-    echo "[1/3] Already built"
 fi
+cmake --build "$BUILD_DIR"
 
 # 2. Install binary
 echo "[2/3] Installing binary..."
