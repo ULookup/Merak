@@ -79,7 +79,7 @@ cmake -B build -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=D
 cmake --build build -j$(nproc)
 
 # 运行 CLI
-./build/cli/merak-cli --config config.json
+./build/cli/merak config.json
 ```
 
 ### 运行测试

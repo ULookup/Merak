@@ -29,7 +29,7 @@ cmake --build "$BUILD_DIR"
 # 2. Install binary
 echo "[2/3] Installing binary..."
 mkdir -p "$BIN_DIR"
-cp "$BUILD_DIR/cli/merak-cli" "$BIN_DIR/merak"
+cp "$BUILD_DIR/cli/merak" "$BIN_DIR/merak"
 
 # 3. Install example config (if not exists)
 echo "[3/3] Installing config..."
