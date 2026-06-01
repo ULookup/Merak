@@ -14,6 +14,7 @@ public:
     virtual void on_enter() {}
     virtual void on_exit() {}
     virtual bool is_overlay() const { return false; }
+    virtual bool has_input() const { return false; }
 };
 
 } // namespace merak::tui

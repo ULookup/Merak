@@ -2,7 +2,6 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <future>
-#include <sstream>
 
 namespace merak {
 
@@ -24,6 +23,7 @@ std::future<AgentResponse> OpenAIProvider::chat(
         body["model"] = request.model;
         body["messages"] = build_messages(request.messages);
         body["stream"] = true;
+        body["stream_options"]["include_usage"] = true;
         body["max_tokens"] = request.max_output_tokens;
 
         if (!request.tools.empty()) {
@@ -49,12 +49,17 @@ std::future<AgentResponse> OpenAIProvider::chat(
 
         std::string response_text;
         int input_tokens = 0, output_tokens = 0;
+        bool has_usage = false;
         nlohmann::json accumulated_tool_calls_json = nlohmann::json::array();
+        std::string line_buffer;
 
         auto write_callback = [&](const std::string& data) {
-            std::istringstream stream(data);
-            std::string line;
-            while (std::getline(stream, line)) {
+            line_buffer += data;
+            size_t newline = 0;
+            while ((newline = line_buffer.find('\n')) != std::string::npos) {
+                std::string line = line_buffer.substr(0, newline);
+                line_buffer.erase(0, newline + 1);
+                if (!line.empty() && line.back() == '\r') line.pop_back();
                 if (line.rfind("data: ", 0) != 0) continue;
                 std::string json_line = line.substr(6);
                 if (json_line == "[DONE]") {
@@ -103,9 +108,10 @@ std::future<AgentResponse> OpenAIProvider::chat(
                         }
                     }
 
-                    if (j.contains("usage")) {
+                    if (j.contains("usage") && !j["usage"].is_null()) {
                         input_tokens = j["usage"].value("prompt_tokens", 0);
                         output_tokens = j["usage"].value("completion_tokens", 0);
+                        has_usage = true;
                     }
                 } catch (const nlohmann::json::exception& e) {
                     spdlog::warn("SSE parse error: {}", e.what());
@@ -145,6 +151,7 @@ std::future<AgentResponse> OpenAIProvider::chat(
         response.text = response_text;
         response.total_input_tokens = input_tokens;
         response.total_output_tokens = output_tokens;
+        response.has_usage = has_usage;
 
         stats_.total_requests++;
         return response;

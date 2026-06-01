@@ -7,17 +7,44 @@ namespace merak::tui {
 class StatusBar {
     std::string provider_ = "none";
     std::string model_ = "none";
-    std::string token_info_ = "0/0";
+    std::string state_ = "Idle";
+    int total_input_tokens_ = 0;
+    int total_output_tokens_ = 0;
+    bool has_usage_ = false;
+    bool usage_missing_ = false;
+
+    static std::string format_tokens(int tokens) {
+        if (tokens < 1000) return std::to_string(tokens);
+        auto whole = tokens / 1000;
+        auto tenth = (tokens % 1000) / 100;
+        return std::to_string(whole) + "." + std::to_string(tenth) + "k";
+    }
+
 public:
     void set_provider(const std::string& p) { provider_ = p; }
     void set_model(const std::string& m) { model_ = m; }
-    void set_token_info(const std::string& t) { token_info_ = t; }
+    void set_state(const std::string& state) { state_ = state; }
+    void add_usage(int input_tokens, int output_tokens, bool has_usage) {
+        if (!has_usage) {
+            usage_missing_ = true;
+            return;
+        }
+        total_input_tokens_ += input_tokens;
+        total_output_tokens_ += output_tokens;
+        has_usage_ = true;
+    }
+    int total_input_tokens() const { return total_input_tokens_; }
+    int total_output_tokens() const { return total_output_tokens_; }
+    bool has_usage() const { return has_usage_; }
+    bool has_exact_usage() const { return has_usage_ && !usage_missing_; }
 
     ftxui::Element render() {
         using namespace ftxui;
-        auto label = provider_ + " │ "
-                    + model_ + " │ "
-                    + token_info_;
+        auto usage = has_exact_usage()
+            ? "Σ " + format_tokens(total_input_tokens_) + " in / "
+                + format_tokens(total_output_tokens_) + " out"
+            : "Σ n/a";
+        auto label = provider_ + " │ " + model_ + " │ " + state_ + " │ " + usage;
         return text(label) | dim | borderLight | size(HEIGHT, EQUAL, 1);
     }
 };

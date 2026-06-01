@@ -2,7 +2,6 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <future>
-#include <sstream>
 
 namespace merak {
 
@@ -119,6 +118,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
         // SSE 累积状态
         std::string response_text;
         int input_tokens = 0, output_tokens = 0;
+        bool has_usage = false;
         struct PendingTool {
             std::string id;
             std::string name;
@@ -139,6 +139,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
                 if (event_type == "message_start") {
                     if (j.contains("message") && j["message"].contains("usage")) {
                         input_tokens = j["message"]["usage"].value("input_tokens", 0);
+                        has_usage = true;
                     }
                 }
                 else if (event_type == "content_block_start") {
@@ -182,6 +183,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
                 else if (event_type == "message_delta") {
                     if (j.contains("usage")) {
                         output_tokens = j["usage"].value("output_tokens", 0);
+                        has_usage = true;
                     }
                 }
                 else if (event_type == "message_stop") {
@@ -194,9 +196,11 @@ std::future<AgentResponse> AnthropicProvider::chat(
         };
 
         auto write_callback = [&](const std::string& data) {
-            std::istringstream stream(data);
-            std::string line;
-            while (std::getline(stream, line)) {
+            line_buffer += data;
+            size_t newline = 0;
+            while ((newline = line_buffer.find('\n')) != std::string::npos) {
+                std::string line = line_buffer.substr(0, newline);
+                line_buffer.erase(0, newline + 1);
                 // 去掉行尾的 \r
                 if (!line.empty() && line.back() == '\r') line.pop_back();
 
@@ -241,6 +245,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
         response.text = response_text;
         response.total_input_tokens = input_tokens;
         response.total_output_tokens = output_tokens;
+        response.has_usage = has_usage;
 
         stats_.total_requests++;
         return response;

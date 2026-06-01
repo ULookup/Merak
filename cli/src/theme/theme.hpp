@@ -28,6 +28,7 @@ constexpr const char* ICON_RUN     = "○";
 
 // ── Functions ──
 bool is_tty();
+bool supports_tui();
 std::string styled(const char* ansi_code, std::string_view text);
 std::string ok_prefix();
 std::string err_prefix();
