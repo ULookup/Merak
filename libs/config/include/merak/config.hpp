@@ -7,6 +7,12 @@
 
 namespace merak {
 
+struct ThinkingConfig {
+    std::string type = "disabled"; // "disabled" | "adaptive" | "enabled"
+    std::string effort;            // Optional: "low" | "medium" | "high" | "xhigh" | "max"
+    int budget_tokens = 0;         // Required for manual "enabled" thinking
+};
+
 // ——— LLM Provider 配置 ———
 // 一个 Provider 就是一个 LLM 服务端点
 struct LLMConfig {
@@ -14,8 +20,10 @@ struct LLMConfig {
     std::string api_key;
     std::string api_base_url;  // 由 default_config() / apply_provider_defaults() 设置
     std::string default_model; // 由 default_config() / apply_provider_defaults() 设置
+    int max_output_tokens = 0;
     int request_timeout_ms = 60000;
     int max_retries = 3;
+    std::optional<ThinkingConfig> thinking;
 };
 
 // ——— 模型配置 ———

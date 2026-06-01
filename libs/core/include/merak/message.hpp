@@ -30,6 +30,9 @@ struct Message {
 
     // 只有 tool 角色时有值：此消息是哪个 tool_call 的结果
     std::optional<std::string> tool_call_id;
+
+    // Provider-specific content blocks that must be replayed verbatim.
+    std::string provider_content_blocks_json;
 };
 
 // ——— 完整的一次 Agent 回复 ———
@@ -41,6 +44,7 @@ struct AgentResponse {
     int total_output_tokens = 0;           // 消耗的输出 token
     bool has_usage = false;                // Provider returned exact usage data
     bool usage_missing = false;            // At least one provider response omitted usage
+    std::string provider_content_blocks_json;
 };
 
 } // namespace merak

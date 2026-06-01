@@ -44,6 +44,7 @@ std::future<CompactionResult> Compactor::compact(
         req.messages.push_back({"user", prompt.str()});
         req.max_output_tokens = target_tokens;
         req.enable_cache = false;
+        req.enable_thinking = false;
 
         std::string summary_text;
         auto future_resp = summary_llm_->chat(req, [&](StreamChunk chunk) {

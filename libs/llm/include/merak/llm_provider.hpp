@@ -24,6 +24,7 @@ struct ChatRequest {
     std::vector<ToolSpec> tools;
     int max_output_tokens = 4096;
     bool enable_cache = true;
+    bool enable_thinking = true;
 };
 
 class LlmProvider {

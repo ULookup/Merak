@@ -13,6 +13,7 @@ Config ConfigLoader::default_config() {
     Config cfg;
     cfg.llm.api_base_url = "https://api.openai.com/v1";
     cfg.llm.default_model = "gpt-4o";
+    cfg.llm.max_output_tokens = 4096;
     cfg.llm.provider = "openai";
     return cfg;
 }
@@ -34,8 +35,17 @@ static std::optional<Config> parse_config_file(const std::string& filepath) {
             if (l.contains("api_key")) cfg.llm.api_key = l["api_key"];
             if (l.contains("api_base_url")) cfg.llm.api_base_url = l["api_base_url"];
             if (l.contains("default_model")) cfg.llm.default_model = l["default_model"];
+            if (l.contains("max_output_tokens")) cfg.llm.max_output_tokens = l["max_output_tokens"];
             if (l.contains("request_timeout_ms")) cfg.llm.request_timeout_ms = l["request_timeout_ms"];
             if (l.contains("max_retries")) cfg.llm.max_retries = l["max_retries"];
+            if (l.contains("thinking")) {
+                auto& t = l["thinking"];
+                ThinkingConfig thinking;
+                thinking.type = t.value("type", "disabled");
+                thinking.effort = t.value("effort", "");
+                thinking.budget_tokens = t.value("budget_tokens", 0);
+                cfg.llm.thinking = std::move(thinking);
+            }
         }
 
         if (j.contains("models")) {
@@ -98,8 +108,10 @@ void ConfigLoader::merge(Config& base, const Config& override_cfg) {
     if (!l.api_key.empty()) base.llm.api_key = l.api_key;
     if (!l.api_base_url.empty()) base.llm.api_base_url = l.api_base_url;
     if (!l.default_model.empty()) base.llm.default_model = l.default_model;
+    if (l.max_output_tokens > 0) base.llm.max_output_tokens = l.max_output_tokens;
     if (l.request_timeout_ms > 0) base.llm.request_timeout_ms = l.request_timeout_ms;
     if (l.max_retries > 0) base.llm.max_retries = l.max_retries;
+    if (l.thinking.has_value()) base.llm.thinking = l.thinking;
 
     if (!override_cfg.models.empty()) base.models = override_cfg.models;
 
@@ -137,8 +149,21 @@ void ConfigLoader::apply_env_overrides(Config& cfg) {
     if (auto* v = env_str("MERAK_API_KEY")) cfg.llm.api_key = v;
     if (auto* v = env_str("MERAK_API_BASE_URL")) cfg.llm.api_base_url = v;
     if (auto* v = env_str("MERAK_MODEL")) cfg.llm.default_model = v;
+    if (auto v = env_int("MERAK_MAX_OUTPUT_TOKENS")) cfg.llm.max_output_tokens = *v;
     if (auto v = env_int("MERAK_TIMEOUT_MS")) cfg.llm.request_timeout_ms = *v;
     if (auto v = env_int("MERAK_MAX_RETRIES")) cfg.llm.max_retries = *v;
+    if (auto* v = env_str("MERAK_THINKING_TYPE")) {
+        if (!cfg.llm.thinking) cfg.llm.thinking = ThinkingConfig{};
+        cfg.llm.thinking->type = v;
+    }
+    if (auto* v = env_str("MERAK_EFFORT_LEVEL")) {
+        if (!cfg.llm.thinking) cfg.llm.thinking = ThinkingConfig{};
+        cfg.llm.thinking->effort = v;
+    }
+    if (auto v = env_int("MERAK_THINKING_BUDGET_TOKENS")) {
+        if (!cfg.llm.thinking) cfg.llm.thinking = ThinkingConfig{};
+        cfg.llm.thinking->budget_tokens = *v;
+    }
 
     if (auto* v = env_str("MERAK_DB_CONNECTION")) cfg.memory.db_connection = v;
     if (auto* v = env_str("MERAK_SYSTEM_PROMPT")) cfg.agent.system_prompt = v;
@@ -157,6 +182,35 @@ static void apply_provider_defaults(Config& cfg) {
             ? "claude-sonnet-4-6"
             : "gpt-4o";
     }
+}
+
+static std::optional<std::string> validate_thinking_config(const Config& cfg) {
+    if (cfg.llm.max_output_tokens <= 0) {
+        return "llm.max_output_tokens must be greater than 0";
+    }
+    if (!cfg.llm.thinking.has_value()) return std::nullopt;
+    const auto& thinking = *cfg.llm.thinking;
+    if (thinking.type != "disabled" &&
+        thinking.type != "adaptive" &&
+        thinking.type != "enabled") {
+        return "llm.thinking.type must be disabled, adaptive, or enabled";
+    }
+    if (!thinking.effort.empty() &&
+        thinking.effort != "low" &&
+        thinking.effort != "medium" &&
+        thinking.effort != "high" &&
+        thinking.effort != "xhigh" &&
+        thinking.effort != "max") {
+        return "llm.thinking.effort must be low, medium, high, xhigh, or max";
+    }
+    if (thinking.type == "enabled" && thinking.budget_tokens < 1024) {
+        return "llm.thinking.budget_tokens must be at least 1024 when type is enabled";
+    }
+    if (thinking.type == "enabled" &&
+        thinking.budget_tokens >= cfg.llm.max_output_tokens) {
+        return "llm.thinking.budget_tokens must be less than llm.max_output_tokens";
+    }
+    return std::nullopt;
 }
 
 // ——— 从标准路径自动加载 ———
@@ -204,6 +258,9 @@ Result<Config, AgentError> ConfigLoader::load() {
     // 3. 环境变量（最高优先级）
     apply_env_overrides(cfg);
     apply_provider_defaults(cfg);
+    if (auto error = validate_thinking_config(cfg)) {
+        return AgentError(ErrorType::CONFIG_ERROR, *error);
+    }
 
     return cfg;
 }
@@ -215,6 +272,9 @@ Result<Config, AgentError> ConfigLoader::load_file(const std::string& filepath) 
         merge(cfg, *loaded);
         apply_env_overrides(cfg);
         apply_provider_defaults(cfg);
+        if (auto error = validate_thinking_config(cfg)) {
+            return AgentError(ErrorType::CONFIG_ERROR, *error);
+        }
         return cfg;
     }
     return AgentError(
