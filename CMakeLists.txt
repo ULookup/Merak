@@ -16,6 +16,7 @@ find_package(libpqxx REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
 find_package(GTest REQUIRED)
+find_package(ftxui REQUIRED)
 
 # 公共编译选项
 add_compile_options(-Wall -Wextra -Wpedantic)
