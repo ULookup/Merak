@@ -29,6 +29,8 @@ public:
 
     StatusBar& status_bar() { return status_bar_; }
 
+    void exit() { screen_.Exit(); }
+
     void push_overlay(std::unique_ptr<Panel> panel) {
         if (!overlay_stack_.empty()) overlay_stack_.back()->on_exit();
         overlay_stack_.push_back(std::move(panel));

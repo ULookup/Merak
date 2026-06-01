@@ -42,12 +42,12 @@ public:
 
     bool handle_event(ftxui::Event event) override {
         using namespace ftxui;
-        if (event.is_character()) {
-            input_buffer_ += event.character();
-            return true;
-        }
-        if (event == Event::Backspace && !input_buffer_.empty()) {
-            input_buffer_.pop_back();
+        // Backspace must be checked BEFORE is_character() — terminals send
+        // DEL (0x7F) which FTXUI sometimes reports as a character, not a key.
+        if (event == Event::Backspace ||
+            (event.is_character() && event.character() == "\x7F") ||
+            (event.is_character() && event.character() == "\x08")) {
+            if (!input_buffer_.empty()) input_buffer_.pop_back();
             return true;
         }
         if (event == Event::Return) {
@@ -56,6 +56,10 @@ public:
                 lines_.push_back("> " + input_buffer_);
                 input_buffer_.clear();
             }
+            return true;
+        }
+        if (event.is_character()) {
+            input_buffer_ += event.character();
             return true;
         }
         return false;

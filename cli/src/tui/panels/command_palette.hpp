@@ -92,13 +92,14 @@ public:
             if (selected_ > 0) selected_--;
             return true;
         }
-        if (event.is_character()) {
-            query_ += event.character();
-            rebuild_filtered();
+        if (event == Event::Backspace ||
+            (event.is_character() && event.character() == "\x7F") ||
+            (event.is_character() && event.character() == "\x08")) {
+            if (!query_.empty()) { query_.pop_back(); rebuild_filtered(); }
             return true;
         }
-        if (event == Event::Backspace && !query_.empty()) {
-            query_.pop_back();
+        if (event.is_character()) {
+            query_ += event.character();
             rebuild_filtered();
             return true;
         }

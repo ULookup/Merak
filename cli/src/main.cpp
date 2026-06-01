@@ -346,9 +346,25 @@ int main(int argc, char* argv[]) {
         tui.status_bar().set_model(cfg.llm.default_model);
         tui.status_bar().set_token_info("0/128k");
 
+        // Welcome banner
+        chat_ptr->add_line("");
+        chat_ptr->add_line("    ▟██▙        ");
+        chat_ptr->add_line("   ▟█▀▀█▙       ");
+        chat_ptr->add_line("  ▟█▘  ▝█▙      ");
+        chat_ptr->add_line("  ▀▀████▀▀      ");
+        chat_ptr->add_line("    Merak       ");
+        chat_ptr->add_line("");
+        chat_ptr->add_line("  Merak Agent v0.2.0");
+        chat_ptr->add_line("  " + cfg.llm.provider + " · " + cfg.llm.default_model);
+        chat_ptr->add_line("");
+        chat_ptr->add_line("  /help for commands  / palette  Ctrl+O context  Esc back");
+        chat_ptr->add_line("  Type a message to start, or /exit to quit.");
+        chat_ptr->add_line("");
+
         // Wire submit callback
         chat_ptr->set_on_submit([&](std::string input) {
             if (input == "/exit" || input == "/quit") {
+                tui.exit();
                 return;
             }
             if (input == "/help") {

@@ -64,12 +64,14 @@ public:
         if (event == Event::ArrowUp && selected_ > 0) {
             selected_--; return true;
         }
-        if (event.is_character()) {
-            search_query_ += event.character();
+        if (event == Event::Backspace ||
+            (event.is_character() && event.character() == "\x7F") ||
+            (event.is_character() && event.character() == "\x08")) {
+            if (!search_query_.empty()) search_query_.pop_back();
             return true;
         }
-        if (event == Event::Backspace && !search_query_.empty()) {
-            search_query_.pop_back();
+        if (event.is_character()) {
+            search_query_ += event.character();
             return true;
         }
         return false;
