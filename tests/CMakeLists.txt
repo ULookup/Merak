@@ -5,15 +5,44 @@ add_executable(merak-core-test
     ${CMAKE_SOURCE_DIR}/libs/core/tests/test_compile.cpp
 )
 target_link_libraries(merak-core-test PRIVATE merak-core)
+add_test(NAME merak-core-test COMMAND merak-core-test)
 
 # 工具系统测试
 add_executable(merak-tools-test
     ${CMAKE_SOURCE_DIR}/libs/tools/tests/test_tools.cpp
 )
 target_link_libraries(merak-tools-test PRIVATE merak-tools)
+add_test(NAME merak-tools-test COMMAND merak-tools-test)
 
 # 上下文测试
 add_executable(merak-context-test
     ${CMAKE_SOURCE_DIR}/libs/context/tests/test_context.cpp
 )
 target_link_libraries(merak-context-test PRIVATE merak-context)
+add_test(NAME merak-context-test COMMAND merak-context-test)
+
+add_executable(merak-storage-test
+    ${CMAKE_SOURCE_DIR}/libs/storage/tests/test_storage.cpp
+)
+target_link_libraries(merak-storage-test PRIVATE merak-storage)
+add_test(NAME merak-storage-test COMMAND merak-storage-test)
+
+add_executable(merak-runtime-test
+    ${CMAKE_SOURCE_DIR}/libs/runtime/tests/test_runtime.cpp
+)
+target_link_libraries(merak-runtime-test PRIVATE merak-runtime)
+add_test(NAME merak-runtime-test COMMAND merak-runtime-test)
+
+add_executable(merak-http-test
+    ${CMAKE_SOURCE_DIR}/libs/http/tests/test_http.cpp
+)
+target_link_libraries(merak-http-test PRIVATE merak-http)
+add_test(NAME merak-http-test COMMAND merak-http-test)
+
+add_executable(merak-tui-client-test
+    ${CMAKE_SOURCE_DIR}/cli/tests/test_runtime_client.cpp
+    ${CMAKE_SOURCE_DIR}/cli/src/client/runtime_client.cpp
+)
+target_include_directories(merak-tui-client-test PRIVATE ${CMAKE_SOURCE_DIR}/cli/src)
+target_link_libraries(merak-tui-client-test PRIVATE merak-core CURL::libcurl)
+add_test(NAME merak-tui-client-test COMMAND merak-tui-client-test)

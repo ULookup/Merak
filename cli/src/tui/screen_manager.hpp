@@ -1,40 +1,47 @@
 #pragma once
-#include "panel.hpp"
+#include "chat_timeline.hpp"
+#include "composer/chat_composer.hpp"
 #include "components/status_bar.hpp"
-#include "panels/command_palette.hpp"
-#include "panels/help_panel.hpp"
-#include "panels/context_panel.hpp"
-#include "panels/model_selector.hpp"
-#include "panels/tools_panel.hpp"
-#include "panels/memory_panel.hpp"
-#include "panels/chat_panel.hpp"
+#include "inline_terminal.hpp"
+#include "terminal_event_reader.hpp"
 #include "../commands/command_registry.hpp"
-#include <vector>
-#include <memory>
+#include <atomic>
+#include <chrono>
+#include <cctype>
 #include <functional>
-#include <optional>
-#include <queue>
-#include <mutex>
-#include <thread>
 #include <future>
-#include <ftxui/component/component.hpp>
-#include <ftxui/component/screen_interactive.hpp>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 namespace merak::tui {
 
 class ScreenManager {
-    std::unique_ptr<Panel> chat_panel_;
-    std::vector<std::unique_ptr<Panel>> overlay_stack_;
+    enum class Overlay { None, Help, Context, Model, Tools, Memory, Transcript, ToolBrowser, ToolDetail };
+
+    ChatTimeline timeline_;
+    ChatComposer composer_;
     StatusBar status_bar_;
-    ftxui::ScreenInteractive screen_;
+    InlineTerminal terminal_;
+    TerminalEventReader reader_;
     std::function<void(std::string)> on_command_;
-    std::optional<std::string> pending_command_;
+    std::function<void()> on_cancel_;
     std::queue<std::function<void()>> ui_events_;
     std::mutex ui_events_mutex_;
     std::thread worker_;
-    bool busy_ = false;
+    std::queue<std::string> queued_messages_;
+    std::function<void(bool)> pending_approval_;
+    std::unique_ptr<ApprovalCell> approval_cell_;
+    std::atomic<bool> busy_ = false;
     bool exit_requested_ = false;
-    std::shared_ptr<std::promise<bool>> pending_approval_;
+    bool running_ = true;
+    Overlay overlay_ = Overlay::None;
+    int overlay_selected_ = 0;
+    size_t overlay_scroll_ = 0;
     int last_prompt_tokens_ = 0;
     int total_input_tokens_ = 0;
     int total_output_tokens_ = 0;
@@ -44,8 +51,6 @@ class ScreenManager {
     bool has_usage_ = false;
     bool usage_missing_ = false;
     std::string system_prompt_;
-
-    ChatPanel& chat() { return static_cast<ChatPanel&>(*chat_panel_); }
 
     void drain_ui_events() {
         std::queue<std::function<void()>> events;
@@ -62,229 +67,298 @@ class ScreenManager {
     void resolve_approval(bool allowed) {
         if (!pending_approval_) return;
         auto approval = std::move(pending_approval_);
-        chat().clear_approval_prompt();
+        approval_cell_.reset();
         status_bar_.set_state("Thinking...");
-        approval->set_value(allowed);
+        approval(allowed);
+    }
+
+    void submit(std::string input) {
+        if (input.empty()) return;
+        if (input.starts_with("/")) {
+            while (!input.empty() && std::isspace(static_cast<unsigned char>(input.back()))) {
+                input.pop_back();
+            }
+            if (on_command_) on_command_(std::move(input));
+            return;
+        }
+        timeline_.submit_user(input);
+        ++messages_;
+        if (busy_) {
+            queued_messages_.push(std::move(input));
+            return;
+        }
+        if (on_command_) on_command_(std::move(input));
+    }
+
+    void submit_composer() {
+        auto input = composer_.submit();
+        submit(std::move(input));
+    }
+
+    void handle_overlay(const TerminalEvent& event) {
+        if (event.type == TerminalEvent::Type::Escape) {
+            overlay_ = overlay_ == Overlay::ToolDetail ? Overlay::ToolBrowser : Overlay::None;
+            return;
+        }
+        if (overlay_ == Overlay::Transcript || overlay_ == Overlay::ToolDetail) {
+            if (event.type == TerminalEvent::Type::Up) ++overlay_scroll_;
+            if (event.type == TerminalEvent::Type::Down && overlay_scroll_ > 0) --overlay_scroll_;
+            return;
+        }
+        if (overlay_ != Overlay::ToolBrowser) return;
+        const auto count = static_cast<int>(timeline_.tools().size());
+        if (event.type == TerminalEvent::Type::Up && overlay_selected_ > 0) --overlay_selected_;
+        if (event.type == TerminalEvent::Type::Down && overlay_selected_ + 1 < count) ++overlay_selected_;
+        if (event.type == TerminalEvent::Type::Enter && count > 0) {
+            overlay_scroll_ = 0;
+            overlay_ = Overlay::ToolDetail;
+        }
+    }
+
+    void handle_event(const TerminalEvent& event) {
+        using Type = TerminalEvent::Type;
+        if (event.type == Type::None) return;
+        if (pending_approval_) {
+            if (event.type == Type::Escape || (event.type == Type::Character && (event.character == 'n' || event.character == 'N'))) {
+                resolve_approval(false);
+            } else if (event.type == Type::Character && (event.character == 'y' || event.character == 'Y')) {
+                resolve_approval(true);
+            }
+            return;
+        }
+        if (overlay_ != Overlay::None) {
+            handle_overlay(event);
+            return;
+        }
+        if (event.type == Type::CtrlC) {
+            if (busy_) {
+                status_bar_.set_state("Cancelling...");
+                if (on_cancel_) on_cancel_();
+            } else if (!composer_.empty()) {
+                composer_.clear();
+            } else {
+                running_ = false;
+            }
+            return;
+        }
+        if (event.type == Type::CtrlD && composer_.empty() && !busy_) { running_ = false; return; }
+        if (event.type == Type::CtrlO) { open_transcript(); return; }
+        if (event.type == Type::CtrlT) { open_tool_browser(); return; }
+        if (event.type == Type::F1) { open_help(); return; }
+        if (event.type == Type::CtrlL) { terminal_.invalidate(); return; }
+        if (event.type == Type::Paste) { composer_.handle_paste(event.text); return; }
+        if (event.type == Type::Enter) { submit_composer(); return; }
+        if (event.type == Type::ShiftEnter) { composer_.newline(); return; }
+        if (event.type == Type::Backspace) { composer_.backspace(); return; }
+        if (event.type == Type::DeleteKey) { composer_.delete_forward(); return; }
+        if (event.type == Type::Left) { composer_.move_left(); return; }
+        if (event.type == Type::Right) { composer_.move_right(); return; }
+        if (event.type == Type::Home || event.type == Type::CtrlA) { composer_.move_home(); return; }
+        if (event.type == Type::End || event.type == Type::CtrlE) { composer_.move_end(); return; }
+        if (event.type == Type::CtrlK) { composer_.kill_to_end(); return; }
+        if (event.type == Type::CtrlU) { composer_.kill_to_start(); return; }
+        if (event.type == Type::CtrlW) { composer_.delete_word_left(); return; }
+        if (event.type == Type::CtrlY) { composer_.yank(); return; }
+        if (event.type == Type::Tab) { composer_.slash_complete(); return; }
+        if (event.type == Type::Up) {
+            if (composer_.slash_open()) composer_.slash_prev(); else composer_.history_prev();
+            return;
+        }
+        if (event.type == Type::Down) {
+            if (composer_.slash_open()) composer_.slash_next(); else composer_.history_next();
+            return;
+        }
+        if (event.type == Type::Character) composer_.insert_char(event.character);
+    }
+
+    std::vector<std::string> overlay_lines() const {
+        std::vector<std::string> lines;
+        if (overlay_ == Overlay::Help) {
+            lines = {ansi(theme::ANSI_ACCENT, "Help"), ""};
+            for (const auto& cmd : commands::all_commands()) {
+                lines.push_back("  " + cmd.name + "  " + ansi(theme::ANSI_DIM, cmd.description));
+            }
+            lines.push_back("");
+            lines.push_back(ansi(theme::ANSI_DIM, "Esc back · Ctrl+O transcript · Ctrl+T tools · Ctrl+D exit"));
+        } else if (overlay_ == Overlay::Context) {
+            lines = {ansi(theme::ANSI_ACCENT, "Context"), "",
+                "  Last prompt      " + std::to_string(last_prompt_tokens_),
+                "  Cumulative input " + std::to_string(total_input_tokens_),
+                "  Output tokens    " + std::to_string(total_output_tokens_),
+                "  Messages         " + std::to_string(messages_),
+                "  Completed turns  " + std::to_string(completed_turns_),
+                "  Tool calls       " + std::to_string(tool_calls_),
+                "", ansi(theme::ANSI_DIM, "Esc back")};
+        } else if (overlay_ == Overlay::Transcript) {
+            lines = {ansi(theme::ANSI_ACCENT, "Transcript"), ""};
+            std::vector<std::string> content;
+            const auto& cells = timeline_.committed();
+            for (size_t i = 0; i < cells.size(); ++i) {
+                auto rendered = cells[i]->render(terminal_.width());
+                content.insert(content.end(), rendered.begin(), rendered.end());
+                content.push_back("");
+            }
+            append_scrolled(lines, content);
+            lines.push_back(ansi(theme::ANSI_DIM, "Esc back · persisted by merak serve"));
+        } else if (overlay_ == Overlay::ToolBrowser) {
+            lines = {ansi(theme::ANSI_ACCENT, "Tool Browser"), ""};
+            const auto& tools = timeline_.tools();
+            if (tools.empty()) lines.push_back(ansi(theme::ANSI_DIM, "  No tool calls yet"));
+            for (size_t i = 0; i < tools.size(); ++i) {
+                lines.push_back(std::string(i == static_cast<size_t>(overlay_selected_) ? "› " : "  ")
+                    + sanitize_terminal_text(tools[i]->call().name) + "  "
+                    + ansi(theme::ANSI_DIM, tools[i]->description()));
+            }
+            lines.push_back("");
+            lines.push_back(ansi(theme::ANSI_DIM, "↑/↓ select · Enter detail · Esc back"));
+        } else if (overlay_ == Overlay::ToolDetail) {
+            const auto& tools = timeline_.tools();
+            if (tools.empty()) return {ansi(theme::ANSI_DIM, "No tool calls yet")};
+            auto selected = tools[std::min<size_t>(overlay_selected_, tools.size() - 1)];
+            lines = {ansi(theme::ANSI_ACCENT, sanitize_terminal_text(selected->call().name)), "",
+                ansi(theme::ANSI_DIM, "Arguments")};
+            std::vector<std::string> content;
+            auto arguments = split_lines(sanitize_terminal_text(selected->call().arguments));
+            content.insert(content.end(), arguments.begin(), arguments.end());
+            content.push_back("");
+            content.push_back(ansi(theme::ANSI_DIM, "Output"));
+            auto output = split_lines(selected->output());
+            content.insert(content.end(), output.begin(), output.end());
+            append_scrolled(lines, content);
+            lines.push_back("");
+            lines.push_back(ansi(theme::ANSI_DIM, "↑/↓ scroll · Esc back"));
+        } else if (overlay_ == Overlay::Model) {
+            lines = {ansi(theme::ANSI_ACCENT, "Model"), "", "  Model selection remains configured through settings.", "", ansi(theme::ANSI_DIM, "Esc back")};
+        } else if (overlay_ == Overlay::Memory) {
+            lines = {ansi(theme::ANSI_ACCENT, "Memory"), "", "  Memory browser is not populated in this runtime.", "", ansi(theme::ANSI_DIM, "Esc back")};
+        } else if (overlay_ == Overlay::Tools) {
+            lines = {ansi(theme::ANSI_ACCENT, "Tools"), "", "  Press Ctrl+T to browse tool calls from this session.", "", ansi(theme::ANSI_DIM, "Esc back")};
+        }
+        return lines;
+    }
+
+    void append_scrolled(std::vector<std::string>& lines,
+                         const std::vector<std::string>& content) const {
+        const auto capacity = terminal_.height() > 7 ? terminal_.height() - 7 : 1;
+        if (content.size() <= capacity) {
+            lines.insert(lines.end(), content.begin(), content.end());
+            return;
+        }
+        const auto max_scroll = content.size() - capacity;
+        const auto scroll = std::min(overlay_scroll_, max_scroll);
+        const auto start = content.size() - capacity - scroll;
+        lines.insert(lines.end(), content.begin() + static_cast<long>(start),
+                     content.begin() + static_cast<long>(start + capacity));
+    }
+
+    std::vector<std::string> frame_lines() const {
+        std::vector<std::string> lines;
+        if (timeline_.active()) {
+            lines = timeline_.active()->render(terminal_.width());
+            lines.push_back("");
+        }
+        if (approval_cell_) {
+            auto approval = approval_cell_->render();
+            lines.insert(lines.end(), approval.begin(), approval.end());
+            lines.push_back("");
+        }
+        lines.push_back(ansi(theme::ANSI_DIM, repeat_text("━", terminal_.width())));
+        auto pane = overlay_ == Overlay::None ? composer_.render() : overlay_lines();
+        lines.insert(lines.end(), pane.begin(), pane.end());
+        lines.push_back(ansi(theme::ANSI_DIM, "/ commands · Shift+Enter newline · Ctrl+O transcript · Ctrl+T tools"));
+        lines.push_back(ansi(theme::ANSI_DIM,
+            sanitize_terminal_text(status_bar_.plain_text(queued_messages_.size()))));
+        const auto max_height = terminal_.height();
+        if (lines.size() > max_height) {
+            lines.erase(lines.begin(), lines.end() - static_cast<long>(max_height));
+        }
+        return lines;
     }
 
 public:
-    ScreenManager(std::unique_ptr<Panel> chat)
-        : chat_panel_(std::move(chat))
-        , screen_(ftxui::ScreenInteractive::Fullscreen())
-    {}
-
-    ~ScreenManager() {
-        if (worker_.joinable()) worker_.join();
-    }
-
+    ScreenManager() = default;
+    ~ScreenManager() { if (worker_.joinable()) worker_.join(); }
     StatusBar& status_bar() { return status_bar_; }
-
+    ChatTimeline& timeline() { return timeline_; }
     void set_on_command(std::function<void(std::string)> fn) { on_command_ = std::move(fn); }
+    void set_on_cancel(std::function<void()> fn) { on_cancel_ = std::move(fn); }
     void set_system_prompt(std::string prompt) { system_prompt_ = std::move(prompt); }
 
-    void exit() {
-        if (busy_) {
-            exit_requested_ = true;
-            status_bar_.set_state("Finishing before exit...");
-            return;
-        }
-        screen_.Exit();
-    }
-
     void post(std::function<void()> fn) {
-        {
-            std::lock_guard<std::mutex> lock(ui_events_mutex_);
-            ui_events_.push(std::move(fn));
-        }
-        screen_.PostEvent(ftxui::Event::Custom);
+        std::lock_guard<std::mutex> lock(ui_events_mutex_);
+        ui_events_.push(std::move(fn));
     }
-
     bool start_background(std::function<void()> fn) {
         if (busy_) return false;
         if (worker_.joinable()) worker_.join();
         busy_ = true;
-        chat().set_busy(true);
         worker_ = std::thread([fn = std::move(fn)] { fn(); });
         return true;
     }
-
     void finish_background() {
         busy_ = false;
-        chat().set_busy(false);
-        if (exit_requested_) screen_.Exit();
+        if (exit_requested_) {
+            running_ = false;
+            return;
+        }
+        if (!queued_messages_.empty()) {
+            auto next = std::move(queued_messages_.front());
+            queued_messages_.pop();
+            if (on_command_) on_command_(std::move(next));
+        }
     }
-
-    void request_approval(const ToolCall& call, std::shared_ptr<std::promise<bool>> approval) {
+    void finish_remote_run() { finish_background(); }
+    bool busy() const { return busy_; }
+    size_t queued_messages() const { return queued_messages_.size(); }
+    void reset_timeline() { timeline_.clear(); }
+    void exit() {
+        if (busy_) {
+            exit_requested_ = true;
+            status_bar_.set_state("Finishing before exit...");
+        } else {
+            running_ = false;
+        }
+    }
+    void request_approval(const ToolCall& call, std::function<void(bool)> approval) {
         post([this, call, approval = std::move(approval)] {
             pending_approval_ = approval;
-            auto detail = ChatPanel::summarize_tool(call);
-            auto prompt = "? Allow " + call.name;
-            if (!detail.empty()) prompt += ": " + detail;
-            chat().set_approval_prompt(prompt + " ? [y/n]");
+            auto detail = call.arguments.empty() ? call.name
+                : call.name + " " + truncate_text(sanitize_terminal_text(call.arguments), 72);
+            approval_cell_ = std::make_unique<ApprovalCell>("Allow " + detail + "?");
             status_bar_.set_state("Waiting for approval...");
         });
     }
-
-    void record_usage(int input_tokens, int output_tokens, bool has_usage) {
-        status_bar_.add_usage(input_tokens, output_tokens, has_usage);
-        if (!has_usage) {
-            usage_missing_ = true;
-            return;
-        }
-        last_prompt_tokens_ = input_tokens;
-        total_input_tokens_ += input_tokens;
-        total_output_tokens_ += output_tokens;
+    void record_usage(int input, int output, bool has_usage) {
+        status_bar_.add_usage(input, output, has_usage);
+        if (!has_usage) { usage_missing_ = true; return; }
+        last_prompt_tokens_ = input;
+        total_input_tokens_ += input;
+        total_output_tokens_ += output;
         has_usage_ = true;
     }
-
-    void record_turn_complete() {
-        completed_turns_++;
-        messages_ += 2;
-    }
-
-    void record_tool_start() { tool_calls_++; }
-    void record_tool_end() { messages_++; }
-
-    void push_overlay(std::unique_ptr<Panel> panel) {
-        if (!overlay_stack_.empty()) overlay_stack_.back()->on_exit();
-        overlay_stack_.push_back(std::move(panel));
-        overlay_stack_.back()->on_enter();
-    }
-
-    void pop_overlay() {
-        if (!overlay_stack_.empty()) {
-            overlay_stack_.back()->on_exit();
-            overlay_stack_.pop_back();
-            if (!overlay_stack_.empty()) overlay_stack_.back()->on_enter();
-        }
-    }
-
-    void open_command_palette() {
-        auto palette = std::make_unique<CommandPalette>();
-        palette->set_on_select([this](const commands::CommandMeta& cmd) {
-            pending_command_ = cmd.name;
-        });
-        palette->set_on_cancel([this] { pop_overlay(); });
-        push_overlay(std::move(palette));
-    }
-
-    void open_help() {
-        push_overlay(std::make_unique<HelpPanel>());
-    }
-
-    void open_context() {
-        auto panel = std::make_unique<ContextPanel>();
-        panel->set_total_tokens(last_prompt_tokens_);
-        panel->set_cumulative_input_tokens(total_input_tokens_);
-        panel->set_total_output_tokens(total_output_tokens_);
-        panel->set_last_prompt_tokens(last_prompt_tokens_);
-        panel->set_has_usage(has_usage_ && !usage_missing_);
-        panel->set_messages(messages_);
-        panel->set_turns(completed_turns_);
-        panel->set_tool_calls(tool_calls_);
-        panel->set_system_prompt(system_prompt_);
-        push_overlay(std::move(panel));
-    }
-
-    void open_model_selector() {
-        auto sel = std::make_unique<ModelSelector>();
-        sel->set_providers({"openai", "anthropic"});
-        sel->set_models({"gpt-4o", "claude-opus-4-7", "deepseek-v4-pro"});
-        sel->set_on_confirm([this](std::string, std::string) {
-            pop_overlay();
-        });
-        push_overlay(std::move(sel));
-    }
-
-    void open_tools() {
-        push_overlay(std::make_unique<ToolsPanel>());
-    }
-
-    void open_memory() {
-        push_overlay(std::make_unique<MemoryPanel>());
-    }
-
-    bool handle_event(ftxui::Event event) {
-        if (event == ftxui::Event::Custom) {
-            drain_ui_events();
-            return true;
-        }
-        if (pending_approval_) {
-            if (event == ftxui::Event::Escape) {
-                resolve_approval(false);
-                return true;
-            }
-            if (event.is_character()) {
-                auto character = event.character();
-                if (character == "y" || character == "Y") {
-                    resolve_approval(true);
-                    return true;
-                }
-                if (character == "n" || character == "N") {
-                    resolve_approval(false);
-                    return true;
-                }
-            }
-            return true;
-        }
-        // Ctrl+C or Ctrl+D: exit
-        if (event.is_character() && (event.character() == "\x03" || event.character() == "\x04")) {
-            exit();
-            return true;
-        }
-        // Ctrl+O: open context panel
-        if (event.is_character() && event.character() == "\x0F") {
-            open_context();
-            return true;
-        }
-        if (event == ftxui::Event::F1) {
-            open_help();
-            return true;
-        }
-        if (event == ftxui::Event::Escape) {
-            if (!overlay_stack_.empty()) {
-                pop_overlay();
-                return true;
-            }
-        }
-        if (!overlay_stack_.empty()) {
-            bool handled = overlay_stack_.back()->handle_event(event);
-            if (pending_command_) {
-                auto command = std::move(*pending_command_);
-                pending_command_.reset();
-                pop_overlay();
-                if (on_command_) on_command_(std::move(command));
-            }
-            return handled;
-        }
-        if (!busy_ && event.is_character() && event.character() == "/" && !chat_panel_->has_input()) {
-            open_command_palette();
-            return true;
-        }
-        return chat_panel_->handle_event(event);
+    void record_turn_complete() { ++completed_turns_; ++messages_; }
+    void record_tool_start() { ++tool_calls_; }
+    void record_tool_end() { ++messages_; }
+    void open_help() { overlay_ = Overlay::Help; }
+    void open_context() { overlay_ = Overlay::Context; }
+    void open_model_selector() { overlay_ = Overlay::Model; }
+    void open_tools() { overlay_ = Overlay::Tools; }
+    void open_memory() { overlay_ = Overlay::Memory; }
+    void open_transcript() { overlay_scroll_ = 0; overlay_ = Overlay::Transcript; }
+    void open_tool_browser() {
+        overlay_selected_ = timeline_.tools().empty()
+            ? 0 : static_cast<int>(timeline_.tools().size() - 1);
+        overlay_scroll_ = 0;
+        overlay_ = Overlay::ToolBrowser;
     }
 
     void run() {
-        auto component = ftxui::Renderer([&] {
-            ftxui::Element content = chat_panel_->render();
-            if (!overlay_stack_.empty()) {
-                auto overlay = overlay_stack_.back()->render();
-                content = ftxui::dbox({
-                    content | ftxui::dim,
-                    overlay | ftxui::clear_under | ftxui::center,
-                });
-            }
-            return ftxui::vbox({
-                content | ftxui::flex,
-                status_bar_.render(),
-            });
-        });
-
-        component |= ftxui::CatchEvent([this](ftxui::Event event) {
-            return handle_event(event);
-        });
-
-        screen_.Loop(component);
+        while (running_) {
+            drain_ui_events();
+            terminal_.flush_scrollback(timeline_.drain_scrollback(terminal_.width()));
+            terminal_.redraw(frame_lines());
+            handle_event(reader_.next());
+        }
     }
 };
 

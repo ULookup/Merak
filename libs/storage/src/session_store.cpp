@@ -1,0 +1,169 @@
+#include <merak/session_store.hpp>
+#include <nlohmann/json.hpp>
+#include <sqlite3.h>
+#include <chrono>
+#include <atomic>
+#include <algorithm>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+#include <stdexcept>
+
+namespace merak {
+namespace {
+std::string now_iso() {
+    auto now = std::chrono::system_clock::now();
+    auto t = std::chrono::system_clock::to_time_t(now);
+    std::ostringstream out;
+    out << std::put_time(std::gmtime(&t), "%FT%TZ");
+    return out.str();
+}
+std::string make_id(const char* prefix) {
+    static std::atomic<unsigned long long> n = 0;
+    auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
+    return std::string(prefix) + "_" + std::to_string(ticks) + "_" + std::to_string(++n);
+}
+bool unfinished(const std::string& status) {
+    return status == "queued" || status == "running" || status == "waiting_approval";
+}
+void bind_text(sqlite3_stmt* stmt, int index, const std::string& value) {
+    sqlite3_bind_text(stmt, index, value.c_str(), -1, SQLITE_TRANSIENT);
+}
+void expect_done(sqlite3_stmt* stmt, const char* operation) {
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        throw std::runtime_error(std::string(operation) + " failed");
+    }
+}
+std::string col(sqlite3_stmt* stmt, int index) {
+    auto* text = sqlite3_column_text(stmt, index);
+    return text ? reinterpret_cast<const char*>(text) : "";
+}
+}
+
+std::string to_string(RunStatus s) {
+    switch (s) {
+        case RunStatus::Queued: return "queued";
+        case RunStatus::Running: return "running";
+        case RunStatus::WaitingApproval: return "waiting_approval";
+        case RunStatus::Completed: return "completed";
+        case RunStatus::Failed: return "failed";
+        case RunStatus::Cancelled: return "cancelled";
+        case RunStatus::Interrupted: return "interrupted";
+    }
+    return "failed";
+}
+std::string to_string(ApprovalStatus s) {
+    switch (s) {
+        case ApprovalStatus::Pending: return "pending";
+        case ApprovalStatus::Allowed: return "allowed";
+        case ApprovalStatus::Denied: return "denied";
+    }
+    return "denied";
+}
+RunStatus run_status_from_string(const std::string& v) {
+    if (v == "queued") return RunStatus::Queued;
+    if (v == "running") return RunStatus::Running;
+    if (v == "waiting_approval") return RunStatus::WaitingApproval;
+    if (v == "completed") return RunStatus::Completed;
+    if (v == "cancelled") return RunStatus::Cancelled;
+    if (v == "interrupted") return RunStatus::Interrupted;
+    return RunStatus::Failed;
+}
+ApprovalStatus approval_status_from_string(const std::string& v) {
+    if (v == "pending") return ApprovalStatus::Pending;
+    if (v == "allowed") return ApprovalStatus::Allowed;
+    return ApprovalStatus::Denied;
+}
+
+SessionStore::SessionStore(std::filesystem::path root) : root_(std::move(root)) {}
+SessionStore::~SessionStore() { if (db_) sqlite3_close(db_); }
+void SessionStore::exec(const std::string& sql) const {
+    char* error = nullptr;
+    if (sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, &error) != SQLITE_OK) {
+        std::string message = error ? error : "sqlite error";
+        sqlite3_free(error);
+        throw std::runtime_error(message);
+    }
+}
+void SessionStore::initialize() {
+    std::filesystem::create_directories(root_ / "sessions");
+    if (sqlite3_open((root_ / "runtime.sqlite3").string().c_str(), &db_) != SQLITE_OK)
+        throw std::runtime_error("Cannot open runtime.sqlite3");
+    exec("PRAGMA journal_mode=WAL;");
+    exec("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,title TEXT,last_seq INTEGER NOT NULL DEFAULT 0,created_at TEXT,updated_at TEXT,archived_at TEXT);");
+    exec("CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,session_id TEXT,status TEXT,user_message TEXT,started_at TEXT,finished_at TEXT,error TEXT);");
+    exec("CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY,run_id TEXT,tool_name TEXT,arguments_json TEXT,tool_call_id TEXT,status TEXT,created_at TEXT,resolved_at TEXT);");
+    for (const auto& entry : std::filesystem::directory_iterator(root_ / "sessions")) {
+        if (!entry.is_regular_file() || entry.path().extension() != ".jsonl") continue;
+        auto session_id = entry.path().stem().string();
+        long long last_seq = 0;
+        std::ifstream input(entry.path());
+        std::string line;
+        while (std::getline(input, line)) {
+            try {
+                last_seq = std::max(last_seq,
+                    nlohmann::json::parse(line).value("seq", 0LL));
+            } catch (...) {
+                break;
+            }
+        }
+        sqlite3_stmt* stmt = nullptr;
+        sqlite3_prepare_v2(db_,
+            "UPDATE sessions SET last_seq=MAX(last_seq,?) WHERE id=?",
+            -1, &stmt, nullptr);
+        sqlite3_bind_int64(stmt, 1, last_seq);
+        bind_text(stmt, 2, session_id);
+        sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+    }
+}
+SessionRecord SessionStore::create_session(const std::string& title) {
+    std::lock_guard lock(mutex_);
+    SessionRecord r{make_id("session"), title, 0, now_iso(), now_iso(), ""};
+    sqlite3_stmt* s = nullptr;
+    sqlite3_prepare_v2(db_, "INSERT INTO sessions VALUES(?,?,?,?,?,?)", -1, &s, nullptr);
+    bind_text(s,1,r.id); bind_text(s,2,r.title); sqlite3_bind_int64(s,3,0);
+    bind_text(s,4,r.created_at); bind_text(s,5,r.updated_at); bind_text(s,6,"");
+    if (sqlite3_step(s) != SQLITE_DONE) { sqlite3_finalize(s); throw std::runtime_error("create session failed"); }
+    sqlite3_finalize(s); return r;
+}
+std::optional<SessionRecord> SessionStore::get_session(const std::string& id) const {
+    std::lock_guard lock(mutex_); sqlite3_stmt* s=nullptr;
+    sqlite3_prepare_v2(db_,"SELECT id,title,last_seq,created_at,updated_at,archived_at FROM sessions WHERE id=?",-1,&s,nullptr); bind_text(s,1,id);
+    if(sqlite3_step(s)!=SQLITE_ROW){sqlite3_finalize(s);return std::nullopt;}
+    SessionRecord r{col(s,0),col(s,1),sqlite3_column_int64(s,2),col(s,3),col(s,4),col(s,5)}; sqlite3_finalize(s); return r;
+}
+std::vector<SessionRecord> SessionStore::list_sessions() const {
+    std::lock_guard lock(mutex_); std::vector<SessionRecord> out; sqlite3_stmt* s=nullptr;
+    sqlite3_prepare_v2(db_,"SELECT id,title,last_seq,created_at,updated_at,archived_at FROM sessions ORDER BY updated_at DESC",-1,&s,nullptr);
+    while(sqlite3_step(s)==SQLITE_ROW) out.push_back({col(s,0),col(s,1),sqlite3_column_int64(s,2),col(s,3),col(s,4),col(s,5)});
+    sqlite3_finalize(s); return out;
+}
+RunRecord SessionStore::create_run(const std::string& session_id,const std::string& message) {
+    std::lock_guard lock(mutex_); RunRecord r{make_id("run"),session_id,RunStatus::Queued,message,now_iso(),"",""}; sqlite3_stmt* s=nullptr;
+    sqlite3_prepare_v2(db_,"INSERT INTO runs VALUES(?,?,?,?,?,?,?)",-1,&s,nullptr); bind_text(s,1,r.id);bind_text(s,2,r.session_id);bind_text(s,3,to_string(r.status));bind_text(s,4,message);bind_text(s,5,r.started_at);bind_text(s,6,"");bind_text(s,7,"");
+    if(sqlite3_step(s)!=SQLITE_DONE){sqlite3_finalize(s);throw std::runtime_error("create run failed");} sqlite3_finalize(s); return r;
+}
+std::optional<RunRecord> SessionStore::get_run(const std::string& id) const {
+    std::lock_guard lock(mutex_);sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"SELECT id,session_id,status,user_message,started_at,finished_at,error FROM runs WHERE id=?",-1,&s,nullptr);bind_text(s,1,id);
+    if(sqlite3_step(s)!=SQLITE_ROW){sqlite3_finalize(s);return std::nullopt;} RunRecord r{col(s,0),col(s,1),run_status_from_string(col(s,2)),col(s,3),col(s,4),col(s,5),col(s,6)};sqlite3_finalize(s);return r;
+}
+bool SessionStore::has_unfinished_run(const std::string& session_id) const {
+    std::lock_guard lock(mutex_);sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"SELECT status FROM runs WHERE session_id=?",-1,&s,nullptr);bind_text(s,1,session_id);bool found=false;
+    while(sqlite3_step(s)==SQLITE_ROW) if(unfinished(col(s,0))){found=true;break;} sqlite3_finalize(s);return found;
+}
+void SessionStore::update_run_status(const std::string& id,RunStatus status,const std::string& error) {
+    std::lock_guard lock(mutex_);sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"UPDATE runs SET status=?,finished_at=?,error=? WHERE id=?",-1,&s,nullptr);bind_text(s,1,to_string(status));bind_text(s,2,status==RunStatus::Running||status==RunStatus::WaitingApproval?"":now_iso());bind_text(s,3,error);bind_text(s,4,id);expect_done(s,"update run status");sqlite3_finalize(s);
+}
+ApprovalRecord SessionStore::create_approval(ApprovalRecord a) {
+    std::lock_guard lock(mutex_);if(a.id.empty())a.id=make_id("approval");a.created_at=now_iso();sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"INSERT INTO approvals VALUES(?,?,?,?,?,?,?,?)",-1,&s,nullptr);bind_text(s,1,a.id);bind_text(s,2,a.run_id);bind_text(s,3,a.tool_name);bind_text(s,4,a.arguments_json);bind_text(s,5,a.tool_call_id);bind_text(s,6,to_string(a.status));bind_text(s,7,a.created_at);bind_text(s,8,"");sqlite3_step(s);sqlite3_finalize(s);return a;
+}
+std::optional<ApprovalRecord> SessionStore::get_approval(const std::string&id)const{
+    std::lock_guard lock(mutex_);sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"SELECT id,run_id,tool_name,arguments_json,tool_call_id,status,created_at,resolved_at FROM approvals WHERE id=?",-1,&s,nullptr);bind_text(s,1,id);if(sqlite3_step(s)!=SQLITE_ROW){sqlite3_finalize(s);return std::nullopt;}ApprovalRecord a{col(s,0),col(s,1),col(s,2),col(s,3),col(s,4),approval_status_from_string(col(s,5)),col(s,6),col(s,7)};sqlite3_finalize(s);return a;
+}
+ApprovalRecord SessionStore::resolve_approval(const std::string&id,ApprovalStatus status){auto existing=get_approval(id);if(!existing)throw std::runtime_error("approval not found");if(existing->status!=ApprovalStatus::Pending)return *existing;{std::lock_guard lock(mutex_);sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"UPDATE approvals SET status=?,resolved_at=? WHERE id=?",-1,&s,nullptr);bind_text(s,1,to_string(status));bind_text(s,2,now_iso());bind_text(s,3,id);sqlite3_step(s);sqlite3_finalize(s);}return *get_approval(id);}
+std::filesystem::path SessionStore::journal_path(const std::string&id)const{return root_/"sessions"/(id+".jsonl");}
+RuntimeEvent SessionStore::append_event(RuntimeEvent e){std::lock_guard lock(mutex_);sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"SELECT last_seq FROM sessions WHERE id=?",-1,&s,nullptr);bind_text(s,1,e.session_id);if(sqlite3_step(s)!=SQLITE_ROW){sqlite3_finalize(s);throw std::runtime_error("session not found");}e.seq=sqlite3_column_int64(s,0)+1;sqlite3_finalize(s);e.timestamp=now_iso();std::ofstream out(journal_path(e.session_id),std::ios::app);out<<nlohmann::json(e).dump()<<'\n';out.flush();if(!out)throw std::runtime_error("journal append failed");sqlite3_prepare_v2(db_,"UPDATE sessions SET last_seq=?,updated_at=? WHERE id=?",-1,&s,nullptr);sqlite3_bind_int64(s,1,e.seq);bind_text(s,2,e.timestamp);bind_text(s,3,e.session_id);expect_done(s,"update journal index");sqlite3_finalize(s);return e;}
+std::vector<RuntimeEvent>SessionStore::events_after(const std::string&id,long long after)const{std::lock_guard lock(mutex_);std::vector<RuntimeEvent>out;std::ifstream in(journal_path(id));std::string line;while(std::getline(in,line)){try{auto e=nlohmann::json::parse(line).get<RuntimeEvent>();if(e.seq>after)out.push_back(std::move(e));}catch(...){break;}}return out;}
+std::vector<RunRecord>SessionStore::interrupt_running_runs(){std::vector<RunRecord>out;std::lock_guard lock(mutex_);sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"SELECT id,session_id,status,user_message,started_at,finished_at,error FROM runs WHERE status='running'",-1,&s,nullptr);while(sqlite3_step(s)==SQLITE_ROW)out.push_back({col(s,0),col(s,1),RunStatus::Running,col(s,3),col(s,4),col(s,5),col(s,6)});sqlite3_finalize(s);for(auto&r:out){sqlite3_prepare_v2(db_,"UPDATE runs SET status='interrupted',finished_at=? WHERE id=?",-1,&s,nullptr);bind_text(s,1,now_iso());bind_text(s,2,r.id);sqlite3_step(s);sqlite3_finalize(s);}return out;}
+} // namespace merak

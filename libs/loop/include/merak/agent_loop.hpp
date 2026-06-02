@@ -9,7 +9,7 @@
 #include <merak/context_assembler.hpp>
 #include <merak/compactor.hpp>
 #include <merak/cache_aware_context.hpp>
-#include <functional>
+#include <merak/execution.hpp>
 #include <future>
 #include <memory>
 
@@ -26,15 +26,6 @@ public:
         bool enable_cache = true;
     };
 
-    struct Callbacks {
-        std::function<void(std::string)> on_text_delta;
-        std::function<void(ToolCall)> on_tool_start;
-        std::function<void(ToolResult)> on_tool_end;
-        std::function<void(TurnState, TurnState)> on_state_change;
-        std::function<bool(ToolCall)> on_permission_ask;
-        std::function<void(int, int, bool)> on_usage;
-    };
-
     AgentLoop(
         Config config,
         std::shared_ptr<LlmProvider> llm,
@@ -44,16 +35,17 @@ public:
         std::shared_ptr<Compactor> compactor
     );
 
-    std::future<AgentResponse> run(const std::string& user_message);
+    std::future<AgentResponse> run(
+        const std::string& user_message,
+        RunControl& control,
+        std::vector<Message> initial_history = {},
+        bool append_user_message = true);
     TurnState current_state() const { return state_; }
-    void set_callbacks(Callbacks cbs) { callbacks_ = std::move(cbs); }
     std::shared_ptr<ToolRegistry> tools() { return tools_; }
 
 private:
     Config config_;
     TurnState state_ = TurnState::Idle;
-    Callbacks callbacks_;
-
     std::shared_ptr<LlmProvider> llm_;
     std::shared_ptr<ToolRegistry> tools_;
     std::shared_ptr<MemoryStore> memory_;
@@ -65,12 +57,13 @@ private:
     std::map<std::string, int> tool_failure_streak_;
     static constexpr int kCircuitBreakerThreshold = 3;
 
-    void transition_to(TurnState next);
+    void transition_to(TurnState next, RunControl& control);
     std::vector<Message> build_context(const std::string& user_message);
     std::vector<ToolResult> handle_tool_calls(
-        const std::vector<ToolCall>& calls
+        const std::vector<ToolCall>& calls,
+        RunControl& control
     );
-    void maybe_compact();
+    void maybe_compact(RunControl& control);
 };
 
 } // namespace merak

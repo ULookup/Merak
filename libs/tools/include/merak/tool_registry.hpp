@@ -37,10 +37,11 @@ public:
     }
     size_t size() const { return tools_.size(); }
 
-    std::future<ToolResult> execute(const ToolCall& call);
+    std::future<ToolResult> execute(const ToolCall& call, ToolExecutionContext context = {});
     std::future<std::vector<ToolResult>> execute_all(
         const std::vector<ToolCall>& calls,
-        ExecutionPolicy policy = ExecutionPolicy::Sequential
+        ExecutionPolicy policy = ExecutionPolicy::Sequential,
+        ToolExecutionContext context = {}
     );
 
     bool check_permission(const std::string& tool_name,

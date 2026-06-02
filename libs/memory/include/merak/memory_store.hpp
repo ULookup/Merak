@@ -8,6 +8,7 @@
 #include <future>
 #include <optional>
 #include <expected>
+#include <mutex>
 
 namespace merak {
 
@@ -62,6 +63,7 @@ private:
     MemoryConfig config_;
     std::shared_ptr<EmbeddingProvider> embedder_;
     std::vector<Message> working_memory_;
+    mutable std::mutex working_memory_mutex_;
     std::string db_conn_;
 
     std::expected<void, AgentError> create_tables();
