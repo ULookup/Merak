@@ -4,6 +4,12 @@
 
 namespace merak {
 
+void SubAgentRunner::emit(SubAgentEvent event) const {
+    if (observer_) {
+        observer_(event);
+    }
+}
+
 SubAgentRunner::SubAgentRunner(
     std::shared_ptr<LlmProvider> llm,
     std::shared_ptr<MemoryStore> memory,
@@ -25,17 +31,36 @@ std::future<AgentResponse> SubAgentRunner::delegate(
     const std::string& task
 ) {
     return std::async(std::launch::async, [this, agent_id, task]() -> AgentResponse {
+        emit({SubAgentEventKind::Started, agent_id});
         auto it = profiles_.find(agent_id);
         if (it == profiles_.end()) {
             AgentResponse err;
             err.text = "Agent not found: " + agent_id;
+            emit({SubAgentEventKind::Failed, agent_id});
             return err;
         }
 
         auto sub = create_sub_agent(it->second);
+        AgentLoop::Callbacks callbacks;
+        callbacks.on_state_change = [this, agent_id](TurnState, TurnState state) {
+            emit({SubAgentEventKind::StateChanged, agent_id, state});
+        };
+        callbacks.on_tool_start = [this, agent_id](ToolCall call) {
+            emit({SubAgentEventKind::ToolStarted, agent_id, TurnState::Acting, call.name});
+        };
+        sub->set_callbacks(std::move(callbacks));
         spdlog::info("SubAgentRunner: delegating '{}' to '{}'",
             task.substr(0, 30), agent_id);
-        return sub->run(task).get();
+        try {
+            auto response = sub->run(task).get();
+            emit({response.interrupted ? SubAgentEventKind::Failed
+                                       : SubAgentEventKind::Completed,
+                  agent_id});
+            return response;
+        } catch (...) {
+            emit({SubAgentEventKind::Failed, agent_id});
+            throw;
+        }
     });
 }
 

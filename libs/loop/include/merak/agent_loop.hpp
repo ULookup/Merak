@@ -9,6 +9,7 @@
 #include <merak/context_assembler.hpp>
 #include <merak/compactor.hpp>
 #include <merak/cache_aware_context.hpp>
+#include <atomic>
 #include <functional>
 #include <future>
 #include <memory>
@@ -47,6 +48,9 @@ public:
     TurnState current_state() const { return state_; }
     void set_callbacks(Callbacks cbs) { callbacks_ = std::move(cbs); }
     std::shared_ptr<ToolRegistry> tools() { return tools_; }
+    void request_cancel() { cancel_requested_.store(true); }
+    void reset_cancel() { cancel_requested_.store(false); }
+    bool cancel_requested() const { return cancel_requested_.load(); }
 
 private:
     Config config_;
@@ -62,6 +66,7 @@ private:
 
     std::vector<Message> session_history_;
     std::map<std::string, int> tool_failure_streak_;
+    std::atomic<bool> cancel_requested_{false};
     static constexpr int kCircuitBreakerThreshold = 3;
 
     void transition_to(TurnState next);
@@ -70,6 +75,7 @@ private:
         const std::vector<ToolCall>& calls
     );
     void maybe_compact();
+    bool stop_if_cancelled(AgentResponse& response);
 };
 
 } // namespace merak

@@ -6,6 +6,8 @@
 #include <merak/memory_store.hpp>
 #include <merak/context_assembler.hpp>
 #include <merak/compactor.hpp>
+#include <merak/turn_state.hpp>
+#include <functional>
 #include <map>
 #include <string>
 #include <vector>
@@ -19,8 +21,25 @@ struct Delegation {
     std::string task;
 };
 
+enum class SubAgentEventKind {
+    Started,
+    StateChanged,
+    ToolStarted,
+    Completed,
+    Failed,
+};
+
+struct SubAgentEvent {
+    SubAgentEventKind kind;
+    std::string agent_id;
+    TurnState state = TurnState::Idle;
+    std::string tool_name;
+};
+
 class SubAgentRunner {
 public:
+    using Observer = std::function<void(const SubAgentEvent&)>;
+
     SubAgentRunner(
         std::shared_ptr<LlmProvider> llm,
         std::shared_ptr<MemoryStore> memory,
@@ -41,16 +60,19 @@ public:
     bool has_agent(const std::string& id) const {
         return profiles_.count(id) > 0;
     }
+    void set_observer(Observer observer) { observer_ = std::move(observer); }
 
 private:
     std::shared_ptr<LlmProvider> llm_;
     std::shared_ptr<MemoryStore> memory_;
     std::shared_ptr<ToolRegistry> parent_tools_;
     std::map<std::string, SubAgentConfig> profiles_;
+    Observer observer_;
 
     std::unique_ptr<class AgentLoop> create_sub_agent(
         const SubAgentConfig& profile
     );
+    void emit(SubAgentEvent event) const;
 };
 
 } // namespace merak

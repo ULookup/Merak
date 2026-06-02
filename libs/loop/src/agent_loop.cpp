@@ -30,10 +30,18 @@ void AgentLoop::transition_to(TurnState next) {
     spdlog::debug("Loop: {} → {}", state_name(prev), state_name(next));
 }
 
+bool AgentLoop::stop_if_cancelled(AgentResponse& response) {
+    if (!cancel_requested()) {
+        return false;
+    }
+    response.interrupted = true;
+    transition_to(TurnState::Complete);
+    return true;
+}
+
 std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
     return std::async(std::launch::async, [this, user_message]() -> AgentResponse {
         AgentResponse response;
-
         Message user_msg;
         user_msg.role = "user";
         user_msg.content = user_message;
@@ -46,11 +54,20 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
         int turn_count = 0;
 
         while (turn_count < config_.max_turns) {
+            if (stop_if_cancelled(response)) {
+                return response;
+            }
             if (config_.enable_compaction) {
                 maybe_compact();
             }
+            if (stop_if_cancelled(response)) {
+                return response;
+            }
 
             auto context_messages = build_context(user_message);
+            if (stop_if_cancelled(response)) {
+                return response;
+            }
 
             auto split = CacheAwareContext::split(context_messages);
             spdlog::debug("Loop: turn {} — {}", turn_count,
@@ -93,6 +110,9 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
             }
 
             accumulated_tool_calls = llm_response.tool_calls;
+            if (stop_if_cancelled(response)) {
+                return response;
+            }
 
             if (accumulated_tool_calls.empty()) {
                 transition_to(TurnState::Responding);
@@ -122,6 +142,9 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
                 session_history_.push_back(tool_msg);
                 memory_->append_message(tool_msg);
             }
+            if (stop_if_cancelled(response)) {
+                return response;
+            }
 
             transition_to(TurnState::Observing);
             transition_to(TurnState::ContextReady);
@@ -131,6 +154,9 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
             config_.max_turns);
 
         transition_to(TurnState::Thinking);
+        if (stop_if_cancelled(response)) {
+            return response;
+        }
         ChatRequest final_req;
         final_req.model = config_.default_model;
         final_req.messages = build_context(
@@ -156,6 +182,9 @@ std::future<AgentResponse> AgentLoop::run(const std::string& user_message) {
                 final_resp.total_input_tokens,
                 final_resp.total_output_tokens,
                 final_resp.has_usage);
+        }
+        if (stop_if_cancelled(response)) {
+            return response;
         }
 
         transition_to(TurnState::Complete);
@@ -187,6 +216,9 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
     std::vector<ToolResult> results;
 
     for (auto& call : calls) {
+        if (cancel_requested()) {
+            break;
+        }
         if (callbacks_.on_tool_start) {
             callbacks_.on_tool_start(call);
         }
@@ -228,6 +260,17 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
                 continue;
             }
         }
+        if (cancel_requested()) {
+            ToolResult interrupted;
+            interrupted.call_id = call.id;
+            interrupted.is_error = true;
+            interrupted.output = "Interrupted before tool execution: " + call.name;
+            results.push_back(interrupted);
+            if (callbacks_.on_tool_end) {
+                callbacks_.on_tool_end(interrupted);
+            }
+            break;
+        }
 
         auto result_future = tools_->execute(call);
         auto result = result_future.get();
@@ -243,6 +286,9 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
 
         if (callbacks_.on_tool_end) {
             callbacks_.on_tool_end(result);
+        }
+        if (cancel_requested()) {
+            break;
         }
     }
 

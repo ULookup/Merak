@@ -1,10 +1,12 @@
 #pragma once
-#include "panels/chat_panel.hpp"
+#include "chat_model.hpp"
+#include <memory>
 #include <string>
+#include <vector>
 
 namespace merak::tui {
 
-inline void add_welcome_banner(ChatPanel& chat,
+inline void add_welcome_banner(ChatModel& chat,
                                const std::string& provider,
                                const std::string& model) {
     auto model_info = "   " + provider + " · " + model;
@@ -13,27 +15,29 @@ inline void add_welcome_banner(ChatPanel& chat,
         model_info += std::string(56 - model_info_width, ' ');
     }
 
-    chat.add_line("");
-    chat.add_line("╭─ merak v0.2.0 ─────────────────────────────────────────╮");
-    chat.add_line("│           ·              ✦              ·              │");
-    chat.add_line("│                         ╱╲                             │");
-    chat.add_line("│              ▟█▙      ╱  ╲      ▟█▙                    │");
-    chat.add_line("│          ▟███████▙  ╱ ✧  ╲  ▟███████▙                  │");
-    chat.add_line("│       ▟████████████████████████████████▙               │");
-    chat.add_line("│                                                        │");
-    chat.add_line("│   ███╗   ███╗███████╗██████╗  █████╗ ██╗  ██╗          │");
-    chat.add_line("│   ████╗ ████║██╔════╝██╔══██╗██╔══██╗██║ ██╔╝          │");
-    chat.add_line("│   ██╔████╔██║█████╗  ██████╔╝███████║█████╔╝           │");
-    chat.add_line("│   ██║╚██╔╝██║██╔══╝  ██╔══██╗██╔══██║██╔═██╗           │");
-    chat.add_line("│   ██║ ╚═╝ ██║███████╗██║  ██║██║  ██║██║  ██╗          │");
-    chat.add_line("│                                                        │");
-    chat.add_line("│" + model_info + "│");
-    chat.add_line("│   ─────────────────────────────────────────────────    │");
-    chat.add_line("│   Tips                                                 │");
-    chat.add_line("│   /        command palette     F1       help           │");
-    chat.add_line("│   Ctrl+O   context usage       /exit    leave session  │");
-    chat.add_line("╰────────────────────────────────────────────────────────╯");
-    chat.add_line("");
+    chat.commit(std::make_unique<RawCell>(std::vector<std::string>{
+        "",
+        "╭─ merak v0.2.0 ─────────────────────────────────────────╮",
+        "│           ·              ✦              ·              │",
+        "│                         ╱╲                             │",
+        "│              ▟█▙      ╱  ╲      ▟█▙                    │",
+        "│          ▟███████▙  ╱ ✧  ╲  ▟███████▙                  │",
+        "│       ▟████████████████████████████████▙               │",
+        "│                                                        │",
+        "│   ███╗   ███╗███████╗██████╗  █████╗ ██╗  ██╗          │",
+        "│   ████╗ ████║██╔════╝██╔══██╗██╔══██╗██║ ██╔╝          │",
+        "│   ██╔████╔██║█████╗  ██████╔╝███████║█████╔╝           │",
+        "│   ██║╚██╔╝██║██╔══╝  ██╔══██╗██╔══██║██╔═██╗           │",
+        "│   ██║ ╚═╝ ██║███████╗██║  ██║██║  ██║██║  ██╗          │",
+        "│                                                        │",
+        "│" + model_info + "│",
+        "│   ─────────────────────────────────────────────────    │",
+        "│   Tips                                                 │",
+        "│   /        command palette     F1       help           │",
+        "│   Ctrl+O   context usage       /exit    leave session  │",
+        "╰────────────────────────────────────────────────────────╯",
+        "",
+    }));
 }
 
 } // namespace merak::tui

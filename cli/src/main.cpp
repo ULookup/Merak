@@ -21,7 +21,6 @@
 #include "commands/command_router.hpp"
 #include "tui/panel.hpp"
 #include "tui/screen_manager.hpp"
-#include "tui/panels/chat_panel.hpp"
 #include "tui/welcome.hpp"
 
 using namespace merak;
@@ -344,54 +343,27 @@ int main(int argc, char* argv[]) {
             loop_cfg, llm, registry, memory, ctx, comp
         );
 
-        auto chat = std::make_unique<tui::ChatPanel>();
-        auto* chat_ptr = chat.get();
-        tui::ScreenManager tui(std::move(chat));
+        tui::ScreenManager tui;
 
         tui.status_bar().set_provider(cfg.llm.provider);
         tui.status_bar().set_model(cfg.llm.default_model);
-        tui.status_bar().set_state("Idle");
+        tui.status_bar().set_permission_mode(cfg.agent.permission_mode);
         tui.set_system_prompt(cfg.agent.system_prompt);
 
-        merak::tui::add_welcome_banner(*chat_ptr, cfg.llm.provider, cfg.llm.default_model);
-
-        auto state_label = [](TurnState state) {
-            switch (state) {
-                case TurnState::Thinking:     return "Thinking...";
-                case TurnState::Acting:       return "Running tools...";
-                case TurnState::Observing:    return "Observing...";
-                case TurnState::Responding:   return "Responding...";
-                case TurnState::ContextReady: return "Preparing context...";
-                case TurnState::Complete:     return "Idle";
-                case TurnState::Error:        return "Error";
-                case TurnState::Idle:         return "Idle";
-            }
-            return "Idle";
-        };
+        merak::tui::add_welcome_banner(tui.model(), cfg.llm.provider, cfg.llm.default_model);
 
         AgentLoop::Callbacks cbs;
         cbs.on_text_delta = [&](std::string text) {
-            tui.post([chat_ptr, text = std::move(text)] {
-                chat_ptr->append_assistant_delta(text);
-            });
+            tui.post(merak::tui::TextDelta{std::move(text)});
         };
         cbs.on_tool_start = [&](ToolCall call) {
-            tui.post([&tui, chat_ptr, call = std::move(call)] {
-                tui.record_tool_start();
-                chat_ptr->add_tool_start(call);
-                tui.status_bar().set_state("Running " + call.name + "...");
-            });
+            tui.post(merak::tui::ToolStarted{std::move(call)});
         };
         cbs.on_tool_end = [&](ToolResult result) {
-            tui.post([&tui, chat_ptr, result = std::move(result)] {
-                tui.record_tool_end();
-                chat_ptr->finish_tool(result);
-            });
+            tui.post(merak::tui::ToolEnded{std::move(result)});
         };
         cbs.on_state_change = [&](TurnState, TurnState to) {
-            tui.post([&tui, to, state_label] {
-                tui.status_bar().set_state(state_label(to));
-            });
+            tui.post(merak::tui::StateChanged{to});
         };
         cbs.on_permission_ask = [&](ToolCall call) {
             if (!registry->requires_approval(call.name)) return true;
@@ -401,11 +373,10 @@ int main(int argc, char* argv[]) {
             return future.get();
         };
         cbs.on_usage = [&](int input_tokens, int output_tokens, bool has_usage) {
-            tui.post([&tui, input_tokens, output_tokens, has_usage] {
-                tui.record_usage(input_tokens, output_tokens, has_usage);
-            });
+            tui.post(merak::tui::Usage{input_tokens, output_tokens, has_usage});
         };
         loop->set_callbacks(std::move(cbs));
+        tui.set_on_interrupt([&] { loop->request_cancel(); });
 
         // Wire submit callback
         std::function<void(std::string)> handle_input;
@@ -436,33 +407,17 @@ int main(int argc, char* argv[]) {
             }
             // Normal chat message
             if (!input.starts_with("/")) {
+                loop->reset_cancel();
                 tui.start_background([&, input = std::move(input)] {
                     try {
                         auto response = loop->run(input).get();
-                        tui.post([&tui, chat_ptr, response = std::move(response)] {
-                            chat_ptr->finish_assistant_response(response.text);
-                            chat_ptr->add_turn_summary(
-                                response.total_input_tokens,
-                                response.total_output_tokens,
-                                static_cast<int>(response.tool_results.size()),
-                                response.has_usage && !response.usage_missing);
-                            tui.record_turn_complete();
-                            tui.status_bar().set_state("Idle");
-                            tui.finish_background();
-                        });
+                        tui.post(merak::tui::TurnCompleted{std::move(response)});
                     } catch (const std::exception& e) {
-                        tui.post([&tui, chat_ptr, error = std::string(e.what())] {
-                            chat_ptr->finish_assistant_response();
-                            chat_ptr->add_line("✗ " + error);
-                            chat_ptr->add_line("");
-                            tui.status_bar().set_state("Error");
-                            tui.finish_background();
-                        });
+                        tui.post(merak::tui::TurnFailed{e.what()});
                     }
                 });
             }
         };
-        chat_ptr->set_on_submit(handle_input);
         tui.set_on_command(handle_input);
 
         tui.run();
