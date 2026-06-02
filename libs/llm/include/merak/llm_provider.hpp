@@ -3,6 +3,7 @@
 #include <merak/tool_spec.hpp>
 #include <merak/error.hpp>
 #include <merak/config.hpp>
+#include <merak/execution.hpp>
 #include <string>
 #include <vector>
 #include <functional>
@@ -33,7 +34,8 @@ public:
 
     virtual std::future<AgentResponse> chat(
         const ChatRequest& request,
-        std::function<void(StreamChunk)> on_chunk
+        std::function<void(StreamChunk)> on_chunk,
+        std::shared_ptr<CancellationToken> cancellation = {}
     ) = 0;
 
     virtual std::string name() const = 0;

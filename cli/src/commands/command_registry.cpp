@@ -35,6 +35,10 @@ const std::vector<CommandMeta>& all_commands() {
             CommandGroup::Core, {}, {}, {}
         },
         CommandMeta{
+            "/context", "Show context and token usage",
+            CommandGroup::Core, {}, {}, {}
+        },
+        CommandMeta{
             "/exit", "Exit Merak",
             CommandGroup::Core, {}, {}, {}
         },
@@ -47,13 +51,21 @@ const std::vector<CommandMeta>& all_commands() {
         CommandMeta{
             "/session", "Session management",
             CommandGroup::Session,
-            {{"list", "List sessions"}, {"history", "Session history"}, {"export", "Export to markdown"}},
-            "[list | history | export]", {}
+            {{"list", "List sessions"}, {"new", "Create a new session"}, {"use", "Switch to a session"}},
+            "[list | new | use <id>]", {}
+        },
+        CommandMeta{
+            "/transcript", "Browse the current session transcript",
+            CommandGroup::Session, {}, {}, {}
         },
 
         // ── Tools ──
         CommandMeta{
             "/tools", "Show loaded tools and MCP status",
+            CommandGroup::Tools, {}, {}, {}
+        },
+        CommandMeta{
+            "/tool-calls", "Browse tool calls and full output",
             CommandGroup::Tools, {}, {}, {}
         },
         CommandMeta{

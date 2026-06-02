@@ -35,7 +35,7 @@ ToolSpec ReadFileTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> ReadFileTool::execute(ToolCall call) {
+std::future<ToolResult> ReadFileTool::execute(ToolCall call, ToolExecutionContext) {
     return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
@@ -94,7 +94,7 @@ ToolSpec WriteFileTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> WriteFileTool::execute(ToolCall call) {
+std::future<ToolResult> WriteFileTool::execute(ToolCall call, ToolExecutionContext) {
     return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
@@ -145,7 +145,7 @@ ToolSpec EditFileTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> EditFileTool::execute(ToolCall call) {
+std::future<ToolResult> EditFileTool::execute(ToolCall call, ToolExecutionContext) {
     return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
@@ -231,7 +231,7 @@ static bool match_glob(const std::string& name, const std::string& pat) {
     return pi == pat.size() && ni == name.size();
 }
 
-std::future<ToolResult> GlobTool::execute(ToolCall call) {
+std::future<ToolResult> GlobTool::execute(ToolCall call, ToolExecutionContext) {
     return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
@@ -295,7 +295,7 @@ ToolSpec GrepTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> GrepTool::execute(ToolCall call) {
+std::future<ToolResult> GrepTool::execute(ToolCall call, ToolExecutionContext) {
     return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
@@ -388,8 +388,8 @@ ToolSpec BashTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> BashTool::execute(ToolCall call) {
-    return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
+std::future<ToolResult> BashTool::execute(ToolCall call, ToolExecutionContext context) {
+    return std::async(std::launch::async, [call = std::move(call), context]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -447,6 +447,7 @@ std::future<ToolResult> BashTool::execute(ToolCall call) {
             }
 
             if (pid == 0) {
+                setpgid(0, 0);
                 close(pipefd[0]);
                 dup2(pipefd[1], STDOUT_FILENO);
                 dup2(pipefd[1], STDERR_FILENO);
@@ -455,6 +456,7 @@ std::future<ToolResult> BashTool::execute(ToolCall call) {
             }
 
             close(pipefd[1]);
+            setpgid(pid, pid);
             std::array<char, 65536> buf{};
             std::string output;
 
@@ -462,6 +464,14 @@ std::future<ToolResult> BashTool::execute(ToolCall call) {
                 std::chrono::milliseconds(timeout_ms);
 
             while (true) {
+                if (context.cancellation && context.cancellation->cancelled()) {
+                    kill(-pid, SIGKILL);
+                    waitpid(pid, nullptr, 0);
+                    result.is_error = true;
+                    result.output = output + "\n[Cancelled]";
+                    close(pipefd[0]);
+                    return result;
+                }
                 auto now = std::chrono::steady_clock::now();
                 if (now >= deadline) {
                     kill(pid, SIGKILL);

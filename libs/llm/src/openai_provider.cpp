@@ -16,9 +16,10 @@ OpenAIProvider::~OpenAIProvider() = default;
 
 std::future<AgentResponse> OpenAIProvider::chat(
     const ChatRequest& request,
-    std::function<void(StreamChunk)> on_chunk
+    std::function<void(StreamChunk)> on_chunk,
+    std::shared_ptr<CancellationToken> cancellation
 ) {
-    return std::async(std::launch::async, [this, request, on_chunk]() -> AgentResponse {
+    return std::async(std::launch::async, [this, request, on_chunk, cancellation]() -> AgentResponse {
         nlohmann::json body;
         body["model"] = request.model;
         body["messages"] = build_messages(request.messages);
@@ -46,6 +47,13 @@ std::future<AgentResponse> OpenAIProvider::chat(
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
+            +[](void* userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
+                auto* token = static_cast<CancellationToken*>(userdata);
+                return token && token->cancelled() ? 1 : 0;
+            });
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancellation.get());
 
         std::string response_text;
         int input_tokens = 0, output_tokens = 0;
@@ -134,7 +142,11 @@ std::future<AgentResponse> OpenAIProvider::chat(
             spdlog::error("curl error: {}", curl_easy_strerror(res));
             curl_easy_cleanup(curl);
             curl_slist_free_all(headers);
-            throw AgentError(ErrorType::LLM_ERROR, curl_easy_strerror(res));
+            throw AgentError(
+                cancellation && cancellation->cancelled()
+                    ? ErrorType::LLM_TIMEOUT : ErrorType::LLM_ERROR,
+                cancellation && cancellation->cancelled()
+                    ? "LLM request cancelled" : curl_easy_strerror(res));
         }
 
         curl_easy_cleanup(curl);

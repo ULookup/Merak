@@ -14,7 +14,8 @@ public:
 
     std::future<AgentResponse> chat(
         const ChatRequest& request,
-        std::function<void(StreamChunk)> on_chunk
+        std::function<void(StreamChunk)> on_chunk,
+        std::shared_ptr<CancellationToken> cancellation = {}
     ) override;
 
     std::string name() const override { return "anthropic"; }

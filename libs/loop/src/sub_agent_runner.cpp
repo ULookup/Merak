@@ -35,7 +35,8 @@ std::future<AgentResponse> SubAgentRunner::delegate(
         auto sub = create_sub_agent(it->second);
         spdlog::info("SubAgentRunner: delegating '{}' to '{}'",
             task.substr(0, 30), agent_id);
-        return sub->run(task).get();
+        NullRunControl control;
+        return sub->run(task, control).get();
     });
 }
 

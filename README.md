@@ -1,175 +1,318 @@
 # Merak Agent
 
-> 一个用于深入学习 Agent 内部机制的 C++20 教学项目 — 从零构建类似 Claude Code/Codex CLI 的智能助手。
+> 一个用于学习现代 Agent Runtime 内部机制的 C++23 项目。当前形态是本地常驻 Agent 服务端，加上独立 TUI 客户端。
 
-## 目标
+## 项目定位
 
-Merak 的目标并非生产可用，而是**通过亲手实现来理解现代 AI Agent 的六大核心系统**：
+Merak 不以生产部署为目标，而是通过可阅读、可拆解的实现理解现代 Coding Agent 的核心机制：
 
-- **对话循环 (Agent Loop)** — 状态机驱动的多轮对话，LLM 思考 → 工具调用 → 结果观察 → 继续思考
-- **上下文管理 (Context)** — Token 预算分配、前缀缓存优化、历史压缩与摘要
-- **记忆系统 (Memory)** — 短期工作记忆 + 基于 pgvector 的长期语义记忆
-- **工具调用 (Tools)** — 统一工具注册表，内置工具与 MCP 远端工具透明调度
-- **多 Agent 协作 (Multi-Agent)** — Fan-out 并行、Sequential 串行、Adversarial 对抗三种分发模式
-- **MCP 集成** — 通过 Model Context Protocol 接入外部工具生态
+- **Agent Loop**：LLM 推理、工具调用、结果观察和多轮状态机。
+- **Runtime**：Session、Run、事件流、审批、取消和恢复。
+- **上下文管理**：Token 预算、前缀缓存意识、历史压缩和摘要。
+- **工具系统**：内置工具、权限检查、MCP 动态工具和取消传播。
+- **持久化**：SQLite 当前状态索引和 JSONL 追加式事件日志。
+- **终端客户端**：通过 HTTP + SSE 连接 runtime 的 TUI，不持有 Agent 核心状态。
 
-## 技术栈
+## 当前架构
 
-| 类别 | 技术 |
-|------|------|
-| 语言 | C++20（协程、concepts、ranges） |
-| 构建 | CMake + Conan 2 |
-| 异步 | Boost.Asio |
-| 数据库 | PostgreSQL 14+ + pgvector |
-| JSON | nlohmann/json |
-| HTTP | libcurl |
-| 日志 | spdlog |
-| 测试 | Google Test |
+Merak 已从单进程 CLI 拆分为两个运行角色：
 
-## 架构
-
-9 个模块，自底向上分层构建，每个模块编译为独立静态库：
-
+```text
+merak tui
+   │
+   │ HTTP + SSE
+   ▼
+merak serve                     仅监听 127.0.0.1
+   │
+   ├── merak-http               REST 路由、SSE backlog/live stream
+   ├── merak-runtime            Session、Run、EventBus、审批、取消
+   ├── merak-storage            SQLite 索引、JSONL journal、启动恢复
+   ├── merak-loop               Agent 状态机、工具循环、上下文压缩
+   ├── merak-context            上下文组装、Token 预算、缓存前缀分析
+   ├── merak-tools              内置工具、权限、MCP 包装
+   ├── merak-mcp                MCP stdio 客户端、远端工具发现
+   ├── merak-llm                OpenAI / Anthropic 流式 Provider
+   ├── merak-memory             工作记忆、pgvector 长期记忆接口
+   ├── merak-config             分层配置加载
+   └── merak-core               共享类型、执行端口、错误定义
 ```
-merak-cli        ← 终端交互，流式渲染
-merak-loop       ← 对话循环，状态机，多 Agent 调度
-merak-context    ← 上下文组装，Token 预算，压缩
-merak-tools      ← 工具注册表，统一调度，权限检查
-merak-llm        ← LLM Provider 抽象，流式调用，缓存策略
-merak-mcp        ← MCP 客户端，远端工具发现
-merak-memory     ← 短期/长期记忆，向量检索
-merak-config     ← 模型配置，密钥，全局参数
-merak-core       ← 共享类型，错误定义，JSON 序列化
-```
+
+TUI 只负责输入和渲染。LLM Provider、工具、MCP、Memory 和 AgentLoop 全部由 `merak serve` 初始化。
 
 ### 依赖关系
 
+```text
+merak-core
+├── merak-config
+├── merak-mcp
+├── merak-llm
+├── merak-memory
+├── merak-storage
+├── merak-tools        ← core, mcp
+├── merak-context      ← core, memory, llm
+├── merak-loop         ← core, config, llm, memory, tools, context
+├── merak-runtime      ← core, storage, loop
+├── merak-http         ← core, runtime
+└── merak-cli          ← HTTP server composition root + TUI HTTP/SSE client
 ```
-merak-core        ← 无依赖
-merak-config      ← core
-merak-llm         ← core, config
-merak-memory      ← core, config
-merak-mcp         ← core, config
-merak-tools       ← core, mcp
-merak-context     ← core, memory
-merak-loop        ← core, context, tools, llm, memory
-merak-cli         ← loop, config
+
+## Runtime 模型
+
+### Session
+
+Session 是长期存在的对话线程。关闭 TUI 不会关闭 Session。
+
+```text
+active → archived
 ```
+
+### Run
+
+每次用户消息会创建一个 Run。同一 Session 同时只允许一个未完成 Run。
+
+```text
+queued
+  → running
+  → waiting_approval
+  → running
+  → completed
+
+running          → failed
+running          → cancelled
+running          → interrupted
+waiting_approval → cancelled
+```
+
+服务端重启时：
+
+- `running` Run 会标记为 `interrupted`。
+- `waiting_approval` Run 会保留；审批后可从 journal 重建消息并继续。
+- 正在执行中的网络请求或 Shell 进程不会跨进程恢复。
+
+### 事件流
+
+Runtime 先追加 JSONL journal，再更新 SQLite 索引，最后广播 SSE。TUI 断线重连时携带最后一个 `seq`，服务端先补发缺失事件，再继续发送实时事件。
+
+公开事件包括：
+
+```text
+session_created
+run_started
+state_changed
+text_delta
+usage_updated
+tool_started
+tool_completed
+approval_requested
+approval_resolved
+run_completed
+run_failed
+run_cancelled
+run_interrupted
+```
+
+内部恢复记录包括：
+
+```text
+message_appended
+compaction_applied
+```
+
+## HTTP API
+
+`merak serve` 默认监听 `127.0.0.1:3888`。第一版没有鉴权，因此不提供局域网监听参数。
+
+```text
+GET  /v1/runtime
+POST /v1/sessions
+GET  /v1/sessions
+GET  /v1/sessions/{id}
+GET  /v1/sessions/{id}/events?after={seq}
+GET  /v1/sessions/{id}/events/stream?after={seq}
+POST /v1/sessions/{id}/runs
+POST /v1/approvals/{id}
+POST /v1/runs/{id}/cancel
+```
+
+## Agent Loop
+
+单个 Run 内的状态机：
+
+```text
+IDLE
+  → CONTEXT_READY
+  → THINKING
+  → [ACTING → OBSERVING → CONTEXT_READY] × N
+  → RESPONDING
+  → COMPLETE
+```
+
+安全机制：
+
+- 最多 25 轮工具调用，可配置。
+- 工具连续失败 3 次后触发熔断。
+- Token 压力过高时压缩历史，并将摘要写入 journal。
+- OpenAI 和 Anthropic 请求支持通过 libcurl progress callback 取消。
+- Shell 使用独立进程组，取消 Run 时终止整个子进程组。
+- MCP 等无法立即中止的调用会在返回后丢弃已取消 Run 的结果。
+
+## 工具系统
+
+当前注册 6 个内置工具：
+
+| 工具 | 权限 | 用途 |
+|------|------|------|
+| `read_file` | `safe` | 读取文件 |
+| `write_file` | `ask` | 写入文件 |
+| `edit_file` | `ask` | 精确替换文件内容 |
+| `glob` | `safe` | 匹配文件 |
+| `grep` | `safe` | 搜索代码 |
+| `execute_bash` | `ask` | 执行 Shell 命令 |
+
+MCP Server 可通过配置启动，并将远端工具动态注册进同一 `ToolRegistry`。
+
+## 持久化
+
+默认存储目录：
+
+```text
+~/.merak/runtime.sqlite3
+~/.merak/sessions/{session_id}.jsonl
+```
+
+- SQLite 保存 Session、Run 和 Approval 的当前状态。
+- JSONL 保存不可变事件历史，用于审计、SSE 补发和恢复。
+- 服务端启动时会根据 journal 修复 SQLite 中落后的 `last_seq`。
 
 ## 构建与运行
 
-### 前置依赖
+### 依赖
 
 - GCC >= 13 或 Clang >= 17
-- CMake >= 3.25
+- CMake >= 3.22
 - Conan >= 2.0
-- PostgreSQL >= 14（长期记忆，可选）
-- pgvector 扩展（长期记忆，可选）
+- PostgreSQL >= 14 和 pgvector，可选
+
+主要第三方库：
+
+| 类别 | 技术 |
+|------|------|
+| 语言 | C++23 |
+| 构建 | CMake + Conan 2 |
+| HTTP Server | cpp-httplib |
+| HTTP Client | libcurl |
+| Runtime 状态 | SQLite |
+| 长期记忆 | PostgreSQL + pgvector |
+| JSON | nlohmann/json |
+| 日志 | spdlog |
+| TUI | FTXUI + inline terminal renderer |
 
 ### 安装依赖并构建
 
 ```bash
-# 安装 Conan 依赖
 conan install . --build=missing -s build_type=Debug
-
-# 配置 CMake
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug
-
-# 编译
-cmake --build build -j$(nproc)
-
-# 运行 CLI
-./build/cli/merak config.json
+cmake -B build \
+  -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake \
+  -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
 ```
 
-### 运行测试
+### 初始化
 
 ```bash
-cd build && ctest --output-on-failure
+./build/cli/merak --init
 ```
+
+编辑 `~/.merak/settings.local.json`，填入 API Key。
+
+### 启动
+
+在一个终端启动服务端：
+
+```bash
+./build/cli/merak serve
+```
+
+在另一个终端启动 TUI：
+
+```bash
+./build/cli/merak tui
+```
+
+恢复已有 Session：
+
+```bash
+./build/cli/merak tui --session <session_id>
+```
+
+### TUI 命令
+
+```text
+/session list
+/session new
+/session use <id>
+/tools
+/context
+/transcript
+/tool-calls
+/clear
+/exit
+```
+
+执行期间按 `Ctrl+C` 会先取消当前 Run；空闲时按 `Ctrl+C` 退出 TUI。
+
+### 测试
+
+```bash
+cd build
+ctest --output-on-failure
+```
+
+测试源码覆盖 storage、runtime、HTTP 契约和 TUI runtime client。
 
 ## 项目结构
 
-```
+```text
 Merak/
-├── CMakeLists.txt
-├── conanfile.txt
 ├── libs/
-│   ├── core/        # merak-core: 共享类型、错误
-│   ├── config/      # merak-config: 配置加载
-│   ├── llm/         # merak-llm: LLM Provider
-│   ├── memory/      # merak-memory: 记忆系统
-│   ├── mcp/         # merak-mcp: MCP 客户端
-│   ├── tools/       # merak-tools: 工具注册
-│   ├── context/     # merak-context: 上下文管理
-│   └── loop/        # merak-loop: 对话循环
-├── cli/             # merak-cli: 终端前端
-├── tests/           # 集成测试
-└── docs/            # 设计与计划文档
+│   ├── core/          # 共享类型、执行端口
+│   ├── config/        # 配置加载
+│   ├── llm/           # OpenAI / Anthropic Provider
+│   ├── memory/        # 工作记忆、长期记忆接口
+│   ├── mcp/           # MCP stdio 客户端
+│   ├── tools/         # 内置工具、ToolRegistry
+│   ├── context/       # 上下文预算、压缩
+│   ├── loop/          # AgentLoop、SubAgentRunner
+│   ├── storage/       # SQLite + JSONL
+│   ├── runtime/       # Session、Run、EventBus、Approval
+│   └── http/          # REST + SSE
+├── cli/               # serve / tui 入口和终端客户端
+└── tests/             # CTest 注册
 ```
 
-## 关键设计原则
+## 当前边界
 
-- **核心库与 CLI 分离** — merak-loop 及以下都是独立库，可嵌入其他程序
-- **异步优先** — 所有 IO 操作基于 C++20 协程，不阻塞线程
-- **统一抽象** — 对 Loop 而言，工具来源（内置/MCP）和记忆存储后端完全透明
-- **追加不修改** — 消息历史只追加，保证 LLM Prompt 缓存前缀命中
-- **自底向上构建** — 从零依赖的 core 开始，逐层叠加能力
+已有实现但仍需后续完善：
 
-## 对话循环状态机
+- 长期记忆 pgvector 接口已存在，但 CLI composition root 尚未接入 EmbeddingProvider。
+- `SubAgentRunner` 提供委派、fan-out 和串行执行库能力，但尚未暴露为 TUI 工作流。
+- 测试源码已补齐，但当前提交没有执行 Conan 安装、编译或测试验证。
 
-```
-IDLE → CONTEXT_READY → THINKING → [ACTING → OBSERVING → CONTEXT_READY]×N → RESPONDING → COMPLETE
-```
+暂未包含：
 
-- **IDLE** — 等待用户输入
-- **CONTEXT_READY** — 上下文组装完成（SystemPrompt + History + Tools + Memory）
-- **THINKING** — 向 LLM 发送请求，等待流式响应
-- **ACTING** — 执行 LLM 请求的工具调用
-- **OBSERVING** — 工具结果注入上下文，准备下一轮
-- **RESPONDING** — 流式输出文本给用户
-- **COMPLETE** — 回复完成
-
-安全阀：最多 25 轮工具调用，Token 预算超限触发上下文压缩。
-
-## 内存 / 记忆系统
-
-| 层级 | 范围 | 存储 | 内容 |
-|------|------|------|------|
-| 短期记忆 | 当前 Session | 内存 | 对话历史、压缩摘要、任务上下文 |
-| 长期记忆 | 跨 Session | PostgreSQL + pgvector | 对话摘要、用户偏好、项目信息 |
-
-长期记忆支持语义检索（top-K 向量搜索），置信度随时间衰减。
-
-## 工具系统
-
-内置 9 个默认工具，3 级权限模型：
-
-- `auto` — 只读操作自动通过（如 read_file、grep、glob）
-- `ask` — 写入/执行操作需用户确认（如 write_file、execute_bash）
-- `deny` — 特定工具完全禁止
-
-通过 MCP 协议可动态注册外部工具，对对话循环完全透明。
-
-## 范围边界
-
-以下能力是生产级 Agent 的重要组成部分，但本学习项目暂不包含：
-
-- Hook 系统
-- ML 分类器权限判定
-- Shell 沙箱隔离
-- 多租户支持
-- 分布式部署
-- E2E 测试框架
-- Plugin 插件系统
-- 性能压测
+- Web UI
+- 鉴权和多用户隔离
+- 远程 Edge 工具执行
+- Shell 沙箱
+- Hook / Skill / Plugin 系统
+- 后台 Durable Job
+- 云端部署
 
 ## 参考资料
 
-- [astra-engine](https://github.com/username/astra-engine) — 架构参考
-- Claude Code 源码分析
-- Codex CLI 架构
-- [Model Context Protocol (MCP)](https://modelcontextprotocol.io/)
+- 本地 `../astra` 项目：Runtime、Session Journal、审批与恢复设计参考
+- Claude Code / Codex CLI 架构分析
+- [Model Context Protocol](https://modelcontextprotocol.io/)
 
 ## 许可证
 

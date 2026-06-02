@@ -7,6 +7,8 @@ openssl/3.2.0
 libcurl/8.5.0
 gtest/1.14.0
 ftxui/5.0.0
+cpp-httplib/0.45.0
+sqlite3/3.53.1
 
 [generators]
 CMakeDeps

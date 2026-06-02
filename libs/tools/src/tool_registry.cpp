@@ -81,7 +81,8 @@ std::optional<ToolSpec> ToolRegistry::find_spec(const std::string& name) const {
     return std::nullopt;
 }
 
-std::future<ToolResult> ToolRegistry::execute(const ToolCall& call) {
+std::future<ToolResult> ToolRegistry::execute(
+    const ToolCall& call, ToolExecutionContext context) {
     auto it = tools_.find(call.name);
     if (it == tools_.end()) {
         return std::async(std::launch::deferred, [call]() -> ToolResult {
@@ -104,14 +105,15 @@ std::future<ToolResult> ToolRegistry::execute(const ToolCall& call) {
         });
     }
 
-    return it->second->execute(call);
+    return it->second->execute(call, std::move(context));
 }
 
 std::future<std::vector<ToolResult>> ToolRegistry::execute_all(
     const std::vector<ToolCall>& calls,
-    ExecutionPolicy policy
+    ExecutionPolicy policy,
+    ToolExecutionContext context
 ) {
-    return std::async(std::launch::async, [this, calls, policy]()
+    return std::async(std::launch::async, [this, calls, policy, context]()
         -> std::vector<ToolResult>
     {
         std::vector<ToolResult> results;
@@ -131,7 +133,7 @@ std::future<std::vector<ToolResult>> ToolRegistry::execute_all(
             // 并发安全的并行执行
             std::vector<std::future<ToolResult>> futures;
             for (auto& call : safe_calls) {
-                futures.push_back(execute(call));
+                futures.push_back(execute(call, context));
             }
             for (auto& f : futures) {
                 results.push_back(f.get());
@@ -139,12 +141,12 @@ std::future<std::vector<ToolResult>> ToolRegistry::execute_all(
 
             // 不安全的串行执行
             for (auto& call : unsafe_calls) {
-                auto result = execute(call).get();
+                auto result = execute(call, context).get();
                 results.push_back(result);
             }
         } else {
             for (auto& call : calls) {
-                auto result = execute(call).get();
+                auto result = execute(call, context).get();
                 results.push_back(result);
                 if (policy == ExecutionPolicy::FailFast && result.is_error) {
                     break;

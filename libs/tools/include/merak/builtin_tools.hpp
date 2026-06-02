@@ -8,7 +8,7 @@ class ReadFileTool : public Tool {
 public:
     ToolSpec spec() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
         return std::make_unique<ReadFileTool>(*this);
     }
@@ -19,7 +19,7 @@ class WriteFileTool : public Tool {
 public:
     ToolSpec spec() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
         return std::make_unique<WriteFileTool>(*this);
     }
@@ -30,7 +30,7 @@ class EditFileTool : public Tool {
 public:
     ToolSpec spec() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
         return std::make_unique<EditFileTool>(*this);
     }
@@ -41,7 +41,7 @@ class GlobTool : public Tool {
 public:
     ToolSpec spec() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
         return std::make_unique<GlobTool>(*this);
     }
@@ -52,7 +52,7 @@ class GrepTool : public Tool {
 public:
     ToolSpec spec() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
         return std::make_unique<GrepTool>(*this);
     }
@@ -63,7 +63,7 @@ class BashTool : public Tool {
 public:
     ToolSpec spec() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
         return std::make_unique<BashTool>(*this);
     }

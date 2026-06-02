@@ -38,6 +38,16 @@ public:
     int total_output_tokens() const { return total_output_tokens_; }
     bool has_usage() const { return has_usage_; }
     bool has_exact_usage() const { return has_usage_ && !usage_missing_; }
+    const std::string& state() const { return state_; }
+
+    std::string plain_text(size_t queued = 0) const {
+        auto usage = has_exact_usage()
+            ? "Σ " + format_tokens(total_input_tokens_) + " in / "
+                + format_tokens(total_output_tokens_) + " out"
+            : "Σ n/a";
+        auto queue = queued > 0 ? " │ queued " + std::to_string(queued) : "";
+        return provider_ + " │ " + model_ + " │ " + state_ + " │ " + usage + queue;
+    }
 
     ftxui::Element render() {
         using namespace ftxui;

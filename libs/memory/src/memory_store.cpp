@@ -18,10 +18,12 @@ MemoryStore::~MemoryStore() {
 }
 
 void MemoryStore::append_message(const Message& msg) {
+    std::lock_guard lock(working_memory_mutex_);
     working_memory_.push_back(msg);
 }
 
 std::vector<Message> MemoryStore::recent_history(int max_turns) const {
+    std::lock_guard lock(working_memory_mutex_);
     int msg_count = max_turns * 2;
     int total = (int)working_memory_.size();
     int start = std::max(0, total - msg_count);
@@ -34,6 +36,7 @@ std::vector<Message> MemoryStore::recent_history(int max_turns) const {
 }
 
 int MemoryStore::message_count() const {
+    std::lock_guard lock(working_memory_mutex_);
     return (int)working_memory_.size();
 }
 

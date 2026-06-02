@@ -18,8 +18,15 @@ public:
     ToolSpec spec() const override { return spec_; }
     PermissionLevel permission() const override { return permission_; }
 
-    std::future<ToolResult> execute(ToolCall call) override {
-        return client_->call_tool(call);
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override {
+        return std::async(std::launch::async, [this, call = std::move(call), context]() {
+            auto result = client_->call_tool(call).get();
+            if (context.cancellation && context.cancellation->cancelled()) {
+                result.is_error = true;
+                result.output = "Tool result discarded because the run was cancelled";
+            }
+            return result;
+        });
     }
 
     std::unique_ptr<Tool> clone() const override {
