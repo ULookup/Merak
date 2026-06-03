@@ -35,6 +35,11 @@ public:
                                          int max_entries) const;
     void write_memory_summary(MemorySummary summary);
 
+    std::vector<DiaryEntry> search_diary(const std::string& agent_id,
+                                         const std::string& query,
+                                         int max_results = 5) const;
+    std::optional<DiaryEntry> get_diary(const std::string& diary_id) const;
+
     void upsert_relation(RelationEntry relation);
     std::vector<RelationEntry> relations_for(const std::string& agent_id) const;
 
