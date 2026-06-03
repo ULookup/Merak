@@ -204,6 +204,28 @@ inline std::string to_string(ForeshadowStatus value) {
     return "open";
 }
 
+inline std::string to_string(ForeshadowHintLevel value) {
+    switch (value) {
+    case ForeshadowHintLevel::Subtle:
+        return "subtle";
+    case ForeshadowHintLevel::Visible:
+        return "visible";
+    case ForeshadowHintLevel::Obvious:
+        return "obvious";
+    }
+    return "visible";
+}
+
+inline std::string to_string(ForeshadowCreatedBy value) {
+    switch (value) {
+    case ForeshadowCreatedBy::Author:
+        return "author";
+    case ForeshadowCreatedBy::GodAgentDetected:
+        return "god_agent_detected";
+    }
+    return "author";
+}
+
 inline std::string to_string(SecretStatus value) {
     switch (value) {
     case SecretStatus::Active:
@@ -214,6 +236,32 @@ inline std::string to_string(SecretStatus value) {
         return "abandoned";
     }
     return "active";
+}
+
+inline std::string to_string(NarrativeTemplate value) {
+    switch (value) {
+    case NarrativeTemplate::ThreeAct:
+        return "three_act";
+    case NarrativeTemplate::FourAct:
+        return "four_act";
+    case NarrativeTemplate::HerosJourney:
+        return "heros_journey";
+    case NarrativeTemplate::Freeform:
+        return "freeform";
+    }
+    return "freeform";
+}
+
+inline std::string to_string(KnowledgeState value) {
+    switch (value) {
+    case KnowledgeState::Public:
+        return "public";
+    case KnowledgeState::Secret:
+        return "secret";
+    case KnowledgeState::Unknown:
+        return "unknown";
+    }
+    return "unknown";
 }
 
 } // namespace merak::worldbuilding

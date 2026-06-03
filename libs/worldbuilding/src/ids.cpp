@@ -2,9 +2,11 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <ctime>
 #include <iomanip>
 #include <random>
+#include <stdexcept>
 #include <sstream>
 
 namespace merak::worldbuilding {
@@ -38,7 +40,9 @@ std::string now_iso_utc() {
     const auto time = std::chrono::system_clock::to_time_t(seconds);
 
     std::tm utc{};
-    gmtime_r(&time, &utc);
+    if (gmtime_r(&time, &utc) == nullptr) {
+        throw std::runtime_error("format UTC timestamp failed");
+    }
 
     std::ostringstream out;
     out << std::put_time(&utc, "%Y-%m-%dT%H:%M:%SZ");

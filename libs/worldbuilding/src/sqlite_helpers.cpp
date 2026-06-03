@@ -1,5 +1,6 @@
 #include <merak/worldbuilding/sqlite_helpers.hpp>
 
+#include <exception>
 #include <stdexcept>
 
 namespace merak::worldbuilding {
@@ -18,22 +19,30 @@ void check(sqlite3* db, int rc, std::string_view operation) {
     }
 }
 
+void close_deferred(sqlite3*& db) noexcept {
+    if (db != nullptr) {
+        // close_v2 defers final handle cleanup until live statements finish.
+        if (sqlite3_close_v2(db) != SQLITE_OK) {
+            std::terminate();
+        }
+        db = nullptr;
+    }
+}
+
 } // namespace
 
 SqliteDb::SqliteDb(std::string_view path) {
     const std::string path_string{path};
     if (sqlite3_open(path_string.c_str(), &db_) != SQLITE_OK) {
         auto error = sqlite_error(db_, "open sqlite database");
-        sqlite3_close(db_);
+        close_deferred(db_);
         db_ = nullptr;
         throw error;
     }
 }
 
 SqliteDb::~SqliteDb() {
-    if (db_ != nullptr) {
-        sqlite3_close(db_);
-    }
+    close_deferred(db_);
 }
 
 SqliteDb::SqliteDb(SqliteDb&& other) noexcept : db_(other.db_) {
@@ -42,9 +51,7 @@ SqliteDb::SqliteDb(SqliteDb&& other) noexcept : db_(other.db_) {
 
 SqliteDb& SqliteDb::operator=(SqliteDb&& other) noexcept {
     if (this != &other) {
-        if (db_ != nullptr) {
-            sqlite3_close(db_);
-        }
+        close_deferred(db_);
         db_ = other.db_;
         other.db_ = nullptr;
     }
