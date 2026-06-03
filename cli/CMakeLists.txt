@@ -3,6 +3,7 @@ add_executable(merak-cli
     src/theme/theme.cpp
     src/output/cli_output.cpp
     src/commands/command_registry.cpp
+    src/commands/worldbuilding_commands.cpp
     src/client/runtime_client.cpp
 )
 set_target_properties(merak-cli PROPERTIES OUTPUT_NAME merak)

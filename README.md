@@ -53,6 +53,7 @@ merak-core
 ├── merak-loop         ← core, config, llm, memory, tools, context
 ├── merak-runtime      ← core, storage, loop
 ├── merak-http         ← core, runtime
+├── merak-worldbuilding ← SQLite, nlohmann_json
 └── merak-cli          ← HTTP server composition root + TUI HTTP/SSE client
 ```
 
@@ -142,6 +143,21 @@ POST /v1/sessions/{id}/delegations
 POST /v1/approvals/{id}
 POST /v1/runs/{id}/cancel
 ```
+
+## Worldbuilding Novel Agent
+
+`merak-worldbuilding` 是世界观/长篇小说创作领域库。详情见 [docs/worldbuilding-novel-agent.md](docs/worldbuilding-novel-agent.md)。
+
+核心能力：
+- **World 隔离**：每个世界独立目录 + SQLite 索引
+- **Agent 分层**：God（全知叙事者）→ Manager（地图/历史/魔法/势力）→ Character（个体/群体）
+- **叙事骨架**：Arc → Chapter → Section → Scene 层级
+- **伏笔系统**：Open/Paid/Abandoned 生命周期，最后一幕提醒
+- **秘密系统**：三态信息不对称（Public/Secret/Unknown），泄密检测
+- **声音指纹**：句式、修饰词、签名词分析，不自动改写角色
+- **角色记忆**：角色卡版本历史、日记、关系、记忆摘要
+
+`merak serve` 启动时初始化 WorldbuildingService，数据落在 `~/.merak/worlds/{world_id}`。
 
 ## Agent Loop
 
@@ -298,7 +314,8 @@ Merak/
 │   ├── loop/          # AgentLoop、SubAgentRunner
 │   ├── storage/       # SQLite + JSONL
 │   ├── runtime/       # Session、Run、EventBus、Approval
-│   └── http/          # REST + SSE
+│   ├── http/          # REST + SSE
+│   └── worldbuilding/ # World、Agent、Narrative、Foreshadowing、Secret、Voice
 ├── cli/               # serve / tui 入口和终端客户端
 └── tests/             # CTest 注册
 ```
