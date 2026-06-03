@@ -1,12 +1,14 @@
 #include <gtest/gtest.h>
 #include <merak/worldbuilding/agent_store.hpp>
 #include <merak/worldbuilding/ids.hpp>
+#include <merak/worldbuilding/sqlite_helpers.hpp>
 #include <merak/worldbuilding/world_store.hpp>
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -37,15 +39,15 @@ CharacterCard sample_card() {
     card.identity = "边境斥候";
     card.core_traits = {"谨慎", "护短"};
     card.emotional_tendency = "压抑但敏锐";
-    card.speaking_style = "短句，少废话";
+    card.speaking_style = "短句，少废话\n紧张时会重复确认方位";
     card.taboo_topics = {"叛逃的兄长"};
     card.core_desire = "守住北境";
     card.deep_fear = "再次失去同伴";
     card.daily_goal = "巡查狼烟塔";
-    card.background = "雪线村幸存者。";
-    card.knowledge_scope = "北境地形、哨站暗号";
+    card.background = "雪线村幸存者。\n曾在狼烟塔独守三夜。";
+    card.knowledge_scope = "北境地形、哨站暗号\n不知道王都密约。";
     card.relations = nlohmann::json::object({{"陆峥", "战友"}});
-    card.appearance = "灰斗篷，左手有旧伤";
+    card.appearance = "灰斗篷，左手有旧伤\n习惯摸刀柄确认距离";
     return card;
 }
 
@@ -195,6 +197,16 @@ TEST(AgentStore, CreateGroupStoresProfileMembersAndSharedMemoryRefs) {
                                                "group_profile.json"));
     EXPECT_EQ(profile["can_speak_directly"], false);
     EXPECT_FALSE(agents.can_speak_directly(group.id));
+    {
+        {
+            SqliteDb db((root / "worlds.sqlite3").string());
+            Statement remove_metadata(
+                db, "DELETE FROM agent_metadata WHERE agent_id = ?1");
+            bind_text(remove_metadata, 1, group.id);
+            EXPECT_FALSE(remove_metadata.step());
+        }
+        EXPECT_THROW(agents.can_speak_directly(group.id), std::runtime_error);
+    }
     EXPECT_EQ(profile["member_agent_ids"].size(), 2);
     EXPECT_EQ(profile["shared_memory_ids"].size(), 1);
 
@@ -220,6 +232,33 @@ TEST(AgentStore, CreateGroupStoresProfileMembersAndSharedMemoryRefs) {
                                          "shared_memory.md"));
 }
 
+TEST(AgentStore, CreateGroupValidatesMembersBeforeCreatingAnyArtifacts) {
+    auto root = temp_dir();
+    WorldStore worlds(root);
+    auto world = worlds.create_world("北境", "雪原史诗");
+    auto other_world = worlds.create_world("南境", "海港史诗");
+    AgentStore agents(worlds, root);
+    auto member = agents.create_character(world.id, sample_card());
+    auto other_member = agents.create_character(other_world.id, sample_card());
+
+    EXPECT_THROW(agents.create_group(world.id, "坏小队", "不应写入",
+                                     {member.id, "agent_missing"}),
+                 std::runtime_error);
+    EXPECT_THROW(agents.create_group(world.id, "跨界小队", "不应写入",
+                                     {member.id, other_member.id}),
+                 std::runtime_error);
+
+    auto agents_after = agents.list_agents(world.id);
+    EXPECT_EQ(std::count_if(agents_after.begin(), agents_after.end(),
+                            [](const AgentRecord& record) {
+                                return record.kind == AgentKind::Group;
+                            }),
+              0);
+    EXPECT_FALSE(std::filesystem::exists(worlds.world_path(world.id) /
+                                         "agents" / member.id /
+                                         "group_memory_refs.json"));
+}
+
 TEST(AgentStore, AppendDiaryEntryWritesSceneDiaryAndUpdatesMemoryIndex) {
     auto root = temp_dir();
     WorldStore worlds(root);
@@ -227,19 +266,32 @@ TEST(AgentStore, AppendDiaryEntryWritesSceneDiaryAndUpdatesMemoryIndex) {
     AgentStore agents(worlds, root);
     auto record = agents.create_character(world.id, sample_card());
 
-    agents.append_diary_entry({"", record.id, "scene_gate", "第三日夜",
-                               "发现城门下的旧血迹。", ""});
+    agents.append_diary_entry({"diary_first", record.id, "scene_gate",
+                               "第三日夜", "发现城门下的旧血迹。", ""});
+    agents.append_diary_entry({"diary_second", record.id, "scene_gate",
+                               "第三日夜", "第二次确认血迹来自城内。", ""});
 
     auto agent_path = worlds.world_path(world.id) / "agents" / record.id;
-    auto diary_path = agent_path / "diary" / "scene_gate.md";
-    ASSERT_TRUE(std::filesystem::exists(diary_path));
-    EXPECT_NE(slurp(diary_path).find("发现城门下的旧血迹。"), std::string::npos);
+    auto first_diary_path = agent_path / "diary" / "diary_first.md";
+    auto second_diary_path = agent_path / "diary" / "diary_second.md";
+    ASSERT_TRUE(std::filesystem::exists(first_diary_path));
+    ASSERT_TRUE(std::filesystem::exists(second_diary_path));
+    EXPECT_NE(slurp(first_diary_path).find("发现城门下的旧血迹。"),
+              std::string::npos);
+    EXPECT_NE(slurp(second_diary_path).find("第二次确认血迹来自城内。"),
+              std::string::npos);
+    EXPECT_NE(slurp(agent_path / "memory_index.md").find("diary/diary_first.md"),
+              std::string::npos);
+    EXPECT_NE(
+        slurp(agent_path / "memory_index.md").find("diary/diary_second.md"),
+        std::string::npos);
     EXPECT_NE(slurp(agent_path / "memory_index.md").find("scene_gate"),
               std::string::npos);
 
     auto recent = agents.recent_diary(record.id, 1);
     ASSERT_EQ(recent.size(), 1);
     EXPECT_EQ(recent[0].scene_id, "scene_gate");
+    EXPECT_EQ(recent[0].id, "diary_second");
 }
 
 TEST(AgentStore, UpsertRelationClampsIntimacyAndStoresKeyEvents) {
@@ -273,4 +325,26 @@ TEST(AgentStore, UpsertRelationClampsIntimacyAndStoresKeyEvents) {
                                    source.id / "relations.md");
     EXPECT_NE(relation_markdown.find("亲密度：100"), std::string::npos);
     EXPECT_NE(relation_markdown.find("雪夜救援"), std::string::npos);
+}
+
+TEST(AgentStore, UpsertRelationRejectsCrossWorldAgents) {
+    auto root = temp_dir();
+    WorldStore worlds(root);
+    auto world = worlds.create_world("北境", "雪原史诗");
+    auto other_world = worlds.create_world("南境", "海港史诗");
+    AgentStore agents(worlds, root);
+    auto source = agents.create_character(world.id, sample_card());
+    auto target = agents.create_character(other_world.id, sample_card());
+
+    EXPECT_THROW(agents.upsert_relation(RelationEntry{
+                     .agent_id = source.id,
+                     .target_id = target.id,
+                     .relation_type = "误连",
+                     .description = "跨世界关系不允许",
+                     .updated_at = "",
+                     .intimacy = 0,
+                     .key_events = {},
+                 }),
+                 std::runtime_error);
+    EXPECT_TRUE(agents.relations_for(source.id).empty());
 }

@@ -59,6 +59,13 @@ void execute_bound(Statement& statement) {
     }
 }
 
+void rollback_no_throw(SqliteDb& db) noexcept {
+    try {
+        db.exec("ROLLBACK");
+    } catch (...) {
+    }
+}
+
 void write_text(const std::filesystem::path& path,
                 const std::string& content) {
     std::filesystem::create_directories(path.parent_path());
@@ -117,17 +124,40 @@ std::vector<std::string> split_zh_list(const std::string& value) {
     return result;
 }
 
+bool starts_with_any_label(const std::string& line) {
+    for (const auto label : std::vector<std::string_view>{
+             "Agent ID", "版本", "更新时间", "姓名", "年龄", "性别", "种族",
+             "身份", "核心性格特质", "情绪倾向", "说话风格", "禁忌话题",
+             "核心欲望", "深层恐惧", "日常目标", "背景故事", "知识范围",
+             "人际关系", "外貌与习惯", "更新原因"}) {
+        const auto prefix = std::string(label) + "：";
+        if (line.starts_with(prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::string label_value(const std::string& markdown,
                         const std::string& label) {
     const auto prefix = label + "：";
     std::istringstream lines(markdown);
     std::string line;
+    std::string value;
+    bool collecting = false;
     while (std::getline(lines, line)) {
-        if (line.starts_with(prefix)) {
-            return line.substr(prefix.size());
+        if (collecting) {
+            if (starts_with_any_label(line)) {
+                break;
+            }
+            value += "\n";
+            value += line;
+        } else if (line.starts_with(prefix)) {
+            value = line.substr(prefix.size());
+            collecting = true;
         }
     }
-    return {};
+    return value;
 }
 
 std::string character_card_markdown(const CharacterCard& card) {
@@ -263,6 +293,12 @@ void AgentStore::initialize() {
             FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
         )
     )sql");
+    db.exec(R"sql(
+        INSERT OR IGNORE INTO agent_metadata(agent_id, can_speak_directly)
+        SELECT id,
+               CASE WHEN kind = 'group' THEN 0 ELSE 1 END
+        FROM agents
+    )sql");
 }
 
 std::filesystem::path AgentStore::database_path() const {
@@ -293,27 +329,37 @@ AgentRecord AgentStore::insert_agent(const std::string& world_id,
 
     SqliteDb db(database_path().string());
     db.exec("PRAGMA foreign_keys = ON");
-    Statement insert(db, R"sql(
-        INSERT INTO agents(id, world_id, name, display_name, kind,
-                           created_at, updated_at)
-        VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)
-    )sql");
-    bind_text(insert, 1, record.id);
-    bind_text(insert, 2, record.world_id);
-    bind_text(insert, 3, record.name);
-    bind_text(insert, 4, record.display_name);
-    bind_text(insert, 5, to_string(record.kind));
-    bind_text(insert, 6, record.created_at);
-    bind_text(insert, 7, record.updated_at);
-    execute_bound(insert);
-
-    Statement insert_metadata(db, R"sql(
-        INSERT INTO agent_metadata(agent_id, can_speak_directly)
-        VALUES(?1, ?2)
-    )sql");
-    bind_text(insert_metadata, 1, record.id);
-    bind_int(insert_metadata, 2, kind == AgentKind::Group ? 0 : 1);
-    execute_bound(insert_metadata);
+    db.exec("BEGIN");
+    try {
+        {
+            Statement insert(db, R"sql(
+                INSERT INTO agents(id, world_id, name, display_name, kind,
+                                   created_at, updated_at)
+                VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            )sql");
+            bind_text(insert, 1, record.id);
+            bind_text(insert, 2, record.world_id);
+            bind_text(insert, 3, record.name);
+            bind_text(insert, 4, record.display_name);
+            bind_text(insert, 5, to_string(record.kind));
+            bind_text(insert, 6, record.created_at);
+            bind_text(insert, 7, record.updated_at);
+            execute_bound(insert);
+        }
+        {
+            Statement insert_metadata(db, R"sql(
+                INSERT INTO agent_metadata(agent_id, can_speak_directly)
+                VALUES(?1, ?2)
+            )sql");
+            bind_text(insert_metadata, 1, record.id);
+            bind_int(insert_metadata, 2, kind == AgentKind::Group ? 0 : 1);
+            execute_bound(insert_metadata);
+        }
+        db.exec("COMMIT");
+    } catch (...) {
+        rollback_no_throw(db);
+        throw;
+    }
     return record;
 }
 
@@ -362,6 +408,18 @@ AgentRecord AgentStore::create_group(
     const std::string& world_id, std::string name,
     std::string culture_card_markdown,
     std::vector<std::string> member_agent_ids) {
+    for (const auto& member_agent_id : member_agent_ids) {
+        const auto member = get_agent(member_agent_id);
+        if (!member.has_value()) {
+            throw std::runtime_error("unknown group member: " +
+                                     member_agent_id);
+        }
+        if (member->world_id != world_id) {
+            throw std::runtime_error("group member belongs to another world: " +
+                                     member_agent_id);
+        }
+    }
+
     auto record = insert_agent(world_id, std::move(name), AgentKind::Group);
     const auto root = worlds_.world_path(world_id) / "agents" / record.id;
     std::filesystem::create_directories(root);
@@ -495,11 +553,11 @@ void AgentStore::append_diary_entry(DiaryEntry entry) {
     diary << "世界时间：" << entry.world_time << "\n";
     diary << "创建时间：" << entry.created_at << "\n\n";
     diary << entry.content << "\n";
-    write_text(root / "diary" / (entry.scene_id + ".md"), diary.str());
+    write_text(root / "diary" / (entry.id + ".md"), diary.str());
 
     std::ostringstream index;
     index << read_text(root / "memory_index.md");
-    index << "- [" << entry.scene_id << "](diary/" << entry.scene_id
+    index << "- [" << entry.scene_id << "](diary/" << entry.id
           << ".md) " << entry.world_time << " " << entry.id << "\n";
     write_text(root / "memory_index.md", index.str());
 }
@@ -582,6 +640,9 @@ void AgentStore::upsert_relation(RelationEntry relation) {
     auto target = get_agent(relation.target_id);
     if (!record.has_value() || !target.has_value()) {
         throw std::runtime_error("relation references unknown agent");
+    }
+    if (record->world_id != target->world_id) {
+        throw std::runtime_error("relation references agents in different worlds");
     }
     relation.intimacy = clamp_intimacy(relation.intimacy);
     if (relation.updated_at.empty()) {
@@ -683,12 +744,7 @@ bool AgentStore::can_speak_directly(const std::string& agent_id) const {
     if (query.step()) {
         return column_int(query, 0) != 0;
     }
-
-    const auto record = get_agent(agent_id);
-    if (!record.has_value()) {
-        throw std::runtime_error("unknown agent: " + agent_id);
-    }
-    return record->kind != AgentKind::Group;
+    throw std::runtime_error("missing agent metadata: " + agent_id);
 }
 
 std::vector<std::string>
