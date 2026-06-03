@@ -156,13 +156,30 @@ TEST(AgentStore, CreateGroupStoresProfileMembersAndSharedMemoryRefs) {
     auto profile = nlohmann::json::parse(slurp(group_path /
                                                "group_profile.json"));
     EXPECT_EQ(profile["can_speak_directly"], false);
+    EXPECT_FALSE(agents.can_speak_directly(group.id));
     EXPECT_EQ(profile["member_agent_ids"].size(), 2);
     EXPECT_EQ(profile["shared_memory_ids"].size(), 1);
 
+    const auto expected_refs =
+        std::vector<std::string>({"shared_memory:" + group.id});
+    EXPECT_EQ(agents.shared_memory_refs_for(a.id), expected_refs);
+    EXPECT_EQ(agents.shared_memory_refs_for(b.id), expected_refs);
+    EXPECT_TRUE(std::filesystem::exists(worlds.world_path(world.id) /
+                                        "agents" / a.id /
+                                        "group_memory_refs.json"));
+    EXPECT_TRUE(std::filesystem::exists(worlds.world_path(world.id) /
+                                        "agents" / b.id /
+                                        "group_memory_refs.json"));
     EXPECT_FALSE(std::filesystem::exists(worlds.world_path(world.id) /
                                          "agents" / a.id / "shared_memory"));
     EXPECT_FALSE(std::filesystem::exists(worlds.world_path(world.id) /
                                          "agents" / b.id / "shared_memory"));
+    EXPECT_FALSE(std::filesystem::exists(worlds.world_path(world.id) /
+                                         "agents" / a.id / "diary" /
+                                         "shared_memory.md"));
+    EXPECT_FALSE(std::filesystem::exists(worlds.world_path(world.id) /
+                                         "agents" / b.id / "diary" /
+                                         "shared_memory.md"));
 }
 
 TEST(AgentStore, AppendDiaryEntryWritesSceneDiaryAndUpdatesMemoryIndex) {

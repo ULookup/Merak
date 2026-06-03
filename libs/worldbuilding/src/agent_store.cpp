@@ -78,6 +78,13 @@ std::string read_text(const std::filesystem::path& path) {
             std::istreambuf_iterator<char>()};
 }
 
+nlohmann::json read_json_or_array(const std::filesystem::path& path) {
+    if (!std::filesystem::exists(path)) {
+        return nlohmann::json::array();
+    }
+    return nlohmann::json::parse(read_text(path));
+}
+
 std::string join_zh(const std::vector<std::string>& values) {
     std::ostringstream output;
     for (std::size_t i = 0; i < values.size(); ++i) {
@@ -249,6 +256,13 @@ void AgentStore::initialize() {
             FOREIGN KEY(target_id) REFERENCES agents(id) ON DELETE CASCADE
         )
     )sql");
+    db.exec(R"sql(
+        CREATE TABLE IF NOT EXISTS agent_metadata(
+            agent_id TEXT PRIMARY KEY,
+            can_speak_directly INTEGER NOT NULL,
+            FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
+        )
+    )sql");
 }
 
 std::filesystem::path AgentStore::database_path() const {
@@ -292,6 +306,14 @@ AgentRecord AgentStore::insert_agent(const std::string& world_id,
     bind_text(insert, 6, record.created_at);
     bind_text(insert, 7, record.updated_at);
     execute_bound(insert);
+
+    Statement insert_metadata(db, R"sql(
+        INSERT INTO agent_metadata(agent_id, can_speak_directly)
+        VALUES(?1, ?2)
+    )sql");
+    bind_text(insert_metadata, 1, record.id);
+    bind_int(insert_metadata, 2, kind == AgentKind::Group ? 0 : 1);
+    execute_bound(insert_metadata);
     return record;
 }
 
@@ -359,6 +381,23 @@ AgentRecord AgentStore::create_group(
     write_text(root / "members.json", nlohmann::json(member_agent_ids).dump(2));
     write_text(root / "shared_memory_refs.json",
                nlohmann::json(shared_memory_ids).dump(2));
+
+    for (const auto& member_agent_id : member_agent_ids) {
+        const auto member_path = agent_path(member_agent_id);
+        const auto refs_path = member_path / "group_memory_refs.json";
+        auto refs = read_json_or_array(refs_path);
+        refs.push_back({
+            {"group_agent_id", record.id},
+            {"shared_memory_ids", shared_memory_ids},
+        });
+        write_text(refs_path, refs.dump(2));
+
+        std::ostringstream index;
+        index << read_text(member_path / "memory_index.md");
+        index << "- 群体共享记忆：" << record.id << " -> "
+              << join_zh(shared_memory_ids) << "\n";
+        write_text(member_path / "memory_index.md", index.str());
+    }
     return record;
 }
 
@@ -631,6 +670,41 @@ GroupProfile AgentStore::load_group(const std::string& group_agent_id) const {
         .shared_memory_ids =
             profile.at("shared_memory_ids").get<std::vector<std::string>>(),
     };
+}
+
+bool AgentStore::can_speak_directly(const std::string& agent_id) const {
+    SqliteDb db(database_path().string());
+    Statement query(db, R"sql(
+        SELECT can_speak_directly
+        FROM agent_metadata
+        WHERE agent_id = ?1
+    )sql");
+    bind_text(query, 1, agent_id);
+    if (query.step()) {
+        return column_int(query, 0) != 0;
+    }
+
+    const auto record = get_agent(agent_id);
+    if (!record.has_value()) {
+        throw std::runtime_error("unknown agent: " + agent_id);
+    }
+    return record->kind != AgentKind::Group;
+}
+
+std::vector<std::string>
+AgentStore::shared_memory_refs_for(const std::string& agent_id) const {
+    const auto refs_path = agent_path(agent_id) / "group_memory_refs.json";
+    if (!std::filesystem::exists(refs_path)) {
+        return {};
+    }
+
+    std::vector<std::string> refs;
+    for (const auto& group_ref : nlohmann::json::parse(read_text(refs_path))) {
+        for (const auto& shared_id : group_ref.at("shared_memory_ids")) {
+            refs.push_back(shared_id.get<std::string>());
+        }
+    }
+    return refs;
 }
 
 } // namespace merak::worldbuilding

@@ -39,6 +39,9 @@ public:
     std::vector<RelationEntry> relations_for(const std::string& agent_id) const;
 
     GroupProfile load_group(const std::string& group_agent_id) const;
+    bool can_speak_directly(const std::string& agent_id) const;
+    std::vector<std::string>
+    shared_memory_refs_for(const std::string& agent_id) const;
 
 private:
     void initialize();
