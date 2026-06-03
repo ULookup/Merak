@@ -23,6 +23,8 @@ find_package(SQLite3 REQUIRED)
 # 公共编译选项
 add_compile_options(-Wall -Wextra -Wpedantic)
 
+enable_testing()
+
 # 子模块
 add_subdirectory(libs/core)
 add_subdirectory(libs/config)
@@ -33,6 +35,7 @@ add_subdirectory(libs/tools)
 add_subdirectory(libs/context)
 add_subdirectory(libs/loop)
 add_subdirectory(libs/storage)
+add_subdirectory(libs/worldbuilding)
 add_subdirectory(libs/runtime)
 add_subdirectory(libs/http)
 add_subdirectory(cli)

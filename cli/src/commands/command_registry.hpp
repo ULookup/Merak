@@ -14,6 +14,7 @@ enum class CommandGroup {
     Memory,
     System,
     Mcp,
+    Worldbuilding,
 };
 
 const char* group_name(CommandGroup g);
