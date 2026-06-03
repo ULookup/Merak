@@ -44,7 +44,7 @@ CharacterCard sample_card() {
     card.core_desire = "守住北境";
     card.deep_fear = "再次失去同伴";
     card.daily_goal = "巡查狼烟塔";
-    card.background = "雪线村幸存者。\n曾在狼烟塔独守三夜。";
+    card.background = "雪线村幸存者。\n身份：曾被敌军误认为逃兵。\n曾在狼烟塔独守三夜。";
     card.knowledge_scope = "北境地形、哨站暗号\n不知道王都密约。";
     card.relations = nlohmann::json::object({{"陆峥", "战友"}});
     card.appearance = "灰斗篷，左手有旧伤\n习惯摸刀柄确认距离";
@@ -257,6 +257,35 @@ TEST(AgentStore, CreateGroupValidatesMembersBeforeCreatingAnyArtifacts) {
     EXPECT_FALSE(std::filesystem::exists(worlds.world_path(world.id) /
                                          "agents" / member.id /
                                          "group_memory_refs.json"));
+}
+
+TEST(AgentStore, CreateGroupCleansUpDbFilesAndMemberRefsOnFilesystemFailure) {
+    auto root = temp_dir();
+    WorldStore worlds(root);
+    auto world = worlds.create_world("北境", "雪原史诗");
+    AgentStore agents(worlds, root);
+    auto member = agents.create_character(world.id, sample_card());
+    auto member_path = worlds.world_path(world.id) / "agents" / member.id;
+    std::filesystem::remove(member_path / "memory_index.md");
+    std::filesystem::create_directory(member_path / "memory_index.md");
+
+    EXPECT_THROW(agents.create_group(world.id, "坏小队", "不应留下痕迹",
+                                     {member.id}),
+                 std::runtime_error);
+
+    const auto agents_after = agents.list_agents(world.id);
+    EXPECT_EQ(std::count_if(agents_after.begin(), agents_after.end(),
+                            [](const AgentRecord& record) {
+                                return record.kind == AgentKind::Group;
+                            }),
+              0);
+    EXPECT_FALSE(std::filesystem::exists(member_path / "group_memory_refs.json"));
+    for (const auto& entry :
+         std::filesystem::directory_iterator(worlds.world_path(world.id) /
+                                             "agents")) {
+        EXPECT_FALSE(std::filesystem::exists(entry.path() /
+                                             "group_profile.json"));
+    }
 }
 
 TEST(AgentStore, AppendDiaryEntryWritesSceneDiaryAndUpdatesMemoryIndex) {

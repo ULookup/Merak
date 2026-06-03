@@ -85,11 +85,11 @@ std::string read_text(const std::filesystem::path& path) {
             std::istreambuf_iterator<char>()};
 }
 
-nlohmann::json read_json_or_array(const std::filesystem::path& path) {
-    if (!std::filesystem::exists(path)) {
-        return nlohmann::json::array();
+void remove_all_no_throw(const std::filesystem::path& path) noexcept {
+    try {
+        std::filesystem::remove_all(path);
+    } catch (...) {
     }
-    return nlohmann::json::parse(read_text(path));
 }
 
 std::string join_zh(const std::vector<std::string>& values) {
@@ -103,61 +103,68 @@ std::string join_zh(const std::vector<std::string>& values) {
     return output.str();
 }
 
-std::vector<std::string> split_zh_list(const std::string& value) {
-    std::vector<std::string> result;
-    std::string current;
-    for (std::size_t i = 0; i < value.size();) {
-        if (value.compare(i, std::string("、").size(), "、") == 0) {
-            if (!current.empty()) {
-                result.push_back(current);
-                current.clear();
-            }
-            i += std::string("、").size();
-        } else {
-            current.push_back(value[i]);
-            ++i;
-        }
-    }
-    if (!current.empty()) {
-        result.push_back(current);
-    }
-    return result;
+nlohmann::json character_card_json(const CharacterCard& card) {
+    return nlohmann::json{
+        {"agent_id", card.agent_id},
+        {"name", card.name},
+        {"age", card.age},
+        {"gender", card.gender},
+        {"race", card.race},
+        {"identity", card.identity},
+        {"core_traits", card.core_traits},
+        {"emotional_tendency", card.emotional_tendency},
+        {"speaking_style", card.speaking_style},
+        {"taboo_topics", card.taboo_topics},
+        {"core_desire", card.core_desire},
+        {"deep_fear", card.deep_fear},
+        {"daily_goal", card.daily_goal},
+        {"background", card.background},
+        {"knowledge_scope", card.knowledge_scope},
+        {"relations", card.relations},
+        {"appearance", card.appearance},
+        {"version", card.version},
+        {"updated_at", card.updated_at},
+    };
 }
 
-bool starts_with_any_label(const std::string& line) {
-    for (const auto label : std::vector<std::string_view>{
-             "Agent ID", "版本", "更新时间", "姓名", "年龄", "性别", "种族",
-             "身份", "核心性格特质", "情绪倾向", "说话风格", "禁忌话题",
-             "核心欲望", "深层恐惧", "日常目标", "背景故事", "知识范围",
-             "人际关系", "外貌与习惯", "更新原因"}) {
-        const auto prefix = std::string(label) + "：";
-        if (line.starts_with(prefix)) {
-            return true;
-        }
-    }
-    return false;
+CharacterCard character_card_from_json(const nlohmann::json& json) {
+    CharacterCard card;
+    card.agent_id = json.at("agent_id").get<std::string>();
+    card.name = json.at("name").get<std::string>();
+    card.age = json.at("age").get<int>();
+    card.gender = json.at("gender").get<std::string>();
+    card.race = json.at("race").get<std::string>();
+    card.identity = json.at("identity").get<std::string>();
+    card.core_traits = json.at("core_traits").get<std::vector<std::string>>();
+    card.emotional_tendency =
+        json.at("emotional_tendency").get<std::string>();
+    card.speaking_style = json.at("speaking_style").get<std::string>();
+    card.taboo_topics = json.at("taboo_topics").get<std::vector<std::string>>();
+    card.core_desire = json.at("core_desire").get<std::string>();
+    card.deep_fear = json.at("deep_fear").get<std::string>();
+    card.daily_goal = json.at("daily_goal").get<std::string>();
+    card.background = json.at("background").get<std::string>();
+    card.knowledge_scope = json.at("knowledge_scope").get<std::string>();
+    card.relations = json.at("relations");
+    card.appearance = json.at("appearance").get<std::string>();
+    card.version = json.at("version").get<int>();
+    card.updated_at = json.at("updated_at").get<std::string>();
+    return card;
 }
 
-std::string label_value(const std::string& markdown,
-                        const std::string& label) {
-    const auto prefix = label + "：";
-    std::istringstream lines(markdown);
-    std::string line;
-    std::string value;
-    bool collecting = false;
-    while (std::getline(lines, line)) {
-        if (collecting) {
-            if (starts_with_any_label(line)) {
-                break;
-            }
-            value += "\n";
-            value += line;
-        } else if (line.starts_with(prefix)) {
-            value = line.substr(prefix.size());
-            collecting = true;
-        }
+nlohmann::json extract_character_card_json(const std::string& markdown) {
+    constexpr std::string_view kBegin = "```merak-character-card-json\n";
+    constexpr std::string_view kEnd = "\n```";
+    const auto begin = markdown.find(kBegin);
+    if (begin == std::string::npos) {
+        throw std::runtime_error("character card is missing structured data");
     }
-    return value;
+    const auto json_start = begin + kBegin.size();
+    const auto end = markdown.find(kEnd, json_start);
+    if (end == std::string::npos) {
+        throw std::runtime_error("character card structured data is malformed");
+    }
+    return nlohmann::json::parse(markdown.substr(json_start, end - json_start));
 }
 
 std::string character_card_markdown(const CharacterCard& card) {
@@ -182,37 +189,14 @@ std::string character_card_markdown(const CharacterCard& card) {
     output << "知识范围：" << card.knowledge_scope << "\n";
     output << "人际关系：" << card.relations.dump() << "\n";
     output << "外貌与习惯：" << card.appearance << "\n";
+    output << "\n```merak-character-card-json\n";
+    output << character_card_json(card).dump(2) << "\n";
+    output << "```\n";
     return output.str();
 }
 
 CharacterCard parse_character_card_markdown(const std::string& markdown) {
-    CharacterCard card;
-    card.agent_id = label_value(markdown, "Agent ID");
-    card.updated_at = label_value(markdown, "更新时间");
-    card.name = label_value(markdown, "姓名");
-    card.gender = label_value(markdown, "性别");
-    card.race = label_value(markdown, "种族");
-    card.identity = label_value(markdown, "身份");
-    card.core_traits = split_zh_list(label_value(markdown, "核心性格特质"));
-    card.emotional_tendency = label_value(markdown, "情绪倾向");
-    card.speaking_style = label_value(markdown, "说话风格");
-    card.taboo_topics = split_zh_list(label_value(markdown, "禁忌话题"));
-    card.core_desire = label_value(markdown, "核心欲望");
-    card.deep_fear = label_value(markdown, "深层恐惧");
-    card.daily_goal = label_value(markdown, "日常目标");
-    card.background = label_value(markdown, "背景故事");
-    card.knowledge_scope = label_value(markdown, "知识范围");
-    card.appearance = label_value(markdown, "外貌与习惯");
-
-    const auto version = label_value(markdown, "版本");
-    card.version = version.empty() ? 1 : std::stoi(version);
-    const auto age = label_value(markdown, "年龄");
-    card.age = age.empty() ? 0 : std::stoi(age);
-    const auto relations = label_value(markdown, "人际关系");
-    card.relations =
-        relations.empty() ? nlohmann::json::object()
-                          : nlohmann::json::parse(relations);
-    return card;
+    return character_card_from_json(extract_character_card_json(markdown));
 }
 
 std::string history_filename(const std::string& timestamp, int version) {
@@ -236,6 +220,46 @@ std::filesystem::path manager_domain_path(AgentKind kind) {
 
 int clamp_intimacy(int intimacy) {
     return std::clamp(intimacy, -100, 100);
+}
+
+void delete_agent_record_no_throw(const std::filesystem::path& database_path,
+                                  const std::string& agent_id) noexcept {
+    try {
+        SqliteDb db(database_path.string());
+        db.exec("PRAGMA foreign_keys = ON");
+        Statement delete_agent(db, "DELETE FROM agents WHERE id = ?1");
+        bind_text(delete_agent, 1, agent_id);
+        execute_bound(delete_agent);
+    } catch (...) {
+    }
+}
+
+struct MemberRefSnapshot {
+    std::filesystem::path refs_path;
+    std::filesystem::path index_path;
+    bool refs_existed = false;
+    bool index_existed = false;
+    std::string refs_content;
+    std::string index_content;
+};
+
+void restore_member_refs_no_throw(
+    const std::vector<MemberRefSnapshot>& snapshots) noexcept {
+    for (const auto& snapshot : snapshots) {
+        try {
+            if (snapshot.refs_existed) {
+                write_text(snapshot.refs_path, snapshot.refs_content);
+            } else {
+                std::filesystem::remove(snapshot.refs_path);
+            }
+            if (snapshot.index_existed) {
+                write_text(snapshot.index_path, snapshot.index_content);
+            } else {
+                std::filesystem::remove(snapshot.index_path);
+            }
+        } catch (...) {
+        }
+    }
 }
 
 } // namespace
@@ -422,39 +446,69 @@ AgentRecord AgentStore::create_group(
 
     auto record = insert_agent(world_id, std::move(name), AgentKind::Group);
     const auto root = worlds_.world_path(world_id) / "agents" / record.id;
-    std::filesystem::create_directories(root);
+    std::vector<MemberRefSnapshot> member_snapshots;
 
-    const auto shared_memory_id = "shared_memory:" + record.id;
-    const auto shared_memory_ids = std::vector<std::string>{shared_memory_id};
-    const auto profile = nlohmann::json{
-        {"agent_id", record.id},
-        {"culture_card_markdown", culture_card_markdown},
-        {"member_agent_ids", member_agent_ids},
-        {"shared_memory_ids", shared_memory_ids},
-        {"can_speak_directly", false},
-    };
+    try {
+        std::filesystem::create_directories(root);
 
-    write_text(root / "group_profile.json", profile.dump(2));
-    write_text(root / "culture_card.md", culture_card_markdown);
-    write_text(root / "members.json", nlohmann::json(member_agent_ids).dump(2));
-    write_text(root / "shared_memory_refs.json",
-               nlohmann::json(shared_memory_ids).dump(2));
-
-    for (const auto& member_agent_id : member_agent_ids) {
-        const auto member_path = agent_path(member_agent_id);
-        const auto refs_path = member_path / "group_memory_refs.json";
-        auto refs = read_json_or_array(refs_path);
-        refs.push_back({
-            {"group_agent_id", record.id},
+        const auto shared_memory_id = "shared_memory:" + record.id;
+        const auto shared_memory_ids =
+            std::vector<std::string>{shared_memory_id};
+        const auto profile = nlohmann::json{
+            {"agent_id", record.id},
+            {"culture_card_markdown", culture_card_markdown},
+            {"member_agent_ids", member_agent_ids},
             {"shared_memory_ids", shared_memory_ids},
-        });
-        write_text(refs_path, refs.dump(2));
+            {"can_speak_directly", false},
+        };
 
-        std::ostringstream index;
-        index << read_text(member_path / "memory_index.md");
-        index << "- 群体共享记忆：" << record.id << " -> "
-              << join_zh(shared_memory_ids) << "\n";
-        write_text(member_path / "memory_index.md", index.str());
+        write_text(root / "group_profile.json", profile.dump(2));
+        write_text(root / "culture_card.md", culture_card_markdown);
+        write_text(root / "members.json",
+                   nlohmann::json(member_agent_ids).dump(2));
+        write_text(root / "shared_memory_refs.json",
+                   nlohmann::json(shared_memory_ids).dump(2));
+
+        for (const auto& member_agent_id : member_agent_ids) {
+            const auto member_path = agent_path(member_agent_id);
+            MemberRefSnapshot snapshot{
+                .refs_path = member_path / "group_memory_refs.json",
+                .index_path = member_path / "memory_index.md",
+                .refs_existed = std::filesystem::exists(member_path /
+                                                        "group_memory_refs.json"),
+                .index_existed = std::filesystem::exists(member_path /
+                                                         "memory_index.md"),
+            };
+            if (snapshot.refs_existed) {
+                snapshot.refs_content = read_text(snapshot.refs_path);
+            }
+            if (snapshot.index_existed) {
+                snapshot.index_content = read_text(snapshot.index_path);
+            }
+            member_snapshots.push_back(std::move(snapshot));
+        }
+
+        for (const auto& snapshot : member_snapshots) {
+            auto refs = snapshot.refs_existed ?
+                            nlohmann::json::parse(snapshot.refs_content) :
+                            nlohmann::json::array();
+            refs.push_back({
+                {"group_agent_id", record.id},
+                {"shared_memory_ids", shared_memory_ids},
+            });
+            write_text(snapshot.refs_path, refs.dump(2));
+
+            std::ostringstream index;
+            index << snapshot.index_content;
+            index << "- 群体共享记忆：" << record.id << " -> "
+                  << join_zh(shared_memory_ids) << "\n";
+            write_text(snapshot.index_path, index.str());
+        }
+    } catch (...) {
+        restore_member_refs_no_throw(member_snapshots);
+        remove_all_no_throw(root);
+        delete_agent_record_no_throw(database_path(), record.id);
+        throw;
     }
     return record;
 }
