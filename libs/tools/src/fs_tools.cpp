@@ -371,7 +371,11 @@ std::future<ToolResult> StrReplaceTool::execute(ToolCall call, ToolExecutionCont
                 return result;
             }
 
-            size_t pos2 = content.find(old_str, pos + 1);
+            if (cascade_level > 0) {
+                spdlog::debug("StrReplace: matched via cascade level {} for {}", cascade_level, path);
+            }
+
+            size_t pos2 = content.find(active_old, pos + 1);
             if (pos2 != std::string::npos) {
                 result.is_error = true;
                 result.output = "old_str matches multiple locations. "
