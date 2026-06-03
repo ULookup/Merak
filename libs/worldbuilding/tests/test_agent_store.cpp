@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <vector>
 
 using namespace merak::worldbuilding;
 
@@ -46,6 +47,29 @@ CharacterCard sample_card() {
     card.relations = nlohmann::json::object({{"陆峥", "战友"}});
     card.appearance = "灰斗篷，左手有旧伤";
     return card;
+}
+
+void expect_character_card_matches(const CharacterCard& actual,
+                                   const CharacterCard& expected) {
+    EXPECT_EQ(actual.agent_id, expected.agent_id);
+    EXPECT_EQ(actual.name, expected.name);
+    EXPECT_EQ(actual.age, expected.age);
+    EXPECT_EQ(actual.gender, expected.gender);
+    EXPECT_EQ(actual.race, expected.race);
+    EXPECT_EQ(actual.identity, expected.identity);
+    EXPECT_EQ(actual.core_traits, expected.core_traits);
+    EXPECT_EQ(actual.emotional_tendency, expected.emotional_tendency);
+    EXPECT_EQ(actual.speaking_style, expected.speaking_style);
+    EXPECT_EQ(actual.taboo_topics, expected.taboo_topics);
+    EXPECT_EQ(actual.core_desire, expected.core_desire);
+    EXPECT_EQ(actual.deep_fear, expected.deep_fear);
+    EXPECT_EQ(actual.daily_goal, expected.daily_goal);
+    EXPECT_EQ(actual.background, expected.background);
+    EXPECT_EQ(actual.knowledge_scope, expected.knowledge_scope);
+    EXPECT_EQ(actual.relations, expected.relations);
+    EXPECT_EQ(actual.appearance, expected.appearance);
+    EXPECT_EQ(actual.version, expected.version);
+    EXPECT_EQ(actual.updated_at, expected.updated_at);
 }
 
 } // namespace
@@ -87,12 +111,25 @@ TEST(AgentStore, CreateCharacterWritesCardHistoryAndMemoryLifecyclePaths) {
     EXPECT_TRUE(std::filesystem::exists(agent_path / "relations.md"));
 
     auto card_markdown = slurp(agent_path / "character_card.md");
+    for (const auto& label : std::vector<std::string>{
+             "姓名：", "年龄：", "性别：", "种族：", "身份：",
+             "核心性格特质：", "情绪倾向：", "说话风格：", "禁忌话题：",
+             "核心欲望：", "深层恐惧：", "日常目标：", "背景故事：",
+             "知识范围：", "人际关系：", "外貌与习惯："}) {
+        EXPECT_NE(card_markdown.find(label), std::string::npos)
+            << "missing label " << label;
+    }
     EXPECT_NE(card_markdown.find("姓名：林霜"), std::string::npos);
-    EXPECT_NE(card_markdown.find("年龄：28"), std::string::npos);
     EXPECT_NE(card_markdown.find("核心性格特质：谨慎、护短"),
               std::string::npos);
-    EXPECT_NE(card_markdown.find("外貌与习惯：灰斗篷，左手有旧伤"),
-              std::string::npos);
+    EXPECT_NE(card_markdown.find("禁忌话题：叛逃的兄长"), std::string::npos);
+
+    auto expected = sample_card();
+    expected.agent_id = record.id;
+    expected.version = 1;
+    expected.updated_at = record.updated_at;
+    expect_character_card_matches(agents.load_character_card(record.id),
+                                  expected);
 
     int history_count = 0;
     for (const auto& entry :
@@ -118,7 +155,8 @@ TEST(AgentStore, UpdateCharacterCardIncrementsVersionAndPreservesHistory) {
     auto updated = agents.update_character_card(record.id, next, "剧情推进");
 
     EXPECT_EQ(updated.version, 2);
-    EXPECT_EQ(agents.load_character_card(record.id).daily_goal, "追踪失踪商队");
+    expect_character_card_matches(agents.load_character_card(record.id),
+                                  updated);
 
     auto history_path = worlds.world_path(world.id) / "agents" / record.id /
                         "character_card_history";
