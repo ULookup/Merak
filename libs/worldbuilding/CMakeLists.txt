@@ -1,6 +1,7 @@
 add_library(merak-worldbuilding STATIC
     src/ids.cpp
     src/sqlite_helpers.cpp
+    src/world_store.cpp
 )
 target_include_directories(merak-worldbuilding PUBLIC include)
 target_link_libraries(merak-worldbuilding PUBLIC

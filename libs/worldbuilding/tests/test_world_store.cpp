@@ -1,13 +1,27 @@
 #include <gtest/gtest.h>
 #include <merak/worldbuilding/ids.hpp>
 #include <merak/worldbuilding/sqlite_helpers.hpp>
+#include <merak/worldbuilding/world_store.hpp>
 #include <merak/worldbuilding/world_models.hpp>
 
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <utility>
 
 using namespace merak::worldbuilding;
+
+namespace {
+
+std::filesystem::path temp_dir() {
+    auto path =
+        std::filesystem::temp_directory_path() / make_id("world_store_test");
+    std::filesystem::remove_all(path);
+    std::filesystem::create_directories(path);
+    return path;
+}
+
+} // namespace
 
 TEST(WorldbuildingModels, RequiredDefaultsMatchDesign) {
     Chapter chapter;
@@ -143,4 +157,49 @@ TEST(WorldbuildingSqliteHelpers, ErrorsIncludeSQLiteMessages) {
         EXPECT_NE(std::string(error.what()).find("syntax error"),
                   std::string::npos);
     }
+}
+
+TEST(WorldStore, CreateWorldCreatesAllDesignDirectoriesAndGodAgent) {
+    WorldStore store(temp_dir());
+    store.initialize();
+    auto world = store.create_world("北境", "雪原史诗");
+
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) /
+                                        "world_knowledge"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) / "god"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) /
+                                        "managers/map"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) /
+                                        "managers/history"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) /
+                                        "managers/magic"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) /
+                                        "managers/faction"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) / "agents"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) / "scenes"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) /
+                                        "chapters"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) / "arcs"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) / "secrets"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) /
+                                        "foreshadows"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) /
+                                        "sessions"));
+    EXPECT_TRUE(std::filesystem::exists(store.world_path(world.id) /
+                                        "timeline.json"));
+
+    auto agents = store.list_agents(world.id);
+    ASSERT_EQ(agents.size(), 1);
+    EXPECT_EQ(agents[0].kind, AgentKind::God);
+    EXPECT_EQ(agents[0].name, "god");
+}
+
+TEST(WorldStore, WorldsAreIsolated) {
+    WorldStore store(temp_dir());
+    store.initialize();
+    auto a = store.create_world("A", "");
+    auto b = store.create_world("B", "");
+    store.add_world_knowledge(a.id, {"", "history", "A only", ""});
+    EXPECT_EQ(store.get_world_knowledge(a.id, "").size(), 1);
+    EXPECT_TRUE(store.get_world_knowledge(b.id, "").empty());
 }
