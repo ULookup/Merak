@@ -1,0 +1,54 @@
+#pragma once
+
+#include <merak/worldbuilding/world_models.hpp>
+#include <merak/worldbuilding/world_store.hpp>
+
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace merak::worldbuilding {
+
+class AgentStore {
+public:
+    AgentStore(WorldStore& worlds, std::filesystem::path data_root);
+
+    AgentRecord create_manager(const std::string& world_id, AgentKind kind,
+                               std::string name, std::string instructions);
+    AgentRecord create_character(const std::string& world_id,
+                                 CharacterCard card);
+    AgentRecord create_group(const std::string& world_id, std::string name,
+                             std::string culture_card_markdown,
+                             std::vector<std::string> member_agent_ids);
+
+    std::optional<AgentRecord> get_agent(const std::string& agent_id) const;
+    std::vector<AgentRecord> list_agents(const std::string& world_id) const;
+
+    CharacterCard load_character_card(const std::string& agent_id) const;
+    CharacterCard update_character_card(const std::string& agent_id,
+                                        CharacterCard next_card,
+                                        std::string reason);
+
+    void append_diary_entry(DiaryEntry entry);
+    std::vector<DiaryEntry> recent_diary(const std::string& agent_id,
+                                         int max_entries) const;
+    void write_memory_summary(MemorySummary summary);
+
+    void upsert_relation(RelationEntry relation);
+    std::vector<RelationEntry> relations_for(const std::string& agent_id) const;
+
+    GroupProfile load_group(const std::string& group_agent_id) const;
+
+private:
+    void initialize();
+    std::filesystem::path database_path() const;
+    std::filesystem::path agent_path(const std::string& agent_id) const;
+    AgentRecord insert_agent(const std::string& world_id, std::string name,
+                             AgentKind kind);
+
+    WorldStore& worlds_;
+    std::filesystem::path data_root_;
+};
+
+} // namespace merak::worldbuilding
