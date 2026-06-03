@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <future>
+#include <set>
 
 namespace fs = std::filesystem;
 
@@ -21,7 +22,10 @@ ToolSpec ReadFileTool::spec() const {
     s.parameters_json = R"JSON({
         "type": "object",
         "properties": {
-            "path": {"type": "string", "description": "Path to the file to read"}
+            "path": {"type": "string", "description": "Path to the file to read"},
+            "offset": {"type": "integer", "description": "Start line (1-based)"},
+            "limit": {"type": "integer", "description": "Number of lines to read"},
+            "outline": {"type": "boolean", "description": "Return a structural outline instead of full content"}
         },
         "required": ["path"]
     })JSON";
@@ -32,20 +36,59 @@ std::future<ToolResult> ReadFileTool::execute(ToolCall call, ToolExecutionContex
     return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
-
         try {
             auto args = nlohmann::json::parse(call.arguments);
             std::string path = args["path"].get<std::string>();
+            int offset = args.value("offset", 0);
+            int limit = args.value("limit", 0);
+            bool outline = args.value("outline", false);
 
             if (!fs::exists(path)) {
                 result.is_error = true;
                 result.output = "File not found: " + path;
                 return result;
             }
-
             if (!fs::is_regular_file(path)) {
                 result.is_error = true;
                 result.output = "Not a regular file: " + path;
+                return result;
+            }
+
+            // Image detection
+            std::string ext = fs::path(path).extension().string();
+            static const std::set<std::string> kImageExt = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"};
+            if (kImageExt.count(ext)) {
+                auto sz = fs::file_size(path);
+                if (sz > 1.5 * 1024 * 1024) {
+                    result.is_error = true;
+                    result.output = "Image too large (" + std::to_string(sz) + " bytes, max 1.5MB)";
+                    return result;
+                }
+                std::ifstream f(path, std::ios::binary);
+                std::ostringstream oss;
+                oss << f.rdbuf();
+                std::string data = oss.str();
+                static const char kBase64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+                std::string b64;
+                b64.reserve(((data.size() + 2) / 3) * 4);
+                for (size_t i = 0; i < data.size(); i += 3) {
+                    uint32_t n = static_cast<unsigned char>(data[i]) << 16;
+                    if (i + 1 < data.size()) n |= static_cast<unsigned char>(data[i+1]) << 8;
+                    if (i + 2 < data.size()) n |= static_cast<unsigned char>(data[i+2]);
+                    b64 += kBase64[(n >> 18) & 63];
+                    b64 += kBase64[(n >> 12) & 63];
+                    b64 += kBase64[(n >> 6) & 63];
+                    b64 += kBase64[n & 63];
+                }
+                if (data.size() % 3) { b64[b64.size() - 1] = '='; }
+                if (data.size() % 3 == 1) { b64[b64.size() - 2] = '='; }
+                result.output = nlohmann::json{
+                    {"type", "image"},
+                    {"mime", "image/" + ext.substr(1)},
+                    {"data", "data:image/" + ext.substr(1) + ";base64," + b64},
+                    {"size_bytes", data.size()}
+                }.dump();
+                spdlog::debug("ReadFile: returned base64 image from {}", path);
                 return result;
             }
 
@@ -55,16 +98,90 @@ std::future<ToolResult> ReadFileTool::execute(ToolCall call, ToolExecutionContex
                 result.output = "Cannot open file: " + path;
                 return result;
             }
-
             std::ostringstream oss;
             oss << f.rdbuf();
-            result.output = oss.str();
+            std::string content = oss.str();
+
+            // Binary detection
+            if (!content.empty()) {
+                auto end = content.data() + std::min(content.size(), size_t(1024));
+                if (std::any_of(content.data(), end, [](char c) { return c == '\0'; })) {
+                    result.is_error = true;
+                    result.output = "Binary file detected. Cannot display.";
+                    return result;
+                }
+            }
+
+            // Outline mode
+            if (outline) {
+                std::istringstream iss(content);
+                std::string line;
+                int lineno = 0;
+                nlohmann::json outline_json = nlohmann::json::array();
+                while (std::getline(iss, line)) {
+                    lineno++;
+                    size_t start = line.find_first_not_of(" \t");
+                    if (start == std::string::npos) continue;
+                    std::string trimmed = line.substr(start);
+                    if (trimmed.starts_with("#") || trimmed.starts_with("class ") ||
+                        trimmed.starts_with("struct ") || trimmed.starts_with("fn ") ||
+                        trimmed.starts_with("def ") || trimmed.starts_with("function ") ||
+                        trimmed.starts_with("namespace ") || trimmed.starts_with("template ") ||
+                        trimmed.starts_with("public:") || trimmed.starts_with("private:") ||
+                        trimmed.starts_with("protected:") || trimmed.starts_with("enum ") ||
+                        trimmed.starts_with("void ") || trimmed.starts_with("int ") ||
+                        trimmed.starts_with("auto ") || trimmed.starts_with("bool ") ||
+                        trimmed.starts_with("static ") || trimmed.starts_with("virtual ")) {
+                        outline_json.push_back({{"line", lineno}, {"text", trimmed}});
+                    }
+                }
+                result.output = outline_json.dump();
+                if (outline_json.empty()) {
+                    result.output = nlohmann::json{{"outline", "No structural elements found"},
+                        {"hint", "Use offset/limit to read sections"}}.dump();
+                }
+                return result;
+            }
+
+            // Auto-expand small range reads
+            if (offset > 0 && limit > 0) {
+                std::vector<std::string> lines_vec;
+                std::istringstream iss(content);
+                std::string line;
+                while (std::getline(iss, line)) lines_vec.push_back(line);
+                int total_lines = static_cast<int>(lines_vec.size());
+                int start_idx = std::max(0, offset - 1);
+                int end_idx = std::min(total_lines, offset - 1 + limit);
+                std::ostringstream range_out;
+                for (int i = start_idx; i < end_idx; ++i) {
+                    range_out << lines_vec[i] << "\n";
+                }
+                if (range_out.str().size() < 16384) {
+                    result.output = content;
+                } else {
+                    result.output = nlohmann::json{
+                        {"lines", range_out.str()},
+                        {"start_line", offset},
+                        {"end_line", end_idx},
+                        {"total_lines", total_lines}
+                    }.dump();
+                }
+                return result;
+            }
+
+            // Large file downgrade
+            if (content.size() > 50000) {
+                result.output = "File is large (" + std::to_string(content.size()) + " bytes). Use offset/limit or outline=true to read sections.";
+                result.truncated = true;
+                return result;
+            }
+
+            result.output = content;
             spdlog::debug("ReadFile: read {} bytes from {}", result.output.size(), path);
         } catch (const std::exception& e) {
             result.is_error = true;
             result.output = std::string("ReadFile error: ") + e.what();
         }
-
         return result;
     });
 }
