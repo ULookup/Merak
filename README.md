@@ -105,6 +105,14 @@ tool_started
 tool_completed
 approval_requested
 approval_resolved
+delegation_started
+sub_run_started
+sub_run_state_changed
+sub_run_text_delta
+sub_run_tool_started
+sub_run_tool_completed
+sub_run_completed
+delegation_completed
 run_completed
 run_failed
 run_cancelled
@@ -130,6 +138,7 @@ GET  /v1/sessions/{id}
 GET  /v1/sessions/{id}/events?after={seq}
 GET  /v1/sessions/{id}/events/stream?after={seq}
 POST /v1/sessions/{id}/runs
+POST /v1/sessions/{id}/delegations
 POST /v1/approvals/{id}
 POST /v1/runs/{id}/cancel
 ```
@@ -252,6 +261,10 @@ cmake --build build -j
 /session new
 /session use <id>
 /tools
+/agents
+/team fanout <agent1,agent2> <task>
+/team sequential <agent1,agent2> <task>
+/team pipeline <agent1,agent2> <task>
 /context
 /transcript
 /tool-calls

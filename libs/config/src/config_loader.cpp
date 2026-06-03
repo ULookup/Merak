@@ -92,6 +92,21 @@ static std::optional<Config> parse_config_file(const std::string& filepath) {
             if (a.contains("reserve_ratio")) cfg.agent.reserve_ratio = a["reserve_ratio"];
             if (a.contains("memory_budget_ratio")) cfg.agent.memory_budget_ratio = a["memory_budget_ratio"];
             if (a.contains("permission_mode")) cfg.agent.permission_mode = a["permission_mode"];
+            if (a.contains("sub_agents")) {
+                for (auto& [id, value] : a["sub_agents"].items()) {
+                    SubAgentConfig sub;
+                    sub.id = value.value("id", id);
+                    sub.system_prompt = value.value("system_prompt", "");
+                    sub.model = value.value("model", "");
+                    sub.can_delegate = value.value("can_delegate", false);
+                    if (value.contains("tool_allowlist")) {
+                        for (const auto& tool : value["tool_allowlist"]) {
+                            sub.tool_allowlist.push_back(tool.get<std::string>());
+                        }
+                    }
+                    cfg.agent.sub_agents[sub.id] = std::move(sub);
+                }
+            }
         }
 
         return cfg;
@@ -132,6 +147,7 @@ void ConfigLoader::merge(Config& base, const Config& override_cfg) {
     if (a.reserve_ratio > 0.0) base.agent.reserve_ratio = a.reserve_ratio;
     if (a.memory_budget_ratio > 0.0) base.agent.memory_budget_ratio = a.memory_budget_ratio;
     if (!a.permission_mode.empty()) base.agent.permission_mode = a.permission_mode;
+    if (!a.sub_agents.empty()) base.agent.sub_agents = a.sub_agents;
 }
 
 // ——— 环境变量覆盖 ———

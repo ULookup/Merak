@@ -69,6 +69,16 @@ const std::vector<CommandMeta>& all_commands() {
             CommandGroup::Tools, {}, {}, {}
         },
         CommandMeta{
+            "/agents", "List configured sub agents",
+            CommandGroup::Tools, {}, {}, {}
+        },
+        CommandMeta{
+            "/team", "Run an explicit multi-agent workflow",
+            CommandGroup::Tools,
+            {{"fanout", "Run agents in parallel"}, {"sequential", "Run agents in order"}, {"pipeline", "Pass each output to the next agent"}},
+            "[fanout|sequential|pipeline] <agent1,agent2> <task>", {}
+        },
+        CommandMeta{
             "/mcp", "MCP server management",
             CommandGroup::Tools,
             {{"list", "List servers"}, {"tools", "List MCP tools"}, {"status", "Server status"}},

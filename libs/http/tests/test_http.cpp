@@ -7,9 +7,16 @@ using namespace merak;
 int main() {
     auto root = std::filesystem::temp_directory_path() / "merak-http-test";
     std::filesystem::remove_all(root);
-    auto runtime = std::make_shared<RuntimeService>(root);
+    std::map<std::string, SubAgentConfig> agents;
+    SubAgentConfig researcher;
+    researcher.id = "researcher";
+    researcher.system_prompt = "Research agent";
+    agents[researcher.id] = researcher;
+    auto runtime = std::make_shared<RuntimeService>(root, RuntimeService::LoopFactory{}, agents);
     runtime->initialize();
-    HttpServer server(runtime, RuntimeMetadata{"test", "fake-model", {}, {}});
+    RuntimeMetadata meta{"test", "fake-model", {}, {}};
+    meta.agents.push_back({"researcher", "Research agent"});
+    HttpServer server(runtime, meta);
 
     auto created = server.handle_create_session();
     assert(created.status == 201);
@@ -18,6 +25,21 @@ int main() {
     auto metadata = server.handle_runtime_metadata();
     assert(metadata.status == 200);
     assert(metadata.body["provider"] == "test");
+    assert(metadata.body["delegation_patterns"].size() == 3);
+    assert(metadata.body["delegation_patterns"][0] == "fan_out");
+    assert(metadata.body["agents"].size() == 1);
+    assert(metadata.body["agents"][0]["id"] == "researcher");
+
+    DelegationRequest request;
+    request.pattern = "fan_out";
+    request.agent_ids = {"researcher"};
+    request.task = "inspect";
+    auto delegation_result = server.handle_create_delegation(
+        created.body["session_id"].get<std::string>(), request);
+    assert(delegation_result.status == 202 || delegation_result.status == 400);
+    if (delegation_result.status == 400) {
+        assert(delegation_result.body["error"]["code"] == "runtime_unconfigured");
+    }
 
     auto missing = server.handle_get_session("missing");
     assert(missing.status == 404);

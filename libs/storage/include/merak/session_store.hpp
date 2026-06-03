@@ -35,6 +35,10 @@ struct RunRecord {
     std::string started_at;
     std::string finished_at;
     std::string error;
+    std::string parent_run_id;
+    std::string delegation_id;
+    std::string agent_id;
+    std::string run_kind = "user";
 };
 
 struct ApprovalRecord {
@@ -57,7 +61,13 @@ public:
     SessionRecord create_session(const std::string& title = "");
     std::optional<SessionRecord> get_session(const std::string& id) const;
     std::vector<SessionRecord> list_sessions() const;
-    RunRecord create_run(const std::string& session_id, const std::string& message);
+    RunRecord create_run(
+        const std::string& session_id,
+        const std::string& message,
+        const std::string& parent_run_id = "",
+        const std::string& delegation_id = "",
+        const std::string& agent_id = "",
+        const std::string& run_kind = "user");
     std::optional<RunRecord> get_run(const std::string& id) const;
     bool has_unfinished_run(const std::string& session_id) const;
     void update_run_status(const std::string& id, RunStatus status, const std::string& error = "");

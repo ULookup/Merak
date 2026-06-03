@@ -12,6 +12,7 @@ struct RuntimeMetadata {
     std::string model;
     std::vector<ToolSpec> tools;
     std::vector<McpServerStatus> mcp_servers;
+    std::vector<AgentMetadata> agents;
 };
 struct HttpResult { int status; nlohmann::json body; };
 
@@ -23,6 +24,9 @@ public:
     HttpResult handle_runtime_metadata() const;
     HttpResult handle_create_session(const std::string& title = "");
     HttpResult handle_get_session(const std::string& id) const;
+    HttpResult handle_create_delegation(
+        const std::string& session_id,
+        const DelegationRequest& request);
 private:
     std::shared_ptr<RuntimeService> runtime_;
     RuntimeMetadata metadata_;

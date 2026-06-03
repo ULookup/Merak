@@ -35,7 +35,19 @@ int main() {
             "agent": {
                 "system_prompt": "You are a test agent.",
                 "max_tool_turns": 10,
-                "permission_mode": "auto"
+                "permission_mode": "auto",
+                "sub_agents": {
+                    "researcher": {
+                        "system_prompt": "Research carefully.",
+                        "model": "gpt-4o-mini",
+                        "tool_allowlist": ["read_file", "grep"],
+                        "can_delegate": false
+                    },
+                    "builder": {
+                        "system_prompt": "Implement changes.",
+                        "tool_allowlist": ["read_file", "edit_file"]
+                    }
+                }
             }
         })";
 
@@ -56,6 +68,15 @@ int main() {
         assert(cfg.agent.system_prompt == "You are a test agent.");
         assert(cfg.agent.max_tool_turns == 10);
         assert(cfg.agent.permission_mode == "auto");
+        assert(cfg.agent.sub_agents.size() == 2);
+        assert(cfg.agent.sub_agents["researcher"].id == "researcher");
+        assert(cfg.agent.sub_agents["researcher"].system_prompt == "Research carefully.");
+        assert(cfg.agent.sub_agents["researcher"].model == "gpt-4o-mini");
+        assert(cfg.agent.sub_agents["researcher"].tool_allowlist.size() == 2);
+        assert(cfg.agent.sub_agents["researcher"].tool_allowlist[1] == "grep");
+        assert(cfg.agent.sub_agents["researcher"].can_delegate == false);
+        assert(cfg.agent.sub_agents["builder"].id == "builder");
+        assert(cfg.agent.sub_agents["builder"].can_delegate == false);
 
         std::remove("/tmp/test_merak_config.json");
     }
