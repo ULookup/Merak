@@ -36,7 +36,7 @@ public:
     void write_memory_summary(MemorySummary summary);
 
     std::vector<DiaryEntry> search_diary(const std::string& agent_id,
-                                         const std::string& query,
+                                         const std::string& keyword,
                                          int max_results = 5) const;
     std::optional<DiaryEntry> get_diary(const std::string& diary_id) const;
 

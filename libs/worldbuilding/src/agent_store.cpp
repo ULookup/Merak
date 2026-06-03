@@ -818,7 +818,7 @@ AgentStore::shared_memory_refs_for(const std::string& agent_id) const {
 }
 
 std::vector<DiaryEntry> AgentStore::search_diary(const std::string& agent_id,
-                                                  const std::string& query,
+                                                  const std::string& keyword,
                                                   int max_results) const {
     SqliteDb db(database_path().string());
     Statement query(db, R"sql(
@@ -829,8 +829,8 @@ std::vector<DiaryEntry> AgentStore::search_diary(const std::string& agent_id,
         LIMIT ?3
     )sql");
     bind_text(query, 1, agent_id);
-    bind_text(query, 2, "%" + query + "%");
-    bind_int(query, 3, std::max(0, max_results));
+    bind_text(query, 2, "%" + keyword + "%");
+    bind_int(query, 3, std::clamp(max_results, 0, 1000));
 
     std::vector<DiaryEntry> results;
     while (query.step()) {
