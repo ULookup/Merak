@@ -197,7 +197,8 @@ ToolSpec WriteFileTool::spec() const {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "Path to write to"},
-            "content": {"type": "string", "description": "Content to write"}
+            "content": {"type": "string", "description": "Content to write"},
+            "mode": {"type": "string", "enum": ["create", "overwrite"], "default": "overwrite"}
         },
         "required": ["path", "content"]
     })JSON";
@@ -208,30 +209,62 @@ std::future<ToolResult> WriteFileTool::execute(ToolCall call, ToolExecutionConte
     return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
-
         try {
             auto args = nlohmann::json::parse(call.arguments);
             std::string path = args["path"].get<std::string>();
             std::string content = args["content"].get<std::string>();
+            std::string mode = args.value("mode", "overwrite");
 
-            fs::create_directories(fs::path(path).parent_path());
+            if (content.size() > 10 * 1024 * 1024) {
+                result.is_error = true;
+                result.output = "Content too large (" + std::to_string(content.size()) + " bytes, max 10MB)";
+                return result;
+            }
 
-            std::ofstream f(path);
+            fs::path p(path);
+            auto abs = fs::absolute(p);
+
+            if (abs.string().find("/.git/") != std::string::npos || abs.filename() == ".git") {
+                result.is_error = true;
+                result.output = "Refusing to write inside .git/: " + path;
+                return result;
+            }
+
+            if (fs::exists(abs) && fs::is_directory(abs)) {
+                result.is_error = true;
+                result.output = "Path is a directory: " + path;
+                return result;
+            }
+
+            if (mode == "create" && fs::exists(abs)) {
+                result.is_error = true;
+                result.output = "File already exists (mode=create): " + path;
+                return result;
+            }
+
+            bool existed = fs::exists(abs);
+            fs::create_directories(abs.parent_path());
+
+            std::ofstream f(abs);
             if (!f.is_open()) {
                 result.is_error = true;
                 result.output = "Cannot write to file: " + path;
                 return result;
             }
-
             f << content;
             f.close();
-            result.output = "File written: " + path + " (" +
-                std::to_string(content.size()) + " bytes)";
+
+            bool created = !existed;
+            result.output = nlohmann::json{
+                {"success", true},
+                {"bytes_written", content.size()},
+                {"path", path},
+                {"created", created}
+            }.dump();
         } catch (const std::exception& e) {
             result.is_error = true;
             result.output = std::string("WriteFile error: ") + e.what();
         }
-
         return result;
     });
 }
