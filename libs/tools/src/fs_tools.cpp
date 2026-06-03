@@ -18,13 +18,13 @@ ToolSpec ReadFileTool::spec() const {
     s.name = "read_file";
     s.description = "Read the contents of a file at the given path";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"JSON({
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "Path to the file to read"}
         },
         "required": ["path"]
-    })";
+    })JSON";
     return s;
 }
 
@@ -76,14 +76,14 @@ ToolSpec WriteFileTool::spec() const {
     s.name = "write_file";
     s.description = "Write content to a file, creating it if it doesn't exist";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"JSON({
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "Path to write to"},
             "content": {"type": "string", "description": "Content to write"}
         },
         "required": ["path", "content"]
-    })";
+    })JSON";
     return s;
 }
 
@@ -126,7 +126,7 @@ ToolSpec StrReplaceTool::spec() const {
     s.name = "str_replace";
     s.description = "Replace a string in a file. old_str must match exactly once";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"JSON({
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "File to edit"},
@@ -134,7 +134,7 @@ ToolSpec StrReplaceTool::spec() const {
             "new_str": {"type": "string", "description": "Replacement text"}
         },
         "required": ["path", "old_str", "new_str"]
-    })";
+    })JSON";
     return s;
 }
 
@@ -213,7 +213,7 @@ ToolSpec MultiEditTool::spec() const {
     s.description = "Apply multiple string replacements atomically. "
         "Each edit's old_str must match exactly once and edits must not overlap.";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"JSON({
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "File to edit"},
@@ -231,7 +231,7 @@ ToolSpec MultiEditTool::spec() const {
             }
         },
         "required": ["path", "edits"]
-    })";
+    })JSON";
     return s;
 }
 
@@ -360,14 +360,14 @@ ToolSpec DeleteFileTool::spec() const {
     s.name = "delete_file";
     s.description = "Delete a file. Refuses to delete directories or .git contents.";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"JSON({
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "Path to the file to delete"},
             "explanation": {"type": "string", "description": "Reason for deleting the file"}
         },
         "required": ["path", "explanation"]
-    })";
+    })JSON";
     return s;
 }
 
@@ -457,7 +457,7 @@ ToolSpec ListDirTool::spec() const {
     s.description = "List contents of a directory recursively with depth control. "
         "Skips common ignored directories (node_modules, .git, etc.)";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"JSON({
         "type": "object",
         "properties": {
             "path": {
@@ -474,7 +474,7 @@ ToolSpec ListDirTool::spec() const {
             }
         },
         "required": []
-    })";
+    })JSON";
     return s;
 }
 

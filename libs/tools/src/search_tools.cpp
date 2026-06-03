@@ -22,7 +22,7 @@ ToolSpec GlobTool::spec() const {
     s.name = "glob";
     s.description = "Find files matching a glob pattern using system glob(3)";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"JSON({
         "type": "object",
         "properties": {
             "pattern": {
@@ -31,7 +31,7 @@ ToolSpec GlobTool::spec() const {
             }
         },
         "required": ["pattern"]
-    })";
+    })JSON";
     return s;
 }
 
@@ -110,7 +110,7 @@ ToolSpec GrepTool::spec() const {
     s.name = "grep";
     s.description = "Search for a regex pattern in text files";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"JSON({
         "type": "object",
         "properties": {
             "pattern": {
@@ -131,7 +131,7 @@ ToolSpec GrepTool::spec() const {
             }
         },
         "required": ["pattern"]
-    })";
+    })JSON";
     return s;
 }
 
