@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -38,7 +39,10 @@ AgentKind agent_kind_from_string(const std::string& value) {
     if (value == "group") {
         return AgentKind::Group;
     }
-    return AgentKind::Individual;
+    if (value == "individual") {
+        return AgentKind::Individual;
+    }
+    throw std::runtime_error("unknown agent kind: " + value);
 }
 
 WorldMeta read_world_meta(Statement& statement) {
@@ -66,6 +70,20 @@ AgentRecord read_agent_record(Statement& statement) {
 void execute_bound(Statement& statement) {
     if (statement.step()) {
         throw std::runtime_error("unexpected sqlite row");
+    }
+}
+
+void rollback_no_throw(SqliteDb& db) noexcept {
+    try {
+        db.exec("ROLLBACK");
+    } catch (...) {
+    }
+}
+
+void remove_all_no_throw(const std::filesystem::path& path) noexcept {
+    try {
+        std::filesystem::remove_all(path);
+    } catch (...) {
     }
 }
 
@@ -132,23 +150,24 @@ WorldMeta WorldStore::create_world(const std::string& name,
     };
 
     const auto root = world_path(world.id);
-    std::filesystem::create_directories(root);
-    for (const auto directory : kWorldDirectories) {
-        std::filesystem::create_directories(root / directory);
-    }
-
-    {
-        std::ofstream timeline(root / "timeline.json");
-        if (!timeline) {
-            throw std::runtime_error("create world timeline failed");
-        }
-        timeline << R"({"events":[]})";
-    }
-
     SqliteDb db(database_path().string());
     db.exec("PRAGMA foreign_keys = ON");
-    db.exec("BEGIN");
+
     try {
+        std::filesystem::create_directories(root);
+        for (const auto directory : kWorldDirectories) {
+            std::filesystem::create_directories(root / directory);
+        }
+
+        {
+            std::ofstream timeline(root / "timeline.json");
+            if (!timeline) {
+                throw std::runtime_error("create world timeline failed");
+            }
+            timeline << R"({"events":[]})";
+        }
+
+        db.exec("BEGIN");
         Statement insert_world(db, R"sql(
             INSERT INTO worlds(id, name, description, created_at, updated_at)
             VALUES(?1, ?2, ?3, ?4, ?5)
@@ -177,8 +196,8 @@ WorldMeta WorldStore::create_world(const std::string& name,
 
         db.exec("COMMIT");
     } catch (...) {
-        db.exec("ROLLBACK");
-        std::filesystem::remove_all(root);
+        rollback_no_throw(db);
+        remove_all_no_throw(root);
         throw;
     }
 
@@ -219,6 +238,20 @@ std::vector<WorldMeta> WorldStore::list_worlds() const {
 bool WorldStore::delete_world(const std::string& world_id) {
     SqliteDb db(database_path().string());
     db.exec("PRAGMA foreign_keys = ON");
+
+    {
+        Statement exists(db, "SELECT 1 FROM worlds WHERE id = ?1");
+        bind_text(exists, 1, world_id);
+        if (!exists.step()) {
+            return false;
+        }
+    }
+
+    const auto root = world_path(world_id);
+    if (std::filesystem::exists(root)) {
+        std::filesystem::remove_all(root);
+    }
+
     db.exec("BEGIN");
     try {
         Statement delete_knowledge(
@@ -236,12 +269,9 @@ bool WorldStore::delete_world(const std::string& world_id) {
 
         const bool removed = sqlite3_changes(db.get()) > 0;
         db.exec("COMMIT");
-        if (removed) {
-            std::filesystem::remove_all(world_path(world_id));
-        }
         return removed;
     } catch (...) {
-        db.exec("ROLLBACK");
+        rollback_no_throw(db);
         throw;
     }
 }

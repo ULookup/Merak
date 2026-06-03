@@ -203,3 +203,81 @@ TEST(WorldStore, WorldsAreIsolated) {
     EXPECT_EQ(store.get_world_knowledge(a.id, "").size(), 1);
     EXPECT_TRUE(store.get_world_knowledge(b.id, "").empty());
 }
+
+TEST(WorldStore, GetAndListWorldsReturnPersistedMetadata) {
+    WorldStore store(temp_dir());
+    store.initialize();
+
+    auto a = store.create_world("A", "first");
+    auto b = store.create_world("B", "second");
+
+    auto loaded = store.get_world(a.id);
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->id, a.id);
+    EXPECT_EQ(loaded->name, "A");
+    EXPECT_EQ(loaded->description, "first");
+
+    auto worlds = store.list_worlds();
+    ASSERT_EQ(worlds.size(), 2);
+    EXPECT_EQ(worlds[0].id, a.id);
+    EXPECT_EQ(worlds[1].id, b.id);
+}
+
+TEST(WorldStore, DeleteWorldRemovesRowsAndOnlyThatWorldDirectory) {
+    auto root = temp_dir();
+    WorldStore store(root);
+    store.initialize();
+    auto a = store.create_world("A", "");
+    auto b = store.create_world("B", "");
+    store.add_world_knowledge(a.id, {"", "history", "A only", ""});
+    const auto deleted_path = store.world_path(a.id);
+    const auto kept_path = store.world_path(b.id);
+
+    EXPECT_TRUE(store.delete_world(a.id));
+
+    EXPECT_FALSE(store.get_world(a.id).has_value());
+    EXPECT_TRUE(store.get_world(b.id).has_value());
+    EXPECT_TRUE(store.get_world_knowledge(a.id, "").empty());
+    EXPECT_TRUE(store.list_agents(a.id).empty());
+    EXPECT_FALSE(std::filesystem::exists(deleted_path));
+    EXPECT_TRUE(std::filesystem::exists(kept_path));
+    EXPECT_FALSE(store.delete_world(a.id));
+}
+
+TEST(WorldStore, DatabaseEnforcesOneGodAgentPerWorld) {
+    auto root = temp_dir();
+    WorldStore store(root);
+    store.initialize();
+    auto world = store.create_world("A", "");
+
+    SqliteDb db((root / "worlds.sqlite3").string());
+    Statement duplicate(db, R"sql(
+        INSERT INTO agents(id, world_id, name, display_name, kind,
+                           created_at, updated_at)
+        VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)
+    )sql");
+    bind_text(duplicate, 1, make_id("agent"));
+    bind_text(duplicate, 2, world.id);
+    bind_text(duplicate, 3, "second-god");
+    bind_text(duplicate, 4, "second-god");
+    bind_text(duplicate, 5, "god");
+    bind_text(duplicate, 6, now_iso_utc());
+    bind_text(duplicate, 7, now_iso_utc());
+
+    EXPECT_THROW(duplicate.step(), std::runtime_error);
+}
+
+TEST(WorldStore, ListAgentsThrowsForUnknownPersistedKind) {
+    auto root = temp_dir();
+    WorldStore store(root);
+    store.initialize();
+    auto world = store.create_world("A", "");
+
+    SqliteDb db((root / "worlds.sqlite3").string());
+    Statement corrupt(db, "UPDATE agents SET kind = ?1 WHERE world_id = ?2");
+    bind_text(corrupt, 1, "mystery");
+    bind_text(corrupt, 2, world.id);
+    EXPECT_FALSE(corrupt.step());
+
+    EXPECT_THROW(store.list_agents(world.id), std::runtime_error);
+}
