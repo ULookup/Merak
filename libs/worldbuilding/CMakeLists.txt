@@ -1,6 +1,7 @@
 add_library(merak-worldbuilding STATIC
     src/ids.cpp
     src/agent_store.cpp
+    src/narrative_store.cpp
     src/sqlite_helpers.cpp
     src/world_store.cpp
 )
@@ -12,6 +13,7 @@ target_link_libraries(merak-worldbuilding PUBLIC
 
 add_executable(worldbuilding_tests
     tests/test_agent_store.cpp
+    tests/test_narrative_store.cpp
     tests/test_world_store.cpp
 )
 target_link_libraries(worldbuilding_tests PRIVATE
