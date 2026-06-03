@@ -19,6 +19,15 @@ enum class ExecutionPolicy {
     FailFast
 };
 
+struct OutputCap {
+    size_t per_tool   = 50000;
+    size_t grep       = 10000;
+    size_t glob       = 100000;
+    size_t aggregate  = 200000;
+    size_t soft       = 120000;
+    size_t persist_threshold = 50000;
+};
+
 class ToolRegistry {
 public:
     ToolRegistry() = default;
@@ -51,10 +60,14 @@ public:
         permission_mode_ = mode;
     }
 
+    void set_output_caps(const OutputCap& caps) { caps_ = caps; }
+    const OutputCap& caps() const { return caps_; }
+
 private:
     std::map<std::string, std::unique_ptr<Tool>> tools_;
     std::map<std::string, std::string> source_;
     std::string permission_mode_ = "ask";
+    OutputCap caps_;
 };
 
 } // namespace merak
