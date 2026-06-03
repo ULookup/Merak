@@ -1,4 +1,5 @@
 add_library(merak-tools STATIC
+    src/edit_journal.cpp
     src/tool_registry.cpp
     src/builtin_tools.cpp
 )
