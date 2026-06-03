@@ -821,26 +821,26 @@ std::vector<DiaryEntry> AgentStore::search_diary(const std::string& agent_id,
                                                   const std::string& query,
                                                   int max_results) const {
     SqliteDb db(database_path().string());
-    Statement stmt(db, R"sql(
+    Statement query(db, R"sql(
         SELECT id, agent_id, scene_id, world_time, content, created_at
         FROM agent_diaries
         WHERE agent_id = ?1 AND content LIKE ?2
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, id DESC
         LIMIT ?3
     )sql");
-    bind_text(stmt, 1, agent_id);
-    bind_text(stmt, 2, "%" + query + "%");
-    bind_int(stmt, 3, max_results);
+    bind_text(query, 1, agent_id);
+    bind_text(query, 2, "%" + query + "%");
+    bind_int(query, 3, std::max(0, max_results));
 
     std::vector<DiaryEntry> results;
-    while (stmt.step()) {
+    while (query.step()) {
         results.push_back(DiaryEntry{
-            .id = column_text(stmt, 0),
-            .agent_id = column_text(stmt, 1),
-            .scene_id = column_text(stmt, 2),
-            .world_time = column_text(stmt, 3),
-            .content = column_text(stmt, 4),
-            .created_at = column_text(stmt, 5),
+            .id = column_text(query, 0),
+            .agent_id = column_text(query, 1),
+            .scene_id = column_text(query, 2),
+            .world_time = column_text(query, 3),
+            .content = column_text(query, 4),
+            .created_at = column_text(query, 5),
         });
     }
     return results;
@@ -849,19 +849,19 @@ std::vector<DiaryEntry> AgentStore::search_diary(const std::string& agent_id,
 std::optional<DiaryEntry>
 AgentStore::get_diary(const std::string& diary_id) const {
     SqliteDb db(database_path().string());
-    Statement stmt(db, R"sql(
+    Statement query(db, R"sql(
         SELECT id, agent_id, scene_id, world_time, content, created_at
         FROM agent_diaries WHERE id = ?1
     )sql");
-    bind_text(stmt, 1, diary_id);
-    if (stmt.step()) {
+    bind_text(query, 1, diary_id);
+    if (query.step()) {
         return DiaryEntry{
-            .id = column_text(stmt, 0),
-            .agent_id = column_text(stmt, 1),
-            .scene_id = column_text(stmt, 2),
-            .world_time = column_text(stmt, 3),
-            .content = column_text(stmt, 4),
-            .created_at = column_text(stmt, 5),
+            .id = column_text(query, 0),
+            .agent_id = column_text(query, 1),
+            .scene_id = column_text(query, 2),
+            .world_time = column_text(query, 3),
+            .content = column_text(query, 4),
+            .created_at = column_text(query, 5),
         };
     }
     return std::nullopt;
