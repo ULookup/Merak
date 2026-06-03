@@ -8,6 +8,36 @@
 #include <future>
 #include <set>
 
+namespace {
+static std::string normalize_quotes(std::string s) {
+    for (auto& c : s) {
+        if (c == '\x93' || c == '\x94') c = '"';
+        if (c == '\x91' || c == '\x92') c = '\'';
+    }
+    return s;
+}
+
+static std::string normalize_leading_whitespace(const std::string& s) {
+    std::istringstream iss(s);
+    std::string line;
+    std::vector<std::string> lines;
+    size_t min_indent = std::string::npos;
+    while (std::getline(iss, line)) {
+        size_t indent = line.find_first_not_of(" \t");
+        if (indent == std::string::npos) indent = line.size();
+        if (indent < min_indent && !line.empty()) min_indent = indent;
+        lines.push_back(line);
+    }
+    if (min_indent == std::string::npos || min_indent == 0) return s;
+    std::string result;
+    for (auto& l : lines) {
+        if (!l.empty()) result += l.substr(min_indent);
+        result += '\n';
+    }
+    return result;
+}
+} // namespace
+
 namespace fs = std::filesystem;
 
 namespace merak::tools {
@@ -311,9 +341,33 @@ std::future<ToolResult> StrReplaceTool::execute(ToolCall call, ToolExecutionCont
             std::string content = oss.str();
 
             size_t pos = content.find(old_str);
+            std::string active_old = old_str;
+            int cascade_level = 0;
+
+            if (pos == std::string::npos) {
+                auto normalized_old = normalize_quotes(old_str);
+                auto normalized_content = normalize_quotes(content);
+                pos = normalized_content.find(normalized_old);
+                if (pos != std::string::npos) {
+                    active_old = normalized_old;
+                    content = normalized_content;
+                    cascade_level = 1;
+                }
+            }
+            if (pos == std::string::npos) {
+                auto nlo = normalize_leading_whitespace(old_str);
+                auto nlc = normalize_leading_whitespace(content);
+                pos = nlc.find(nlo);
+                if (pos != std::string::npos) {
+                    active_old = nlo;
+                    content = nlc;
+                    cascade_level = 2;
+                }
+            }
             if (pos == std::string::npos) {
                 result.is_error = true;
-                result.output = "old_str not found in file. Ensure exact whitespace match.";
+                result.output = "old_str not found in file. Ensure exact whitespace match. "
+                    "(Tried exact, quote-normalized, whitespace-normalized)";
                 return result;
             }
 
@@ -330,7 +384,7 @@ std::future<ToolResult> StrReplaceTool::execute(ToolCall call, ToolExecutionCont
                 journal->record(fs::path(path), content, "");
             }
 
-            content.replace(pos, old_str.size(), new_str);
+            content.replace(pos, active_old.size(), new_str);
 
             // Record after state
             if (journal) {
