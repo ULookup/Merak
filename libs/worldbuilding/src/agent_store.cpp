@@ -531,16 +531,26 @@ AgentStore::update_character_card(const std::string& agent_id,
                    history_filename(next_card.updated_at, next_card.version),
                markdown + "\n更新原因：" + reason + "\n");
 
-    SqliteDb db(database_path().string());
-    Statement update(db, R"sql(
-        UPDATE agents SET name = ?1, display_name = ?2, updated_at = ?3
-        WHERE id = ?4
-    )sql");
-    bind_text(update, 1, next_card.name);
-    bind_text(update, 2, next_card.name);
-    bind_text(update, 3, next_card.updated_at);
-    bind_text(update, 4, agent_id);
-    execute_bound(update);
+    PgConn conn(*pool_);
+    conn.execute(
+        "UPDATE agents SET name = $1, display_name = $2, updated_at = $3 "
+        "WHERE id = $4",
+        {next_card.name, next_card.name, next_card.updated_at, agent_id});
+
+    conn.execute(
+        "UPDATE character_cards SET name = $1, age = $2, gender = $3, race = $4, "
+        "identity = $5, core_traits = $6, emotional_tendency = $7, "
+        "speaking_style = $8, taboo_topics = $9, core_desire = $10, "
+        "deep_fear = $11, daily_goal = $12, background = $13, "
+        "knowledge_scope = $14, appearance = $15, version = $16, updated_at = $17 "
+        "WHERE agent_id = $18",
+        {next_card.name, std::to_string(next_card.age),
+         next_card.gender, next_card.race, next_card.identity,
+         to_pg_array(next_card.core_traits), next_card.emotional_tendency,
+         next_card.speaking_style, to_pg_array(next_card.taboo_topics),
+         next_card.core_desire, next_card.deep_fear, next_card.daily_goal,
+         next_card.background, next_card.knowledge_scope, next_card.appearance,
+         std::to_string(next_card.version), next_card.updated_at, agent_id});
     return next_card;
 }
 
@@ -556,30 +566,13 @@ void AgentStore::append_diary_entry(DiaryEntry entry) {
         entry.created_at = now_iso_utc();
     }
 
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    Statement insert(db, R"sql(
-        INSERT INTO agent_diaries(id, agent_id, scene_id, world_time, content,
-                                  created_at)
-        VALUES(?1, ?2, ?3, ?4, ?5, ?6)
-    )sql");
-    bind_text(insert, 1, entry.id);
-    bind_text(insert, 2, entry.agent_id);
-    bind_text(insert, 3, entry.scene_id);
-    bind_text(insert, 4, entry.world_time);
-    bind_text(insert, 5, entry.content);
-    bind_text(insert, 6, entry.created_at);
-    execute_bound(insert);
-
-    // Sync to FTS5 index
-    try {
-        Statement fts_insert(db, R"sql(
-            INSERT INTO agent_diaries_fts(diary_id, content) VALUES(?1, ?2)
-        )sql");
-        bind_text(fts_insert, 1, entry.id);
-        bind_text(fts_insert, 2, entry.content);
-        execute_bound(fts_insert);
-    } catch (...) {}
+    PgConn conn(*pool_);
+    conn.execute(
+        "INSERT INTO agent_diaries(id, agent_id, scene_id, world_time, content, created_at) "
+        "VALUES($1, $2, $3, $4, $5, $6)",
+        {entry.id, entry.agent_id, entry.scene_id, entry.world_time,
+         entry.content, entry.created_at});
+    // content_tsv updated by trigger
 
     const auto root = agent_path(entry.agent_id);
     std::ostringstream diary;
@@ -599,26 +592,22 @@ void AgentStore::append_diary_entry(DiaryEntry entry) {
 
 std::vector<DiaryEntry>
 AgentStore::recent_diary(const std::string& agent_id, int max_entries) const {
-    SqliteDb db(database_path().string());
-    Statement query(db, R"sql(
-        SELECT id, agent_id, scene_id, world_time, content, created_at
-        FROM agent_diaries
-        WHERE agent_id = ?1
-        ORDER BY created_at DESC, id DESC
-        LIMIT ?2
-    )sql");
-    bind_text(query, 1, agent_id);
-    bind_int(query, 2, std::max(0, max_entries));
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, agent_id, scene_id, world_time, content, created_at "
+        "FROM agent_diaries WHERE agent_id = $1 "
+        "ORDER BY created_at DESC, id DESC LIMIT $2",
+        {agent_id, std::to_string(std::max(0, max_entries))});
 
     std::vector<DiaryEntry> entries;
-    while (query.step()) {
+    for (int i = 0; i < res.ntuples(); i++) {
         entries.push_back(DiaryEntry{
-            .id = column_text(query, 0),
-            .agent_id = column_text(query, 1),
-            .scene_id = column_text(query, 2),
-            .world_time = column_text(query, 3),
-            .content = column_text(query, 4),
-            .created_at = column_text(query, 5),
+            .id = res.get(i, 0),
+            .agent_id = res.get(i, 1),
+            .scene_id = res.get(i, 2),
+            .world_time = res.get(i, 3),
+            .content = res.get(i, 4),
+            .created_at = res.get(i, 5),
         });
     }
     return entries;
@@ -801,91 +790,72 @@ AgentStore::shared_memory_refs_for(const std::string& agent_id) const {
 std::vector<DiaryEntry> AgentStore::search_diary(const std::string& agent_id,
                                                   const std::string& keyword,
                                                   int max_results) const {
-    SqliteDb db(database_path().string());
+    PgConn conn(*pool_);
     std::vector<DiaryEntry> results;
 
-    // Try FTS5 first
-    {
-        std::string fts_query = keyword;
-        for (auto& c : fts_query) {
-            if (c == '"' || c == '*' || c == '(' || c == ')') c = ' ';
+    // Try FTS with zhparser
+    try {
+        auto res = conn.query(
+            "SELECT d.id, d.agent_id, d.scene_id, d.world_time, d.content, d.created_at "
+            "FROM agent_diaries d "
+            "WHERE d.agent_id = $1 "
+            "  AND d.content_tsv @@ plainto_tsquery('chinese', $2) "
+            "ORDER BY ts_rank_cd(d.content_tsv, plainto_tsquery('chinese', $2)) DESC "
+            "LIMIT $3",
+            {agent_id, keyword, std::to_string(std::clamp(max_results, 0, 1000))});
+
+        for (int i = 0; i < res.ntuples(); i++) {
+            results.push_back(DiaryEntry{
+                .id = res.get(i, 0),
+                .agent_id = res.get(i, 1),
+                .scene_id = res.get(i, 2),
+                .world_time = res.get(i, 3),
+                .content = res.get(i, 4),
+                .created_at = res.get(i, 5),
+            });
         }
-        if (!fts_query.empty() && fts_query.back() != '*') fts_query += '*';
-
-        try {
-            Statement query(db, R"sql(
-                SELECT d.id, d.agent_id, d.scene_id, d.world_time, d.content, d.created_at
-                FROM agent_diaries_fts f
-                JOIN agent_diaries d ON d.id = f.diary_id
-                WHERE d.agent_id = ?1 AND agent_diaries_fts MATCH ?2
-                ORDER BY rank
-                LIMIT ?3
-            )sql");
-            bind_text(query, 1, agent_id);
-            bind_text(query, 2, fts_query);
-            bind_int(query, 3, std::clamp(max_results, 0, 1000));
-
-            while (query.step()) {
-                results.push_back(DiaryEntry{
-                    .id = column_text(query, 0),
-                    .agent_id = column_text(query, 1),
-                    .scene_id = column_text(query, 2),
-                    .world_time = column_text(query, 3),
-                    .content = column_text(query, 4),
-                    .created_at = column_text(query, 5),
-                });
-            }
-        } catch (...) {}
-    }
+    } catch (...) {}
 
     if (!results.empty()) return results;
 
     // Fallback to LIKE
-    {
-        Statement query(db, R"sql(
-            SELECT id, agent_id, scene_id, world_time, content, created_at
-            FROM agent_diaries
-            WHERE agent_id = ?1 AND content LIKE ?2
-            ORDER BY created_at DESC, id DESC
-            LIMIT ?3
-        )sql");
-        bind_text(query, 1, agent_id);
-        bind_text(query, 2, "%" + keyword + "%");
-        bind_int(query, 3, std::clamp(max_results, 0, 1000));
+    auto res = conn.query(
+        "SELECT id, agent_id, scene_id, world_time, content, created_at "
+        "FROM agent_diaries "
+        "WHERE agent_id = $1 AND content LIKE $2 "
+        "ORDER BY created_at DESC, id DESC LIMIT $3",
+        {agent_id, "%" + keyword + "%",
+         std::to_string(std::clamp(max_results, 0, 1000))});
 
-        while (query.step()) {
-            results.push_back(DiaryEntry{
-                .id = column_text(query, 0),
-                .agent_id = column_text(query, 1),
-                .scene_id = column_text(query, 2),
-                .world_time = column_text(query, 3),
-                .content = column_text(query, 4),
-                .created_at = column_text(query, 5),
-            });
-        }
+    for (int i = 0; i < res.ntuples(); i++) {
+        results.push_back(DiaryEntry{
+            .id = res.get(i, 0),
+            .agent_id = res.get(i, 1),
+            .scene_id = res.get(i, 2),
+            .world_time = res.get(i, 3),
+            .content = res.get(i, 4),
+            .created_at = res.get(i, 5),
+        });
     }
     return results;
 }
 
 std::optional<DiaryEntry>
 AgentStore::get_diary(const std::string& diary_id) const {
-    SqliteDb db(database_path().string());
-    Statement query(db, R"sql(
-        SELECT id, agent_id, scene_id, world_time, content, created_at
-        FROM agent_diaries WHERE id = ?1
-    )sql");
-    bind_text(query, 1, diary_id);
-    if (query.step()) {
-        return DiaryEntry{
-            .id = column_text(query, 0),
-            .agent_id = column_text(query, 1),
-            .scene_id = column_text(query, 2),
-            .world_time = column_text(query, 3),
-            .content = column_text(query, 4),
-            .created_at = column_text(query, 5),
-        };
-    }
-    return std::nullopt;
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, agent_id, scene_id, world_time, content, created_at "
+        "FROM agent_diaries WHERE id = $1",
+        {diary_id});
+    if (res.ntuples() == 0) return std::nullopt;
+    return DiaryEntry{
+        .id = res.get(0, 0),
+        .agent_id = res.get(0, 1),
+        .scene_id = res.get(0, 2),
+        .world_time = res.get(0, 3),
+        .content = res.get(0, 4),
+        .created_at = res.get(0, 5),
+    };
 }
 
 std::vector<AgentRecord>
