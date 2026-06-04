@@ -69,9 +69,9 @@ static int run_server(int argc,char**argv) {
     // Instantiate WorldbuildingService
     std::shared_ptr<worldbuilding::WorldbuildingService> wb_service;
     try {
-        if (!cfg.database.postgres_conninfo.empty()) {
+        if (!cfg.memory.db_connection.empty()) {
             wb_service = std::make_shared<worldbuilding::WorldbuildingService>(
-                cfg.database.postgres_conninfo, cfg.storage.fs_root);
+                cfg.memory.db_connection, merak_home() / "worldbuilding");
             wb_service->initialize();
         }
     } catch (const std::exception& e) {

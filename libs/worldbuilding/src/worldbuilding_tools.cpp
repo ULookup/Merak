@@ -1297,7 +1297,7 @@ std::future<ToolResult> UpdateAgentPromptTool::execute(
                 return r;
             }
 
-            svc->update_agent_prompt(agent_id, prompt);
+            svc.update_agent_prompt(agent_id, prompt);
 
             ToolResult r;
             r.output = ok_response({
