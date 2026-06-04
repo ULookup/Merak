@@ -751,15 +751,11 @@ std::vector<DiaryEntry> AgentStore::search_diary(const std::string& agent_id,
     PgConn conn(*pool_);
     std::vector<DiaryEntry> results;
 
-    // Try FTS with zhparser
+    // Try hybrid search (FTS + vector weighting via stored function)
     try {
         auto res = conn.query(
-            "SELECT d.id, d.agent_id, d.scene_id, d.world_time, d.content, d.created_at "
-            "FROM agent_diaries d "
-            "WHERE d.agent_id = $1 "
-            "  AND d.content_tsv @@ plainto_tsquery('chinese', $2) "
-            "ORDER BY ts_rank_cd(d.content_tsv, plainto_tsquery('chinese', $2)) DESC "
-            "LIMIT $3",
+            "SELECT id, agent_id, scene_id, world_time, content, created_at "
+            "FROM hybrid_search_diary($1, $2, $3)",
             {agent_id, keyword, std::to_string(std::clamp(max_results, 0, 1000))});
 
         for (int i = 0; i < res.ntuples(); i++) {
