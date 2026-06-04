@@ -36,6 +36,37 @@ int main() {
     }
 
     {
+        // Test bold rendering
+        AssistantCell bold_cell;
+        bold_cell.append("**bold text**\n");
+        bold_cell.finalize();
+        auto rendered = bold_cell.render(100);
+        bool found_bold = false;
+        for (const auto& line : rendered) {
+            if (line.find("bold text") != std::string::npos) {
+                found_bold = true;
+                break;
+            }
+        }
+        assert(found_bold);
+    }
+    {
+        // Test that list item with bold works
+        AssistantCell list_bold;
+        list_bold.append("* **bold item**\n");
+        list_bold.finalize();
+        auto rendered = list_bold.render(100);
+        bool found_bold = false;
+        for (const auto& line : rendered) {
+            if (line.find("bold item") != std::string::npos) {
+                found_bold = true;
+                break;
+            }
+        }
+        assert(found_bold);
+    }
+
+    {
         // CJK characters must survive sanitization
         auto sanitized = sanitize_terminal_text("你好世界");
         assert(sanitized == "你好世界");

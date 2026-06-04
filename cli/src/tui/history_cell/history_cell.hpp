@@ -131,14 +131,19 @@ class AssistantCell final : public HistoryCell {
     int frozen_gutter_ = 178;
 
     static std::string render_inline(std::string line) {
+        // Headings
         if (line.starts_with("# ")) return ansi(theme::ANSI_BOLD, line.substr(2));
         if (line.starts_with("## ")) return ansi(theme::ANSI_BOLD, line.substr(3));
-        if (line.starts_with("> ")) return ansi(theme::ANSI_DIM, "│ " + line.substr(2));
-        if (line.starts_with("- ") || line.starts_with("* ")) {
-            return ansi(theme::ANSI_ACCENT, "• ") + line.substr(2);
+
+        // Blockquote: strip prefix, recursively inline-parse remainder
+        if (line.starts_with("> ")) {
+            return ansi(theme::ANSI_DIM, "│ ") + render_inline(line.substr(2));
         }
+
+        // Inline parsing: `code`, **bold**, __italic__
         bool in_code = false;
         bool in_bold = false;
+        bool in_italic = false;
         std::string out;
         for (size_t i = 0; i < line.size(); ++i) {
             auto c = line[i];
@@ -149,11 +154,21 @@ class AssistantCell final : public HistoryCell {
                 out += in_bold ? theme::ANSI_RESET : theme::ANSI_BOLD;
                 in_bold = !in_bold;
                 ++i;
+            } else if (c == '_' && i + 1 < line.size() && line[i + 1] == '_') {
+                out += in_italic ? theme::ANSI_RESET : theme::ANSI_ACCENT;
+                in_italic = !in_italic;
+                ++i;
             } else {
                 out.push_back(c);
             }
         }
-        if (in_code || in_bold) out += theme::ANSI_RESET;
+        if (in_code || in_bold || in_italic) out += theme::ANSI_RESET;
+
+        // List items: replace leading "* " or "- " with bullet AFTER inline parsing
+        if (line.starts_with("* ") || line.starts_with("- ")) {
+            return ansi(theme::ANSI_ACCENT, "• ") + out.substr(2);
+        }
+
         return out;
     }
     static bool is_separator_row(const std::string& line) {
