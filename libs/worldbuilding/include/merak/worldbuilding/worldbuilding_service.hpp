@@ -38,7 +38,7 @@ public:
 
     // Scene orchestration
     ScenePreparation prepare_scene(const std::string& world_id,
-                                    const std::string& scene_id) const;
+                                    const std::string& scene_id);
     SceneWrapUp end_scene(const std::string& world_id,
                            const std::string& scene_id,
                            const std::string& final_markdown);

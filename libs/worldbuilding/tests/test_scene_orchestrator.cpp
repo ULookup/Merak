@@ -7,6 +7,7 @@
 #include <merak/worldbuilding/secret_store.hpp>
 #include <merak/worldbuilding/voice_analyzer.hpp>
 #include <merak/worldbuilding/world_store.hpp>
+#include <merak/worldbuilding/worldbuilding_service.hpp>
 
 #include <filesystem>
 #include <fstream>
@@ -34,6 +35,7 @@ struct OrchFixture {
     SecretStore secrets;
     VoiceAnalyzer voice;
     SceneOrchestrator orchestrator;
+    WorldbuildingService service{root};
 
     OrchFixture()
         : world(worlds.create_world("北境", "雪原史诗")),
@@ -82,7 +84,7 @@ TEST(SceneOrchestrator, PrepareSceneLoadsGodContext) {
     scene.participant_ids = {linshi.id, masha.id};
     auto created_scene = f.narrative.create_scene(f.world.id, scene);
 
-    auto prep = f.orchestrator.prepare_scene(f.world.id, created_scene.id);
+    auto prep = f.orchestrator.prepare_scene(f.world.id, created_scene.id, f.service);
 
     EXPECT_FALSE(prep.god_context.empty());
     EXPECT_NE(prep.god_context.find("旧友求援打破边境平静"), std::string::npos);
@@ -110,7 +112,7 @@ TEST(SceneOrchestrator, PrepareSceneAssemblesCharacterViews) {
     scene.participant_ids = {linshi.id, masha.id};
     auto created_scene = f.narrative.create_scene(f.world.id, scene);
 
-    auto prep = f.orchestrator.prepare_scene(f.world.id, created_scene.id);
+    auto prep = f.orchestrator.prepare_scene(f.world.id, created_scene.id, f.service);
 
     ASSERT_EQ(prep.character_views.size(), 2);
     EXPECT_FALSE(prep.character_views[0].system_prompt.empty());
@@ -140,7 +142,7 @@ TEST(SceneOrchestrator, PrepareSceneIncludesRelevantForeshadowing) {
     scene.participant_ids = {linshi.id};
     auto sc = f.narrative.create_scene(f.world.id, scene);
 
-    auto prep = f.orchestrator.prepare_scene(f.world.id, sc.id);
+    auto prep = f.orchestrator.prepare_scene(f.world.id, sc.id, f.service);
 
     ASSERT_EQ(prep.relevant_foreshadowing.size(), 1);
     EXPECT_EQ(prep.relevant_foreshadowing[0].content, "铁匠的断指");
@@ -173,7 +175,7 @@ TEST(SceneOrchestrator, CharacterViewsDifferBySecretKnowledge) {
     scene.participant_ids = {ailin.id, masha.id};
     auto sc = f.narrative.create_scene(f.world.id, scene);
 
-    auto prep = f.orchestrator.prepare_scene(f.world.id, sc.id);
+    auto prep = f.orchestrator.prepare_scene(f.world.id, sc.id, f.service);
 
     // Ailin's view should mention truth; masha's view should too (aware)
     // Both should have different secret contexts from any unaware character
