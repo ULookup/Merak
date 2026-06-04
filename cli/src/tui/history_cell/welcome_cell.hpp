@@ -38,8 +38,9 @@ public:
         auto box_width = width > 2 ? std::min(width - 2, content_width) : content_width;
 
         auto pad_right = [box_width](const std::string& text) {
-            if (text.size() >= box_width - 2) return text;
-            return text + repeat_text(" ", box_width - 2 - text.size());
+            auto inner = box_width > 4 ? box_width - 4 : 0;
+            if (text.size() >= inner) return text;
+            return text + repeat_text(" ", inner - text.size());
         };
 
         // top border
