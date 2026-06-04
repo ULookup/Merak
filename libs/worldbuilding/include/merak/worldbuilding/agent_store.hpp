@@ -4,15 +4,20 @@
 #include <merak/worldbuilding/world_store.hpp>
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace merak::worldbuilding {
 
+class PgPool;
+
 class AgentStore {
 public:
-    AgentStore(WorldStore& worlds, std::filesystem::path data_root);
+    AgentStore(WorldStore& worlds, std::string_view pg_conninfo,
+               std::filesystem::path data_root);
 
     AgentRecord create_manager(const std::string& world_id, AgentKind kind,
                                std::string name, std::string instructions);
@@ -40,6 +45,12 @@ public:
                                          int max_results = 5) const;
     std::optional<DiaryEntry> get_diary(const std::string& diary_id) const;
 
+    std::vector<AgentRecord>
+    search_agents_by_traits(const std::string& world_id,
+                            const std::vector<std::string>& traits,
+                            const std::string& identity = "",
+                            int max_results = 20) const;
+
     void upsert_relation(RelationEntry relation);
     std::vector<RelationEntry> relations_for(const std::string& agent_id) const;
 
@@ -50,13 +61,13 @@ public:
 
 private:
     void initialize();
-    std::filesystem::path database_path() const;
     std::filesystem::path agent_path(const std::string& agent_id) const;
     AgentRecord insert_agent(const std::string& world_id, std::string name,
                              AgentKind kind);
 
     WorldStore& worlds_;
     std::filesystem::path data_root_;
+    std::unique_ptr<PgPool> pool_;
 };
 
 } // namespace merak::worldbuilding
