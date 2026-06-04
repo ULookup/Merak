@@ -9,6 +9,7 @@
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
 #include <merak/worldbuilding_http_handler.hpp>
 #include "client/runtime_client.hpp"
+#include "commands/worldbuilding_commands.hpp"
 #include "tui/screen_manager.hpp"
 #include <atomic>
 #include <algorithm>
@@ -144,7 +145,33 @@ static int run_tui(int argc,char**argv) {
     for(const auto&e:api.events(session_id)["events"])apply({e.value("seq",0LL),e.value("type",""),e},true);start_stream();
     ui.timeline().add_system("Connected to merak serve · session "+session_id);
     ui.set_on_cancel([&]{std::string run;{std::lock_guard lock(state_mutex);run=current_run;}if(!run.empty())api.cancel_run(run);});
-    ui.set_on_command([&](std::string input){if(input=="/exit"||input=="/quit"){ui.exit();return;}if(input=="/help"){ui.open_help();return;}if(input=="/context"){ui.open_context();return;}if(input=="/model"||input.rfind("/model ",0)==0){ui.open_model_selector();return;}if(input=="/transcript"){ui.open_transcript();return;}if(input=="/tool-calls"){ui.open_tool_browser();return;}if(input=="/agents"){std::ostringstream out;out<<"Agents";for(const auto&a:meta.value("agents",nlohmann::json::array()))out<<"\n"<<a.value("id","")<<"  "<<a.value("description","");ui.timeline().add_system(out.str());return;}if(input.rfind("/team ",0)==0){std::istringstream parts(input.substr(6));std::string pattern,agent_list;parts>>pattern>>agent_list;std::string task;std::getline(parts,task);while(!task.empty()&&std::isspace(static_cast<unsigned char>(task.front())))task.erase(task.begin());auto agents=split_csv(agent_list);pattern=normalize_team_pattern(pattern);if((pattern!="fan_out"&&pattern!="sequential"&&pattern!="pipeline")||agents.empty()||task.empty()){ui.timeline().add_system("Usage: /team fanout|sequential|pipeline agent1,agent2 task",true);return;}ui.timeline().submit_user(input);ui.start_background([&api,&ui,&session_id,pattern,agents,task]{try{api.start_delegation(session_id,pattern,agents,task);}catch(const std::exception&e){ui.post([&ui,error=std::string(e.what())]{ui.timeline().add_system(error,true);ui.finish_remote_run();});}});return;}if(input=="/tools"){ui.open_tools();return;}if(input=="/memory"||input.rfind("/memory ",0)==0){try{ui.set_memory_items(api.memory(session_id).value("items",nlohmann::json::array()));}catch(const std::exception&e){ui.timeline().add_system(std::string("Memory refresh failed: ")+e.what(),true);}ui.open_memory();return;}if(input=="/session list"){auto sessions=api.list_sessions()["sessions"];std::ostringstream out;out<<"Sessions";for(const auto&s:sessions)out<<"\n"<<s.value("id","")<<"  "<<s.value("title","");ui.timeline().add_system(out.str());return;}if(input=="/clear")input="/session new";if(input=="/session new"||input.rfind("/session use ",0)==0){if(ui.busy()||ui.queued_messages()>0){ui.timeline().add_system("Cannot switch sessions while a run or queued message is active",true);return;}stop_stream=true;if(stream.joinable())stream.join();session_id=input=="/session new"?api.create_session()["session_id"].get<std::string>():input.substr(13);api.session(session_id);{std::lock_guard lock(state_mutex);last_seq=0;current_run.clear();}ui.reset_timeline();for(const auto&e:api.events(session_id)["events"])apply({e.value("seq",0LL),e.value("type",""),e},true);start_stream();ui.timeline().add_system("Using session "+session_id);return;}if(input.starts_with("/")){ui.timeline().add_system("Unknown command: "+input,true);return;}auto model=ui.selected_model();ui.start_background([&api,&ui,&session_id,input=std::move(input),model]{try{api.start_run(session_id,input,model);}catch(const std::exception&e){ui.post([&ui,error=std::string(e.what())]{ui.timeline().add_system(error,true);ui.finish_remote_run();});}});});
+    ui.set_on_command([&](std::string input){if(input=="/exit"||input=="/quit"){ui.exit();return;}if(input=="/help"){ui.open_help();return;}
+    // Worldbuilding commands
+    if (input.rfind("/world", 0) == 0 ||
+        input.rfind("/agent", 0) == 0 ||
+        input.rfind("/story", 0) == 0 ||
+        input.rfind("/chapter", 0) == 0 ||
+        input.rfind("/arc", 0) == 0 ||
+        input.rfind("/scene", 0) == 0 ||
+        input.rfind("/time", 0) == 0 ||
+        input.rfind("/foreshadow", 0) == 0 ||
+        input.rfind("/secret", 0) == 0 ||
+        input.rfind("/voice", 0) == 0 ||
+        input.rfind("/memory", 0) == 0 ||
+        input.rfind("/diary", 0) == 0 ||
+        input.rfind("@", 0) == 0) {
+        auto wb_cmd = commands::parse_worldbuilding_command(input, "", "", "");
+        if (wb_cmd) {
+            auto result = commands::execute_worldbuilding_command(*wb_cmd,
+                [&api](const std::string& method, const std::string& path,
+                       const nlohmann::json& body) {
+                    return api.request(method, path, body);
+                });
+            ui.timeline().add_system(result);
+            return;
+        }
+    }
+    if(input=="/context"){ui.open_context();return;}if(input=="/model"||input.rfind("/model ",0)==0){ui.open_model_selector();return;}if(input=="/transcript"){ui.open_transcript();return;}if(input=="/tool-calls"){ui.open_tool_browser();return;}if(input=="/agents"){std::ostringstream out;out<<"Agents";for(const auto&a:meta.value("agents",nlohmann::json::array()))out<<"\n"<<a.value("id","")<<"  "<<a.value("description","");ui.timeline().add_system(out.str());return;}if(input.rfind("/team ",0)==0){std::istringstream parts(input.substr(6));std::string pattern,agent_list;parts>>pattern>>agent_list;std::string task;std::getline(parts,task);while(!task.empty()&&std::isspace(static_cast<unsigned char>(task.front())))task.erase(task.begin());auto agents=split_csv(agent_list);pattern=normalize_team_pattern(pattern);if((pattern!="fan_out"&&pattern!="sequential"&&pattern!="pipeline")||agents.empty()||task.empty()){ui.timeline().add_system("Usage: /team fanout|sequential|pipeline agent1,agent2 task",true);return;}ui.timeline().submit_user(input);ui.start_background([&api,&ui,&session_id,pattern,agents,task]{try{api.start_delegation(session_id,pattern,agents,task);}catch(const std::exception&e){ui.post([&ui,error=std::string(e.what())]{ui.timeline().add_system(error,true);ui.finish_remote_run();});}});return;}if(input=="/tools"){ui.open_tools();return;}if(input=="/memory"||input.rfind("/memory ",0)==0){try{ui.set_memory_items(api.memory(session_id).value("items",nlohmann::json::array()));}catch(const std::exception&e){ui.timeline().add_system(std::string("Memory refresh failed: ")+e.what(),true);}ui.open_memory();return;}if(input=="/session list"){auto sessions=api.list_sessions()["sessions"];std::ostringstream out;out<<"Sessions";for(const auto&s:sessions)out<<"\n"<<s.value("id","")<<"  "<<s.value("title","");ui.timeline().add_system(out.str());return;}if(input=="/clear")input="/session new";if(input=="/session new"||input.rfind("/session use ",0)==0){if(ui.busy()||ui.queued_messages()>0){ui.timeline().add_system("Cannot switch sessions while a run or queued message is active",true);return;}stop_stream=true;if(stream.joinable())stream.join();session_id=input=="/session new"?api.create_session()["session_id"].get<std::string>():input.substr(13);api.session(session_id);{std::lock_guard lock(state_mutex);last_seq=0;current_run.clear();}ui.reset_timeline();for(const auto&e:api.events(session_id)["events"])apply({e.value("seq",0LL),e.value("type",""),e},true);start_stream();ui.timeline().add_system("Using session "+session_id);return;}if(input.starts_with("/")){ui.timeline().add_system("Unknown command: "+input,true);return;}auto model=ui.selected_model();ui.start_background([&api,&ui,&session_id,input=std::move(input),model]{try{api.start_run(session_id,input,model);}catch(const std::exception&e){ui.post([&ui,error=std::string(e.what())]{ui.timeline().add_system(error,true);ui.finish_remote_run();});}});});
     ui.run();stop_stream=true;if(stream.joinable())stream.join();return 0;
 }
 
