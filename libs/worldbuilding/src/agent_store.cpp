@@ -65,31 +65,6 @@ AgentRecord read_agent_record_pg(const PgResult& res, int row) {
     };
 }
 
-AgentRecord read_agent_record(Statement& statement) {
-    return AgentRecord{
-        .id = column_text(statement, 0),
-        .world_id = column_text(statement, 1),
-        .name = column_text(statement, 2),
-        .display_name = column_text(statement, 3),
-        .created_at = column_text(statement, 5),
-        .updated_at = column_text(statement, 6),
-        .kind = agent_kind_from_string(column_text(statement, 4)),
-    };
-}
-
-void execute_bound(Statement& statement) {
-    if (statement.step()) {
-        throw std::runtime_error("unexpected sqlite row");
-    }
-}
-
-void rollback_no_throw(SqliteDb& db) noexcept {
-    try {
-        db.exec("ROLLBACK");
-    } catch (...) {
-    }
-}
-
 void write_text(const std::filesystem::path& path,
                 const std::string& content) {
     std::filesystem::create_directories(path.parent_path());
@@ -625,21 +600,14 @@ void AgentStore::write_memory_summary(MemorySummary summary) {
         summary.created_at = now_iso_utc();
     }
 
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    Statement insert(db, R"sql(
-        INSERT INTO memory_summaries(id, agent_id, period_start, period_end,
-                                     summary, source_diary_ids, created_at)
-        VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)
-    )sql");
-    bind_text(insert, 1, summary.id);
-    bind_text(insert, 2, summary.agent_id);
-    bind_text(insert, 3, summary.period_start);
-    bind_text(insert, 4, summary.period_end);
-    bind_text(insert, 5, summary.summary);
-    bind_text(insert, 6, nlohmann::json(summary.source_diary_ids).dump());
-    bind_text(insert, 7, summary.created_at);
-    execute_bound(insert);
+    PgConn conn(*pool_);
+    conn.execute(
+        "INSERT INTO memory_summaries(id, agent_id, period_start, period_end, "
+        "summary, source_diary_ids, created_at) "
+        "VALUES($1, $2, $3, $4, $5, $6, $7)",
+        {summary.id, summary.agent_id, summary.period_start, summary.period_end,
+         summary.summary, nlohmann::json(summary.source_diary_ids).dump(),
+         summary.created_at});
 
     const auto root = agent_path(summary.agent_id);
     std::ostringstream markdown;
@@ -673,28 +641,20 @@ void AgentStore::upsert_relation(RelationEntry relation) {
         relation.updated_at = now_iso_utc();
     }
 
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    Statement upsert(db, R"sql(
-        INSERT INTO agent_relations(agent_id, target_id, relation_type,
-                                    description, intimacy, key_events,
-                                    updated_at)
-        VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)
-        ON CONFLICT(agent_id, target_id) DO UPDATE SET
-            relation_type = excluded.relation_type,
-            description = excluded.description,
-            intimacy = excluded.intimacy,
-            key_events = excluded.key_events,
-            updated_at = excluded.updated_at
-    )sql");
-    bind_text(upsert, 1, relation.agent_id);
-    bind_text(upsert, 2, relation.target_id);
-    bind_text(upsert, 3, relation.relation_type);
-    bind_text(upsert, 4, relation.description);
-    bind_int(upsert, 5, relation.intimacy);
-    bind_text(upsert, 6, nlohmann::json(relation.key_events).dump());
-    bind_text(upsert, 7, relation.updated_at);
-    execute_bound(upsert);
+    PgConn conn(*pool_);
+    conn.execute(
+        "INSERT INTO agent_relations(agent_id, target_id, relation_type, "
+        "description, intimacy, key_events, updated_at) "
+        "VALUES($1, $2, $3, $4, $5, $6, $7) "
+        "ON CONFLICT(agent_id, target_id) DO UPDATE SET "
+        "relation_type = EXCLUDED.relation_type, "
+        "description = EXCLUDED.description, "
+        "intimacy = EXCLUDED.intimacy, "
+        "key_events = EXCLUDED.key_events, "
+        "updated_at = EXCLUDED.updated_at",
+        {relation.agent_id, relation.target_id, relation.relation_type,
+         relation.description, std::to_string(relation.intimacy),
+         nlohmann::json(relation.key_events).dump(), relation.updated_at});
 
     std::ostringstream markdown;
     markdown << "# 人际关系\n";
@@ -711,28 +671,24 @@ void AgentStore::upsert_relation(RelationEntry relation) {
 
 std::vector<RelationEntry>
 AgentStore::relations_for(const std::string& agent_id) const {
-    SqliteDb db(database_path().string());
-    Statement query(db, R"sql(
-        SELECT agent_id, target_id, relation_type, description, intimacy,
-               key_events, updated_at
-        FROM agent_relations
-        WHERE agent_id = ?1
-        ORDER BY target_id ASC
-    )sql");
-    bind_text(query, 1, agent_id);
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT agent_id, target_id, relation_type, description, intimacy, "
+        "key_events, updated_at "
+        "FROM agent_relations WHERE agent_id = $1 ORDER BY target_id ASC",
+        {agent_id});
 
     std::vector<RelationEntry> relations;
-    while (query.step()) {
+    for (int i = 0; i < res.ntuples(); i++) {
         relations.push_back(RelationEntry{
-            .agent_id = column_text(query, 0),
-            .target_id = column_text(query, 1),
-            .relation_type = column_text(query, 2),
-            .description = column_text(query, 3),
-            .updated_at = column_text(query, 6),
-            .intimacy = column_int(query, 4),
-            .key_events =
-                nlohmann::json::parse(column_text(query, 5))
-                    .get<std::vector<std::string>>(),
+            .agent_id = res.get(i, 0),
+            .target_id = res.get(i, 1),
+            .relation_type = res.get(i, 2),
+            .description = res.get(i, 3),
+            .updated_at = res.get(i, 6),
+            .intimacy = std::stoi(res.get(i, 4)),
+            .key_events = nlohmann::json::parse(res.get(i, 5))
+                              .get<std::vector<std::string>>(),
         });
     }
     return relations;
@@ -758,15 +714,12 @@ GroupProfile AgentStore::load_group(const std::string& group_agent_id) const {
 }
 
 bool AgentStore::can_speak_directly(const std::string& agent_id) const {
-    SqliteDb db(database_path().string());
-    Statement query(db, R"sql(
-        SELECT can_speak_directly
-        FROM agent_metadata
-        WHERE agent_id = ?1
-    )sql");
-    bind_text(query, 1, agent_id);
-    if (query.step()) {
-        return column_int(query, 0) != 0;
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT can_speak_directly FROM agent_metadata WHERE agent_id = $1",
+        {agent_id});
+    if (res.ntuples() > 0) {
+        return res.get(0, 0) != "0";
     }
     throw std::runtime_error("missing agent metadata: " + agent_id);
 }
@@ -863,40 +816,47 @@ AgentStore::search_agents_by_traits(const std::string& world_id,
                                      const std::vector<std::string>& traits,
                                      const std::string& identity,
                                      int max_results) const {
+    PgConn conn(*pool_);
+
+    std::vector<std::string> params;
+    std::ostringstream sql;
+    sql << "SELECT a.id, a.world_id, a.name, a.display_name, a.kind, "
+           "a.created_at, a.updated_at "
+           "FROM agents a "
+           "JOIN character_cards c ON c.agent_id = a.id "
+           "WHERE a.world_id = $1 AND a.kind = 'individual'";
+    int param_idx = 2;
+    params.push_back(world_id);
+
+    if (!identity.empty()) {
+        sql << " AND c.identity LIKE $" << param_idx++;
+        params.push_back("%" + identity + "%");
+    }
+
+    if (!traits.empty()) {
+        for (const auto& trait : traits) {
+            sql << " AND ("
+                << "  $" << param_idx << " = ANY(c.core_traits)"
+                << "  OR c.background LIKE $" << param_idx + 1
+                << "  OR c.knowledge_scope LIKE $" << param_idx + 2
+                << "  OR c.appearance LIKE $" << param_idx + 3
+                << ")";
+            params.push_back(trait);
+            params.push_back("%" + trait + "%");
+            params.push_back("%" + trait + "%");
+            params.push_back("%" + trait + "%");
+            param_idx += 4;
+        }
+    }
+
+    sql << " ORDER BY a.created_at ASC LIMIT $" << param_idx;
+    params.push_back(std::to_string(std::clamp(max_results, 0, 100)));
+
+    auto res = conn.query(sql.str(), params);
+
     std::vector<AgentRecord> results;
-    auto all = list_agents(world_id);
-    for (auto& ag : all) {
-        if (ag.kind != AgentKind::Individual) continue;
-        if (results.size() >= static_cast<size_t>(max_results)) break;
-
-        try {
-            auto card = load_character_card(ag.id);
-
-            bool identity_match = identity.empty() ||
-                card.identity.find(identity) != std::string::npos;
-
-            bool trait_match = traits.empty();
-            if (!traits.empty() && !trait_match) {
-                for (auto& trait : traits) {
-                    for (auto& ct : card.core_traits) {
-                        if (ct.find(trait) != std::string::npos) {
-                            trait_match = true;
-                            break;
-                        }
-                    }
-                    if (trait_match) break;
-                    // Also search in background, knowledge_scope, appearance
-                    if (card.background.find(trait) != std::string::npos) trait_match = true;
-                    if (card.knowledge_scope.find(trait) != std::string::npos) trait_match = true;
-                    if (card.appearance.find(trait) != std::string::npos) trait_match = true;
-                    if (trait_match) break;
-                }
-            }
-
-            if (identity_match && trait_match) {
-                results.push_back(ag);
-            }
-        } catch (...) {}
+    for (int i = 0; i < res.ntuples(); i++) {
+        results.push_back(read_agent_record_pg(res, i));
     }
     return results;
 }
