@@ -1,7 +1,7 @@
 #include <merak/worldbuilding/agent_store.hpp>
 
 #include <merak/worldbuilding/ids.hpp>
-#include <merak/worldbuilding/sqlite_helpers.hpp>
+#include <merak/worldbuilding/pg_helpers.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -39,6 +39,30 @@ AgentKind agent_kind_from_string(const std::string& value) {
         return AgentKind::Group;
     }
     throw std::runtime_error("unknown agent kind: " + value);
+}
+
+std::string to_pg_array(const std::vector<std::string>& values) {
+    if (values.empty()) return "{}";
+    std::ostringstream out;
+    out << '{';
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i > 0) out << ',';
+        out << '"' << values[i] << '"';
+    }
+    out << '}';
+    return out.str();
+}
+
+AgentRecord read_agent_record_pg(const PgResult& res, int row) {
+    return AgentRecord{
+        .id = res.get(row, 0),
+        .world_id = res.get(row, 1),
+        .name = res.get(row, 2),
+        .display_name = res.get(row, 3),
+        .created_at = res.get(row, 5),
+        .updated_at = res.get(row, 6),
+        .kind = agent_kind_from_string(res.get(row, 4)),
+    };
 }
 
 AgentRecord read_agent_record(Statement& statement) {
@@ -222,16 +246,12 @@ int clamp_intimacy(int intimacy) {
     return std::clamp(intimacy, -100, 100);
 }
 
-void delete_agent_record_no_throw(const std::filesystem::path& database_path,
+void delete_agent_record_no_throw(PgPool& pool,
                                   const std::string& agent_id) noexcept {
     try {
-        SqliteDb db(database_path.string());
-        db.exec("PRAGMA foreign_keys = ON");
-        Statement delete_agent(db, "DELETE FROM agents WHERE id = ?1");
-        bind_text(delete_agent, 1, agent_id);
-        execute_bound(delete_agent);
-    } catch (...) {
-    }
+        PgConn conn(pool);
+        conn.execute("DELETE FROM agents WHERE id = $1", {agent_id});
+    } catch (...) {}
 }
 
 struct MemberRefSnapshot {
@@ -264,69 +284,22 @@ void restore_member_refs_no_throw(
 
 } // namespace
 
-AgentStore::AgentStore(WorldStore& worlds, std::filesystem::path data_root)
-    : worlds_(worlds), data_root_(std::move(data_root)) {
+AgentStore::AgentStore(WorldStore& worlds, std::string_view pg_conninfo,
+                       std::filesystem::path data_root)
+    : worlds_(worlds),
+      data_root_(std::move(data_root)),
+      pool_(std::make_unique<PgPool>(pg_conninfo)) {
     initialize();
 }
 
 void AgentStore::initialize() {
     worlds_.initialize();
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec(R"sql(
-        CREATE TABLE IF NOT EXISTS agent_diaries(
-            id TEXT PRIMARY KEY,
-            agent_id TEXT NOT NULL,
-            scene_id TEXT NOT NULL,
-            world_time TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
-        )
-    )sql");
-    db.exec(R"sql(
-        CREATE TABLE IF NOT EXISTS memory_summaries(
-            id TEXT PRIMARY KEY,
-            agent_id TEXT NOT NULL,
-            period_start TEXT NOT NULL,
-            period_end TEXT NOT NULL,
-            summary TEXT NOT NULL,
-            source_diary_ids TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
-        )
-    )sql");
-    db.exec(R"sql(
-        CREATE TABLE IF NOT EXISTS agent_relations(
-            agent_id TEXT NOT NULL,
-            target_id TEXT NOT NULL,
-            relation_type TEXT NOT NULL,
-            description TEXT NOT NULL,
-            intimacy INTEGER NOT NULL,
-            key_events TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            PRIMARY KEY(agent_id, target_id),
-            FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE,
-            FOREIGN KEY(target_id) REFERENCES agents(id) ON DELETE CASCADE
-        )
-    )sql");
-    db.exec(R"sql(
-        CREATE TABLE IF NOT EXISTS agent_metadata(
-            agent_id TEXT PRIMARY KEY,
-            can_speak_directly INTEGER NOT NULL,
-            FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
-        )
-    )sql");
-    db.exec(R"sql(
-        INSERT OR IGNORE INTO agent_metadata(agent_id, can_speak_directly)
-        SELECT id,
-               CASE WHEN kind = 'group' THEN 0 ELSE 1 END
-        FROM agents
-    )sql");
-}
-
-std::filesystem::path AgentStore::database_path() const {
-    return data_root_ / "worlds.sqlite3";
+    PgConn conn(*pool_);
+    conn.exec(
+        "INSERT INTO agent_metadata(agent_id, can_speak_directly) "
+        "SELECT id, CASE WHEN kind = 'group' THEN 0 ELSE 1 END "
+        "FROM agents "
+        "ON CONFLICT (agent_id) DO NOTHING");
 }
 
 std::filesystem::path
@@ -351,37 +324,23 @@ AgentRecord AgentStore::insert_agent(const std::string& world_id,
         .kind = kind,
     };
 
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec("BEGIN");
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
     try {
-        {
-            Statement insert(db, R"sql(
-                INSERT INTO agents(id, world_id, name, display_name, kind,
-                                   created_at, updated_at)
-                VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)
-            )sql");
-            bind_text(insert, 1, record.id);
-            bind_text(insert, 2, record.world_id);
-            bind_text(insert, 3, record.name);
-            bind_text(insert, 4, record.display_name);
-            bind_text(insert, 5, to_string(record.kind));
-            bind_text(insert, 6, record.created_at);
-            bind_text(insert, 7, record.updated_at);
-            execute_bound(insert);
-        }
-        {
-            Statement insert_metadata(db, R"sql(
-                INSERT INTO agent_metadata(agent_id, can_speak_directly)
-                VALUES(?1, ?2)
-            )sql");
-            bind_text(insert_metadata, 1, record.id);
-            bind_int(insert_metadata, 2, kind == AgentKind::Group ? 0 : 1);
-            execute_bound(insert_metadata);
-        }
-        db.exec("COMMIT");
+        conn.execute(
+            "INSERT INTO agents(id, world_id, name, display_name, kind, created_at, updated_at) "
+            "VALUES($1, $2, $3, $4, $5, $6, $7)",
+            {record.id, record.world_id, record.name, record.display_name,
+             to_string(record.kind), record.created_at, record.updated_at});
+
+        conn.execute(
+            "INSERT INTO agent_metadata(agent_id, can_speak_directly) "
+            "VALUES($1, $2)",
+            {record.id, std::to_string(kind == AgentKind::Group ? 0 : 1)});
+
+        conn.exec("COMMIT");
     } catch (...) {
-        rollback_no_throw(db);
+        try { conn.exec("ROLLBACK"); } catch (...) {}
         throw;
     }
     return record;
@@ -425,6 +384,22 @@ AgentRecord AgentStore::create_character(const std::string& world_id,
     write_text(root / "memory_index.md",
                "# 记忆索引\n\n## 场景日记\n\n## 记忆摘要\n");
     write_text(root / "relations.md", "# 人际关系\n");
+
+    PgConn conn(*pool_);
+    conn.execute(
+        "INSERT INTO character_cards(agent_id, name, age, gender, race, identity, "
+        "core_traits, emotional_tendency, speaking_style, taboo_topics, "
+        "core_desire, deep_fear, daily_goal, background, knowledge_scope, "
+        "appearance, version, updated_at) "
+        "VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
+        {card.agent_id, card.name,
+         std::to_string(card.age), card.gender, card.race, card.identity,
+         to_pg_array(card.core_traits), card.emotional_tendency,
+         card.speaking_style, to_pg_array(card.taboo_topics),
+         card.core_desire, card.deep_fear, card.daily_goal,
+         card.background, card.knowledge_scope, card.appearance,
+         std::to_string(card.version), card.updated_at});
+
     return record;
 }
 
@@ -507,7 +482,7 @@ AgentRecord AgentStore::create_group(
     } catch (...) {
         restore_member_refs_no_throw(member_snapshots);
         remove_all_no_throw(root);
-        delete_agent_record_no_throw(database_path(), record.id);
+        delete_agent_record_no_throw(*pool_, record.id);
         throw;
     }
     return record;
@@ -515,17 +490,13 @@ AgentRecord AgentStore::create_group(
 
 std::optional<AgentRecord>
 AgentStore::get_agent(const std::string& agent_id) const {
-    SqliteDb db(database_path().string());
-    Statement query(db, R"sql(
-        SELECT id, world_id, name, display_name, kind, created_at, updated_at
-        FROM agents
-        WHERE id = ?1
-    )sql");
-    bind_text(query, 1, agent_id);
-    if (!query.step()) {
-        return std::nullopt;
-    }
-    return read_agent_record(query);
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, world_id, name, display_name, kind, created_at, updated_at "
+        "FROM agents WHERE id = $1",
+        {agent_id});
+    if (res.ntuples() == 0) return std::nullopt;
+    return read_agent_record_pg(res, 0);
 }
 
 std::vector<AgentRecord>
@@ -599,6 +570,16 @@ void AgentStore::append_diary_entry(DiaryEntry entry) {
     bind_text(insert, 5, entry.content);
     bind_text(insert, 6, entry.created_at);
     execute_bound(insert);
+
+    // Sync to FTS5 index
+    try {
+        Statement fts_insert(db, R"sql(
+            INSERT INTO agent_diaries_fts(diary_id, content) VALUES(?1, ?2)
+        )sql");
+        bind_text(fts_insert, 1, entry.id);
+        bind_text(fts_insert, 2, entry.content);
+        execute_bound(fts_insert);
+    } catch (...) {}
 
     const auto root = agent_path(entry.agent_id);
     std::ostringstream diary;
@@ -821,27 +802,67 @@ std::vector<DiaryEntry> AgentStore::search_diary(const std::string& agent_id,
                                                   const std::string& keyword,
                                                   int max_results) const {
     SqliteDb db(database_path().string());
-    Statement query(db, R"sql(
-        SELECT id, agent_id, scene_id, world_time, content, created_at
-        FROM agent_diaries
-        WHERE agent_id = ?1 AND content LIKE ?2
-        ORDER BY created_at DESC, id DESC
-        LIMIT ?3
-    )sql");
-    bind_text(query, 1, agent_id);
-    bind_text(query, 2, "%" + keyword + "%");
-    bind_int(query, 3, std::clamp(max_results, 0, 1000));
-
     std::vector<DiaryEntry> results;
-    while (query.step()) {
-        results.push_back(DiaryEntry{
-            .id = column_text(query, 0),
-            .agent_id = column_text(query, 1),
-            .scene_id = column_text(query, 2),
-            .world_time = column_text(query, 3),
-            .content = column_text(query, 4),
-            .created_at = column_text(query, 5),
-        });
+
+    // Try FTS5 first
+    {
+        std::string fts_query = keyword;
+        for (auto& c : fts_query) {
+            if (c == '"' || c == '*' || c == '(' || c == ')') c = ' ';
+        }
+        if (!fts_query.empty() && fts_query.back() != '*') fts_query += '*';
+
+        try {
+            Statement query(db, R"sql(
+                SELECT d.id, d.agent_id, d.scene_id, d.world_time, d.content, d.created_at
+                FROM agent_diaries_fts f
+                JOIN agent_diaries d ON d.id = f.diary_id
+                WHERE d.agent_id = ?1 AND agent_diaries_fts MATCH ?2
+                ORDER BY rank
+                LIMIT ?3
+            )sql");
+            bind_text(query, 1, agent_id);
+            bind_text(query, 2, fts_query);
+            bind_int(query, 3, std::clamp(max_results, 0, 1000));
+
+            while (query.step()) {
+                results.push_back(DiaryEntry{
+                    .id = column_text(query, 0),
+                    .agent_id = column_text(query, 1),
+                    .scene_id = column_text(query, 2),
+                    .world_time = column_text(query, 3),
+                    .content = column_text(query, 4),
+                    .created_at = column_text(query, 5),
+                });
+            }
+        } catch (...) {}
+    }
+
+    if (!results.empty()) return results;
+
+    // Fallback to LIKE
+    {
+        Statement query(db, R"sql(
+            SELECT id, agent_id, scene_id, world_time, content, created_at
+            FROM agent_diaries
+            WHERE agent_id = ?1 AND content LIKE ?2
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?3
+        )sql");
+        bind_text(query, 1, agent_id);
+        bind_text(query, 2, "%" + keyword + "%");
+        bind_int(query, 3, std::clamp(max_results, 0, 1000));
+
+        while (query.step()) {
+            results.push_back(DiaryEntry{
+                .id = column_text(query, 0),
+                .agent_id = column_text(query, 1),
+                .scene_id = column_text(query, 2),
+                .world_time = column_text(query, 3),
+                .content = column_text(query, 4),
+                .created_at = column_text(query, 5),
+            });
+        }
     }
     return results;
 }
@@ -865,6 +886,49 @@ AgentStore::get_diary(const std::string& diary_id) const {
         };
     }
     return std::nullopt;
+}
+
+std::vector<AgentRecord>
+AgentStore::search_agents_by_traits(const std::string& world_id,
+                                     const std::vector<std::string>& traits,
+                                     const std::string& identity,
+                                     int max_results) const {
+    std::vector<AgentRecord> results;
+    auto all = list_agents(world_id);
+    for (auto& ag : all) {
+        if (ag.kind != AgentKind::Individual) continue;
+        if (results.size() >= static_cast<size_t>(max_results)) break;
+
+        try {
+            auto card = load_character_card(ag.id);
+
+            bool identity_match = identity.empty() ||
+                card.identity.find(identity) != std::string::npos;
+
+            bool trait_match = traits.empty();
+            if (!traits.empty() && !trait_match) {
+                for (auto& trait : traits) {
+                    for (auto& ct : card.core_traits) {
+                        if (ct.find(trait) != std::string::npos) {
+                            trait_match = true;
+                            break;
+                        }
+                    }
+                    if (trait_match) break;
+                    // Also search in background, knowledge_scope, appearance
+                    if (card.background.find(trait) != std::string::npos) trait_match = true;
+                    if (card.knowledge_scope.find(trait) != std::string::npos) trait_match = true;
+                    if (card.appearance.find(trait) != std::string::npos) trait_match = true;
+                    if (trait_match) break;
+                }
+            }
+
+            if (identity_match && trait_match) {
+                results.push_back(ag);
+            }
+        } catch (...) {}
+    }
+    return results;
 }
 
 } // namespace merak::worldbuilding
