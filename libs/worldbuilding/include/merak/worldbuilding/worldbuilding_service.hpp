@@ -52,6 +52,14 @@ public:
     // Voice analysis
     std::vector<VoiceComparison> voice_check(const std::string& world_id) const;
 
+    // Agent prompt management
+    void update_agent_prompt(const std::string& agent_id, std::string prompt) {
+        agents_.update_agent_prompt(agent_id, std::move(prompt));
+    }
+    std::string load_agent_prompt(const std::string& agent_id) const {
+        return agents_.load_agent_prompt(agent_id);
+    }
+
     // Access underlying stores
     WorldStore& worlds() noexcept { return worlds_; }
     AgentStore& agents() noexcept { return agents_; }

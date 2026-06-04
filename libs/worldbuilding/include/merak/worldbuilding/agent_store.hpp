@@ -51,6 +51,9 @@ public:
                             const std::string& identity = "",
                             int max_results = 20) const;
 
+    void update_agent_prompt(const std::string& agent_id, std::string prompt);
+    std::string load_agent_prompt(const std::string& agent_id) const;
+
     void upsert_relation(RelationEntry relation);
     std::vector<RelationEntry> relations_for(const std::string& agent_id) const;
 

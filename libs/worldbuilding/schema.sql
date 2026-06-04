@@ -358,3 +358,11 @@ CREATE INDEX IF NOT EXISTS secrets_by_status
 
 CREATE INDEX IF NOT EXISTS secrets_by_holder
     ON secrets(world_id, holder_ids, id);
+
+-- ─── Agent Prompts (system prompts written by Creative Director) ────
+
+CREATE TABLE IF NOT EXISTS agent_prompts (
+    agent_id     TEXT PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
+    prompt       TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
