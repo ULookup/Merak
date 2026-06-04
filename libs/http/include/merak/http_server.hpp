@@ -25,6 +25,7 @@ public:
     HttpServer(std::shared_ptr<RuntimeService> runtime, RuntimeMetadata metadata);
     void listen(int port);
     void stop();
+    httplib::Server& raw_server() { return server_; }
     HttpResult handle_runtime_metadata() const;
     HttpResult handle_session_memory(const std::string& id) const;
     HttpResult handle_create_session(const std::string& title = "");

@@ -5,6 +5,9 @@
 #include <merak/http_server.hpp>
 #include <merak/mcp_client.hpp>
 #include <merak/openai_provider.hpp>
+#include <merak/worldbuilding/worldbuilding_service.hpp>
+#include <merak/worldbuilding/worldbuilding_tools.hpp>
+#include <merak/worldbuilding_http_handler.hpp>
 #include "client/runtime_client.hpp"
 #include "tui/screen_manager.hpp"
 #include <atomic>
@@ -61,10 +64,31 @@ static std::string normalize_team_pattern(std::string pattern){
 }
 
 static int run_server(int argc,char**argv) {
-    auto cfg=load_config();std::shared_ptr<LlmProvider>llm=cfg.llm.provider=="anthropic"
+    auto cfg=load_config();
+    // Instantiate WorldbuildingService
+    std::shared_ptr<worldbuilding::WorldbuildingService> wb_service;
+    try {
+        if (!cfg.database.postgres_conninfo.empty()) {
+            wb_service = std::make_shared<worldbuilding::WorldbuildingService>(
+                cfg.database.postgres_conninfo, cfg.storage.fs_root);
+            wb_service->initialize();
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Warning: WorldbuildingService not available: " << e.what() << "\n";
+    }
+    std::shared_ptr<LlmProvider>llm=cfg.llm.provider=="anthropic"
         ?std::static_pointer_cast<LlmProvider>(std::make_shared<AnthropicProvider>(cfg.llm))
         :std::static_pointer_cast<LlmProvider>(std::make_shared<OpenAIProvider>(cfg.llm));
     auto tools=std::make_shared<ToolRegistry>();tools->register_tool(std::make_unique<tools::ReadFileTool>());tools->register_tool(std::make_unique<tools::WriteFileTool>());tools->register_tool(std::make_unique<tools::StrReplaceTool>());tools->register_tool(std::make_unique<tools::MultiEditTool>());tools->register_tool(std::make_unique<tools::DeleteFileTool>());tools->register_tool(std::make_unique<tools::ListDirTool>());tools->register_tool(std::make_unique<tools::GlobTool>());tools->register_tool(std::make_unique<tools::GrepTool>());tools->register_tool(std::make_unique<tools::BashTool>());tools->set_permission_mode(cfg.agent.permission_mode);
+    // Register Worldbuilding tools if service is available
+    if (wb_service) {
+        worldbuilding::WorldbuildingTools wb_tools(*wb_service);
+        auto wb_ctx = worldbuilding::ToolContext{};
+        auto god_tools = wb_tools.create_tools(worldbuilding::AgentKind::God, wb_ctx);
+        for (auto& tool : god_tools) {
+            tools->register_tool(std::move(tool));
+        }
+    }
     std::vector<std::shared_ptr<McpClient>>mcp;std::vector<McpServerStatus>mcp_status;
     for(const auto& mc:cfg.mcp_servers){if(!mc.enabled)continue;auto c=std::make_shared<McpClient>(mc);auto connected=c->connect();mcp_status.push_back({mc.name,connected.has_value()});if(connected){tools->import_from_mcp(c).get();mcp.push_back(c);}}
     auto memory_cfg=cfg.memory;if(memory_cfg.db_connection.empty())memory_cfg.enabled=false;auto memory=std::make_shared<MemoryStore>(memory_cfg,nullptr);
@@ -98,6 +122,11 @@ static int run_server(int argc,char**argv) {
     metadata.mcp_servers = mcp_status;
     metadata.agents = runtime->agents();
     HttpServer server(runtime,metadata);
+    // Register Worldbuilding HTTP routes
+    if (wb_service) {
+        auto wb_handler = std::make_shared<WorldbuildingHttpHandler>(wb_service);
+        wb_handler->install_routes(server.raw_server());
+    }
     auto port=parse_port(argc,argv);std::cout<<"merak serve listening on 127.0.0.1:"<<port<<"\n";server.listen(port);return 0;
 }
 
