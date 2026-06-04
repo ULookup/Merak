@@ -1,5 +1,9 @@
 add_library(merak-prompts STATIC
+    src/compositor.cpp
     src/core_prompt.cpp
+    src/memory_prompt.cpp
+    src/scene_prompt.cpp
+    src/skill_prompt.cpp
     src/team_prompt.cpp
 )
 target_include_directories(merak-prompts PUBLIC include)
