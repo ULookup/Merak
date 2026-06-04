@@ -47,7 +47,12 @@ std::string to_pg_array(const std::vector<std::string>& values) {
     out << '{';
     for (size_t i = 0; i < values.size(); ++i) {
         if (i > 0) out << ',';
-        out << '"' << values[i] << '"';
+        out << '"';
+        for (char c : values[i]) {
+            if (c == '"') out << '"'; // escape embedded double quote
+            out << c;
+        }
+        out << '"';
     }
     out << '}';
     return out.str();

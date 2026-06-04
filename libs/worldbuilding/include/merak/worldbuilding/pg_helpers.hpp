@@ -52,6 +52,7 @@ private:
 
 class PgResult {
 public:
+    PgResult() : result_(nullptr) {}
     explicit PgResult(PGresult* result);
     ~PgResult();
 

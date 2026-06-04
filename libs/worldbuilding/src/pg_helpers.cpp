@@ -34,6 +34,7 @@ PgPool::PgPool(std::string_view conninfo, int pool_size)
 }
 
 PgPool::~PgPool() {
+    std::lock_guard lock(impl_->mutex);
     while (!impl_->available.empty()) {
         PQfinish(impl_->available.front());
         impl_->available.pop();
@@ -41,10 +42,14 @@ PgPool::~PgPool() {
 }
 
 PGconn* PgPool::acquire() {
-    std::unique_lock lock(impl_->mutex);
-    impl_->cv.wait(lock, [this] { return !impl_->available.empty(); });
-    PGconn* conn = impl_->available.front();
-    impl_->available.pop();
+    PGconn* conn = nullptr;
+    {
+        std::unique_lock lock(impl_->mutex);
+        impl_->cv.wait(lock, [this] { return !impl_->available.empty(); });
+        conn = impl_->available.front();
+        impl_->available.pop();
+    }
+    // Health check and reconnect without holding the pool mutex
     if (PQstatus(conn) != CONNECTION_OK) {
         PQreset(conn);
         if (PQstatus(conn) != CONNECTION_OK) {

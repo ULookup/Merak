@@ -76,13 +76,64 @@ std::vector<std::string> split_dialogue(const std::string& markdown) {
 }
 
 Foreshadowing detect_foreshadow_proposal(const std::string& markdown) {
-    // Deterministic heuristic: if text mentions "伏笔" or "暗示",
-    // create a GodAgentDetected proposal
     Foreshadowing proposal;
     proposal.created_by = ForeshadowCreatedBy::GodAgentDetected;
-    proposal.content = markdown.size() > 100 ? markdown.substr(0, 97) + "..." : markdown;
-    proposal.pay_off_idea = "(由作者确认)";
-    proposal.hint_level = ForeshadowHintLevel::Visible;
+
+    // Narrative foreshadowing pattern detection using n-gram matching.
+    // Patterns are grouped by signal strength.
+    static const std::vector<std::string> strong_signals = {
+        "预感", "不安的预感", "不详", "命运的",
+    };
+    static const std::vector<std::string> medium_signals = {
+        "忽然", "似乎", "隐约", "莫名", "不禁想起",
+        "意味深长", "似曾相识", "那把", "那只",
+        "日后", "总有一天",
+    };
+    static const std::vector<std::string> weak_signals = {
+        "……", "——", "或许", "也许", "仿佛",
+        "不知为何", "说不上",
+    };
+
+    std::string best_line;
+    int best_score = 0;
+    size_t pos = 0;
+    while (pos < markdown.size()) {
+        size_t end = markdown.find_first_of("。\n！？!?", pos);
+        if (end == std::string::npos) end = markdown.size();
+        if (end > pos) {
+            std::string sentence = markdown.substr(pos, end - pos);
+            int score = 0;
+            for (auto& p : strong_signals)
+                if (sentence.find(p) != std::string::npos) score += 3;
+            for (auto& p : medium_signals)
+                if (sentence.find(p) != std::string::npos) score += 2;
+            for (auto& p : weak_signals)
+                if (sentence.find(p) != std::string::npos) score += 1;
+            // Questions suggest unresolved threads
+            if (sentence.find('？') != std::string::npos || sentence.find('?') != std::string::npos) score += 1;
+            // Interrupted dialogue
+            if (sentence.find("——") != std::string::npos && sentence.find('？') == std::string::npos) score += 1;
+
+            if (score > best_score) {
+                best_score = score;
+                best_line = sentence;
+            }
+        }
+        pos = end + 1;
+    }
+
+    if (best_score >= 3) {
+        proposal.content = best_line.size() > 100 ? best_line.substr(0, 97) + "..." : best_line;
+        proposal.pay_off_idea = "(检测到" + std::to_string(best_score) + "个伏笔信号，由作者确认)";
+        proposal.hint_level = ForeshadowHintLevel::Visible;
+    } else if (best_score >= 2) {
+        proposal.content = best_line.size() > 100 ? best_line.substr(0, 97) + "..." : best_line;
+        proposal.pay_off_idea = "(弱信号，由作者确认)";
+        proposal.hint_level = ForeshadowHintLevel::Subtle;
+    } else {
+        proposal.content = "";
+        proposal.pay_off_idea = "";
+    }
     return proposal;
 }
 

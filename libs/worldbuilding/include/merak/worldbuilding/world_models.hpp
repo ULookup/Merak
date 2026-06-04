@@ -32,7 +32,117 @@ struct WorldMeta {
 
 struct WorldKnowledge {
     std::string id, category, content, created_at;
+    std::vector<std::string> tags;
+    std::vector<std::string> aliases;
+    std::vector<std::string> related_ids;
 };
+
+struct WorldTime {
+    int day = 1;
+    int period = 0; // 0=晨 1=昼 2=午 3=晚 4=夜
+    std::string label;
+
+    bool operator<(const WorldTime& other) const {
+        if (day != other.day) return day < other.day;
+        return period < other.period;
+    }
+    bool operator<=(const WorldTime& other) const {
+        return *this < other || (day == other.day && period == other.period);
+    }
+
+    static std::optional<WorldTime> parse(const std::string& input);
+    std::string to_label() const;
+};
+
+inline std::optional<WorldTime> WorldTime::parse(const std::string& input) {
+    if (input.empty()) return std::nullopt;
+
+    WorldTime wt;
+
+    // Duration format: \d+[hd] (e.g., "2h", "1d")
+    if (input.size() >= 2 && std::isdigit(input[0])) {
+        size_t i = 0;
+        while (i < input.size() && std::isdigit(input[i])) i++;
+        if (i < input.size() && (input[i] == 'h' || input[i] == 'd') && i == input.size() - 1) {
+            int val;
+            try { val = std::stoi(input.substr(0, i)); }
+            catch (...) { return std::nullopt; }
+            if (input[i] == 'd') { wt.day = val; wt.period = 0; }
+            else { wt.day = 1; wt.period = std::clamp(val, 0, 4); }
+            wt.label = input;
+            return wt;
+        }
+        return std::nullopt;
+    }
+
+    // Chinese named format: 第X日[晨/昼/午/晚/夜] or X日[晨/昼/午/晚/夜]
+    size_t day_pos = input.find('日');
+    if (day_pos != std::string::npos) {
+        // Extract day number
+        size_t num_start = 0;
+        if (day_pos > 0 && input[day_pos - 1] >= '0' && input[day_pos - 1] <= '9') {
+            num_start = day_pos - 1;
+            while (num_start > 0 && input[num_start - 1] >= '0' && input[num_start - 1] <= '9')
+                num_start--;
+            try { wt.day = std::stoi(input.substr(num_start, day_pos - num_start)); }
+            catch (...) { return std::nullopt; }
+        } else if (day_pos >= 3 && input.substr(day_pos - 3, 3) == "第一") {
+            wt.day = 1;
+        } else if (day_pos >= 3 && input.substr(day_pos - 3, 3) == "第二") {
+            wt.day = 2;
+        } else if (day_pos >= 3 && input.substr(day_pos - 3, 3) == "第三") {
+            wt.day = 3;
+        } else if (day_pos >= 3 && input.substr(day_pos - 3, 3) == "第四") {
+            wt.day = 4;
+        } else if (day_pos >= 3 && input.substr(day_pos - 3, 3) == "第五") {
+            wt.day = 5;
+        } else if (day_pos >= 3 && input.substr(day_pos - 3, 3) == "第六") {
+            wt.day = 6;
+        } else if (day_pos >= 3 && input.substr(day_pos - 3, 3) == "第七") {
+            wt.day = 7;
+        } else {
+            wt.day = 1; // default
+        }
+
+        // Extract period from suffix
+        if (input.find("晨") != std::string::npos) wt.period = 0;
+        else if (input.find("昼") != std::string::npos) wt.period = 1;
+        else if (input.find("午") != std::string::npos) wt.period = 2;
+        else if (input.find("晚") != std::string::npos) wt.period = 3;
+        else if (input.find("夜") != std::string::npos) wt.period = 4;
+        else wt.period = 0;
+
+        wt.label = input;
+        return wt;
+    }
+
+    // English format: dayN_[dawn/morning/noon/evening/night]
+    size_t underscore = input.find('_');
+    if (underscore != std::string::npos && input.find("day") == 0) {
+        try {
+            wt.day = std::stoi(input.substr(3, underscore - 3));
+        } catch (...) {
+            return std::nullopt;
+        }
+        std::string period_str = input.substr(underscore + 1);
+        if (period_str == "dawn" || period_str == "morning") wt.period = 0;
+        else if (period_str == "noon" || period_str == "midday") wt.period = 2;
+        else if (period_str == "evening") wt.period = 3;
+        else if (period_str == "night") wt.period = 4;
+        else wt.period = 1;
+
+        wt.label = input;
+        return wt;
+    }
+
+    return std::nullopt;
+}
+
+inline std::string WorldTime::to_label() const {
+    if (!label.empty()) return label;
+    static const char* periods[] = {"晨", "昼", "午", "晚", "夜"};
+    return "第" + std::to_string(day) + "日" + periods[std::clamp(period, 0, 4)];
+}
 
 struct AgentRecord {
     std::string id, world_id, name, display_name, created_at, updated_at;

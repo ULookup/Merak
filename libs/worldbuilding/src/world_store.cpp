@@ -163,9 +163,6 @@ bool WorldStore::delete_world(const std::string& world_id) {
     if (check.ntuples() == 0) return false;
 
     const auto root = world_path(world_id);
-    if (std::filesystem::exists(root)) {
-        std::filesystem::remove_all(root);
-    }
 
     conn.exec("BEGIN");
     try {
@@ -173,6 +170,9 @@ bool WorldStore::delete_world(const std::string& world_id) {
         conn.execute("DELETE FROM agents WHERE world_id = $1", {world_id});
         int affected = conn.execute("DELETE FROM worlds WHERE id = $1", {world_id});
         conn.exec("COMMIT");
+        if (std::filesystem::exists(root)) {
+            std::filesystem::remove_all(root);
+        }
         return affected > 0;
     } catch (...) {
         try { conn.exec("ROLLBACK"); } catch (...) {}
