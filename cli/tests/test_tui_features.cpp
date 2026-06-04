@@ -36,6 +36,52 @@ int main() {
     }
 
     {
+        // Test bold rendering
+        AssistantCell bold_cell;
+        bold_cell.append("**bold text**\n");
+        bold_cell.finalize();
+        auto rendered = bold_cell.render(100);
+        bool found_bold = false;
+        for (const auto& line : rendered) {
+            if (line.find("bold text") != std::string::npos) {
+                found_bold = true;
+                break;
+            }
+        }
+        assert(found_bold);
+    }
+    {
+        // Test that list item with bold works
+        AssistantCell list_bold;
+        list_bold.append("* **bold item**\n");
+        list_bold.finalize();
+        auto rendered = list_bold.render(100);
+        bool found_bold = false;
+        for (const auto& line : rendered) {
+            if (line.find("bold item") != std::string::npos) {
+                found_bold = true;
+                break;
+            }
+        }
+        assert(found_bold);
+    }
+
+    {
+        // CJK characters must survive sanitization
+        auto sanitized = sanitize_terminal_text("你好世界");
+        assert(sanitized == "你好世界");
+        // Mixed ASCII + CJK
+        auto mixed = sanitize_terminal_text("Hello 你好 World");
+        assert(mixed == "Hello 你好 World");
+        // ANSI escapes stripped, CJK preserved
+        auto with_ansi = sanitize_terminal_text("\x1b[31m红色\x1b[0m");
+        assert(with_ansi == "红色");
+        // Invalid UTF-8 bytes stripped
+        auto invalid = sanitize_terminal_text("abc\xff\xfe");
+        assert(invalid == "abc");
+    }
+
+    {
         StatusBar bar;
         bar.set_provider("openai");
         bar.set_model("gpt-4o");

@@ -80,10 +80,17 @@ public:
     bool empty() const { return textarea_.empty(); }
     const std::string& text() const { return textarea_.text(); }
     size_t cursor() const { return textarea_.cursor(); }
+    size_t cursor_col_in_line() const {
+        size_t cur = textarea_.cursor();
+        if (cur == 0) return 0;
+        auto start = textarea_.text().rfind('\n', cur == 0 ? 0 : cur - 1);
+        if (start == std::string::npos) return cur;
+        return cur - start - 1;
+    }
     void clear() { textarea_.clear(); history_index_.reset(); pasted_.clear(); }
     void set_text(std::string text) { textarea_.set_text(std::move(text)); }
     void replace_range(size_t start, size_t end, std::string_view value) { textarea_.replace_range(start, end, value); refresh_mention(); }
-    void insert_char(char c) { textarea_.insert_char(c); slash_selected_ = 0; refresh_mention(); }
+    void insert_text(std::string_view text) { textarea_.insert(text); slash_selected_ = 0; refresh_mention(); }
     void newline() { textarea_.newline(); refresh_mention(); }
     void backspace() { textarea_.backspace(); slash_selected_ = 0; refresh_mention(); }
     void delete_forward() { textarea_.delete_forward(); refresh_mention(); }
