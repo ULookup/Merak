@@ -344,7 +344,7 @@ public:
                                        : std::to_string(ms / 1000.0).substr(0, 3) + "s";
         std::string verb = status_ == Status::Running ? "Running "
             : status_ == Status::Success ? "Ran " : "Failed ";
-        const char* color = status_ == Status::Running ? theme::ANSI_WARNING
+        const std::string& color = status_ == Status::Running ? theme::ANSI_WARNING
             : status_ == Status::Success ? theme::ANSI_SUCCESS : theme::ANSI_ERROR;
         std::vector<std::string> lines{ansi(color, "• " + verb + sanitize_terminal_text(call_.name))
             + ansi(theme::ANSI_DIM, " (" + elapsed + ")")};
@@ -402,6 +402,68 @@ public:
     }
     nlohmann::json to_json() const override {
         return {{"type", "system"}, {"text", text_}, {"error", error_}};
+    }
+
+    static std::string format_worldbuilding_result(const std::string& json_str) {
+        try {
+            auto j = nlohmann::json::parse(json_str);
+            if (!j.value("ok", false)) {
+                return j.value("error", "Unknown error");
+            }
+
+            std::ostringstream out;
+
+            if (j.contains("worlds")) {
+                out << "Worlds:\n";
+                for (const auto& w : j["worlds"]) {
+                    out << "  " << w.value("name", "") << "  ["
+                        << w.value("id", "") << "]";
+                    if (!w.value("description", "").empty())
+                        out << "\n    " << w.value("description", "");
+                    out << "\n";
+                }
+                return out.str();
+            }
+
+            if (j.contains("agents")) {
+                out << "Agents:\n";
+                for (const auto& a : j["agents"]) {
+                    out << "  " << a.value("name", "") << "  ["
+                        << a.value("id", "") << "]";
+                    if (!a.value("display_name", "").empty())
+                        out << "  (" << a.value("display_name", "") << ")";
+                    out << "\n";
+                }
+                return out.str();
+            }
+
+            if (j.contains("agent_id") && j.contains("name")) {
+                out << "Agent created: " << j.value("name", "")
+                    << "  [" << j.value("agent_id", "") << "]";
+                return out.str();
+            }
+
+            if (j.contains("world_id") && j.contains("name")) {
+                out << "World created: " << j.value("name", "")
+                    << "  [" << j.value("world_id", "") << "]";
+                return out.str();
+            }
+
+            if (j.contains("scene_id")) {
+                out << "Scene: [" << j.value("scene_id", "") << "]";
+                if (j.contains("wrapup")) out << "\n" << j.value("wrapup", "");
+                return out.str();
+            }
+
+            if (j.contains("prompt")) {
+                out << "System prompt loaded";
+                return out.str();
+            }
+
+            return j.dump(2);
+        } catch (...) {
+            return json_str;
+        }
     }
 };
 
