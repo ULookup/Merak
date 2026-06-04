@@ -10,13 +10,14 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace merak::worldbuilding {
 
 class WorldbuildingService {
 public:
-    explicit WorldbuildingService(std::filesystem::path root);
+    WorldbuildingService(std::string_view pg_conninfo, std::filesystem::path root);
     void initialize();
 
     // World

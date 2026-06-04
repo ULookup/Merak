@@ -310,6 +310,38 @@ private:
     ToolContext ctx_;
 };
 
+class SearchAgentTool : public Tool {
+public:
+    SearchAgentTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<SearchAgentTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return true; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
+class QueryWorldTool : public Tool {
+public:
+    QueryWorldTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<QueryWorldTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return true; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
 class EndSceneTool : public Tool {
 public:
     EndSceneTool(WorldbuildingService& svc, ToolContext ctx)

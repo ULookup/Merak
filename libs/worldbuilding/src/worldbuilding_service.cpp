@@ -5,10 +5,11 @@
 
 namespace merak::worldbuilding {
 
-WorldbuildingService::WorldbuildingService(std::filesystem::path root)
+WorldbuildingService::WorldbuildingService(std::string_view pg_conninfo,
+                                           std::filesystem::path root)
     : root_(std::move(root)),
-      worlds_(root_),
-      agents_(worlds_, root_),
+      worlds_(pg_conninfo, root_),
+      agents_(worlds_, pg_conninfo, root_),
       narrative_(worlds_, root_),
       foreshadowing_(worlds_, narrative_, root_),
       secrets_(worlds_, foreshadowing_, root_),

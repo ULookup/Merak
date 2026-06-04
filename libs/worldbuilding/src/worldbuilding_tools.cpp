@@ -233,14 +233,13 @@ std::future<ToolResult> QueryMapTool::execute(ToolCall call, ToolExecutionContex
             auto& svc = *static_cast<QueryMapTool&>(*self).svc_;
             auto& ctx = static_cast<QueryMapTool&>(*self).ctx_;
 
-            auto knowledge = svc.worlds().get_world_knowledge(ctx.world_id, "map");
-            for (auto& kw : knowledge) {
-                if (kw.content.find(region) != std::string::npos) {
-                    result.output = ok_response({{"region", region}, {"data", kw.content}});
-                    return result;
-                }
+            auto results = svc.worlds().search_world_knowledge(ctx.world_id, region, "map", 1);
+            if (!results.empty()) {
+                result.output = ok_response({{"region", region}, {"data", results[0].content}});
+                return result;
             }
 
+            auto knowledge = svc.worlds().get_world_knowledge(ctx.world_id, "map");
             std::string known;
             for (auto& kw : knowledge) known += (known.empty() ? "" : "、") + kw.content;
 
@@ -292,21 +291,20 @@ std::future<ToolResult> QueryHistoryTool::execute(ToolCall call, ToolExecutionCo
             auto& svc = *static_cast<QueryHistoryTool&>(*self).svc_;
             auto& ctx = static_cast<QueryHistoryTool&>(*self).ctx_;
 
-            auto knowledge = svc.worlds().get_world_knowledge(ctx.world_id, "history");
+            auto knowledge = svc.worlds().search_world_knowledge(ctx.world_id, keyword, "history");
             json arr = json::array();
             for (auto& kw : knowledge) {
-                if (kw.content.find(keyword) != std::string::npos) {
-                    arr.push_back({
-                        {"world_time", kw.created_at},
-                        {"description", kw.content}
-                    });
-                }
+                arr.push_back({
+                    {"world_time", kw.created_at},
+                    {"description", kw.content}
+                });
             }
 
             if (arr.empty()) {
                 std::string hint;
-                if (!knowledge.empty()) {
-                    hint = "最近事件：" + make_snippet(knowledge.back().content, 80);
+                auto all_history = svc.worlds().get_world_knowledge(ctx.world_id, "history");
+                if (!all_history.empty()) {
+                    hint = "最近事件：" + make_snippet(all_history.back().content, 80);
                 }
                 result.output = error_response(ToolErrorCode::EMPTY_RESULT,
                     "历史记录中没有匹配 '" + keyword + "' 的事件。" + hint);
@@ -358,12 +356,10 @@ std::future<ToolResult> QueryMagicTool::execute(ToolCall call, ToolExecutionCont
             auto& svc = *static_cast<QueryMagicTool&>(*self).svc_;
             auto& ctx = static_cast<QueryMagicTool&>(*self).ctx_;
 
-            auto knowledge = svc.worlds().get_world_knowledge(ctx.world_id, "magic");
-            for (auto& kw : knowledge) {
-                if (kw.content.find(topic) != std::string::npos) {
-                    result.output = ok_response({{"topic", topic}, {"rule", kw.content}});
-                    return result;
-                }
+            auto results = svc.worlds().search_world_knowledge(ctx.world_id, topic, "magic", 1);
+            if (!results.empty()) {
+                result.output = ok_response({{"topic", topic}, {"rule", results[0].content}});
+                return result;
             }
 
             result.output = error_response(ToolErrorCode::EMPTY_RESULT,
@@ -413,14 +409,13 @@ std::future<ToolResult> QueryFactionTool::execute(ToolCall call, ToolExecutionCo
             auto& svc = *static_cast<QueryFactionTool&>(*self).svc_;
             auto& ctx = static_cast<QueryFactionTool&>(*self).ctx_;
 
-            auto knowledge = svc.worlds().get_world_knowledge(ctx.world_id, "faction");
-            for (auto& kw : knowledge) {
-                if (kw.content.find(name) != std::string::npos) {
-                    result.output = ok_response({{"name", name}, {"info", kw.content}});
-                    return result;
-                }
+            auto results = svc.worlds().search_world_knowledge(ctx.world_id, name, "faction", 1);
+            if (!results.empty()) {
+                result.output = ok_response({{"name", name}, {"info", results[0].content}});
+                return result;
             }
 
+            auto knowledge = svc.worlds().get_world_knowledge(ctx.world_id, "faction");
             std::string known;
             for (auto& kw : knowledge) known += (known.empty() ? "" : "、") + kw.content;
             result.output = error_response(ToolErrorCode::EMPTY_RESULT,
@@ -569,7 +564,7 @@ std::future<ToolResult> ReadSecretTool::execute(ToolCall call, ToolExecutionCont
 
             if (secret_opt->status == SecretStatus::Abandoned) {
                 result.output = error_response(ToolErrorCode::CONFLICT,
-                    "秘密 '" + secret_id + "' 已废弃（abandoned）。");
+                    "秘密 '" + secret_id + "' 已废弃（abandoned）。如需查看，请使用 list_secrets(status=abandoned)。");
                 return result;
             }
 
@@ -740,8 +735,30 @@ std::future<ToolResult> AdvanceWorldTimeTool::execute(ToolCall call, ToolExecuti
                 return result;
             }
 
+            // Validate time format using WorldTime parser
+            auto parsed_delta = WorldTime::parse(delta);
+            if (!parsed_delta.has_value()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "无法解析时间格式 '" + delta + "'。请使用时间增量（如 2h、1d）、中文时间标签（如 第四日午）或英文格式（如 day3_night）。");
+                return result;
+            }
+
             auto& svc = *static_cast<AdvanceWorldTimeTool&>(*self).svc_;
             auto& ctx = static_cast<AdvanceWorldTimeTool&>(*self).ctx_;
+
+            // Backward time travel check against current scene time
+            {
+                auto scene_opt = svc.narrative().get_scene(ctx.world_id, ctx.scene_id);
+                if (scene_opt && !scene_opt->world_time.empty()) {
+                    auto current_time = WorldTime::parse(scene_opt->world_time);
+                    if (current_time.has_value() && *parsed_delta <= *current_time) {
+                        result.output = error_response(ToolErrorCode::CONFLICT,
+                            "时间只能前进，不能倒退。当前场景时间：" + scene_opt->world_time +
+                            "，目标时间：" + delta + "。");
+                        return result;
+                    }
+                }
+            }
 
             TimelineEvent ev;
             ev.world_time = delta;
@@ -984,8 +1001,7 @@ std::future<ToolResult> ExposeSecretTool::execute(ToolCall call, ToolExecutionCo
                 } catch (...) {
                     warnings.push_back({
                         {"code", "NOT_FOUND"},
-                        {"message", "关联伏笔 '" + f_id + "' 偿还失败：该伏笔不存在或已删除"},
-                        {"detail", "秘密已成功暴露，其余 " + std::to_string(repaid) + " 个关联伏笔已正常偿还。"}
+                        {"message", "关联伏笔 '" + f_id + "' 偿还失败：该伏笔不存在或已删除"}
                     });
                 }
             }
@@ -993,7 +1009,8 @@ std::future<ToolResult> ExposeSecretTool::execute(ToolCall call, ToolExecutionCo
             json data{
                 {"secret_id", exposed.id},
                 {"status", to_string(exposed.status)},
-                {"exposed_at", exposed.exposed_at.value_or("")}
+                {"exposed_at", exposed.exposed_at.value_or("")},
+                {"related_foreshadowing_repaid", repaid}
             };
 
             if (warnings.empty()) {
@@ -1055,7 +1072,7 @@ std::future<ToolResult> EndSceneTool::execute(ToolCall call, ToolExecutionContex
             }
             if (scene_opt->status == SceneStatus::Completed) {
                 result.output = error_response(ToolErrorCode::CONFLICT,
-                    "场景 '" + scene_opt->title + "' 已经结束。");
+                    "场景 '" + scene_opt->title + "' 已经结束。请使用 /scene new 创建新场景。");
                 return result;
             }
 
@@ -1105,6 +1122,145 @@ std::future<ToolResult> EndSceneTool::execute(ToolCall call, ToolExecutionContex
     });
 }
 
+// ========== SearchAgentTool ==========
+
+ToolSpec SearchAgentTool::spec() const {
+    ToolSpec s;
+    s.name = "search_agent";
+    s.description = R"(Search for characters by traits and/or identity. Returns matching agents with their basic info. Example: search_agent(traits=["剑术"], identity="骑士") or search_agent(traits=["勇敢","善良"]))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "traits": {"type": "array", "items": {"type": "string"}, "description": "Traits to search for"},
+            "identity": {"type": "string", "description": "Identity keyword to filter by"}
+        },
+        "required": []
+    })";
+    return s;
+}
+
+std::future<ToolResult> SearchAgentTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::vector<std::string> traits;
+            if (args.contains("traits") && args["traits"].is_array()) {
+                for (auto& t : args["traits"]) traits.push_back(t.get<std::string>());
+            }
+            std::string identity = args.value("identity", "");
+
+            if (traits.empty() && identity.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "请至少提供 traits 或 identity 中的一个搜索条件。例如：search_agent(traits=[\"剑术\"])");
+                return result;
+            }
+
+            auto& svc = *static_cast<SearchAgentTool&>(*self).svc_;
+            auto& ctx = static_cast<SearchAgentTool&>(*self).ctx_;
+
+            auto agents = svc.agents().search_agents_by_traits(ctx.world_id, traits, identity);
+
+            if (agents.empty()) {
+                result.output = error_response(ToolErrorCode::EMPTY_RESULT,
+                    "没有找到匹配的角色。尝试更宽泛的特质或身份描述。");
+                return result;
+            }
+
+            json arr = json::array();
+            for (auto& ag : agents) {
+                try {
+                    auto card = svc.agents().load_character_card(ag.id);
+                    arr.push_back({
+                        {"agent_id", ag.id},
+                        {"name", card.name},
+                        {"identity", card.identity},
+                        {"core_traits", card.core_traits},
+                        {"appearance", make_snippet(card.appearance, 80)}
+                    });
+                } catch (...) {
+                    arr.push_back({{"agent_id", ag.id}, {"name", ag.name}});
+                }
+            }
+            result.output = ok_response({{"agents", arr}, {"count", agents.size()}});
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("search_agent 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
+// ========== QueryWorldTool ==========
+
+ToolSpec QueryWorldTool::spec() const {
+    ToolSpec s;
+    s.name = "query_world";
+    s.description = R"(Search all world knowledge categories at once. Returns matching entries from map, history, magic, and faction categories. Example: query_world(狼烟) or query_world(北境, category=map))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search query across all knowledge"},
+            "category": {"type": "string", "description": "Optional category filter: map, history, magic, faction"}
+        },
+        "required": ["query"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> QueryWorldTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::string query = args.value("query", "");
+
+            if (query.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "请提供搜索关键词。例如：query_world(狼烟)");
+                return result;
+            }
+
+            auto& svc = *static_cast<QueryWorldTool&>(*self).svc_;
+            auto& ctx = static_cast<QueryWorldTool&>(*self).ctx_;
+
+            std::string category = args.value("category", "");
+            auto knowledge = svc.worlds().search_world_knowledge(ctx.world_id, query, category);
+
+            if (knowledge.empty()) {
+                result.output = error_response(ToolErrorCode::EMPTY_RESULT,
+                    "在世界知识中没有找到与 '" + query + "' 相关的内容。");
+                return result;
+            }
+
+            json arr = json::array();
+            for (auto& kw : knowledge) {
+                arr.push_back({
+                    {"id", kw.id},
+                    {"category", kw.category},
+                    {"content", make_snippet(kw.content, 200)},
+                    {"tags", kw.tags}
+                });
+            }
+            result.output = ok_response({{"results", arr}, {"count", knowledge.size()}});
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("query_world 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
 // ========== WorldbuildingTools Factory ==========
 
 std::vector<ToolSpec> WorldbuildingTools::specs_for(AgentKind kind) const {
@@ -1125,6 +1281,8 @@ WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) {
         tools.push_back(std::make_unique<ReadSecretTool>(*service_, ctx));
         tools.push_back(std::make_unique<ReadForeshadowingTool>(*service_, ctx));
         tools.push_back(std::make_unique<ListOpenForeshadowingTool>(*service_, ctx));
+        tools.push_back(std::make_unique<SearchAgentTool>(*service_, ctx));
+        tools.push_back(std::make_unique<QueryWorldTool>(*service_, ctx));
         tools.push_back(std::make_unique<AdvanceWorldTimeTool>(*service_, ctx));
         tools.push_back(std::make_unique<CreateCharacterTool>(*service_, ctx));
         tools.push_back(std::make_unique<PlantForeshadowingTool>(*service_, ctx));

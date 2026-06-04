@@ -1,3 +1,5 @@
+find_package(PostgreSQL REQUIRED)
+
 add_library(merak-worldbuilding STATIC
     src/ids.cpp
     src/agent_store.cpp
@@ -5,17 +7,22 @@ add_library(merak-worldbuilding STATIC
     src/narrative_store.cpp
     src/secret_store.cpp
     src/sqlite_helpers.cpp
+    src/pg_helpers.cpp
     src/world_store.cpp
     src/voice_analyzer.cpp
     src/scene_orchestrator.cpp
     src/worldbuilding_service.cpp
     src/worldbuilding_tools.cpp
 )
-target_include_directories(merak-worldbuilding PUBLIC include)
+target_include_directories(merak-worldbuilding PUBLIC
+    include
+    ${PostgreSQL_INCLUDE_DIRS}
+)
 target_link_libraries(merak-worldbuilding PUBLIC
     merak-tools
     nlohmann_json::nlohmann_json
     SQLite::SQLite3
+    ${PostgreSQL_LIBRARIES}
 )
 
 add_executable(worldbuilding_tests
