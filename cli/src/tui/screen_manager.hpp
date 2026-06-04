@@ -206,7 +206,7 @@ class ScreenManager {
             else if (composer_.slash_open()) composer_.slash_next(); else composer_.history_next();
             return;
         }
-        if (event.type == Type::Character) composer_.insert_char(event.character);
+        if (event.type == Type::Character) composer_.insert_text(event.text);
     }
 
     std::vector<std::string> overlay_lines() const {
