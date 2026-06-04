@@ -14,19 +14,27 @@
 
 namespace merak::tui {
 
+inline int utf8_sequence_length(unsigned char lead) {
+    if (lead < 0x80) return 1;
+    if ((lead & 0xE0) == 0xC0) return 2;
+    if ((lead & 0xF0) == 0xE0) return 3;
+    if ((lead & 0xF8) == 0xF0) return 4;
+    return 0;
+}
+
 inline std::string sanitize_terminal_text(std::string_view input) {
     std::string out;
     out.reserve(input.size());
     for (size_t i = 0; i < input.size(); ++i) {
         auto c = static_cast<unsigned char>(input[i]);
+        // Strip ANSI escape sequences
         if (c == 0x1b || c == 0x9b) {
             if (c == 0x1b && i + 1 < input.size() && input[i + 1] == ']') {
                 i += 2;
                 while (i < input.size()) {
                     if (input[i] == '\a') break;
                     if (input[i] == '\x1b' && i + 1 < input.size() && input[i + 1] == '\\') {
-                        ++i;
-                        break;
+                        ++i; break;
                     }
                     ++i;
                 }
@@ -39,7 +47,27 @@ inline std::string sanitize_terminal_text(std::string_view input) {
             }
             continue;
         }
-        if (c == '\n' || c == '\t' || (c >= 0x20 && c != 0x7f && c != 0x9b)) {
+        // Preserve valid UTF-8 multi-byte sequences
+        if (c >= 0x80) {
+            int seq_len = utf8_sequence_length(c);
+            if (seq_len > 1) {
+                bool valid = true;
+                for (int j = 1; j < seq_len; ++j) {
+                    if (i + j >= input.size() ||
+                        (static_cast<unsigned char>(input[i + j]) & 0xC0) != 0x80) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (valid) {
+                    for (int j = 0; j < seq_len; ++j) out.push_back(input[i + j]);
+                    i += seq_len - 1;
+                }
+            }
+            continue;
+        }
+        // Printable ASCII
+        if (c == '\n' || c == '\t' || (c >= 0x20 && c != 0x7f)) {
             out.push_back(static_cast<char>(c));
         }
     }
