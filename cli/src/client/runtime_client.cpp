@@ -13,7 +13,8 @@ nlohmann::json RuntimeClient::create_session(const std::string&t){return request
 nlohmann::json RuntimeClient::list_sessions(){return request("GET","/v1/sessions");}
 nlohmann::json RuntimeClient::session(const std::string&id){return request("GET","/v1/sessions/"+id);}
 nlohmann::json RuntimeClient::events(const std::string&id,long long after){return request("GET","/v1/sessions/"+id+"/events?after="+std::to_string(after));}
-nlohmann::json RuntimeClient::start_run(const std::string&id,const std::string&m){return request("POST","/v1/sessions/"+id+"/runs",{{"message",m}});}
+nlohmann::json RuntimeClient::memory(const std::string&id){return request("GET","/v1/sessions/"+id+"/memory");}
+nlohmann::json RuntimeClient::start_run(const std::string&id,const std::string&m,const std::string&model){auto body=nlohmann::json{{"message",m}};if(!model.empty())body["model"]=model;return request("POST","/v1/sessions/"+id+"/runs",body);}
 nlohmann::json RuntimeClient::start_delegation(const std::string&id,const std::string&p,const std::vector<std::string>&agents,const std::string&t,const std::string&a){return request("POST",delegations_path(id),{{"pattern",p},{"agents",agents},{"task",t},{"aggregation",a}});}
 nlohmann::json RuntimeClient::resolve_approval(const std::string&id,bool allow){return request("POST","/v1/approvals/"+id,{{"decision",allow?"allow":"deny"}});}
 nlohmann::json RuntimeClient::cancel_run(const std::string&id){return request("POST","/v1/runs/"+id+"/cancel");}

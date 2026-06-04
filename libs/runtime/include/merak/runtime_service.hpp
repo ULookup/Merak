@@ -68,7 +68,7 @@ private:
 
 class RuntimeService : public std::enable_shared_from_this<RuntimeService> {
 public:
-    using LoopFactory = std::function<std::unique_ptr<AgentLoop>()>;
+    using LoopFactory = std::function<std::unique_ptr<AgentLoop>(const std::string& model)>;
     using SubRunExecutor = std::function<AgentResponse(
         const SubAgentConfig& agent, const std::string& task, RunControl& control)>;
     explicit RuntimeService(
@@ -82,7 +82,8 @@ public:
     std::optional<SessionRecord> get_session(const std::string& id) const;
     std::optional<RunRecord> get_run(const std::string& id) const;
     RunRecord create_run_record(const std::string& session_id, const std::string& message);
-    RunRecord start_run(const std::string& session_id, const std::string& message);
+    RunRecord start_run(const std::string& session_id, const std::string& message,
+                        const std::string& model = "");
     DelegationStart start_delegation(
         const std::string& session_id,
         const DelegationRequest& request);
@@ -105,7 +106,7 @@ private:
     std::map<std::string, std::vector<std::string>> child_runs_;
     RuntimeEvent emit(const std::string& session_id, const std::string& run_id,
                       const std::string& type, nlohmann::json payload = {});
-    void execute_run(RunRecord run);
+    void execute_run(RunRecord run, std::string model);
     void execute_delegation(RunRecord parent, DelegationRequest request,
                             std::string delegation_id);
     AgentResponse execute_sub_run(

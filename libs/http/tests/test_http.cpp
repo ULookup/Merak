@@ -14,7 +14,10 @@ int main() {
     agents[researcher.id] = researcher;
     auto runtime = std::make_shared<RuntimeService>(root, RuntimeService::LoopFactory{}, agents);
     runtime->initialize();
-    RuntimeMetadata meta{"test", "fake-model", {}, {}};
+    RuntimeMetadata meta;
+    meta.provider = "test";
+    meta.model = "fake-model";
+    meta.permission_mode = "ask";
     meta.agents.push_back({"researcher", "Research agent"});
     HttpServer server(runtime, meta);
 
@@ -25,10 +28,18 @@ int main() {
     auto metadata = server.handle_runtime_metadata();
     assert(metadata.status == 200);
     assert(metadata.body["provider"] == "test");
+    assert(metadata.body["models"].size() == 1);
+    assert(metadata.body["models"][0]["name"] == "fake-model");
+    assert(metadata.body["permission_mode"] == "ask");
+    assert(metadata.body["memory"]["enabled"] == false);
     assert(metadata.body["delegation_patterns"].size() == 3);
     assert(metadata.body["delegation_patterns"][0] == "fan_out");
     assert(metadata.body["agents"].size() == 1);
     assert(metadata.body["agents"][0]["id"] == "researcher");
+
+    auto memory = server.handle_session_memory(created.body["session_id"].get<std::string>());
+    assert(memory.status == 200);
+    assert(memory.body["items"].is_array());
 
     DelegationRequest request;
     request.pattern = "fan_out";
