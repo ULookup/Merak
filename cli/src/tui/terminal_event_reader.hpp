@@ -88,7 +88,20 @@ public:
             case '\x19': return {TerminalEvent::Type::CtrlY};
             default:
                 if (static_cast<unsigned char>(c) >= 0x20) {
-                    return {TerminalEvent::Type::Character, c};
+                    int seq_len = 1;
+                    if ((static_cast<unsigned char>(c) & 0x80) != 0) {
+                        if ((static_cast<unsigned char>(c) & 0xE0) == 0xC0) seq_len = 2;
+                        else if ((static_cast<unsigned char>(c) & 0xF0) == 0xE0) seq_len = 3;
+                        else if ((static_cast<unsigned char>(c) & 0xF8) == 0xF0) seq_len = 4;
+                        else return {}; // invalid lead byte
+                    }
+                    std::string utf8_char(1, c);
+                    for (int j = 1; j < seq_len; ++j) {
+                        char next;
+                        if (!read_byte(next, 5)) break;
+                        utf8_char.push_back(next);
+                    }
+                    return {TerminalEvent::Type::Character, 0, utf8_char};
                 }
                 return {};
         }
