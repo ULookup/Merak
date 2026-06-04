@@ -388,7 +388,7 @@ class ScreenManager {
 
     std::vector<std::string> frame_lines() {
         std::vector<std::string> lines;
-        if (!welcome_inserted_ && timeline_.committed().empty() && !timeline_.active()) {
+        if (!welcome_inserted_) {
             timeline_.commit(std::make_shared<WelcomeCell>(
                 "0.1.0", selected_model_, status_bar_.git_branch()));
             welcome_inserted_ = true;
