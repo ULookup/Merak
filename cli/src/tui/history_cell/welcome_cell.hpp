@@ -1,6 +1,7 @@
 #pragma once
 #include "history_cell.hpp"
 #include "../../theme/theme.hpp"
+#include <cstring>
 
 namespace merak::tui {
 
@@ -44,8 +45,9 @@ public:
         };
 
         // top border
+        auto safe_box = std::max(box_width, size_t{2});
         lines.push_back(ansi(theme::ANSI_DIM,
-            "┌" + repeat_text("─", box_width - 2) + "┐"));
+            "┌" + repeat_text("─", safe_box - 2) + "┐"));
 
         // info row
         lines.push_back(ansi(theme::ANSI_DIM, "│ ")
@@ -60,7 +62,7 @@ public:
 
         // bottom border
         lines.push_back(ansi(theme::ANSI_DIM,
-            "└" + repeat_text("─", box_width - 2) + "┘"));
+            "└" + repeat_text("─", safe_box - 2) + "┘"));
 
         return lines;
     }
