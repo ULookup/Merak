@@ -5,6 +5,8 @@
 #include <merak/worldbuilding/secret_store.hpp>
 #include <merak/worldbuilding/world_store.hpp>
 
+#include "test_helpers.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -31,7 +33,7 @@ std::string slurp(const std::filesystem::path& path) {
 
 struct Fixture {
     std::filesystem::path root = temp_dir();
-    WorldStore worlds{root};
+    WorldStore worlds{test_pg_conninfo(), root};
     WorldMeta world;
     NarrativeStore narrative;
     ForeshadowingStore foreshadowing;
@@ -252,7 +254,7 @@ TEST(ForeshadowingStore, FinalActRemindersReturnsOpenItemsOnlyInFinalStage) {
 
 TEST(SecretStore, CreateStoresKnowledgeBarriers) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
     ForeshadowingStore foreshadowing(worlds, narrative, root);
@@ -278,7 +280,7 @@ TEST(SecretStore, CreateStoresKnowledgeBarriers) {
 
 TEST(SecretStore, SceneAsymmetryFiltersPerCharacterKnowledge) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
     ForeshadowingStore foreshadowing(worlds, narrative, root);
@@ -332,7 +334,7 @@ TEST(SecretStore, SceneAsymmetryFiltersPerCharacterKnowledge) {
 
 TEST(SecretStore, CheckLeakRiskFlagsTruthInWrongContext) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
     ForeshadowingStore foreshadowing(worlds, narrative, root);
@@ -366,7 +368,7 @@ TEST(SecretStore, CheckLeakRiskFlagsTruthInWrongContext) {
 
 TEST(SecretStore, ExposeChangesStatusAndPaysRelatedForeshadowing) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
     ForeshadowingStore foreshadowing(worlds, narrative, root);
@@ -410,7 +412,7 @@ TEST(SecretStore, ExposeChangesStatusAndPaysRelatedForeshadowing) {
 
 TEST(SecretStore, TransferAddsAwareCharacterWithoutExposing) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
     ForeshadowingStore foreshadowing(worlds, narrative, root);
@@ -434,7 +436,7 @@ TEST(SecretStore, TransferAddsAwareCharacterWithoutExposing) {
 
 TEST(SecretStore, ReverseTruthArchivesOldAndCreatesDeeper) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
     ForeshadowingStore foreshadowing(worlds, narrative, root);
@@ -458,7 +460,7 @@ TEST(SecretStore, ReverseTruthArchivesOldAndCreatesDeeper) {
 
 TEST(SecretStore, ListFiltersByStatus) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
     ForeshadowingStore foreshadowing(worlds, narrative, root);

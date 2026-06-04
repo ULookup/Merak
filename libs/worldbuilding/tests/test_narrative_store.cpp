@@ -3,6 +3,8 @@
 #include <merak/worldbuilding/narrative_store.hpp>
 #include <merak/worldbuilding/world_store.hpp>
 
+#include "test_helpers.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -32,7 +34,7 @@ std::string slurp(const std::filesystem::path& path) {
 
 TEST(NarrativeStore, CreateStoryStructurePersistsThreeActStages) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
 
@@ -55,7 +57,7 @@ TEST(NarrativeStore, CreateStoryStructurePersistsThreeActStages) {
 
 TEST(NarrativeStore, CreateArcChapterSectionScenePreservesHierarchy) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
 
@@ -107,7 +109,7 @@ TEST(NarrativeStore, CreateArcChapterSectionScenePreservesHierarchy) {
 
 TEST(NarrativeStore, ChapterToScenePathWorksWithoutArcOrSection) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
 
@@ -130,7 +132,7 @@ TEST(NarrativeStore, ChapterToScenePathWorksWithoutArcOrSection) {
 
 TEST(NarrativeStore, SceneRequiresChapterWorldTimeAndParticipants) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
 
@@ -160,7 +162,7 @@ TEST(NarrativeStore, SceneRequiresChapterWorldTimeAndParticipants) {
 
 TEST(NarrativeStore, AdvanceTimeAppendsTimelineEvent) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
 
@@ -183,7 +185,7 @@ TEST(NarrativeStore, AdvanceTimeAppendsTimelineEvent) {
 
 TEST(NarrativeStore, InsertFlashbackMarksSceneAndWarnsOnParticipantConflicts) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
 
@@ -222,7 +224,7 @@ TEST(NarrativeStore, InsertFlashbackMarksSceneAndWarnsOnParticipantConflicts) {
 
 TEST(NarrativeStore, ChapterContextAssemblesStoredNarrativeSignals) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
     NarrativeStore narrative(worlds, root);
 
