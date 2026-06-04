@@ -1,12 +1,18 @@
 cmake_minimum_required(VERSION 3.22)
+
+if(NOT DEFINED CMAKE_C_COMPILER AND NOT DEFINED CMAKE_CXX_COMPILER)
+    find_program(MERAK_GCC13 gcc-13)
+    find_program(MERAK_GXX13 g++-13)
+    if(MERAK_GCC13 AND MERAK_GXX13)
+        set(CMAKE_C_COMPILER ${MERAK_GCC13})
+        set(CMAKE_CXX_COMPILER ${MERAK_GXX13})
+    endif()
+endif()
+
 project(merak-agent VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# 使用 g++-13（支持 C++23 std::expected）
-set(CMAKE_C_COMPILER gcc-13)
-set(CMAKE_CXX_COMPILER g++-13)
 
 # Conan 依赖查找
 find_package(Boost REQUIRED COMPONENTS system)

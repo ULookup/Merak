@@ -46,3 +46,12 @@ add_executable(merak-tui-client-test
 target_include_directories(merak-tui-client-test PRIVATE ${CMAKE_SOURCE_DIR}/cli/src)
 target_link_libraries(merak-tui-client-test PRIVATE merak-core CURL::libcurl)
 add_test(NAME merak-tui-client-test COMMAND merak-tui-client-test)
+
+add_executable(merak-tui-features-test
+    ${CMAKE_SOURCE_DIR}/cli/tests/test_tui_features.cpp
+    ${CMAKE_SOURCE_DIR}/cli/src/theme/theme.cpp
+    ${CMAKE_SOURCE_DIR}/cli/src/commands/command_registry.cpp
+)
+target_include_directories(merak-tui-features-test PRIVATE ${CMAKE_SOURCE_DIR}/cli/src)
+target_link_libraries(merak-tui-features-test PRIVATE merak-core ftxui::component)
+add_test(NAME merak-tui-features-test COMMAND merak-tui-features-test)

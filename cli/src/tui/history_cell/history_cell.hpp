@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <iomanip>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -58,7 +60,7 @@ inline std::vector<std::string> split_lines(const std::string& text) {
     return lines;
 }
 
-inline std::string ansi(const char* style, std::string_view text) {
+inline std::string ansi(std::string_view style, std::string_view text) {
     return std::string(style) + std::string(text) + theme::ANSI_RESET;
 }
 
@@ -98,9 +100,9 @@ public:
 class AssistantCell final : public HistoryCell {
     std::string markdown_;
     bool live_ = true;
+    int frozen_gutter_ = 178;
 
     static std::string render_inline(std::string line) {
-        if (line.starts_with("```")) return ansi(theme::ANSI_DIM, line);
         if (line.starts_with("# ")) return ansi(theme::ANSI_BOLD, line.substr(2));
         if (line.starts_with("## ")) return ansi(theme::ANSI_BOLD, line.substr(3));
         if (line.starts_with("> ")) return ansi(theme::ANSI_DIM, "│ " + line.substr(2));
@@ -126,13 +128,148 @@ class AssistantCell final : public HistoryCell {
         if (in_code || in_bold) out += theme::ANSI_RESET;
         return out;
     }
+    static bool is_separator_row(const std::string& line) {
+        if (line.find('|') == std::string::npos) return false;
+        for (char c : line) {
+            if (c != '|' && c != '-' && c != ':' && c != ' ') return false;
+        }
+        return true;
+    }
+    static std::string highlight_code(std::string line, const std::string& language) {
+        static const std::set<std::string> keywords = {
+            "auto", "bool", "break", "case", "class", "const", "def", "else", "fn",
+            "for", "func", "function", "if", "import", "int", "let", "package",
+            "pub", "return", "std", "struct", "var", "void", "while"
+        };
+        (void)language;
+        std::string out;
+        std::string word;
+        auto flush = [&] {
+            if (word.empty()) return;
+            out += keywords.contains(word) ? ansi(theme::ANSI_ACCENT, word) : word;
+            word.clear();
+        };
+        for (char c : line) {
+            if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') word.push_back(c);
+            else { flush(); out.push_back(c); }
+        }
+        flush();
+        return out;
+    }
+    static std::string table_line(std::string line) {
+        std::replace(line.begin(), line.end(), '|', ' ');
+        return ansi(theme::ANSI_DIM, "│ ") + line;
+    }
+    static std::vector<std::string> split_table_cells(const std::string& line) {
+        std::vector<std::string> cells;
+        std::string cell;
+        size_t start = 0;
+        size_t end = line.size();
+        if (start < end && line[start] == '|') ++start;
+        if (end > start && line[end - 1] == '|') --end;
+        for (size_t i = start; i <= end; ++i) {
+            if (i == end || line[i] == '|') {
+                while (!cell.empty() && std::isspace(static_cast<unsigned char>(cell.front()))) cell.erase(cell.begin());
+                while (!cell.empty() && std::isspace(static_cast<unsigned char>(cell.back()))) cell.pop_back();
+                cells.push_back(cell);
+                cell.clear();
+            } else {
+                cell.push_back(line[i]);
+            }
+        }
+        return cells;
+    }
+    static std::string render_table_row(const std::vector<std::string>& cells,
+                                        const std::vector<size_t>& widths,
+                                        bool header) {
+        std::string out = "│";
+        for (size_t i = 0; i < widths.size(); ++i) {
+            auto text = i < cells.size() ? cells[i] : "";
+            out += " " + text + repeat_text(" ", widths[i] > text.size() ? widths[i] - text.size() : 0) + " │";
+        }
+        return ansi(header ? theme::ANSI_ACCENT : theme::ANSI_DIM, out);
+    }
+    int live_gutter_color() const {
+        if (!live_) return frozen_gutter_;
+        const auto tick = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count() / 250);
+        return 178 + (tick % 36);
+    }
 
 public:
     void append(std::string_view delta) { markdown_ += sanitize_terminal_text(delta); }
     const std::string& markdown() const { return markdown_; }
     std::vector<std::string> render(size_t) const override {
-        auto lines = split_lines(markdown_);
-        for (auto& line : lines) line = ansi(theme::ANSI_ACCENT, "█ ") + render_inline(line);
+        std::vector<std::string> lines;
+        bool in_code = false;
+        bool in_thinking = false;
+        int thinking_lines = 0;
+        std::string language;
+        auto raw_lines = split_lines(markdown_);
+        for (size_t index = 0; index < raw_lines.size(); ++index) {
+            auto line = raw_lines[index];
+            if (line.starts_with("```")) {
+                in_code = !in_code;
+                if (in_code) {
+                    language = line.size() > 3 ? line.substr(3) : "";
+                    lines.push_back(ansi(theme::ANSI_DIM, "┌ code " + language));
+                } else {
+                    lines.push_back(ansi(theme::ANSI_DIM, "└"));
+                    language.clear();
+                }
+                continue;
+            }
+            if (line == "<think>" || line == "<thinking>") {
+                in_thinking = true;
+                thinking_lines = 0;
+                continue;
+            }
+            if (line == "</think>" || line == "</thinking>") {
+                in_thinking = false;
+                lines.push_back(ansi(theme::ANSI_DIM,
+                    "thinking hidden · " + std::to_string(thinking_lines) + " lines"));
+                continue;
+            }
+            if (in_thinking) {
+                ++thinking_lines;
+                if (live_) lines.push_back(ansi(theme::ANSI_DIM, "thinking..."));
+                continue;
+            }
+            if (in_code) lines.push_back("  " + highlight_code(line, language));
+            else if (index + 1 < raw_lines.size()
+                && line.find('|') != std::string::npos
+                && is_separator_row(raw_lines[index + 1])) {
+                std::vector<std::vector<std::string>> rows{split_table_cells(line)};
+                index += 2;
+                while (index < raw_lines.size() && raw_lines[index].find('|') != std::string::npos) {
+                    rows.push_back(split_table_cells(raw_lines[index]));
+                    ++index;
+                }
+                if (index < raw_lines.size()) --index;
+                size_t columns = 0;
+                for (const auto& row : rows) columns = std::max(columns, row.size());
+                std::vector<size_t> widths(columns, 0);
+                for (const auto& row : rows) {
+                    for (size_t c = 0; c < row.size(); ++c) widths[c] = std::max(widths[c], row[c].size());
+                }
+                if (!rows.empty()) {
+                    lines.push_back(render_table_row(rows.front(), widths, true));
+                    std::string rule = "├";
+                    for (auto width : widths) rule += repeat_text("─", width + 2) + "┼";
+                    if (!rule.empty()) rule.back() = '┤';
+                    lines.push_back(ansi(theme::ANSI_DIM, rule));
+                    for (size_t r = 1; r < rows.size(); ++r) lines.push_back(render_table_row(rows[r], widths, false));
+                }
+            }
+            else if (is_separator_row(line)) lines.push_back(ansi(theme::ANSI_DIM, "├" + repeat_text("─", std::min<size_t>(line.size(), 80))));
+            else if (line.find('|') != std::string::npos) lines.push_back(table_line(line));
+            else if (line.starts_with("+")) lines.push_back(ansi(theme::ANSI_SUCCESS, line));
+            else if (line.starts_with("-")) lines.push_back(ansi(theme::ANSI_ERROR, line));
+            else lines.push_back(render_inline(line));
+        }
+        auto gutter_style = "\x1b[38;5;" + std::to_string(live_gutter_color()) + "m";
+        auto gutter = ansi(gutter_style.c_str(), "█ ");
+        for (auto& line : lines) line = gutter + line;
         if (live_ && !lines.empty()) lines.back() += ansi(theme::ANSI_ACCENT, "▎");
         return lines;
     }
@@ -140,7 +277,11 @@ public:
         return {{"type", "assistant"}, {"markdown", markdown_}};
     }
     bool is_live() const override { return live_; }
-    void finalize() override { live_ = false; }
+    void finalize() override {
+        frozen_gutter_ = 178 + (static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count() / 250) % 36);
+        live_ = false;
+    }
 };
 
 class ToolCell final : public HistoryCell {

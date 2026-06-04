@@ -21,7 +21,9 @@ public:
     nlohmann::json list_sessions();
     nlohmann::json session(const std::string& id);
     nlohmann::json events(const std::string& id,long long after = 0);
-    nlohmann::json start_run(const std::string& id,const std::string& message);
+    nlohmann::json memory(const std::string& id);
+    nlohmann::json start_run(const std::string& id,const std::string& message,
+                             const std::string& model = "");
     nlohmann::json start_delegation(
         const std::string& id,
         const std::string& pattern,

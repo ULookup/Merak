@@ -5,6 +5,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <iostream>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -40,6 +41,23 @@ public:
         clear_viewport();
         if (raw_) tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_);
         std::cout << "\x1b[?2004l\x1b[?25h\r\n" << std::flush;
+    }
+    void with_cooked_terminal(const std::function<void()>& fn) {
+        std::cout << "\x1b[?25h" << std::flush;
+        if (raw_) tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_);
+        fn();
+        if (raw_) {
+            auto raw = original_;
+            raw.c_lflag &= static_cast<unsigned long>(~(ECHO | ICANON | IEXTEN | ISIG));
+            raw.c_iflag &= static_cast<unsigned long>(~(IXON | ICRNL | BRKINT | INPCK | ISTRIP));
+            raw.c_oflag &= static_cast<unsigned long>(~OPOST);
+            raw.c_cflag |= CS8;
+            raw.c_cc[VMIN] = 0;
+            raw.c_cc[VTIME] = 1;
+            tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+        }
+        std::cout << "\x1b[?25l" << std::flush;
+        invalidate();
     }
 
     size_t width() const {

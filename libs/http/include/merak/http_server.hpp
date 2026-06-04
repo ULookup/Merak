@@ -1,4 +1,5 @@
 #pragma once
+#include <merak/config.hpp>
 #include <merak/runtime_service.hpp>
 #include <httplib.h>
 #include <nlohmann/json.hpp>
@@ -10,6 +11,9 @@ struct McpServerStatus { std::string name; bool alive = false; };
 struct RuntimeMetadata {
     std::string provider;
     std::string model;
+    std::vector<ModelEntry> models;
+    std::string permission_mode;
+    bool memory_enabled = false;
     std::vector<ToolSpec> tools;
     std::vector<McpServerStatus> mcp_servers;
     std::vector<AgentMetadata> agents;
@@ -22,6 +26,7 @@ public:
     void listen(int port);
     void stop();
     HttpResult handle_runtime_metadata() const;
+    HttpResult handle_session_memory(const std::string& id) const;
     HttpResult handle_create_session(const std::string& title = "");
     HttpResult handle_get_session(const std::string& id) const;
     HttpResult handle_create_delegation(
