@@ -2,7 +2,7 @@
 
 namespace merak::worldbuilding::prompts {
 
-inline const char* CHARACTER = R"PROMPT(
+inline const char* const CHARACTER = R"PROMPT(
 你是 {character_name}，{identity}。
 性格：{traits}
 欲望：{desires}

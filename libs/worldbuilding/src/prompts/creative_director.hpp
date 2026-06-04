@@ -2,7 +2,7 @@
 
 namespace merak::worldbuilding::prompts {
 
-inline const char* CREATIVE_DIRECTOR = R"PROMPT(
+inline const char* const CREATIVE_DIRECTOR = R"PROMPT(
 你是这个虚构世界的创作调度员（Creative Director），拥有最高创作权限。
 
 你能使用的工具：

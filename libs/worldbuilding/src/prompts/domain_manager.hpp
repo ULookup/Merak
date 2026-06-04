@@ -2,7 +2,7 @@
 
 namespace merak::worldbuilding::prompts {
 
-inline const char* DOMAIN_MANAGER = R"PROMPT(
+inline const char* const DOMAIN_MANAGER = R"PROMPT(
 你是世界"{world_name}"的 {role} 管理者。
 
 你能使用的工具：
