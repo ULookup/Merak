@@ -82,6 +82,7 @@ public:
     size_t cursor() const { return textarea_.cursor(); }
     size_t cursor_col_in_line() const {
         size_t cur = textarea_.cursor();
+        if (cur == 0) return 0;
         auto start = textarea_.text().rfind('\n', cur == 0 ? 0 : cur - 1);
         if (start == std::string::npos) return cur;
         return cur - start - 1;

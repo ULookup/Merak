@@ -524,7 +524,7 @@ public:
                 if (!composer_lines.empty()) {
                     // composer is before the last 2 frame lines (help + status bar)
                     size_t col = 2 + composer_.cursor_col_in_line();
-                    std::cout << "\x1b[" << (composer_lines.size() + 2) << "A\r\x1b[" << col << "C" << std::flush;
+                    std::cout << "\x1b[2A\r\x1b[" << col << "C" << std::flush;
                 }
             }
             handle_event(reader_.next());
