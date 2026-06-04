@@ -3,6 +3,8 @@
 #include <merak/worldbuilding/narrative_store.hpp>
 #include <merak/worldbuilding/world_store.hpp>
 
+#include "test_helpers.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -32,9 +34,9 @@ std::string slurp(const std::filesystem::path& path) {
 
 TEST(NarrativeStore, CreateStoryStructurePersistsThreeActStages) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
 
     auto structure =
         narrative.create_story_structure(world.id, NarrativeTemplate::ThreeAct);
@@ -55,9 +57,9 @@ TEST(NarrativeStore, CreateStoryStructurePersistsThreeActStages) {
 
 TEST(NarrativeStore, CreateArcChapterSectionScenePreservesHierarchy) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
 
     Arc arc;
     arc.title = "守住狼烟";
@@ -107,9 +109,9 @@ TEST(NarrativeStore, CreateArcChapterSectionScenePreservesHierarchy) {
 
 TEST(NarrativeStore, ChapterToScenePathWorksWithoutArcOrSection) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
 
     Chapter chapter;
     chapter.title = "无弧线章节";
@@ -130,9 +132,9 @@ TEST(NarrativeStore, ChapterToScenePathWorksWithoutArcOrSection) {
 
 TEST(NarrativeStore, SceneRequiresChapterWorldTimeAndParticipants) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
 
     Scene missing_chapter;
     missing_chapter.world_time = "第一日晨";
@@ -160,9 +162,9 @@ TEST(NarrativeStore, SceneRequiresChapterWorldTimeAndParticipants) {
 
 TEST(NarrativeStore, AdvanceTimeAppendsTimelineEvent) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
 
     TimelineEvent event;
     event.world_time = "第四日午";
@@ -183,9 +185,9 @@ TEST(NarrativeStore, AdvanceTimeAppendsTimelineEvent) {
 
 TEST(NarrativeStore, InsertFlashbackMarksSceneAndWarnsOnParticipantConflicts) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
 
     Chapter chapter;
     chapter.title = "交错时间";
@@ -222,9 +224,9 @@ TEST(NarrativeStore, InsertFlashbackMarksSceneAndWarnsOnParticipantConflicts) {
 
 TEST(NarrativeStore, ChapterContextAssemblesStoredNarrativeSignals) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
 
     Arc arc;
     arc.title = "守住狼烟";

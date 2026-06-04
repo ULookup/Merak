@@ -6,7 +6,6 @@ add_library(merak-worldbuilding STATIC
     src/foreshadowing_store.cpp
     src/narrative_store.cpp
     src/secret_store.cpp
-    src/sqlite_helpers.cpp
     src/pg_helpers.cpp
     src/world_store.cpp
     src/voice_analyzer.cpp
@@ -21,7 +20,6 @@ target_include_directories(merak-worldbuilding PUBLIC
 target_link_libraries(merak-worldbuilding PUBLIC
     merak-tools
     nlohmann_json::nlohmann_json
-    SQLite::SQLite3
     ${PostgreSQL_LIBRARIES}
 )
 

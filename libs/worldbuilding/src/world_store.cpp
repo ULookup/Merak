@@ -232,30 +232,13 @@ WorldStore::search_world_knowledge(const std::string& world_id,
     PgConn conn(*pool_);
     std::vector<WorldKnowledge> items;
 
-    // Try FTS with zhparser
+    // Try hybrid search (FTS + vector weighting via stored function)
     try {
-        PgResult res;
         int limit = std::clamp(max_results, 0, 100);
-        if (!category.empty()) {
-            res = conn.query(
-                "SELECT id, category, content, created_at, tags, aliases, related_ids "
-                "FROM world_knowledge "
-                "WHERE world_id = $1 "
-                "  AND category = $2 "
-                "  AND content_tsv @@ plainto_tsquery('chinese', $3) "
-                "ORDER BY ts_rank_cd(content_tsv, plainto_tsquery('chinese', $3)) DESC "
-                "LIMIT $4",
-                {world_id, category, query, std::to_string(limit)});
-        } else {
-            res = conn.query(
-                "SELECT id, category, content, created_at, tags, aliases, related_ids "
-                "FROM world_knowledge "
-                "WHERE world_id = $1 "
-                "  AND content_tsv @@ plainto_tsquery('chinese', $2) "
-                "ORDER BY ts_rank_cd(content_tsv, plainto_tsquery('chinese', $2)) DESC "
-                "LIMIT $3",
-                {world_id, query, std::to_string(limit)});
-        }
+        auto res = conn.query(
+            "SELECT id, category, content, created_at, tags, aliases, related_ids "
+            "FROM hybrid_search_knowledge($1, $2, $3, $4)",
+            {world_id, query, category, std::to_string(limit)});
 
         for (int i = 0; i < res.ntuples(); i++) {
             items.push_back(world_knowledge_from_row(res, i));

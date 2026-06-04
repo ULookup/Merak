@@ -10,9 +10,9 @@ WorldbuildingService::WorldbuildingService(std::string_view pg_conninfo,
     : root_(std::move(root)),
       worlds_(pg_conninfo, root_),
       agents_(worlds_, pg_conninfo, root_),
-      narrative_(worlds_, root_),
-      foreshadowing_(worlds_, narrative_, root_),
-      secrets_(worlds_, foreshadowing_, root_),
+      narrative_(worlds_, pg_conninfo, root_),
+      foreshadowing_(worlds_, narrative_, pg_conninfo, root_),
+      secrets_(worlds_, foreshadowing_, pg_conninfo, root_),
       voice_(),
       orchestrator_(worlds_, agents_, narrative_, foreshadowing_, secrets_, voice_) {}
 

@@ -1,10 +1,11 @@
 #include <merak/worldbuilding/secret_store.hpp>
 
 #include <merak/worldbuilding/ids.hpp>
-#include <merak/worldbuilding/sqlite_helpers.hpp>
+#include <merak/worldbuilding/pg_helpers.hpp>
 
 #include <algorithm>
 #include <filesystem>
+#include <memory>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -12,19 +13,6 @@
 
 namespace merak::worldbuilding {
 namespace {
-
-void execute_bound(Statement& statement) {
-    if (statement.step()) {
-        throw std::runtime_error("unexpected sqlite row");
-    }
-}
-
-void rollback_no_throw(SqliteDb& db) noexcept {
-    try {
-        db.exec("ROLLBACK");
-    } catch (...) {
-    }
-}
 
 void write_json(const std::filesystem::path& path, const nlohmann::json& json) {
     std::filesystem::create_directories(path.parent_path());
@@ -115,36 +103,32 @@ bool actor_is_suspicious(const Secret& secret, const std::string& character_id) 
 
 SecretStore::SecretStore(WorldStore& worlds,
                          ForeshadowingStore& foreshadowing,
+                         std::string_view pg_conninfo,
                          std::filesystem::path data_root)
-    : worlds_(worlds), foreshadowing_(foreshadowing), data_root_(std::move(data_root)) {
+    : worlds_(worlds),
+      foreshadowing_(foreshadowing),
+      data_root_(std::move(data_root)),
+      pool_(std::make_unique<PgPool>(pg_conninfo)) {
     initialize();
 }
 
 void SecretStore::initialize() {
     worlds_.initialize();
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec(R"sql(
-        CREATE TABLE IF NOT EXISTS secrets(
-            id TEXT PRIMARY KEY,
-            world_id TEXT NOT NULL,
-            holder_id TEXT NOT NULL,
-            status TEXT NOT NULL,
-            FOREIGN KEY(world_id) REFERENCES worlds(id) ON DELETE CASCADE
-        )
-    )sql");
-    db.exec(R"sql(
-        CREATE INDEX IF NOT EXISTS secrets_by_status
-        ON secrets(world_id, status, id)
-    )sql");
-    db.exec(R"sql(
-        CREATE INDEX IF NOT EXISTS secrets_by_holder
-        ON secrets(world_id, holder_id, id)
-    )sql");
-}
-
-std::filesystem::path SecretStore::database_path() const {
-    return data_root_ / "worlds.sqlite3";
+    PgConn conn(*pool_);
+    conn.exec("CREATE TABLE IF NOT EXISTS secrets("
+              "id TEXT PRIMARY KEY, world_id TEXT NOT NULL,"
+              "secret_type TEXT DEFAULT 'background',"
+              "status TEXT DEFAULT 'active',"
+              "holder_ids TEXT DEFAULT '[]',"
+              "known_by_ids TEXT DEFAULT '[]',"
+              "content TEXT, stakes TEXT, deeper_truth TEXT,"
+              "exposed_in_scene_id TEXT,"
+              "created_at TIMESTAMPTZ DEFAULT now(),"
+              "updated_at TIMESTAMPTZ DEFAULT now())");
+    conn.exec("CREATE INDEX IF NOT EXISTS secrets_by_status"
+              " ON secrets(world_id, status, id)");
+    conn.exec("CREATE INDEX IF NOT EXISTS secrets_by_holder"
+              " ON secrets(world_id, holder_ids, id)");
 }
 
 Secret SecretStore::create(const std::string& world_id, Secret secret) {
@@ -154,25 +138,21 @@ Secret SecretStore::create(const std::string& world_id, Secret secret) {
     }
     secret.status = SecretStatus::Active;
 
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec("BEGIN");
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
     try {
-        Statement insert(db, R"sql(
-            INSERT INTO secrets(id, world_id, holder_id, status)
-            VALUES(?1, ?2, ?3, ?4)
-        )sql");
-        bind_text(insert, 1, secret.id);
-        bind_text(insert, 2, world_id);
-        bind_text(insert, 3, secret.holder_id);
-        bind_text(insert, 4, to_string(secret.status));
-        execute_bound(insert);
+        conn.query(
+            "INSERT INTO secrets(id, world_id, holder_ids, status, content, stakes)"
+            " VALUES($1, $2, $3, $4, $5, $6)",
+            {secret.id, world_id,
+             nlohmann::json(std::vector<std::string>{secret.holder_id}).dump(),
+             to_string(secret.status), secret.truth, secret.stakes});
 
         write_json(worlds_.world_path(world_id) / "secrets" / (secret.id + ".json"),
                    secret_json(secret));
-        db.exec("COMMIT");
+        conn.exec("COMMIT");
     } catch (...) {
-        rollback_no_throw(db);
+        try { conn.exec("ROLLBACK"); } catch (...) {}
         throw;
     }
     return secret;
@@ -207,22 +187,18 @@ Secret SecretStore::expose(const std::string& world_id,
     secret.status = SecretStatus::Exposed;
     secret.exposed_at = scene_id;
 
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec("BEGIN");
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
     try {
         write_json(path, secret_json(secret));
 
-        Statement update(db, R"sql(
-            UPDATE secrets SET status = ?1 WHERE world_id = ?2 AND id = ?3
-        )sql");
-        bind_text(update, 1, to_string(secret.status));
-        bind_text(update, 2, world_id);
-        bind_text(update, 3, secret_id);
-        execute_bound(update);
-        db.exec("COMMIT");
+        conn.query(
+            "UPDATE secrets SET status = $1, exposed_in_scene_id = $2"
+            " WHERE world_id = $3 AND id = $4",
+            {to_string(secret.status), scene_id, world_id, secret_id});
+        conn.exec("COMMIT");
     } catch (...) {
-        rollback_no_throw(db);
+        try { conn.exec("ROLLBACK"); } catch (...) {}
         write_json(path, old_json);
         throw;
     }
@@ -252,14 +228,10 @@ Secret SecretStore::abandon(const std::string& world_id,
 
     write_json(path, secret_json(secret));
 
-    SqliteDb db(database_path().string());
-    Statement update(db, R"sql(
-        UPDATE secrets SET status = ?1 WHERE world_id = ?2 AND id = ?3
-    )sql");
-    bind_text(update, 1, to_string(secret.status));
-    bind_text(update, 2, world_id);
-    bind_text(update, 3, secret_id);
-    execute_bound(update);
+    PgConn conn(*pool_);
+    conn.query(
+        "UPDATE secrets SET status = $1 WHERE world_id = $2 AND id = $3",
+        {to_string(secret.status), world_id, secret_id});
 
     return secret;
 }

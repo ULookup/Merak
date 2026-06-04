@@ -9,6 +9,8 @@
 #include <merak/worldbuilding/world_store.hpp>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 
+#include "test_helpers.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -27,7 +29,7 @@ std::filesystem::path temp_dir() {
 
 struct OrchFixture {
     std::filesystem::path root = temp_dir();
-    WorldStore worlds{root};
+    WorldStore worlds{test_pg_conninfo(), root};
     WorldMeta world;
     NarrativeStore narrative;
     AgentStore agents;
@@ -35,14 +37,14 @@ struct OrchFixture {
     SecretStore secrets;
     VoiceAnalyzer voice;
     SceneOrchestrator orchestrator;
-    WorldbuildingService service{root};
+    WorldbuildingService service{test_pg_conninfo(), root};
 
     OrchFixture()
         : world(worlds.create_world("北境", "雪原史诗")),
-          narrative(worlds, root),
-          agents(worlds, root),
-          foreshadowing(worlds, narrative, root),
-          secrets(worlds, foreshadowing, root),
+          narrative(worlds, test_pg_conninfo(), root),
+          agents(worlds, test_pg_conninfo(), root),
+          foreshadowing(worlds, narrative, test_pg_conninfo(), root),
+          secrets(worlds, foreshadowing, test_pg_conninfo(), root),
           orchestrator(worlds, agents, narrative, foreshadowing, secrets, voice) {}
 
     AgentRecord make_char(const std::string& name) {

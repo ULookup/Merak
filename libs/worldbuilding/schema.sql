@@ -241,3 +241,120 @@ UPDATE world_knowledge SET content_tsv = to_tsvector('chinese', coalesce(content
     WHERE content_tsv IS NULL;
 UPDATE agent_diaries SET content_tsv = to_tsvector('chinese', coalesce(content, ''))
     WHERE content_tsv IS NULL;
+
+-- ─── Narrative: Arcs ──────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS arcs (
+    id          TEXT PRIMARY KEY,
+    world_id    TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    name        TEXT,
+    description TEXT,
+    theme       TEXT,
+    status      TEXT,
+    metadata    JSONB DEFAULT '{}',
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- ─── Narrative: Chapters ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS chapters (
+    id          TEXT PRIMARY KEY,
+    world_id    TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    arc_id      TEXT,
+    name        TEXT,
+    pitch       TEXT,
+    status      TEXT,
+    position    INT DEFAULT 0,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- ─── Narrative: Sections ──────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS sections (
+    id          TEXT PRIMARY KEY,
+    world_id    TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    chapter_id  TEXT NOT NULL,
+    name        TEXT,
+    status      TEXT,
+    position    INT DEFAULT 0,
+    created_at  TIMESTAMPTZ DEFAULT now(),
+    updated_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- ─── Narrative: Scenes ────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS scenes (
+    id               TEXT PRIMARY KEY,
+    world_id         TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    chapter_id       TEXT,
+    section_id       TEXT,
+    name             TEXT,
+    pitch            TEXT,
+    status           TEXT,
+    participants     TEXT DEFAULT '[]',
+    pov_character_id TEXT,
+    location         TEXT,
+    world_time       TEXT,
+    scene_time       TEXT,
+    is_flashback     BOOLEAN DEFAULT false,
+    scene_index      INT DEFAULT 0,
+    created_at       TIMESTAMPTZ DEFAULT now(),
+    updated_at       TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS scenes_by_world_time
+    ON scenes(world_id, world_time, id);
+
+-- ─── Narrative: Timeline Events ───────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS timeline_events (
+    id          TEXT PRIMARY KEY,
+    world_id    TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    scene_id    TEXT,
+    event       TEXT,
+    world_time  TEXT,
+    created_at  TIMESTAMPTZ DEFAULT now()
+);
+
+-- ─── Foreshadowing ────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS foreshadowings (
+    id              TEXT PRIMARY KEY,
+    world_id        TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    hint            TEXT,
+    hint_level      TEXT DEFAULT 'subtle',
+    status          TEXT DEFAULT 'open',
+    created_by      TEXT DEFAULT 'author',
+    pay_off_scene_id TEXT,
+    pay_off         TEXT,
+    created_at      TIMESTAMPTZ DEFAULT now(),
+    updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS foreshadowings_by_status
+    ON foreshadowings(world_id, status, id);
+
+-- ─── Secrets ──────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS secrets (
+    id                  TEXT PRIMARY KEY,
+    world_id            TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    secret_type         TEXT DEFAULT 'background',
+    status              TEXT DEFAULT 'active',
+    holder_ids          TEXT DEFAULT '[]',
+    known_by_ids        TEXT DEFAULT '[]',
+    content             TEXT,
+    stakes              TEXT,
+    deeper_truth        TEXT,
+    exposed_in_scene_id TEXT,
+    created_at          TIMESTAMPTZ DEFAULT now(),
+    updated_at          TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS secrets_by_status
+    ON secrets(world_id, status, id);
+
+CREATE INDEX IF NOT EXISTS secrets_by_holder
+    ON secrets(world_id, holder_ids, id);

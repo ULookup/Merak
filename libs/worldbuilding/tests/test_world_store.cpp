@@ -4,6 +4,8 @@
 #include <merak/worldbuilding/world_store.hpp>
 #include <merak/worldbuilding/world_models.hpp>
 
+#include "test_helpers.hpp"
+
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -160,7 +162,7 @@ TEST(WorldbuildingSqliteHelpers, ErrorsIncludeSQLiteMessages) {
 }
 
 TEST(WorldStore, CreateWorldCreatesAllDesignDirectoriesAndGodAgent) {
-    WorldStore store(temp_dir());
+    WorldStore store(test_pg_conninfo(), temp_dir());
     store.initialize();
     auto world = store.create_world("北境", "雪原史诗");
 
@@ -195,7 +197,7 @@ TEST(WorldStore, CreateWorldCreatesAllDesignDirectoriesAndGodAgent) {
 }
 
 TEST(WorldStore, WorldsAreIsolated) {
-    WorldStore store(temp_dir());
+    WorldStore store(test_pg_conninfo(), temp_dir());
     store.initialize();
     auto a = store.create_world("A", "");
     auto b = store.create_world("B", "");
@@ -205,7 +207,7 @@ TEST(WorldStore, WorldsAreIsolated) {
 }
 
 TEST(WorldStore, GetAndListWorldsReturnPersistedMetadata) {
-    WorldStore store(temp_dir());
+    WorldStore store(test_pg_conninfo(), temp_dir());
     store.initialize();
 
     auto a = store.create_world("A", "first");
@@ -225,7 +227,7 @@ TEST(WorldStore, GetAndListWorldsReturnPersistedMetadata) {
 
 TEST(WorldStore, DeleteWorldRemovesRowsAndOnlyThatWorldDirectory) {
     auto root = temp_dir();
-    WorldStore store(root);
+    WorldStore store(test_pg_conninfo(), root);
     store.initialize();
     auto a = store.create_world("A", "");
     auto b = store.create_world("B", "");
@@ -246,7 +248,7 @@ TEST(WorldStore, DeleteWorldRemovesRowsAndOnlyThatWorldDirectory) {
 
 TEST(WorldStore, DatabaseEnforcesOneGodAgentPerWorld) {
     auto root = temp_dir();
-    WorldStore store(root);
+    WorldStore store(test_pg_conninfo(), root);
     store.initialize();
     auto world = store.create_world("A", "");
 
@@ -269,7 +271,7 @@ TEST(WorldStore, DatabaseEnforcesOneGodAgentPerWorld) {
 
 TEST(WorldStore, ListAgentsThrowsForUnknownPersistedKind) {
     auto root = temp_dir();
-    WorldStore store(root);
+    WorldStore store(test_pg_conninfo(), root);
     store.initialize();
     auto world = store.create_world("A", "");
 

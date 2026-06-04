@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 
+#include "test_helpers.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -20,7 +22,7 @@ std::filesystem::path temp_dir() {
 
 TEST(WorldbuildingE2E, FullMiniWorldCreationAndSceneLifecycle) {
     auto root = temp_dir();
-    WorldbuildingService service(root);
+    WorldbuildingService service(test_pg_conninfo(), root);
     service.initialize();
 
     // ── Create world ──

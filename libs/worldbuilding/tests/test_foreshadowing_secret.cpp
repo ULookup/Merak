@@ -5,6 +5,8 @@
 #include <merak/worldbuilding/secret_store.hpp>
 #include <merak/worldbuilding/world_store.hpp>
 
+#include "test_helpers.hpp"
+
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -31,15 +33,15 @@ std::string slurp(const std::filesystem::path& path) {
 
 struct Fixture {
     std::filesystem::path root = temp_dir();
-    WorldStore worlds{root};
+    WorldStore worlds{test_pg_conninfo(), root};
     WorldMeta world;
     NarrativeStore narrative;
     ForeshadowingStore foreshadowing;
 
     Fixture()
         : world(worlds.create_world("北境", "雪原史诗")),
-          narrative(worlds, root),
-          foreshadowing(worlds, narrative, root) {}
+          narrative(worlds, test_pg_conninfo(), root),
+          foreshadowing(worlds, narrative, test_pg_conninfo(), root) {}
 };
 
 } // namespace
@@ -252,11 +254,11 @@ TEST(ForeshadowingStore, FinalActRemindersReturnsOpenItemsOnlyInFinalStage) {
 
 TEST(SecretStore, CreateStoresKnowledgeBarriers) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
-    ForeshadowingStore foreshadowing(worlds, narrative, root);
-    SecretStore secrets(worlds, foreshadowing, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
+    ForeshadowingStore foreshadowing(worlds, narrative, test_pg_conninfo(), root);
+    SecretStore secrets(worlds, foreshadowing, test_pg_conninfo(), root);
 
     Secret secret;
     secret.holder_id = "agent_ailin";
@@ -278,11 +280,11 @@ TEST(SecretStore, CreateStoresKnowledgeBarriers) {
 
 TEST(SecretStore, SceneAsymmetryFiltersPerCharacterKnowledge) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
-    ForeshadowingStore foreshadowing(worlds, narrative, root);
-    SecretStore secrets(worlds, foreshadowing, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
+    ForeshadowingStore foreshadowing(worlds, narrative, test_pg_conninfo(), root);
+    SecretStore secrets(worlds, foreshadowing, test_pg_conninfo(), root);
 
     Secret secret;
     secret.holder_id = "agent_ailin";
@@ -332,11 +334,11 @@ TEST(SecretStore, SceneAsymmetryFiltersPerCharacterKnowledge) {
 
 TEST(SecretStore, CheckLeakRiskFlagsTruthInWrongContext) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
-    ForeshadowingStore foreshadowing(worlds, narrative, root);
-    SecretStore secrets(worlds, foreshadowing, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
+    ForeshadowingStore foreshadowing(worlds, narrative, test_pg_conninfo(), root);
+    SecretStore secrets(worlds, foreshadowing, test_pg_conninfo(), root);
 
     Secret secret;
     secret.holder_id = "agent_ailin";
@@ -366,11 +368,11 @@ TEST(SecretStore, CheckLeakRiskFlagsTruthInWrongContext) {
 
 TEST(SecretStore, ExposeChangesStatusAndPaysRelatedForeshadowing) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
-    ForeshadowingStore foreshadowing(worlds, narrative, root);
-    SecretStore secrets(worlds, foreshadowing, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
+    ForeshadowingStore foreshadowing(worlds, narrative, test_pg_conninfo(), root);
+    SecretStore secrets(worlds, foreshadowing, test_pg_conninfo(), root);
 
     Foreshadowing fs;
     fs.content = "艾琳的剑法不像是平民";
@@ -410,11 +412,11 @@ TEST(SecretStore, ExposeChangesStatusAndPaysRelatedForeshadowing) {
 
 TEST(SecretStore, TransferAddsAwareCharacterWithoutExposing) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
-    ForeshadowingStore foreshadowing(worlds, narrative, root);
-    SecretStore secrets(worlds, foreshadowing, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
+    ForeshadowingStore foreshadowing(worlds, narrative, test_pg_conninfo(), root);
+    SecretStore secrets(worlds, foreshadowing, test_pg_conninfo(), root);
 
     Secret secret;
     secret.holder_id = "agent_ailin";
@@ -434,11 +436,11 @@ TEST(SecretStore, TransferAddsAwareCharacterWithoutExposing) {
 
 TEST(SecretStore, ReverseTruthArchivesOldAndCreatesDeeper) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
-    ForeshadowingStore foreshadowing(worlds, narrative, root);
-    SecretStore secrets(worlds, foreshadowing, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
+    ForeshadowingStore foreshadowing(worlds, narrative, test_pg_conninfo(), root);
+    SecretStore secrets(worlds, foreshadowing, test_pg_conninfo(), root);
 
     Secret secret;
     secret.holder_id = "agent_ailin";
@@ -458,11 +460,11 @@ TEST(SecretStore, ReverseTruthArchivesOldAndCreatesDeeper) {
 
 TEST(SecretStore, ListFiltersByStatus) {
     auto root = temp_dir();
-    WorldStore worlds(root);
+    WorldStore worlds(test_pg_conninfo(), root);
     auto world = worlds.create_world("北境", "雪原史诗");
-    NarrativeStore narrative(worlds, root);
-    ForeshadowingStore foreshadowing(worlds, narrative, root);
-    SecretStore secrets(worlds, foreshadowing, root);
+    NarrativeStore narrative(worlds, test_pg_conninfo(), root);
+    ForeshadowingStore foreshadowing(worlds, narrative, test_pg_conninfo(), root);
+    SecretStore secrets(worlds, foreshadowing, test_pg_conninfo(), root);
 
     Secret a;
     a.holder_id = "agent_ailin";
