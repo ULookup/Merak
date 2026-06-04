@@ -516,7 +516,17 @@ public:
                 submit_flash_until_ = {};
             }
             terminal_.flush_scrollback(timeline_.drain_scrollback(terminal_.width()));
-            terminal_.redraw(frame_lines());
+            auto frame = frame_lines();
+            terminal_.redraw(frame);
+            // Position cursor at composer for IME composition window
+            if (overlay_ == Overlay::None) {
+                auto composer_lines = composer_.render();
+                if (!composer_lines.empty()) {
+                    // composer is before the last 2 frame lines (help + status bar)
+                    size_t col = 2 + composer_.cursor_col_in_line();
+                    std::cout << "\x1b[" << (composer_lines.size() + 2) << "A\r\x1b[" << col << "C" << std::flush;
+                }
+            }
             handle_event(reader_.next());
         }
     }
