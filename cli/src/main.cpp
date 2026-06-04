@@ -11,6 +11,7 @@
 #include "client/runtime_client.hpp"
 #include "commands/worldbuilding_commands.hpp"
 #include "tui/screen_manager.hpp"
+#include "tui/history_cell/welcome_cell.hpp"
 #include <atomic>
 #include <algorithm>
 #include <chrono>

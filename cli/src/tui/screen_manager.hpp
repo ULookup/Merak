@@ -5,7 +5,6 @@
 #include "inline_terminal.hpp"
 #include "terminal_event_reader.hpp"
 #include "../commands/command_registry.hpp"
-#include "history_cell/welcome_cell.hpp"
 #include <nlohmann/json.hpp>
 #include <atomic>
 #include <chrono>
@@ -40,7 +39,6 @@ class ScreenManager {
     std::unique_ptr<ApprovalCell> approval_cell_;
     std::atomic<bool> busy_ = false;
     bool exit_requested_ = false;
-    bool welcome_inserted_ = false;
     bool running_ = true;
     Overlay overlay_ = Overlay::None;
     int overlay_selected_ = 0;
@@ -386,13 +384,8 @@ class ScreenManager {
                      content.begin() + static_cast<long>(start + capacity));
     }
 
-    std::vector<std::string> frame_lines() {
+    std::vector<std::string> frame_lines() const {
         std::vector<std::string> lines;
-        if (!welcome_inserted_) {
-            timeline_.commit(std::make_shared<WelcomeCell>(
-                "0.1.0", selected_model_, status_bar_.git_branch()));
-            welcome_inserted_ = true;
-        }
         if (timeline_.active()) {
             lines = timeline_.active()->render(terminal_.width());
             lines.push_back("");
