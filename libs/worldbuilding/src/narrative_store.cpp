@@ -1,10 +1,11 @@
 #include <merak/worldbuilding/narrative_store.hpp>
 
 #include <merak/worldbuilding/ids.hpp>
-#include <merak/worldbuilding/sqlite_helpers.hpp>
+#include <merak/worldbuilding/pg_helpers.hpp>
 
 #include <algorithm>
 #include <filesystem>
+#include <memory>
 #include <fstream>
 #include <set>
 #include <sstream>
@@ -15,19 +16,6 @@
 
 namespace merak::worldbuilding {
 namespace {
-
-void execute_bound(Statement& statement) {
-    if (statement.step()) {
-        throw std::runtime_error("unexpected sqlite row");
-    }
-}
-
-void rollback_no_throw(SqliteDb& db) noexcept {
-    try {
-        db.exec("ROLLBACK");
-    } catch (...) {
-    }
-}
 
 void write_json(const std::filesystem::path& path, const nlohmann::json& json) {
     std::filesystem::create_directories(path.parent_path());
@@ -240,70 +228,44 @@ void ensure_world_exists(WorldStore& worlds, const std::string& world_id) {
 
 } // namespace
 
-NarrativeStore::NarrativeStore(WorldStore& worlds, std::filesystem::path data_root)
-    : worlds_(worlds), data_root_(std::move(data_root)) {
+NarrativeStore::NarrativeStore(WorldStore& worlds,
+                               std::string_view pg_conninfo,
+                               std::filesystem::path data_root)
+    : worlds_(worlds),
+      data_root_(std::move(data_root)),
+      pool_(std::make_unique<PgPool>(pg_conninfo)) {
     initialize();
 }
 
 void NarrativeStore::initialize() {
     worlds_.initialize();
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec(R"sql(
-        CREATE TABLE IF NOT EXISTS arcs(
-            id TEXT PRIMARY KEY,
-            world_id TEXT NOT NULL,
-            title TEXT NOT NULL,
-            purpose TEXT NOT NULL,
-            status TEXT NOT NULL,
-            FOREIGN KEY(world_id) REFERENCES worlds(id) ON DELETE CASCADE
-        )
-    )sql");
-    db.exec(R"sql(
-        CREATE TABLE IF NOT EXISTS chapters(
-            id TEXT PRIMARY KEY,
-            world_id TEXT NOT NULL,
-            arc_id TEXT,
-            number INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            status TEXT NOT NULL,
-            FOREIGN KEY(world_id) REFERENCES worlds(id) ON DELETE CASCADE
-        )
-    )sql");
-    db.exec(R"sql(
-        CREATE TABLE IF NOT EXISTS sections(
-            id TEXT PRIMARY KEY,
-            world_id TEXT NOT NULL,
-            chapter_id TEXT NOT NULL,
-            display_order INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            FOREIGN KEY(world_id) REFERENCES worlds(id) ON DELETE CASCADE,
-            FOREIGN KEY(chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
-        )
-    )sql");
-    db.exec(R"sql(
-        CREATE TABLE IF NOT EXISTS scenes(
-            id TEXT PRIMARY KEY,
-            world_id TEXT NOT NULL,
-            chapter_id TEXT NOT NULL,
-            section_id TEXT,
-            world_time TEXT NOT NULL,
-            title TEXT NOT NULL,
-            status TEXT NOT NULL,
-            is_flashback INTEGER NOT NULL DEFAULT 0,
-            participants TEXT NOT NULL,
-            FOREIGN KEY(world_id) REFERENCES worlds(id) ON DELETE CASCADE,
-            FOREIGN KEY(chapter_id) REFERENCES chapters(id) ON DELETE CASCADE
-        )
-    )sql");
-    db.exec(R"sql(
-        CREATE INDEX IF NOT EXISTS scenes_by_world_time
-        ON scenes(world_id, world_time, id)
-    )sql");
-}
-
-std::filesystem::path NarrativeStore::database_path() const {
-    return data_root_ / "worlds.sqlite3";
+    PgConn conn(*pool_);
+    conn.exec("CREATE TABLE IF NOT EXISTS arcs("
+              "id TEXT PRIMARY KEY, world_id TEXT NOT NULL, name TEXT,"
+              "description TEXT, theme TEXT, status TEXT,"
+              "metadata JSONB DEFAULT '{}',"
+              "created_at TIMESTAMPTZ DEFAULT now(),"
+              "updated_at TIMESTAMPTZ DEFAULT now())");
+    conn.exec("CREATE TABLE IF NOT EXISTS chapters("
+              "id TEXT PRIMARY KEY, world_id TEXT NOT NULL, arc_id TEXT,"
+              "name TEXT, pitch TEXT, status TEXT, position INT DEFAULT 0,"
+              "created_at TIMESTAMPTZ DEFAULT now(),"
+              "updated_at TIMESTAMPTZ DEFAULT now())");
+    conn.exec("CREATE TABLE IF NOT EXISTS sections("
+              "id TEXT PRIMARY KEY, world_id TEXT NOT NULL, chapter_id TEXT NOT NULL,"
+              "name TEXT, status TEXT, position INT DEFAULT 0,"
+              "created_at TIMESTAMPTZ DEFAULT now(),"
+              "updated_at TIMESTAMPTZ DEFAULT now())");
+    conn.exec("CREATE TABLE IF NOT EXISTS scenes("
+              "id TEXT PRIMARY KEY, world_id TEXT NOT NULL, chapter_id TEXT,"
+              "section_id TEXT, name TEXT, pitch TEXT, status TEXT,"
+              "participants TEXT DEFAULT '[]', pov_character_id TEXT,"
+              "location TEXT, world_time TEXT, scene_time TEXT,"
+              "is_flashback BOOLEAN DEFAULT false, scene_index INT DEFAULT 0,"
+              "created_at TIMESTAMPTZ DEFAULT now(),"
+              "updated_at TIMESTAMPTZ DEFAULT now())");
+    conn.exec("CREATE INDEX IF NOT EXISTS scenes_by_world_time"
+              " ON scenes(world_id, world_time, id)");
 }
 
 StoryStructure
@@ -340,18 +302,11 @@ Arc NarrativeStore::create_arc(const std::string& world_id, Arc arc) {
         arc.id = make_id("arc");
     }
 
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    Statement insert(db, R"sql(
-        INSERT INTO arcs(id, world_id, title, purpose, status)
-        VALUES(?1, ?2, ?3, ?4, ?5)
-    )sql");
-    bind_text(insert, 1, arc.id);
-    bind_text(insert, 2, world_id);
-    bind_text(insert, 3, arc.title);
-    bind_text(insert, 4, arc.purpose);
-    bind_text(insert, 5, arc.status);
-    execute_bound(insert);
+    PgConn conn(*pool_);
+    conn.query(
+        "INSERT INTO arcs(id, world_id, name, description, theme, status)"
+        " VALUES($1, $2, $3, $4, $5, $6)",
+        {arc.id, world_id, arc.title, arc.purpose, "", arc.status});
 
     write_json(worlds_.world_path(world_id) / "arcs" / (arc.id + ".json"),
                arc_json(arc));
@@ -370,23 +325,16 @@ Chapter NarrativeStore::create_chapter(const std::string& world_id,
         throw std::runtime_error("unknown arc: " + *chapter.arc_id);
     }
 
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec("BEGIN");
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
     try {
-        {
-            Statement insert(db, R"sql(
-                INSERT INTO chapters(id, world_id, arc_id, number, title, status)
-                VALUES(?1, ?2, ?3, ?4, ?5, ?6)
-            )sql");
-            bind_text(insert, 1, chapter.id);
-            bind_text(insert, 2, world_id);
-            bind_text(insert, 3, chapter.arc_id.value_or(""));
-            bind_int(insert, 4, chapter.number);
-            bind_text(insert, 5, chapter.title);
-            bind_text(insert, 6, to_string(chapter.status));
-            execute_bound(insert);
-        }
+        conn.query(
+            "INSERT INTO chapters(id, world_id, arc_id, name, pitch, status, position)"
+            " VALUES($1, $2, $3, $4, $5, $6, $7)",
+            {chapter.id, world_id, chapter.arc_id.value_or(""),
+             chapter.title, chapter.pitch, to_string(chapter.status),
+             std::to_string(chapter.number)});
+
         if (chapter.arc_id.has_value()) {
             const auto arc_path =
                 worlds_.world_path(world_id) / "arcs" / (*chapter.arc_id + ".json");
@@ -400,9 +348,9 @@ Chapter NarrativeStore::create_chapter(const std::string& world_id,
         std::filesystem::create_directories(worlds_.world_path(world_id) /
                                             "chapters" / chapter.id /
                                             "sections");
-        db.exec("COMMIT");
+        conn.exec("COMMIT");
     } catch (...) {
-        rollback_no_throw(db);
+        try { conn.exec("ROLLBACK"); } catch (...) {}
         throw;
     }
     return chapter;
@@ -423,18 +371,12 @@ Section NarrativeStore::create_section(const std::string& world_id,
         section.id = make_id("section");
     }
 
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    Statement insert(db, R"sql(
-        INSERT INTO sections(id, world_id, chapter_id, display_order, title)
-        VALUES(?1, ?2, ?3, ?4, ?5)
-    )sql");
-    bind_text(insert, 1, section.id);
-    bind_text(insert, 2, world_id);
-    bind_text(insert, 3, section.chapter_id);
-    bind_int(insert, 4, section.order);
-    bind_text(insert, 5, section.title);
-    execute_bound(insert);
+    PgConn conn(*pool_);
+    conn.query(
+        "INSERT INTO sections(id, world_id, chapter_id, name, status, position)"
+        " VALUES($1, $2, $3, $4, $5, $6)",
+        {section.id, world_id, section.chapter_id, section.title,
+         "", std::to_string(section.order)});
 
     write_json(worlds_.world_path(world_id) / "chapters" / section.chapter_id /
                    "sections" / (section.id + ".json"),
@@ -470,27 +412,17 @@ Scene NarrativeStore::create_scene(const std::string& world_id, Scene scene) {
         scene.id = make_id("scene");
     }
 
-    SqliteDb db(database_path().string());
-    db.exec("PRAGMA foreign_keys = ON");
-    db.exec("BEGIN");
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
     try {
-        {
-            Statement insert(db, R"sql(
-                INSERT INTO scenes(id, world_id, chapter_id, section_id,
-                                   world_time, title, status, is_flashback,
-                                   participants)
-                VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8)
-            )sql");
-            bind_text(insert, 1, scene.id);
-            bind_text(insert, 2, world_id);
-            bind_text(insert, 3, scene.chapter_id);
-            bind_text(insert, 4, scene.section_id.value_or(""));
-            bind_text(insert, 5, scene.world_time);
-            bind_text(insert, 6, scene.title);
-            bind_text(insert, 7, to_string(scene.status));
-            bind_text(insert, 8, nlohmann::json(scene.participant_ids).dump());
-            execute_bound(insert);
-        }
+        conn.query(
+            "INSERT INTO scenes(id, world_id, chapter_id, section_id,"
+            " name, world_time, status, is_flashback, participants)"
+            " VALUES($1, $2, $3, $4, $5, $6, $7, false, $8)",
+            {scene.id, world_id, scene.chapter_id,
+             scene.section_id.value_or(""), scene.title,
+             scene.world_time, to_string(scene.status),
+             nlohmann::json(scene.participant_ids).dump()});
 
         auto chapter = chapter_from_json(read_json(chapter_path));
         chapter.scene_ids.push_back(scene.id);
@@ -508,9 +440,9 @@ Scene NarrativeStore::create_scene(const std::string& world_id, Scene scene) {
         write_json(worlds_.world_path(world_id) / "scenes" /
                        (scene.id + ".json"),
                    scene_json(scene));
-        db.exec("COMMIT");
+        conn.exec("COMMIT");
     } catch (...) {
-        rollback_no_throw(db);
+        try { conn.exec("ROLLBACK"); } catch (...) {}
         throw;
     }
 
@@ -527,14 +459,10 @@ Scene NarrativeStore::update_scene_status(const std::string& world_id,
     json["status"] = to_string(status);
     write_json(path, json);
 
-    SqliteDb db(database_path().string());
-    Statement update(db, R"sql(
-        UPDATE scenes SET status = ?1 WHERE world_id = ?2 AND id = ?3
-    )sql");
-    bind_text(update, 1, to_string(status));
-    bind_text(update, 2, world_id);
-    bind_text(update, 3, scene_id);
-    execute_bound(update);
+    PgConn conn(*pool_);
+    conn.query(
+        "UPDATE scenes SET status = $1 WHERE world_id = $2 AND id = $3",
+        {to_string(status), world_id, scene_id});
 
     return scene_from_json(json);
 }
@@ -585,20 +513,18 @@ NarrativeStore::insert_flashback_scene(const std::string& world_id,
     std::vector<std::string> warnings;
 
     {
-        SqliteDb db(database_path().string());
-        Statement query(db, R"sql(
-            SELECT id, world_time, participants
-            FROM scenes
-            WHERE world_id = ?1 AND world_time > ?2
-            ORDER BY world_time ASC, id ASC
-        )sql");
-        bind_text(query, 1, world_id);
-        bind_text(query, 2, scene.world_time);
-        while (query.step()) {
-            const auto existing_id = column_text(query, 0);
-            const auto existing_time = column_text(query, 1);
+        PgConn conn(*pool_);
+        auto res = conn.query(
+            "SELECT id, world_time, participants"
+            " FROM scenes"
+            " WHERE world_id = $1 AND world_time > $2"
+            " ORDER BY world_time ASC, id ASC",
+            {world_id, scene.world_time});
+        for (int i = 0; i < res.ntuples(); i++) {
+            const auto existing_id = res.get(i, 0);
+            const auto existing_time = res.get(i, 1);
             const auto participants =
-                nlohmann::json::parse(column_text(query, 2))
+                nlohmann::json::parse(res.get(i, 2))
                     .get<std::vector<std::string>>();
             if (overlaps(scene.participant_ids, participants)) {
                 warnings.push_back("flashback " + scene.world_time +
@@ -617,13 +543,10 @@ NarrativeStore::insert_flashback_scene(const std::string& world_id,
     json["is_flashback"] = true;
     write_json(path, json);
 
-    SqliteDb db(database_path().string());
-    Statement mark(db, R"sql(
-        UPDATE scenes SET is_flashback = 1 WHERE world_id = ?1 AND id = ?2
-    )sql");
-    bind_text(mark, 1, world_id);
-    bind_text(mark, 2, created.id);
-    execute_bound(mark);
+    PgConn conn(*pool_);
+    conn.query(
+        "UPDATE scenes SET is_flashback = true WHERE world_id = $1 AND id = $2",
+        {world_id, created.id});
 
     return warnings;
 }
@@ -657,20 +580,18 @@ NarrativeStore::chapter_context(const std::string& world_id,
         }
     }
 
-    SqliteDb db(database_path().string());
-    Statement query(db, R"sql(
-        SELECT s.id
-        FROM scenes s
-        JOIN chapters c ON c.id = s.chapter_id
-        WHERE s.world_id = ?1
-          AND s.status = 'completed'
-          AND c.number < ?2
-        ORDER BY c.number ASC, s.world_time ASC, s.id ASC
-    )sql");
-    bind_text(query, 1, world_id);
-    bind_int(query, 2, chapter.number);
-    while (query.step()) {
-        const auto scene_id = column_text(query, 0);
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT s.id"
+        " FROM scenes s"
+        " JOIN chapters c ON c.id = s.chapter_id"
+        " WHERE s.world_id = $1"
+        "   AND s.status = 'completed'"
+        "   AND c.position < $2"
+        " ORDER BY c.position ASC, s.world_time ASC, s.id ASC",
+        {world_id, std::to_string(chapter.number)});
+    for (int i = 0; i < res.ntuples(); i++) {
+        const auto scene_id = res.get(i, 0);
         const auto scene_path =
             worlds_.world_path(world_id) / "scenes" / (scene_id + ".json");
         const auto summary = first_line_summary(

@@ -2,8 +2,10 @@
 
 #include <merak/worldbuilding/world_models.hpp>
 #include <merak/worldbuilding/world_store.hpp>
+#include <merak/worldbuilding/pg_helpers.hpp>
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -20,7 +22,8 @@ struct ChapterContext {
 
 class NarrativeStore {
 public:
-    NarrativeStore(WorldStore& worlds, std::filesystem::path data_root);
+    NarrativeStore(WorldStore& worlds, std::string_view pg_conninfo,
+                   std::filesystem::path data_root);
 
     StoryStructure create_story_structure(const std::string& world_id,
                                           NarrativeTemplate type);
@@ -47,10 +50,10 @@ public:
 
 private:
     void initialize();
-    std::filesystem::path database_path() const;
 
     WorldStore& worlds_;
     std::filesystem::path data_root_;
+    std::unique_ptr<PgPool> pool_;
 };
 
 } // namespace merak::worldbuilding

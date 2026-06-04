@@ -3,8 +3,10 @@
 #include <merak/worldbuilding/world_models.hpp>
 #include <merak/worldbuilding/world_store.hpp>
 #include <merak/worldbuilding/narrative_store.hpp>
+#include <merak/worldbuilding/pg_helpers.hpp>
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -21,6 +23,7 @@ class ForeshadowingStore {
 public:
     ForeshadowingStore(WorldStore& worlds,
                        NarrativeStore& narrative,
+                       std::string_view pg_conninfo,
                        std::filesystem::path data_root);
 
     Foreshadowing plant(const std::string& world_id, Foreshadowing item);
@@ -41,11 +44,11 @@ public:
 
 private:
     void initialize();
-    std::filesystem::path database_path() const;
 
     WorldStore& worlds_;
     NarrativeStore& narrative_;
     std::filesystem::path data_root_;
+    std::unique_ptr<PgPool> pool_;
 };
 
 } // namespace merak::worldbuilding

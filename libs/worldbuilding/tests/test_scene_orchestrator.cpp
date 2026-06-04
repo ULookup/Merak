@@ -41,10 +41,10 @@ struct OrchFixture {
 
     OrchFixture()
         : world(worlds.create_world("北境", "雪原史诗")),
-          narrative(worlds, root),
+          narrative(worlds, test_pg_conninfo(), root),
           agents(worlds, test_pg_conninfo(), root),
-          foreshadowing(worlds, narrative, root),
-          secrets(worlds, foreshadowing, root),
+          foreshadowing(worlds, narrative, test_pg_conninfo(), root),
+          secrets(worlds, foreshadowing, test_pg_conninfo(), root),
           orchestrator(worlds, agents, narrative, foreshadowing, secrets, voice) {}
 
     AgentRecord make_char(const std::string& name) {

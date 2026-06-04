@@ -3,8 +3,10 @@
 #include <merak/worldbuilding/world_models.hpp>
 #include <merak/worldbuilding/world_store.hpp>
 #include <merak/worldbuilding/foreshadowing_store.hpp>
+#include <merak/worldbuilding/pg_helpers.hpp>
 
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -27,6 +29,7 @@ class SecretStore {
 public:
     SecretStore(WorldStore& worlds,
                 ForeshadowingStore& foreshadowing,
+                std::string_view pg_conninfo,
                 std::filesystem::path data_root);
 
     Secret create(const std::string& world_id, Secret secret);
@@ -52,11 +55,11 @@ public:
 
 private:
     void initialize();
-    std::filesystem::path database_path() const;
 
     WorldStore& worlds_;
     ForeshadowingStore& foreshadowing_;
     std::filesystem::path data_root_;
+    std::unique_ptr<PgPool> pool_;
 };
 
 } // namespace merak::worldbuilding
