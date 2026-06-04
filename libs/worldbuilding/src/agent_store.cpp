@@ -4,6 +4,7 @@
 #include <merak/worldbuilding/pg_helpers.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -860,6 +861,32 @@ AgentStore::search_agents_by_traits(const std::string& world_id,
         results.push_back(read_agent_record_pg(res, i));
     }
     return results;
+}
+
+void AgentStore::update_agent_prompt(const std::string& agent_id,
+                                      std::string prompt) {
+    auto now = std::to_string(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count());
+
+    PgConn conn(*pool_);
+    conn.execute(
+        "INSERT INTO agent_prompts (agent_id, prompt, updated_at) "
+        "VALUES ($1, $2, $3) "
+        "ON CONFLICT (agent_id) DO UPDATE SET prompt = $2, updated_at = $3",
+        {agent_id, prompt, now});
+}
+
+std::string AgentStore::load_agent_prompt(const std::string& agent_id) const {
+    PgConn conn(*pool_);
+    auto result = conn.query(
+        "SELECT prompt FROM agent_prompts WHERE agent_id = $1",
+        {agent_id});
+    if (result.ntuples() == 0) {
+        return "";
+    }
+    return result.get(0, 0);
 }
 
 } // namespace merak::worldbuilding
