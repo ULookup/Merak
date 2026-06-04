@@ -3,6 +3,7 @@
 #include "tui/composer/chat_composer.hpp"
 #include "tui/composer/external_editor.hpp"
 #include "tui/composer/mention_menu.hpp"
+#include "tui/history_cell/welcome_cell.hpp"
 #include "theme/theme.hpp"
 #include <cassert>
 #include <filesystem>
@@ -96,6 +97,46 @@ int main() {
         auto drained = timeline.drain_scrollback(80);
         assert(contains(drained, "hello"));
         assert(timeline.drain_scrollback(80).empty());
+    }
+
+    {
+        WelcomeCell cell("0.1.0", "deepseek-v4-pro", "fix/tui");
+        auto rendered = cell.render(80);
+        // figlet title (6 lines)
+        assert(rendered.size() == 10); // 6 figlet + 4 box
+        assert(rendered[0].find("███╗") != std::string::npos);
+        assert(rendered[5].find("╚╝") != std::string::npos);
+        // info row
+        assert(contains(rendered, "agent 0.1.0"));
+        assert(contains(rendered, "model deepseek-v4-pro"));
+        assert(contains(rendered, "branch fix/tui"));
+        // tips row
+        assert(contains(rendered, "/help"));
+        assert(contains(rendered, "Ctrl+T"));
+        assert(contains(rendered, "Ctrl+O"));
+        // box borders
+        assert(rendered[6].find("┌") != std::string::npos);
+        assert(contains(rendered, "└"));
+        // to_json
+        auto json = cell.to_json();
+        assert(json["type"] == "welcome");
+    }
+
+    {
+        // narrow terminal
+        WelcomeCell cell("0.1.0", "m", "b");
+        auto rendered = cell.render(30);
+        assert(rendered.size() == 10);
+        assert(contains(rendered, "agent 0.1.0"));
+        assert(contains(rendered, "model m"));
+        assert(contains(rendered, "branch b"));
+    }
+
+    {
+        // very narrow terminal (edge case: width < 4)
+        WelcomeCell cell("0.1.0", "m", "b");
+        auto rendered = cell.render(3);
+        assert(rendered.size() == 10);
     }
 
     return 0;
