@@ -1,5 +1,6 @@
 #include <merak/runtime_service.hpp>
 #include <merak/turn_state.hpp>
+#include <merak/prompts/compositor.hpp>
 #include <algorithm>
 #include <atomic>
 #include <sstream>
@@ -105,7 +106,19 @@ std::optional<SessionRecord>RuntimeService::get_session(const std::string&id)con
 std::optional<RunRecord>RuntimeService::get_run(const std::string&id)const{return store_.get_run(id);}
 RunRecord RuntimeService::create_run_record(const std::string&s,const std::string&m){if(!store_.get_session(s))throw RuntimeError("session_not_found","Session does not exist");if(store_.has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");auto r=store_.create_run(s,m);emit(s,r.id,"run_started",{{"message",m}});return r;}
 RunRecord RuntimeService::start_run(const std::string&s,const std::string&m,const std::string&model){auto r=create_run_record(s,m);if(!loop_factory_)throw RuntimeError("runtime_unconfigured","Agent loop is not configured");std::thread([self=shared_from_this(),r,model]{self->execute_run(r,model);}).detach();return r;}
-std::vector<AgentMetadata>RuntimeService::agents()const{std::vector<AgentMetadata>out;for(const auto&[id,agent]:agents_)out.push_back({id,agent.system_prompt});return out;}
+std::vector<AgentMetadata> RuntimeService::agents() const {
+	std::vector<AgentMetadata> out;
+	prompts::PromptCompositor compositor;
+	prompts::PromptProfile profile;
+	std::string compositor_output = compositor.assemble(profile);
+	for (const auto& [id, agent] : agents_) {
+		std::string description = compositor_output.empty()
+			? agent.system_prompt
+			: (compositor_output + "\n\n---\n\n" + agent.system_prompt);
+		out.push_back({id, description});
+	}
+	return out;
+}
 DelegationStart RuntimeService::start_delegation(const std::string&s,const DelegationRequest&request){
     if(!store_.get_session(s))throw RuntimeError("session_not_found","Session does not exist");
     if(store_.has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");
@@ -122,8 +135,18 @@ DelegationStart RuntimeService::start_delegation(const std::string&s,const Deleg
     return{delegation_id,parent.id,s};
 }
 void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=store_.get_run(r.id);!current||current->status==RunStatus::Cancelled)return;auto token=std::make_shared<CancellationToken>();auto control=std::make_shared<Control>(*this,r,token);{std::lock_guard lock(mutex_);tokens_[r.id]=token;controls_[r.id]=control;}store_.update_run_status(r.id,RunStatus::Running);try{auto loop=loop_factory_(model);loop->run(r.user_message,*control).get();if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed");}}catch(const std::exception&e){if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
-AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig&agent,const std::string&task,const RunRecord&parent,const std::string&delegation_id,std::optional<std::string>previous_output){
-    auto prompt=task;
+AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig& agent_, const std::string& task, const RunRecord& parent, const std::string& delegation_id, std::optional<std::string> previous_output) {
+    // Enhance system_prompt with PromptCompositor output for platform agents
+    SubAgentConfig agent = agent_;
+    {
+        prompts::PromptCompositor compositor;
+        prompts::PromptProfile profile;
+        std::string composed = compositor.assemble(profile);
+        if (!composed.empty()) {
+            agent.system_prompt = composed + "\n\n---\n\n" + agent.system_prompt;
+        }
+    }
+    auto prompt = task;
     if(previous_output&& !previous_output->empty())prompt+="\n\nPrevious stage output:\n"+*previous_output;
     auto sub=store_.create_run(parent.session_id,prompt,parent.id,delegation_id,agent.id,"sub_run");
     std::shared_ptr<CancellationToken>token;
