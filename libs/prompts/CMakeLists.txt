@@ -12,3 +12,10 @@ target_link_libraries(merak-prompts PUBLIC
     nlohmann_json::nlohmann_json
     spdlog::spdlog
 )
+
+add_executable(test-prompts tests/test_prompts.cpp)
+target_link_libraries(test-prompts PRIVATE
+    merak-prompts
+    GTest::gtest_main
+)
+add_test(NAME prompts COMMAND test-prompts WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
