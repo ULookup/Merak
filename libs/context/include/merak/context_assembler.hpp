@@ -2,6 +2,7 @@
 #include <merak/message.hpp>
 #include <merak/token_counter.hpp>
 #include <merak/memory_store.hpp>
+#include <merak/prompts/types.hpp>
 #include <nlohmann/json.hpp>
 #include <memory>
 #include <vector>
@@ -30,6 +31,13 @@ public:
 
     std::vector<Message> assemble(
         const std::string& system_prompt,
+        const nlohmann::json& tool_specs_json,
+        const std::vector<Message>& history,
+        const std::vector<MemorySnippet>& memory_snippets = {}
+    );
+
+    std::vector<Message> assemble(
+        const prompts::PromptProfile& profile,
         const nlohmann::json& tool_specs_json,
         const std::vector<Message>& history,
         const std::vector<MemorySnippet>& memory_snippets = {}

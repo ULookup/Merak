@@ -9,6 +9,7 @@ target_link_libraries(merak-context PUBLIC
     merak-core
     merak-memory
     merak-llm
+    merak-prompts
     nlohmann_json::nlohmann_json
     spdlog::spdlog
 )

@@ -1,4 +1,5 @@
 #include <merak/context_assembler.hpp>
+#include <merak/prompts/compositor.hpp>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <sstream>
@@ -113,6 +114,18 @@ Message ContextAssembler::build_memory_message(
     msg.role = "user";
     msg.content = oss.str();
     return msg;
+}
+
+std::vector<Message> ContextAssembler::assemble(
+    const prompts::PromptProfile& profile,
+    const nlohmann::json& tool_specs_json,
+    const std::vector<Message>& history,
+    const std::vector<MemorySnippet>& memory_snippets
+) {
+    prompts::PromptCompositor compositor;
+    std::string system_prompt = compositor.assemble(profile);
+
+    return assemble(system_prompt, tool_specs_json, history, memory_snippets);
 }
 
 } // namespace merak
