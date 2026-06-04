@@ -35,9 +35,9 @@ public:
     void stream_events(const std::string& session,long long after,
                        const std::function<void(SseFrame)>& on_event,
                        std::atomic<bool>& stop);
-private:
-    std::string server_;
     nlohmann::json request(const std::string& method,const std::string& path,
                            const nlohmann::json& body = {});
+private:
+    std::string server_;
 };
 } // namespace merak::client
