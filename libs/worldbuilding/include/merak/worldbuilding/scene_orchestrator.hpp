@@ -6,12 +6,16 @@
 #include <merak/worldbuilding/secret_store.hpp>
 #include <merak/worldbuilding/voice_analyzer.hpp>
 #include <merak/worldbuilding/world_store.hpp>
+#include <merak/tool_spec.hpp>
 
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
 namespace merak::worldbuilding {
+
+class WorldbuildingService;
 
 struct CharacterContextView {
     std::string agent_id;
@@ -24,6 +28,7 @@ struct ScenePreparation {
     std::vector<CharacterContextView> character_views;
     std::vector<Foreshadowing> relevant_foreshadowing;
     std::vector<KnowledgeView> secret_views;
+    std::map<std::string, std::vector<ToolSpec>> tools_by_agent_id;
 };
 
 struct SceneWrapUp {
@@ -44,7 +49,8 @@ public:
                       VoiceAnalyzer& voice);
 
     ScenePreparation prepare_scene(const std::string& world_id,
-                                    const std::string& scene_id) const;
+                                    const std::string& scene_id,
+                                    WorldbuildingService& service) const;
     SceneWrapUp finish_scene(const std::string& world_id,
                               const std::string& scene_id,
                               const std::string& final_markdown);

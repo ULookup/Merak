@@ -1,5 +1,6 @@
 #include <merak/worldbuilding/scene_orchestrator.hpp>
 #include <merak/worldbuilding/ids.hpp>
+#include <merak/worldbuilding/worldbuilding_tools.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -127,7 +128,8 @@ SceneOrchestrator::SceneOrchestrator(WorldStore& worlds,
 
 ScenePreparation
 SceneOrchestrator::prepare_scene(const std::string& world_id,
-                                  const std::string& scene_id) const {
+                                  const std::string& scene_id,
+                                  WorldbuildingService& service) const {
     ensure_world_exists(worlds_, world_id);
 
     auto scene = load_scene(worlds_, world_id, scene_id);
@@ -245,6 +247,32 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
 
         view.system_prompt = prompt.str();
         prep.character_views.push_back(view);
+    }
+
+    // Populate tools_by_agent_id for each agent.
+    WorldbuildingTools tools_factory(service);
+
+    // God agent.
+    {
+        ToolContext ctx{world_id, scene_id, ""};
+        auto instances = tools_factory.create_tools(AgentKind::God, ctx);
+        for (auto& t : instances) prep.tools_by_agent_id["god"].push_back(t->spec());
+    }
+
+    // Character tools per participant.
+    for (auto& cv : prep.character_views) {
+        ToolContext ctx{world_id, scene_id, cv.agent_id};
+        auto instances = tools_factory.create_tools(AgentKind::Individual, ctx);
+        for (auto& t : instances) prep.tools_by_agent_id[cv.agent_id].push_back(t->spec());
+    }
+
+    // Manager tools.
+    for (auto kind : {AgentKind::MapManager, AgentKind::HistoryManager,
+                       AgentKind::MagicSystemManager, AgentKind::FactionManager}) {
+        ToolContext ctx{world_id, scene_id, ""};
+        auto instances = tools_factory.create_tools(kind, ctx);
+        std::string key = to_string(kind);
+        for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
     }
 
     return prep;

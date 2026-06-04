@@ -68,8 +68,8 @@ Scene WorldbuildingService::create_scene(const std::string& world_id,
 
 ScenePreparation
 WorldbuildingService::prepare_scene(const std::string& world_id,
-                                     const std::string& scene_id) const {
-    return orchestrator_.prepare_scene(world_id, scene_id);
+                                     const std::string& scene_id) {
+    return orchestrator_.prepare_scene(world_id, scene_id, *this);
 }
 
 SceneWrapUp WorldbuildingService::end_scene(const std::string& world_id,

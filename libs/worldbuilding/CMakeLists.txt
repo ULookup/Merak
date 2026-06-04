@@ -9,9 +9,11 @@ add_library(merak-worldbuilding STATIC
     src/voice_analyzer.cpp
     src/scene_orchestrator.cpp
     src/worldbuilding_service.cpp
+    src/worldbuilding_tools.cpp
 )
 target_include_directories(merak-worldbuilding PUBLIC include)
 target_link_libraries(merak-worldbuilding PUBLIC
+    merak-tools
     nlohmann_json::nlohmann_json
     SQLite::SQLite3
 )
