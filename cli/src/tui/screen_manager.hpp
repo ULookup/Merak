@@ -117,7 +117,7 @@ class ScreenManager {
             if (event.type == TerminalEvent::Type::Down && overlay_selected_ + 1 < static_cast<int>(items.size())) ++overlay_selected_;
             if (event.type == TerminalEvent::Type::Enter && !items.empty()) { memory_detail_ = !memory_detail_; overlay_scroll_ = 0; }
             if (event.type == TerminalEvent::Type::Backspace && !memory_filter_.empty()) { memory_filter_.pop_back(); overlay_selected_ = 0; }
-            if (event.type == TerminalEvent::Type::Character) { memory_filter_.push_back(event.character); overlay_selected_ = 0; memory_detail_ = false; }
+            if (event.type == TerminalEvent::Type::Character) { memory_filter_ += event.text; overlay_selected_ = 0; memory_detail_ = false; }
             return;
         }
         if (overlay_ == Overlay::Transcript || overlay_ == Overlay::ToolDetail) {
@@ -151,9 +151,9 @@ class ScreenManager {
         using Type = TerminalEvent::Type;
         if (event.type == Type::None) return;
         if (pending_approval_) {
-            if (event.type == Type::Escape || (event.type == Type::Character && (event.character == 'n' || event.character == 'N'))) {
+            if (event.type == Type::Escape || (event.type == Type::Character && (event.text == "n" || event.text == "N"))) {
                 resolve_approval(false);
-            } else if (event.type == Type::Character && (event.character == 'y' || event.character == 'Y')) {
+            } else if (event.type == Type::Character && (event.text == "y" || event.text == "Y")) {
                 resolve_approval(true);
             }
             return;
