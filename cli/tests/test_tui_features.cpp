@@ -103,7 +103,7 @@ int main() {
         WelcomeCell cell("0.1.0", "deepseek-v4-pro", "fix/tui");
         auto rendered = cell.render(80);
         // figlet title (6 lines)
-        assert(rendered.size() >= 10); // 6 figlet + 4 box
+        assert(rendered.size() == 10); // 6 figlet + 4 box
         assert(rendered[0].find("███╗") != std::string::npos);
         assert(rendered[5].find("╚╝") != std::string::npos);
         // info row
@@ -126,16 +126,17 @@ int main() {
         // narrow terminal
         WelcomeCell cell("0.1.0", "m", "b");
         auto rendered = cell.render(30);
-        // should still render without crashing
-        assert(rendered.size() >= 10);
+        assert(rendered.size() == 10);
+        assert(contains(rendered, "agent 0.1.0"));
+        assert(contains(rendered, "model m"));
+        assert(contains(rendered, "branch b"));
     }
 
     {
         // very narrow terminal (edge case: width < 4)
         WelcomeCell cell("0.1.0", "m", "b");
         auto rendered = cell.render(3);
-        // should not crash, should still produce output
-        assert(!rendered.empty());
+        assert(rendered.size() == 10);
     }
 
     return 0;
