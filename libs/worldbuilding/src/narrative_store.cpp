@@ -683,4 +683,12 @@ NarrativeStore::chapter_context(const std::string& world_id,
     return context;
 }
 
+std::optional<Scene> NarrativeStore::get_scene(const std::string& world_id,
+                                                const std::string& scene_id) const {
+    if (!worlds_.get_world(world_id).has_value()) return std::nullopt;
+    const auto path = worlds_.world_path(world_id) / "scenes" / (scene_id + ".json");
+    if (!std::filesystem::exists(path)) return std::nullopt;
+    return scene_from_json(read_json(path));
+}
+
 } // namespace merak::worldbuilding
