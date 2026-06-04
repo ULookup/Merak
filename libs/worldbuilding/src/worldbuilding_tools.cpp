@@ -1283,7 +1283,8 @@ ToolSpec UpdateAgentPromptTool::spec() const {
 
 std::future<ToolResult> UpdateAgentPromptTool::execute(
     ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [this, call = std::move(call)]() -> ToolResult {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        auto& svc = *static_cast<UpdateAgentPromptTool&>(*self).svc_;
         try {
             auto args = json::parse(call.arguments);
             std::string agent_id = args.value("agent_id", "");
@@ -1296,7 +1297,7 @@ std::future<ToolResult> UpdateAgentPromptTool::execute(
                 return r;
             }
 
-            svc_->update_agent_prompt(agent_id, prompt);
+            svc->update_agent_prompt(agent_id, prompt);
 
             ToolResult r;
             r.output = ok_response({
