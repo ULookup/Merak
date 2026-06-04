@@ -1,4 +1,5 @@
 find_package(PostgreSQL REQUIRED)
+find_path(LIBPQ_INCLUDE_DIR libpq-fe.h REQUIRED)
 
 add_library(merak-worldbuilding STATIC
     src/ids.cpp
@@ -16,6 +17,7 @@ add_library(merak-worldbuilding STATIC
 target_include_directories(merak-worldbuilding PUBLIC
     include
     ${PostgreSQL_INCLUDE_DIRS}
+    ${LIBPQ_INCLUDE_DIR}
 )
 target_link_libraries(merak-worldbuilding PUBLIC
     merak-tools
@@ -35,5 +37,6 @@ add_executable(worldbuilding_tests
 target_link_libraries(worldbuilding_tests PRIVATE
     merak-worldbuilding
     GTest::gtest_main
+    SQLite::SQLite3
 )
 add_test(NAME worldbuilding_tests COMMAND worldbuilding_tests)

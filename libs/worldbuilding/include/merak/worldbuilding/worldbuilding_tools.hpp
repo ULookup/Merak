@@ -358,6 +358,22 @@ private:
     ToolContext ctx_;
 };
 
+class UpdateAgentPromptTool : public Tool {
+public:
+    UpdateAgentPromptTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::ask; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<UpdateAgentPromptTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return false; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
 // ====== WorldbuildingTools Factory ======
 
 class WorldbuildingTools {
@@ -367,7 +383,7 @@ public:
 
     std::vector<ToolSpec> specs_for(AgentKind kind) const;
     std::vector<std::unique_ptr<Tool>>
-    create_tools(AgentKind kind, const ToolContext& ctx);
+    create_tools(AgentKind kind, const ToolContext& ctx) const;
 
 private:
     WorldbuildingService* service_;

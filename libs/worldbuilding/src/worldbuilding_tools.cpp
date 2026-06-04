@@ -1261,6 +1261,57 @@ std::future<ToolResult> QueryWorldTool::execute(ToolCall call, ToolExecutionCont
     });
 }
 
+// ========== UpdateAgentPromptTool ==========
+
+ToolSpec UpdateAgentPromptTool::spec() const {
+    ToolSpec s;
+    s.name = "update_agent_prompt";
+    s.description = R"(更新角色或管理Agent的系统提示词。"
+                    "输入：agent_id（要更新的Agent ID）、prompt（新的系统提示词全文）。"
+                    "创建角色/管理Agent后必须调用此工具来设置其系统提示词。)";
+    s.source = "worldbuilding";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "agent_id": {"type": "string", "description": "要更新提示词的Agent ID"},
+            "prompt": {"type": "string", "description": "新的系统提示词全文"}
+        },
+        "required": ["agent_id", "prompt"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> UpdateAgentPromptTool::execute(
+    ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [this, call = std::move(call)]() -> ToolResult {
+        try {
+            auto args = json::parse(call.arguments);
+            std::string agent_id = args.value("agent_id", "");
+            std::string prompt = args.value("prompt", "");
+
+            if (agent_id.empty() || prompt.empty()) {
+                ToolResult r;
+                r.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "agent_id 和 prompt 都不能为空");
+                return r;
+            }
+
+            svc_->update_agent_prompt(agent_id, prompt);
+
+            ToolResult r;
+            r.output = ok_response({
+                {"agent_id", agent_id},
+                {"message", "系统提示词已更新"}
+            });
+            return r;
+        } catch (const std::exception& e) {
+            ToolResult r;
+            r.output = error_response(ToolErrorCode::INTERNAL, e.what());
+            return r;
+        }
+    });
+}
+
 // ========== WorldbuildingTools Factory ==========
 
 std::vector<ToolSpec> WorldbuildingTools::specs_for(AgentKind kind) const {
@@ -1272,7 +1323,7 @@ std::vector<ToolSpec> WorldbuildingTools::specs_for(AgentKind kind) const {
 }
 
 std::vector<std::unique_ptr<Tool>>
-WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) {
+WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) const {
     std::vector<std::unique_ptr<Tool>> tools;
 
     switch (kind) {
@@ -1288,6 +1339,8 @@ WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) {
         tools.push_back(std::make_unique<PlantForeshadowingTool>(*service_, ctx));
         tools.push_back(std::make_unique<ExposeSecretTool>(*service_, ctx));
         tools.push_back(std::make_unique<EndSceneTool>(*service_, ctx));
+        tools.push_back(
+            std::make_unique<UpdateAgentPromptTool>(*service_, ctx));
         break;
     case AgentKind::Individual:
         tools.push_back(std::make_unique<DescribeCharacterTool>(*service_, ctx));
