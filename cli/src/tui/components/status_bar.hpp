@@ -46,6 +46,8 @@ public:
     void set_model(const std::string& m) { model_ = m; }
     void set_state(const std::string& state) { state_ = state; }
     void set_git_branch(std::string branch) { git_branch_ = std::move(branch); }
+    const std::string& git_branch() const { return git_branch_; }
+    const std::string& cwd() const { return cwd_; }
     void set_cwd(std::string cwd) { cwd_ = std::move(cwd); }
     void set_permission_mode(std::string mode) { permission_mode_ = std::move(mode); }
     void set_pending_approvals(int count) { pending_approvals_ = count; }
