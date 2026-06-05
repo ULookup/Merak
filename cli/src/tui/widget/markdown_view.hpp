@@ -71,6 +71,7 @@ private:
         Style bold; bold.bold(true);
         Style dim; dim.fg = t.dim; dim.dim(true);
         Style accent; accent.fg = t.accent;
+        Style quote; quote.fg = t.quote;
 
         auto lines = split_lines_md(md);
         size_t i = 0;
@@ -95,7 +96,7 @@ private:
             } else if (line.starts_with("> ")) {
                 auto inner_spans = parse_inline_spans(line.substr(2), t);
                 for (auto& sp : inner_spans) {
-                    if (sp.style == Style{}) sp.style = dim;
+                    if (sp.style == Style{}) sp.style = quote;
                 }
                 add(std::make_unique<SpanParagraph>(std::move(inner_spans)));
                 ++i;

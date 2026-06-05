@@ -153,7 +153,7 @@ public:
 class AssistantCell final : public HistoryCell {
     std::string markdown_;
     bool live_ = true;
-    int frozen_gutter_ = 178;
+    int frozen_gutter_ = theme::active_theme().gutter_frozen;
 
     static bool is_separator_row(const std::string& line) {
         if (line.find('|') == std::string::npos) return false;
@@ -223,9 +223,10 @@ class AssistantCell final : public HistoryCell {
     }
     int live_gutter_color() const {
         if (!live_) return frozen_gutter_;
+        const auto& t = theme::active_theme();
         const auto tick = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now().time_since_epoch()).count() / 250);
-        return 178 + (tick % 36);
+        return tick % 2 == 0 ? t.gutter : t.accent;
     }
 
 public:
@@ -311,8 +312,12 @@ public:
                 lines.push_back({Span{line.substr(3), bold}});
             } else if (line.starts_with("> ")) {
                 std::vector<Span> bq;
-                bq.push_back({"│ ", dim_fg});
+                Style quote_fg; quote_fg.fg = t.quote;
+                bq.push_back({"│ ", quote_fg});
                 auto inner = MarkdownView::parse_inline_spans(line.substr(2), t);
+                for (auto& sp : inner) {
+                    if (sp.style == Style{}) sp.style = quote_fg;
+                }
                 bq.insert(bq.end(), inner.begin(), inner.end());
                 lines.push_back(bq);
             } else if (line.starts_with("* ") || line.starts_with("- ")) {
@@ -344,8 +349,7 @@ public:
     }
     bool is_live() const override { return live_; }
     void finalize() override {
-        frozen_gutter_ = 178 + (static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch()).count() / 250) % 36);
+        frozen_gutter_ = theme::active_theme().gutter_frozen;
         live_ = false;
     }
 };

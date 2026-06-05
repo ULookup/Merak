@@ -71,6 +71,16 @@ struct AgentConfig {
     std::map<std::string, struct SubAgentConfig> sub_agents;
 };
 
+struct TuiThemeConfig {
+    std::string preset = "auto"; // "auto" | "dark" | "light"
+    bool preset_set = false;
+    std::map<std::string, std::string> colors;
+};
+
+struct TuiConfig {
+    TuiThemeConfig theme;
+};
+
 struct SubAgentConfig {
     std::string id;             // Agent 唯一标识
     std::string system_prompt;
@@ -86,6 +96,7 @@ struct Config {
     MemoryConfig memory;
     std::vector<MCPServerConfig> mcp_servers;
     AgentConfig agent;
+    TuiConfig tui;
 };
 
 } // namespace merak

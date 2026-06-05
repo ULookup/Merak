@@ -21,6 +21,23 @@ static bool contains(const std::vector<std::string>& lines, const std::string& n
 
 int main() {
     {
+        auto theme = merak::theme::load_theme_from_metadata({
+            {"preset", "light"},
+            {"accent", "blue"},
+            {"selected_bg", 236},
+            {"selected_fg", "bright_white"},
+            {"gutter_frozen", 61},
+            {"quote", "green"},
+        });
+        assert(theme.fg == 16);
+        assert(theme.accent == 4);
+        assert(theme.selected_bg == 236);
+        assert(theme.selected_fg == 15);
+        assert(theme.gutter_frozen == 61);
+        assert(theme.quote == 2);
+    }
+
+    {
         AssistantCell cell;
         cell.append("```cpp\nint main() { return 0; }\n```\n\n| Name | Count |\n| --- | ---: |\n| tea | 3 |\n+ added\n- removed\n<think>\nprivate chain\n</think>\n");
         cell.finalize();
@@ -162,6 +179,25 @@ int main() {
         composer.replace_range(menu.trigger_start(), composer.cursor(), menu.accepted_text());
         assert(composer.text() == "read @src/main.cpp ");
         std::filesystem::remove_all(root);
+    }
+
+    {
+        ChatComposer composer;
+        composer.set_text("/wo");
+        assert(composer.slash_open());
+        auto matches = composer.slash_matches();
+        assert(!matches.empty());
+        assert(matches.front().name == "/world");
+        composer.slash_complete();
+        assert(composer.text() == "/world ");
+        composer.set_text("/world cr");
+        matches = composer.slash_matches();
+        assert(!matches.empty());
+        assert(matches.front().name == "create");
+        composer.slash_complete();
+        assert(composer.text() == "/world create ");
+        composer.set_text("/world create 北境");
+        assert(!composer.slash_open());
     }
 
     {

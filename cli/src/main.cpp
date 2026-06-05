@@ -45,7 +45,15 @@ using namespace merak;
 static const char* SETTINGS_TEMPLATE = R"({
   "llm": {"provider":"openai","api_key":"sk-your-api-key-here","default_model":"gpt-4o","max_output_tokens":4096},
   "agent": {"system_prompt":"You are a helpful AI assistant. Use tools to complete tasks."},
-  "memory": {"enabled":false}
+  "memory": {"enabled":false},
+  "tui": {
+    "theme": {
+      "preset": "auto",
+      "accent": "yellow",
+      "selected_bg": 236,
+      "selected_fg": 252
+    }
+  }
 })";
 
 static std::filesystem::path merak_home() {
@@ -77,6 +85,12 @@ static std::vector<std::string> split_csv(std::string value){
 static std::string normalize_team_pattern(std::string pattern){
     if(pattern=="fanout")return"fan_out";
     return pattern;
+}
+static nlohmann::json tui_theme_json(const TuiThemeConfig& theme) {
+    nlohmann::json out;
+    if (theme.preset_set) out["preset"] = theme.preset.empty() ? "auto" : theme.preset;
+    for (const auto& [key, value] : theme.colors) out[key] = value;
+    return out;
 }
 
 #ifdef _WIN32
@@ -184,6 +198,7 @@ static int run_server(int argc,char**argv) {
     metadata.permission_mode = cfg.agent.permission_mode;
     metadata.memory_enabled = memory_cfg.enabled;
     metadata.worldbuilding_enabled = wb_service != nullptr;
+    metadata.tui_theme = tui_theme_json(cfg.tui.theme);
     metadata.tools = tools->all_tools();
     metadata.mcp_servers = mcp_status;
     metadata.agents = runtime->agents();
@@ -245,6 +260,7 @@ static bool is_context_switch(commands::WorldbuildingAction action) {
 
 static int run_tui(int argc,char**argv) {
     auto server=option(argc,argv,"--server","http://127.0.0.1:3888");client::RuntimeClient api(server);auto meta=api.metadata();
+    theme::configure_theme(theme::load_theme_from_metadata(meta.value("tui", nlohmann::json::object()).value("theme", nlohmann::json::object())));
     tui::ScreenManager ui;ui.set_runtime_metadata(meta);ui.status_bar().set_provider(meta.value("provider","none"));ui.status_bar().set_model(meta.value("model","none"));ui.status_bar().set_cwd(std::filesystem::current_path().string());{auto branch=tui::ExternalEditorResolver::shell_output("git branch --show-current 2>/dev/null");ui.status_bar().set_git_branch(branch);}
     std::string session_id=option(argc,argv,"--session");if(session_id.empty())session_id=api.create_session()["session_id"];else api.session(session_id);
     std::mutex state_mutex;std::string current_run;long long last_seq=0;std::atomic<bool>stop_stream=false;
