@@ -1,5 +1,6 @@
 #pragma once
 #include "../../theme/theme.hpp"
+#include "../buffer.hpp"
 #include <merak/message.hpp>
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -99,10 +100,30 @@ inline std::string repeat_text(std::string_view text, size_t count) {
     return out;
 }
 
+struct Span {
+    std::string text;
+    Style style;
+};
+
+inline void write_spans(Buffer& buf, const std::vector<std::vector<Span>>& lines) {
+    for (uint16_t y = 0; y < lines.size() && y < buf.h; ++y) {
+        uint16_t x = 0;
+        for (const auto& span : lines[y]) {
+            buf.set_span(x, y, span.text, span.style);
+            // approximate x advance - set_span handles exact widths
+            size_t pos = 0;
+            while (pos < span.text.size()) {
+                auto cp = utf8_decode(span.text, pos);
+                x += std::max(uint8_t(1), char_width(cp));
+            }
+        }
+    }
+}
+
 class HistoryCell {
 public:
     virtual ~HistoryCell() = default;
-    virtual std::vector<std::string> render(size_t width) const = 0;
+    virtual void render(Buffer& buf, uint16_t width) const = 0;
     virtual nlohmann::json to_json() const = 0;
     virtual bool is_live() const { return false; }
     virtual void finalize() {}
@@ -113,12 +134,19 @@ class UserCell final : public HistoryCell {
 public:
     explicit UserCell(std::string text) : text_(sanitize_terminal_text(text)) {}
     const std::string& text() const { return text_; }
-    std::vector<std::string> render(size_t) const override {
+    void render(Buffer& buf, uint16_t width) const override {
+        (void)width;
         auto lines = split_lines(text_);
+        auto& t = theme::active_theme();
+        Style accent; accent.fg = t.accent; accent.bold(true);
+        Style dim_fg; dim_fg.fg = t.dim; dim_fg.dim(true);
+        std::vector<std::vector<Span>> spans(lines.size());
         for (size_t i = 0; i < lines.size(); ++i) {
-            lines[i] = (i == 0 ? ansi(theme::ANSI_ACCENT, "› ") : "  ") + lines[i];
+            spans[i].push_back({i == 0 ? "> " : "  ", accent});
+            spans[i].push_back({lines[i], Style{}});
         }
-        return lines;
+        if (buf.h < lines.size()) buf.resize(buf.w, lines.size());
+        write_spans(buf, spans);
     }
     nlohmann::json to_json() const override {
         return {{"type", "user"}, {"text", text_}};
@@ -130,46 +158,54 @@ class AssistantCell final : public HistoryCell {
     bool live_ = true;
     int frozen_gutter_ = 178;
 
-    static std::string render_inline(std::string line) {
-        // Headings
-        if (line.starts_with("# ")) return ansi(theme::ANSI_BOLD, line.substr(2));
-        if (line.starts_with("## ")) return ansi(theme::ANSI_BOLD, line.substr(3));
+    static std::vector<Span> render_inline_spans(std::string line, const theme::Theme& t) {
+        std::vector<Span> spans;
+        Style base;
+        Style bold; bold.bold(true);
+        Style accent; accent.fg = t.accent;
+        Style dim_fg; dim_fg.fg = t.dim; dim_fg.dim(true);
 
-        // Blockquote: strip prefix, recursively inline-parse remainder
+        // Headings
+        if (line.starts_with("# ")) { spans.push_back({line.substr(2), bold}); return spans; }
+        if (line.starts_with("## ")) { spans.push_back({line.substr(3), bold}); return spans; }
+
+        // Blockquote
         if (line.starts_with("> ")) {
-            return ansi(theme::ANSI_DIM, "│ ") + render_inline(line.substr(2));
+            spans.push_back({"│ ", dim_fg});
+            auto inner = render_inline_spans(line.substr(2), t);
+            spans.insert(spans.end(), inner.begin(), inner.end());
+            return spans;
         }
 
         // Inline parsing: `code`, **bold**, __italic__
-        bool in_code = false;
-        bool in_bold = false;
-        bool in_italic = false;
-        std::string out;
+        bool in_code = false, in_bold = false, in_italic = false;
+        std::string buf;
+        auto flush = [&] {
+            if (buf.empty()) return;
+            Style s;
+            if (in_code) s = accent;
+            else if (in_bold) s = bold;
+            else if (in_italic) s = accent;
+            else s = base;
+            spans.push_back({buf, s});
+            buf.clear();
+        };
         for (size_t i = 0; i < line.size(); ++i) {
-            auto c = line[i];
-            if (c == '`') {
-                out += in_code ? theme::ANSI_RESET : theme::ANSI_ACCENT;
-                in_code = !in_code;
-            } else if (c == '*' && i + 1 < line.size() && line[i + 1] == '*') {
-                out += in_bold ? theme::ANSI_RESET : theme::ANSI_BOLD;
-                in_bold = !in_bold;
-                ++i;
-            } else if (c == '_' && i + 1 < line.size() && line[i + 1] == '_') {
-                out += in_italic ? theme::ANSI_RESET : theme::ANSI_ACCENT;
-                in_italic = !in_italic;
-                ++i;
-            } else {
-                out.push_back(c);
+            char c = line[i];
+            if (c == '`') { flush(); in_code = !in_code; }
+            else if (c == '*' && i+1 < line.size() && line[i+1] == '*') { flush(); in_bold = !in_bold; ++i; }
+            else if (c == '_' && i+1 < line.size() && line[i+1] == '_') { flush(); in_italic = !in_italic; ++i; }
+            else buf.push_back(c);
+        }
+        flush();
+
+        // List items
+        if (line.starts_with("* ") || line.starts_with("- ")) {
+            if (!spans.empty() && spans[0].text.size() >= 2) {
+                spans[0].text = "• " + spans[0].text.substr(2);
             }
         }
-        if (in_code || in_bold || in_italic) out += theme::ANSI_RESET;
-
-        // List items: replace leading "* " or "- " with bullet AFTER inline parsing
-        if (line.starts_with("* ") || line.starts_with("- ")) {
-            return ansi(theme::ANSI_ACCENT, "• ") + out.substr(2);
-        }
-
-        return out;
+        return spans;
     }
     static bool is_separator_row(const std::string& line) {
         if (line.find('|') == std::string::npos) return false;
@@ -178,30 +214,33 @@ class AssistantCell final : public HistoryCell {
         }
         return true;
     }
-    static std::string highlight_code(std::string line, const std::string& language) {
+    static std::vector<Span> highlight_code_spans(std::string line, const std::string& language, const theme::Theme& t) {
         static const std::set<std::string> keywords = {
             "auto", "bool", "break", "case", "class", "const", "def", "else", "fn",
             "for", "func", "function", "if", "import", "int", "let", "package",
             "pub", "return", "std", "struct", "var", "void", "while"
         };
         (void)language;
-        std::string out;
+        std::vector<Span> spans;
+        Style accent; accent.fg = t.accent;
+        Style base;
         std::string word;
         auto flush = [&] {
             if (word.empty()) return;
-            out += keywords.contains(word) ? ansi(theme::ANSI_ACCENT, word) : word;
+            spans.push_back({word, keywords.contains(word) ? accent : base});
             word.clear();
         };
         for (char c : line) {
             if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') word.push_back(c);
-            else { flush(); out.push_back(c); }
+            else { flush(); spans.push_back({std::string(1, c), base}); }
         }
         flush();
-        return out;
+        return spans;
     }
-    static std::string table_line(std::string line) {
+    static std::vector<Span> table_line_spans(std::string line, const theme::Theme& t) {
         std::replace(line.begin(), line.end(), '|', ' ');
-        return ansi(theme::ANSI_DIM, "│ ") + line;
+        Style dim_fg; dim_fg.fg = t.dim; dim_fg.dim(true);
+        return {Span{"│ " + line, dim_fg}};
     }
     static std::vector<std::string> split_table_cells(const std::string& line) {
         std::vector<std::string> cells;
@@ -222,15 +261,17 @@ class AssistantCell final : public HistoryCell {
         }
         return cells;
     }
-    static std::string render_table_row(const std::vector<std::string>& cells,
-                                        const std::vector<size_t>& widths,
-                                        bool header) {
-        std::string out = "│";
+    static std::vector<Span> render_table_row_spans(const std::vector<std::string>& cells,
+                                                      const std::vector<size_t>& widths,
+                                                      bool header, const theme::Theme& t) {
+        Style style;
+        if (header) { style.fg = t.accent; } else { style.fg = t.dim; style.dim(true); }
+        std::string text = "│";
         for (size_t i = 0; i < widths.size(); ++i) {
-            auto text = i < cells.size() ? cells[i] : "";
-            out += " " + text + repeat_text(" ", widths[i] > text.size() ? widths[i] - text.size() : 0) + " │";
+            auto cell_text = i < cells.size() ? cells[i] : "";
+            text += " " + cell_text + repeat_text(" ", widths[i] > cell_text.size() ? widths[i] - cell_text.size() : 0) + " │";
         }
-        return ansi(header ? theme::ANSI_ACCENT : theme::ANSI_DIM, out);
+        return {Span{text, style}};
     }
     int live_gutter_color() const {
         if (!live_) return frozen_gutter_;
@@ -242,79 +283,95 @@ class AssistantCell final : public HistoryCell {
 public:
     void append(std::string_view delta) { markdown_ += sanitize_terminal_text(delta); }
     const std::string& markdown() const { return markdown_; }
-    std::vector<std::string> render(size_t) const override {
-        std::vector<std::string> lines;
-        bool in_code = false;
-        bool in_thinking = false;
+    void render(Buffer& buf, uint16_t width) const override {
+        (void)width;
+        auto& t = theme::active_theme();
+        Style accent; accent.fg = t.accent;
+        Style dim_fg; dim_fg.fg = t.dim; dim_fg.dim(true);
+        Style success_fg; success_fg.fg = t.success;
+        Style error_fg; error_fg.fg = t.error;
+        Style base;
+
+        std::vector<std::vector<Span>> lines;
+        bool in_code = false, in_thinking = false;
         int thinking_lines = 0;
         std::string language;
         auto raw_lines = split_lines(markdown_);
+
         for (size_t index = 0; index < raw_lines.size(); ++index) {
             auto line = raw_lines[index];
             if (line.starts_with("```")) {
                 in_code = !in_code;
                 if (in_code) {
                     language = line.size() > 3 ? line.substr(3) : "";
-                    lines.push_back(ansi(theme::ANSI_DIM, "┌ code " + language));
+                    lines.push_back({Span{"┌ code " + language, dim_fg}});
                 } else {
-                    lines.push_back(ansi(theme::ANSI_DIM, "└"));
+                    lines.push_back({Span{"└", dim_fg}});
                     language.clear();
                 }
                 continue;
             }
             if (line == "<think>" || line == "<thinking>") {
-                in_thinking = true;
-                thinking_lines = 0;
-                continue;
+                in_thinking = true; thinking_lines = 0; continue;
             }
             if (line == "</think>" || line == "</thinking>") {
                 in_thinking = false;
-                lines.push_back(ansi(theme::ANSI_DIM,
-                    "thinking hidden · " + std::to_string(thinking_lines) + " lines"));
+                lines.push_back({Span{"thinking hidden · " + std::to_string(thinking_lines) + " lines", dim_fg}});
                 continue;
             }
-            if (in_thinking) {
-                ++thinking_lines;
-                if (live_) lines.push_back(ansi(theme::ANSI_DIM, "thinking..."));
-                continue;
-            }
-            if (in_code) lines.push_back("  " + highlight_code(line, language));
-            else if (index + 1 < raw_lines.size()
-                && line.find('|') != std::string::npos
-                && is_separator_row(raw_lines[index + 1])) {
+            if (in_thinking) { ++thinking_lines; if (live_) lines.push_back({Span{"thinking...", dim_fg}}); continue; }
+
+            if (in_code) {
+                std::vector<Span> code_line;
+                code_line.push_back({"  ", base});
+                auto hl = highlight_code_spans(line, language, t);
+                code_line.insert(code_line.end(), hl.begin(), hl.end());
+                lines.push_back(code_line);
+            } else if (index+1 < raw_lines.size() && line.find('|') != std::string::npos && is_separator_row(raw_lines[index+1])) {
+                // Table handling — build spans per row
                 std::vector<std::vector<std::string>> rows{split_table_cells(line)};
                 index += 2;
                 while (index < raw_lines.size() && raw_lines[index].find('|') != std::string::npos) {
-                    rows.push_back(split_table_cells(raw_lines[index]));
-                    ++index;
+                    rows.push_back(split_table_cells(raw_lines[index])); ++index;
                 }
                 if (index < raw_lines.size()) --index;
                 size_t columns = 0;
                 for (const auto& row : rows) columns = std::max(columns, row.size());
                 std::vector<size_t> widths(columns, 0);
-                for (const auto& row : rows) {
-                    for (size_t c = 0; c < row.size(); ++c) widths[c] = std::max(widths[c], row[c].size());
-                }
+                for (const auto& row : rows) for (size_t c=0; c<row.size(); ++c) widths[c]=std::max(widths[c], row[c].size());
                 if (!rows.empty()) {
-                    lines.push_back(render_table_row(rows.front(), widths, true));
+                    lines.push_back(render_table_row_spans(rows.front(), widths, true, t));
                     std::string rule = "├";
-                    for (auto width : widths) rule += repeat_text("─", width + 2) + "┼";
+                    for (auto w : widths) rule += repeat_text("─", w+2) + "┼";
                     if (!rule.empty()) rule.back() = '┤';
-                    lines.push_back(ansi(theme::ANSI_DIM, rule));
-                    for (size_t r = 1; r < rows.size(); ++r) lines.push_back(render_table_row(rows[r], widths, false));
+                    lines.push_back({Span{rule, dim_fg}});
+                    for (size_t r=1; r<rows.size(); ++r) lines.push_back(render_table_row_spans(rows[r], widths, false, t));
                 }
+            } else if (is_separator_row(line)) {
+                lines.push_back({Span{"├" + repeat_text("─", std::min<size_t>(line.size(), 80)), dim_fg}});
+            } else if (line.find('|') != std::string::npos) {
+                lines.push_back(table_line_spans(line, t));
+            } else if (line.starts_with("+")) {
+                lines.push_back({Span{line, success_fg}});
+            } else if (line.starts_with("-")) {
+                lines.push_back({Span{line, error_fg}});
+            } else {
+                lines.push_back(render_inline_spans(line, t));
             }
-            else if (is_separator_row(line)) lines.push_back(ansi(theme::ANSI_DIM, "├" + repeat_text("─", std::min<size_t>(line.size(), 80))));
-            else if (line.find('|') != std::string::npos) lines.push_back(table_line(line));
-            else if (line.starts_with("+")) lines.push_back(ansi(theme::ANSI_SUCCESS, line));
-            else if (line.starts_with("-")) lines.push_back(ansi(theme::ANSI_ERROR, line));
-            else lines.push_back(render_inline(line));
         }
-        auto gutter_style = "\x1b[38;5;" + std::to_string(live_gutter_color()) + "m";
-        auto gutter = ansi(gutter_style.c_str(), "█ ");
-        for (auto& line : lines) line = gutter + line;
-        if (live_ && !lines.empty()) lines.back() += ansi(theme::ANSI_ACCENT, "▎");
-        return lines;
+
+        // Add gutter and cursor
+        Style gutter_style; gutter_style.fg = live_gutter_color();
+        Style cursor_style; cursor_style.fg = t.accent;
+        for (auto& line_spans : lines) {
+            line_spans.insert(line_spans.begin(), {"█ ", gutter_style});
+        }
+        if (live_ && !lines.empty()) {
+            lines.back().push_back({"▎", cursor_style});
+        }
+
+        if (buf.h < lines.size()) buf.resize(buf.w, lines.size());
+        write_spans(buf, lines);
     }
     nlohmann::json to_json() const override {
         return {{"type", "assistant"}, {"markdown", markdown_}};
@@ -381,30 +438,39 @@ public:
         status_ = result.is_error ? Status::Failed : Status::Success;
     }
 
-    std::vector<std::string> render(size_t) const override {
+    void render(Buffer& buf, uint16_t width) const override {
+        (void)width;
+        auto& t = theme::active_theme();
         const auto ms = elapsed_ms();
         const auto elapsed = ms < 1000 ? std::to_string(ms) + "ms"
                                        : std::to_string(ms / 1000.0).substr(0, 3) + "s";
         std::string verb = status_ == Status::Running ? "Running "
             : status_ == Status::Success ? "Ran " : "Failed ";
-        const std::string& color = status_ == Status::Running ? theme::ANSI_WARNING
-            : status_ == Status::Success ? theme::ANSI_SUCCESS : theme::ANSI_ERROR;
-        std::vector<std::string> lines{ansi(color, "• " + verb + sanitize_terminal_text(call_.name))
-            + ansi(theme::ANSI_DIM, " (" + elapsed + ")")};
-        if (!description_.empty()) lines.push_back(ansi(theme::ANSI_DIM, "  │ ") + description_);
+
+        Style status_style;
+        if (status_ == Status::Running) status_style.fg = t.warn;
+        else if (status_ == Status::Success) status_style.fg = t.success;
+        else status_style.fg = t.error;
+
+        Style dim_fg; dim_fg.fg = t.dim; dim_fg.dim(true);
+        Style base;
+
+        std::vector<std::vector<Span>> lines;
+        lines.push_back({Span{"• " + verb + sanitize_terminal_text(call_.name), status_style},
+                         Span{" (" + elapsed + ")", dim_fg}});
+        if (!description_.empty()) lines.push_back({Span{"  │ " + description_, dim_fg}});
         if (status_ != Status::Running && !output_.empty()) {
             auto preview = split_lines(output_);
             const auto count = std::min<size_t>(preview.size(), 5);
             for (size_t i = 0; i < count; ++i) {
-                lines.push_back(ansi(theme::ANSI_DIM, i == 0 ? "  └ " : "    ")
-                    + truncate_text(preview[i], 120));
+                lines.push_back({Span{(i == 0 ? "  └ " : "    ") + truncate_text(preview[i], 120), dim_fg}});
             }
             if (preview.size() > count) {
-                lines.push_back(ansi(theme::ANSI_DIM,
-                    "    … +" + std::to_string(preview.size() - count) + " lines"));
+                lines.push_back({Span{"    … +" + std::to_string(preview.size() - count) + " lines", dim_fg}});
             }
         }
-        return lines;
+        if (buf.h < lines.size()) buf.resize(buf.w, lines.size());
+        write_spans(buf, lines);
     }
 
     nlohmann::json to_json() const override {
@@ -435,13 +501,19 @@ class SystemCell final : public HistoryCell {
 public:
     SystemCell(std::string text, bool error = false)
         : text_(sanitize_terminal_text(text)), error_(error) {}
-    std::vector<std::string> render(size_t) const override {
-        auto lines = split_lines(text_);
-        for (size_t i = 0; i < lines.size(); ++i) {
-            lines[i] = ansi(error_ ? theme::ANSI_ERROR : theme::ANSI_WARNING,
-                std::string(i == 0 ? (error_ ? "✗ " : "ℹ ") : "  ") + lines[i]);
+    void render(Buffer& buf, uint16_t width) const override {
+        (void)width;
+        auto& t = theme::active_theme();
+        Style prefix_style; prefix_style.fg = error_ ? t.error : t.warn;
+        Style base;
+        auto raw_lines = split_lines(text_);
+        std::vector<std::vector<Span>> lines(raw_lines.size());
+        for (size_t i = 0; i < raw_lines.size(); ++i) {
+            lines[i].push_back({i == 0 ? (error_ ? "✗ " : "ℹ ") : "  ", prefix_style});
+            lines[i].push_back({raw_lines[i], base});
         }
-        return lines;
+        if (buf.h < lines.size()) buf.resize(buf.w, lines.size());
+        write_spans(buf, lines);
     }
     nlohmann::json to_json() const override {
         return {{"type", "system"}, {"text", text_}, {"error", error_}};
@@ -522,14 +594,19 @@ public:
                     int cumulative, bool has_usage)
         : elapsed_ms_(elapsed_ms), input_tokens_(input), output_tokens_(output),
           tools_(tools), cumulative_tokens_(cumulative), has_usage_(has_usage) {}
-    std::vector<std::string> render(size_t) const override {
+    void render(Buffer& buf, uint16_t width) const override {
+        (void)width;
+        auto& t = theme::active_theme();
+        Style dim_fg; dim_fg.fg = t.dim; dim_fg.dim(true);
         auto usage = has_usage_
             ? "⚡ " + std::to_string(input_tokens_ + output_tokens_) + " ↑"
                 + std::to_string(input_tokens_) + " ↓" + std::to_string(output_tokens_)
             : "⚡ n/a";
-        return {ansi(theme::ANSI_DIM, "  ─ ⏱ " + std::to_string(elapsed_ms_) + "ms │ "
+        std::string text = "  ─ ⏱ " + std::to_string(elapsed_ms_) + "ms │ "
             + usage + " │ 🛠 " + std::to_string(tools_) + " │ Σ "
-            + std::to_string(cumulative_tokens_) + " ─")};
+            + std::to_string(cumulative_tokens_) + " ─";
+        if (buf.h < 1) buf.resize(buf.w, 1);
+        write_spans(buf, {{Span{text, dim_fg}}});
     }
     nlohmann::json to_json() const override {
         return {{"type", "turn_summary"}, {"elapsed_ms", elapsed_ms_},
@@ -543,8 +620,11 @@ class ApprovalCell final {
     std::string prompt_;
 public:
     explicit ApprovalCell(std::string prompt) : prompt_(std::move(prompt)) {}
-    std::vector<std::string> render() const {
-        return {ansi(theme::ANSI_ACCENT, "⏸ " + prompt_ + "  [y] allow  [n] deny")};
+    void render(Buffer& buf) const {
+        auto& t = theme::active_theme();
+        Style accent; accent.fg = t.accent;
+        if (buf.h < 1) buf.resize(buf.w, 1);
+        write_spans(buf, {{Span{"⏸ " + prompt_ + "  [y] allow  [n] deny", accent}}});
     }
 };
 

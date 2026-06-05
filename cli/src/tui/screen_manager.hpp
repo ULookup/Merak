@@ -2,7 +2,8 @@
 #include "chat_timeline.hpp"
 #include "composer/chat_composer.hpp"
 #include "components/status_bar.hpp"
-#include "inline_terminal.hpp"
+#include "buffer.hpp"
+#include "diff_terminal.hpp"
 #include "terminal_event_reader.hpp"
 #include "../commands/command_registry.hpp"
 #include <nlohmann/json.hpp>
@@ -27,7 +28,7 @@ class ScreenManager {
     ChatTimeline timeline_;
     ChatComposer composer_;
     StatusBar status_bar_;
-    InlineTerminal terminal_;
+    DiffTerminal terminal_;
     TerminalEventReader reader_;
     std::function<void(std::string)> on_command_;
     std::function<void()> on_cancel_;
@@ -232,7 +233,10 @@ class ScreenManager {
             std::vector<std::string> content;
             const auto& cells = timeline_.committed();
             for (size_t i = 0; i < cells.size(); ++i) {
-                auto rendered = cells[i]->render(terminal_.width());
+                Buffer cell_buf;
+                cell_buf.resize(terminal_.width(), 20);
+                cells[i]->render(cell_buf, terminal_.width());
+                auto rendered = buffer_to_lines(cell_buf);
                 content.insert(content.end(), rendered.begin(), rendered.end());
                 content.push_back("");
             }
@@ -384,28 +388,56 @@ class ScreenManager {
                      content.begin() + static_cast<long>(start + capacity));
     }
 
-    std::vector<std::string> frame_lines() const {
-        std::vector<std::string> lines;
+    static void copy_to(Buffer& dst, const Buffer& src, uint16_t dst_y) {
+        for (uint16_t sy = 0; sy < src.h && dst_y + sy < dst.h; ++sy) {
+            for (uint16_t sx = 0; sx < src.w && sx < dst.w; ++sx) {
+                dst.at(sx, dst_y + sy) = src.at(sx, sy);
+            }
+        }
+    }
+
+    void frame_buffer(Buffer& buf) const {
+        buf.clear();
+        auto& t = theme::active_theme();
+        Style dim_style; dim_style.fg = t.dim; dim_style.dim(true);
+        uint16_t w = buf.w;
+        uint16_t y = 0;
+
         if (timeline_.active()) {
-            lines = timeline_.active()->render(terminal_.width());
-            lines.push_back("");
+            Buffer cell_buf;
+            cell_buf.resize(w, 20);
+            timeline_.active()->render(cell_buf, w);
+            copy_to(buf, cell_buf, y);
+            y += cell_buf.h + 1;
         }
         if (approval_cell_) {
-            auto approval = approval_cell_->render();
-            lines.insert(lines.end(), approval.begin(), approval.end());
-            lines.push_back("");
+            Buffer approval_buf;
+            approval_buf.resize(w, 2);
+            approval_cell_->render(approval_buf);
+            copy_to(buf, approval_buf, y);
+            y += approval_buf.h + 1;
         }
-        lines.push_back(ansi(theme::ANSI_DIM, repeat_text("━", terminal_.width())));
-        auto pane = overlay_ == Overlay::None ? composer_.render() : overlay_lines();
-        lines.insert(lines.end(), pane.begin(), pane.end());
-        lines.push_back(ansi(theme::ANSI_DIM, "/ commands · Shift+Enter newline · Ctrl+O transcript · Ctrl+T tools"));
-        lines.push_back(ansi(theme::ANSI_DIM,
-            sanitize_terminal_text(status_bar_.plain_text(queued_messages_.size(), terminal_.width()))));
-        const auto max_height = terminal_.height();
-        if (lines.size() > max_height) {
-            lines.erase(lines.begin(), lines.end() - static_cast<long>(max_height));
+
+        buf.set_span(0, y, repeat_text("━", w), dim_style);
+        ++y;
+
+        if (overlay_ == Overlay::None) {
+            Buffer composer_buf;
+            composer_buf.resize(w, 15);
+            composer_.render(composer_buf);
+            copy_to(buf, composer_buf, y);
+            y += composer_buf.h;
+        } else {
+            auto pane_lines = overlay_lines();
+            for (size_t i = 0; i < pane_lines.size() && y < buf.h; ++i) {
+                buf.set_span(0, y, sanitize_terminal_text(pane_lines[i]), dim_style);
+                ++y;
+            }
         }
-        return lines;
+
+        buf.set_span(0, y, "/ commands · Shift+Enter newline · Ctrl+O transcript · Ctrl+T tools", dim_style);
+        ++y;
+        buf.set_span(0, y, sanitize_terminal_text(status_bar_.plain_text(queued_messages_.size(), w)), dim_style);
     }
 
 public:
@@ -516,16 +548,13 @@ public:
                 submit_flash_until_ = {};
             }
             terminal_.flush_scrollback(timeline_.drain_scrollback(terminal_.width()));
-            auto frame = frame_lines();
-            terminal_.redraw(frame);
-            // Position cursor at composer for IME composition window
+            Buffer frame_buf;
+            frame_buf.resize(terminal_.width(), terminal_.height());
+            frame_buffer(frame_buf);
+            terminal_.draw(frame_buf);
             if (overlay_ == Overlay::None) {
-                auto composer_lines = composer_.render();
-                if (!composer_lines.empty()) {
-                    // composer is before the last 2 frame lines (help + status bar)
-                    size_t col = 2 + composer_.cursor_col_in_line();
-                    std::cout << "\x1b[2A\r\x1b[" << col << "C" << std::flush;
-                }
+                size_t col = 2 + composer_.cursor_col_in_line();
+                std::cout << "\x1b[2A\r\x1b[" << col << "C" << std::flush;
             }
             handle_event(reader_.next());
         }
