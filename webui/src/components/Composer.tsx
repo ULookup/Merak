@@ -1,13 +1,22 @@
 import { useCallback, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAppState } from '../AppState';
+import { useToast } from './Toast';
 import styles from './Composer.module.css';
 
 export default function Composer() {
   const { state, dispatch } = useAppState();
+  const { showToast } = useToast();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+
+  const cancel = useCallback(async () => {
+    if (!state.currentRun) return;
+    try {
+      await api.cancelRun(state.currentRun);
+    } catch { /* ignore */ }
+  }, [state.currentRun]);
 
   const send = useCallback(async () => {
     const msg = text.trim();
@@ -18,14 +27,13 @@ export default function Composer() {
     try {
       await api.startRun(state.sessionId, msg, state.selectedModel);
     } catch (e) {
-      dispatch({
-        type: 'APPEND_MESSAGE',
-        message: { id: 'err_' + Date.now(), kind: 'system', text: `Error: ${e}`, error: true },
-      });
+      showToast(`Error: ${e}`, 'error');
     } finally {
       setSending(false);
     }
   }, [text, sending, state.sessionId, state.selectedModel, dispatch]);
+
+  const isRunning = state.currentRun !== null && state.status !== 'idle' && state.status !== 'waiting_approval';
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -48,9 +56,15 @@ export default function Composer() {
           rows={2}
           disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
         />
-        <button className={styles.sendBtn} onClick={send} disabled={sending || !text.trim()} data-testid="send-btn">
-          Send
-        </button>
+        {isRunning ? (
+          <button className={styles.cancelBtn} onClick={cancel} data-testid="cancel-btn">
+            Cancel
+          </button>
+        ) : (
+          <button className={styles.sendBtn} onClick={send} disabled={sending || !text.trim()} data-testid="send-btn">
+            Send
+          </button>
+        )}
       </div>
       <div className={styles.hint}>
         Enter &middot; send &nbsp;|&nbsp; Shift+Enter &middot; newline

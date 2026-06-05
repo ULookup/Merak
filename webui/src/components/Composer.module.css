@@ -51,6 +51,19 @@
   cursor: default;
 }
 
+.cancelBtn {
+  background: #7f1d1d;
+  color: #fca5a5;
+  border: none;
+  border-radius: 6px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.cancelBtn:hover { background: #991b1b; }
+
 .hint {
   font-size: 10px;
   color: #3e4055;
