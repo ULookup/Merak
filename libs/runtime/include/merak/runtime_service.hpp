@@ -104,6 +104,8 @@ private:
     std::map<std::string, std::shared_ptr<CancellationToken>> tokens_;
     std::map<std::string, std::shared_ptr<Control>> controls_;
     std::map<std::string, std::vector<std::string>> child_runs_;
+    std::map<std::string, std::shared_ptr<AgentLoop>> session_loops_;
+    std::mutex session_loops_mutex_;
     RuntimeEvent emit(const std::string& session_id, const std::string& run_id,
                       const std::string& type, nlohmann::json payload = {});
     void execute_run(RunRecord run, std::string model);

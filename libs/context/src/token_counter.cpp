@@ -47,6 +47,16 @@ int TokenCounter::fit_in_budget(
         kept++;
     }
 
+    // Protect message pairing: if the first kept message is a "tool" role,
+    // walk backwards to include its corresponding "assistant" (with tool_calls)
+    // or "user" message. This prevents sending orphaned tool messages to the
+    // LLM API without their parent assistant message containing the matching tool_call.
+    int start_idx = (int)messages.size() - kept;
+    while (start_idx > 0 && messages[start_idx].role == "tool") {
+        start_idx--;
+        kept++;
+    }
+
     return kept;
 }
 

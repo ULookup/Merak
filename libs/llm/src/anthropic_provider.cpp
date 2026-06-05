@@ -135,6 +135,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
             +[](void* userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
