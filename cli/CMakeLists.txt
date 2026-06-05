@@ -46,4 +46,10 @@ target_include_directories(test_syntax PRIVATE src)
 target_compile_features(test_syntax PRIVATE cxx_std_17)
 add_test(NAME test_syntax COMMAND test_syntax)
 
+add_executable(test_persistence tests/test_persistence.cpp)
+target_link_libraries(test_persistence PRIVATE nlohmann_json::nlohmann_json)
+target_include_directories(test_persistence PRIVATE src)
+target_compile_features(test_persistence PRIVATE cxx_std_17)
+add_test(NAME test_persistence COMMAND test_persistence)
+
 install(TARGETS merak-cli RUNTIME DESTINATION bin)
