@@ -127,11 +127,10 @@ std::future<AgentResponse> AnthropicProvider::chat(
             ("x-api-key: " + config_.api_key).c_str());
         headers = curl_slist_append(headers,
             "anthropic-version: 2023-06-01");
-        headers = curl_slist_append(headers, "Content-Type: application/json");
-
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, body_str.c_str());
+        headers = curl_slist_append(headers, "Content-Type: application/json");
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body_str.c_str());
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
