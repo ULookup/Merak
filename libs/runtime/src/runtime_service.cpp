@@ -100,7 +100,7 @@ private:
 
 RuntimeService::RuntimeService(std::filesystem::path root,LoopFactory factory,std::map<std::string, SubAgentConfig> agents,SubRunExecutor sub_run_executor):store_(std::move(root)),loop_factory_(std::move(factory)),agents_(std::move(agents)),sub_run_executor_(std::move(sub_run_executor)){}
 void RuntimeService::initialize(){store_.initialize();for(const auto&r:store_.interrupt_running_runs())emit(r.session_id,r.id,"run_interrupted",{{"reason","server restarted"}});}
-RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const std::string&t,nlohmann::json p){RuntimeEvent e{0,"",s,r,t,std::move(p)};e=store_.append_event(std::move(e));bus_.publish(e);return e;}
+RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const std::string&t,nlohmann::json p){RuntimeEvent e{0,"",s,r,t,std::move(p)};try{e=store_.append_event(e);}catch(const nlohmann::json::exception&ex){spdlog::warn("Failed to serialize event {}: {}",t,ex.what());}catch(const std::exception&){throw;}bus_.publish(e);return e;}
 SessionRecord RuntimeService::create_session(const std::string&title){auto s=store_.create_session(title);emit(s.id,"","session_created",{{"title",title}});return *store_.get_session(s.id);}
 std::vector<SessionRecord>RuntimeService::list_sessions()const{return store_.list_sessions();}
 std::optional<SessionRecord>RuntimeService::get_session(const std::string&id)const{return store_.get_session(id);}

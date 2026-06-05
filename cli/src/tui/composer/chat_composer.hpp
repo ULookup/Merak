@@ -33,7 +33,7 @@ class ChatComposer {
     std::string draft_;
     std::vector<std::pair<std::string, std::string>> pasted_;
     unsigned paste_counter_ = 0;
-    int slash_selected_ = 0;
+    mutable int slash_selected_ = 0;
     MentionMenu mention_menu_;
     bool submit_flash_ = false;
 
