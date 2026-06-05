@@ -5,6 +5,7 @@ add_library(merak-http STATIC
 target_include_directories(merak-http PUBLIC include)
 target_link_libraries(merak-http PUBLIC
     merak-core
+    merak-config
     merak-runtime
     merak-worldbuilding
     httplib::httplib

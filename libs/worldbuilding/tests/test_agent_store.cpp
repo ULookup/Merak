@@ -15,7 +15,7 @@
 #include <vector>
 
 using namespace merak::worldbuilding;
-
+using namespace merak::worldbuilding::test;
 namespace {
 
 std::filesystem::path temp_dir() {

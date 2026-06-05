@@ -15,6 +15,9 @@
 #include <utility>
 
 namespace merak::worldbuilding {
+
+AgentStore::~AgentStore() = default;
+
 namespace {
 
 AgentKind agent_kind_from_string(const std::string& value) {

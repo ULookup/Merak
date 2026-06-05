@@ -246,7 +246,7 @@ std::vector<ToolSpec> ToolRegistry::pinned_schemas() const {
 
 std::string ToolRegistry::search_tools(const std::string& query, size_t max_results) const {
     struct ScoredMeta {
-        const tools::ToolMeta* meta;
+        const ToolMeta* meta;
         int score;
     };
     std::vector<ScoredMeta> scored;
@@ -298,7 +298,7 @@ std::string ToolRegistry::search_tools(const std::string& query, size_t max_resu
 }
 
 std::string ToolRegistry::select_tool(const std::string& name) const {
-    const tools::ToolMeta* meta = tools::find_meta(name);
+    const ToolMeta* meta = tools::find_meta(name);
     if (!meta) {
         return nlohmann::json{{"error", "tool not found: " + name}}.dump();
     }

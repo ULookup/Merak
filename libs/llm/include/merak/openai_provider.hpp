@@ -20,6 +20,7 @@ public:
 
     std::string name() const override { return "openai"; }
     bool supports_caching() const override { return true; }
+    bool test_connection() override;
     const CacheStats& cache_stats() const { return stats_; }
 
 private:

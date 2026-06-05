@@ -16,6 +16,7 @@ class PgPool;
 class WorldStore {
 public:
     WorldStore(std::string_view pg_conninfo, std::filesystem::path data_root);
+    ~WorldStore();
 
     void initialize();
     WorldMeta create_world(const std::string& name,
