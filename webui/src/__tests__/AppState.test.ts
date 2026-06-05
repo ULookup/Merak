@@ -295,6 +295,29 @@ describe('AppState reducer', () => {
     expect(next.inspectorTab).toBe('files');
   });
 
+  it('opens generated files into an editable buffer', () => {
+    const prev = state({
+      generatedFiles: [
+        {
+          id: 'file_1',
+          title: 'chapter-12',
+          path: '/Users/me/novel/chapter-12.md',
+          updatedAt: 1,
+        },
+      ],
+    });
+    const opened = reducer(prev, { type: 'OPEN_GENERATED_FILE', fileId: 'file_1' });
+    expect(opened.activeEditorFileId).toBe('file_1');
+    expect(opened.editorBuffers.file_1).toBe('');
+
+    const edited = reducer(opened, {
+      type: 'UPDATE_EDITOR_BUFFER',
+      fileId: 'file_1',
+      content: 'The revised chapter begins here.',
+    });
+    expect(edited.editorBuffers.file_1).toBe('The revised chapter begins here.');
+  });
+
   describe('SSE frame: run_failed', () => {
     it('commits active and adds error message', () => {
       const prev = state({ currentRun: 'r1' });

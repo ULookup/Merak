@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppStateProvider, useAppState } from '../AppState';
 import BrandMark from '../components/BrandMark';
@@ -166,5 +166,20 @@ describe('InspectorPanel', () => {
     expect(screen.getByText('chapter-12')).toBeDefined();
     expect(screen.getByText('/Users/me/novel/chapter-12.md')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Open chapter-12 in editor' })).toBeDefined();
+  });
+
+  it('opens a text editor when a generated file is double-clicked', async () => {
+    render(
+      <AppStateProvider>
+        <FilesHarness />
+      </AppStateProvider>,
+    );
+
+    fireEvent.doubleClick(await screen.findByText('chapter-12'));
+    const editor = await screen.findByLabelText('Edit chapter-12');
+    fireEvent.change(editor, { target: { value: 'A revised opening line.' } });
+
+    expect((editor as HTMLTextAreaElement).value).toBe('A revised opening line.');
+    expect(screen.getAllByText('/Users/me/novel/chapter-12.md')).toHaveLength(2);
   });
 });

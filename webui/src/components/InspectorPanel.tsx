@@ -24,6 +24,8 @@ function statusLabel(value: string | undefined) {
 export default function InspectorPanel({ open = true, onClose }: InspectorPanelProps) {
   const { state, dispatch } = useAppState();
   const selectedWorld = state.worlds.find((world) => world.id === state.worldId);
+  const activeFile =
+    state.generatedFiles.find((file) => file.id === state.activeEditorFileId) ?? null;
   const used = state.usage.inputTokens + state.usage.outputTokens;
   const model = state.metadata?.models?.find((m) => m.name === state.selectedModel);
   const budget = model?.max_context_tokens ?? 128000;
@@ -97,7 +99,15 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
                   ) : (
                     <div className={styles.fileList}>
                       {state.generatedFiles.map((file) => (
-                        <article className={styles.fileItem} key={file.id}>
+                        <article
+                          className={`${styles.fileItem} ${
+                            activeFile?.id === file.id ? styles.fileItemActive : ''
+                          }`}
+                          key={file.id}
+                          onDoubleClick={() =>
+                            dispatch({ type: 'OPEN_GENERATED_FILE', fileId: file.id })
+                          }
+                        >
                           <div>
                             <strong>{file.title}</strong>
                             <code>{file.path}</code>
@@ -106,6 +116,9 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
                             className={styles.entryButton}
                             type="button"
                             aria-label={`Open ${file.title} in editor`}
+                            onClick={() =>
+                              dispatch({ type: 'OPEN_GENERATED_FILE', fileId: file.id })
+                            }
                           >
                             Open in editor
                           </button>
@@ -114,6 +127,31 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
                     </div>
                   )}
                 </section>
+
+                {activeFile && (
+                  <section className={styles.editorPanel}>
+                    <div className={styles.editorHeader}>
+                      <div>
+                        <div className={styles.sectionTitle}>Text Editor</div>
+                        <strong>{activeFile.title}</strong>
+                        <code>{activeFile.path}</code>
+                      </div>
+                      <span>Local draft</span>
+                    </div>
+                    <textarea
+                      className={styles.editor}
+                      aria-label={`Edit ${activeFile.title}`}
+                      value={state.editorBuffers[activeFile.id] ?? ''}
+                      onChange={(event) =>
+                        dispatch({
+                          type: 'UPDATE_EDITOR_BUFFER',
+                          fileId: activeFile.id,
+                          content: event.target.value,
+                        })
+                      }
+                    />
+                  </section>
+                )}
               </>
             )}
 

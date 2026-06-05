@@ -42,6 +42,8 @@ export interface AppState {
   worldbuildingError: string | null;
   outputDirectory: string | null;
   generatedFiles: GeneratedFileEntry[];
+  activeEditorFileId: string | null;
+  editorBuffers: Record<string, string>;
 }
 
 export const initialState: AppState = {
@@ -65,6 +67,8 @@ export const initialState: AppState = {
   worldbuildingError: null,
   outputDirectory: null,
   generatedFiles: [],
+  activeEditorFileId: null,
+  editorBuffers: {},
 };
 
 let nextId = 1;
@@ -90,6 +94,8 @@ export type Action =
     }
   | { type: 'SET_OUTPUT_DIRECTORY'; path: string | null }
   | { type: 'REGISTER_GENERATED_FILE'; file: GeneratedFileEntry }
+  | { type: 'OPEN_GENERATED_FILE'; fileId: string }
+  | { type: 'UPDATE_EDITOR_BUFFER'; fileId: string; content: string }
   | { type: 'SET_MODEL'; model: string }
   | { type: 'SET_LAST_SEQ'; seq: number }
   | { type: 'APPEND_MESSAGE'; message: Message }
@@ -150,6 +156,29 @@ export function reducer(state: AppState, action: Action): AppState {
         outputDirectory:
           state.outputDirectory ?? directoryFromPath(action.file.path) ?? state.outputDirectory,
         inspectorTab: 'files',
+      };
+
+    case 'OPEN_GENERATED_FILE': {
+      const file = state.generatedFiles.find((item) => item.id === action.fileId);
+      if (!file) return state;
+      return {
+        ...state,
+        activeEditorFileId: file.id,
+        inspectorTab: 'files',
+        editorBuffers: {
+          ...state.editorBuffers,
+          [file.id]: state.editorBuffers[file.id] ?? '',
+        },
+      };
+    }
+
+    case 'UPDATE_EDITOR_BUFFER':
+      return {
+        ...state,
+        editorBuffers: {
+          ...state.editorBuffers,
+          [action.fileId]: action.content,
+        },
       };
 
     case 'SET_TOOL_DONE': {

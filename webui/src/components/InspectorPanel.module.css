@@ -245,6 +245,14 @@
   border-color: rgba(122, 79, 19, 0.2);
 }
 
+.fileItemActive {
+  border-color: rgba(122, 79, 19, 0.28);
+  background: linear-gradient(135deg, var(--brand-wash), #fff);
+  box-shadow:
+    inset 3px 0 0 var(--brand),
+    var(--shadow-sm);
+}
+
 .fileItem strong,
 .fileItem code {
   display: block;
@@ -258,9 +266,77 @@
   overflow-wrap: anywhere;
 }
 
+.editorPanel {
+  min-height: 340px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: panelRise 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.editorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.editorHeader strong,
+.editorHeader code {
+  display: block;
+}
+
+.editorHeader strong {
+  color: var(--ink);
+}
+
+.editorHeader code {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.editorHeader span {
+  color: var(--brand);
+  background: var(--brand-soft);
+  border-radius: 999px;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 850;
+  padding: 5px 8px;
+}
+
+.editor {
+  flex: 1;
+  min-height: 260px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.9)),
+    repeating-linear-gradient(0deg, transparent 0, transparent 30px, rgba(122, 79, 19, 0.045) 31px);
+  color: var(--ink);
+  padding: 14px;
+  line-height: 1.7;
+  font-size: 13px;
+  font-family: inherit;
+}
+
 @media (max-width: 420px) {
   .fileItem {
     align-items: stretch;
+    flex-direction: column;
+  }
+
+  .editorHeader {
     flex-direction: column;
   }
 }
