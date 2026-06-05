@@ -3,6 +3,7 @@ import styles from './Sidebar.module.css';
 import ContextMeter from './Sidebar/ContextMeter';
 import ModelSelector from './Sidebar/ModelSelector';
 import SessionList from './Sidebar/SessionList';
+import SettingsPanel from './Sidebar/SettingsPanel';
 import ToolPanel from './Sidebar/ToolPanel';
 import WorldSelector from './Sidebar/WorldSelector';
 
@@ -35,6 +36,7 @@ export default function Sidebar({ open = true, onClose }: SidebarProps) {
       <ModelSelector />
       <ToolPanel />
       <ContextMeter />
+      <SettingsPanel />
     </aside>
   );
 }

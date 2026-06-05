@@ -57,4 +57,14 @@ export const api = {
   getWorldTime: (worldId: string) => request('GET', `/api/worldbuilding/${worldId}/time`),
 
   sseUrl: (id: string, after = 0) => `${BASE}/v1/sessions/${id}/events/stream?after=${after}`,
+
+  getConfig: () => request('GET', '/api/config/llm'),
+
+  saveConfig: (config: {
+    provider?: string;
+    api_key?: string;
+    api_base_url?: string;
+    default_model?: string;
+    max_output_tokens?: number;
+  }) => request('POST', '/api/config/llm', config),
 };
