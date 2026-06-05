@@ -1,4 +1,4 @@
-const BASE = 'http://127.0.0.1:3888';
+const BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:3888';
 
 async function request(method: string, path: string, body?: unknown) {
   const opts: RequestInit = {
