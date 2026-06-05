@@ -30,6 +30,19 @@ bool starts_with(const std::string& s, const std::string& prefix) {
     return s.rfind(prefix, 0) == 0;
 }
 
+bool requires_world(WorldbuildingAction action) {
+    switch (action) {
+    case WorldbuildingAction::WorldList:
+    case WorldbuildingAction::WorldCreate:
+    case WorldbuildingAction::WorldUse:
+    case WorldbuildingAction::WorldDelete:
+    case WorldbuildingAction::None:
+        return false;
+    default:
+        return true;
+    }
+}
+
 } // namespace
 
 std::optional<WorldbuildingCommand>
@@ -291,7 +304,18 @@ std::string execute_worldbuilding_command(const WorldbuildingCommand& cmd,
         }
     };
 
+    auto del = [&](const std::string& path) -> std::string {
+        try {
+            return http("DELETE", path, {}).dump(2);
+        } catch (const std::exception& e) {
+            return std::string("Error: ") + e.what();
+        }
+    };
+
     std::string wid = cmd.current_world_id;
+    if (requires_world(cmd.action) && wid.empty()) {
+        return "Error: select a world first with /world use <id>";
+    }
 
     switch (cmd.action) {
     case WorldbuildingAction::WorldList:
@@ -301,7 +325,7 @@ std::string execute_worldbuilding_command(const WorldbuildingCommand& cmd,
     case WorldbuildingAction::WorldUse:
         return "Switched to world: " + (cmd.args.empty() ? "?" : cmd.args[0]);
     case WorldbuildingAction::WorldDelete:
-        return method("/api/worldbuilding/worlds/" + (cmd.args.empty() ? "" : cmd.args[0]) + "?action=delete");
+        return del("/api/worldbuilding/worlds/" + (cmd.args.empty() ? "" : cmd.args[0]));
     case WorldbuildingAction::AgentList:
         return method("/api/worldbuilding/" + wid + "/agents");
     case WorldbuildingAction::AgentCreate:

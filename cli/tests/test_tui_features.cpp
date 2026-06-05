@@ -92,6 +92,24 @@ int main() {
     }
 
     {
+        Buffer buf;
+        buf.resize(40, 4);
+        const std::string text = "我是一个创作助手";
+        buf.set_span(0, 0, text, Style{});
+        assert(buf.at(0, 0).width == 2);
+        assert(buf.at(1, 0).width == 0);
+        assert(buf.at(2, 0).width == 2);
+        auto rendered = buffer_to_lines(buf);
+        assert(contains(rendered, text));
+        assert(!contains(rendered, "我 是"));
+
+        buf.set_span(0, 0, "ab", Style{});
+        rendered = buffer_to_lines(buf);
+        assert(contains(rendered, "ab"));
+        assert(!contains(rendered, text));
+    }
+
+    {
         StatusBar bar;
         bar.set_provider("openai");
         bar.set_model("gpt-4o");

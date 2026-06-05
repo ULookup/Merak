@@ -18,6 +18,7 @@ struct RuntimeMetadata {
     std::vector<ModelEntry> models;
     std::string permission_mode;
     bool memory_enabled = false;
+    bool worldbuilding_enabled = false;
     std::vector<ToolSpec> tools;
     std::vector<McpServerStatus> mcp_servers;
     std::vector<AgentMetadata> agents;
