@@ -14,4 +14,9 @@ target_link_libraries(merak-cli PRIVATE
 )
 target_include_directories(merak-cli PRIVATE src)
 
+add_executable(test_buffer tests/test_buffer.cpp)
+target_include_directories(test_buffer PRIVATE src)
+target_compile_features(test_buffer PRIVATE cxx_std_17)
+add_test(NAME test_buffer COMMAND test_buffer)
+
 install(TARGETS merak-cli RUNTIME DESTINATION bin)
