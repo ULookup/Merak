@@ -119,6 +119,7 @@ static int run_server(int argc,char**argv) {
             portable_pg = std::make_unique<PortablePg>(pg_path);
             if (portable_pg->start()) {
                 cfg.memory.db_connection = portable_pg->connection_string();
+                cfg.memory.enabled = true;
                 std::cout << "Portable PostgreSQL started on port " << portable_pg->port() << "\n";
             } else {
                 std::cerr << "Warning: portable PostgreSQL failed to start\n";
@@ -213,8 +214,9 @@ static int run_server(int argc,char**argv) {
         }
     }
     // Register Worldbuilding HTTP routes
+    std::shared_ptr<WorldbuildingHttpHandler> wb_handler;
     if (wb_service) {
-        auto wb_handler = std::make_shared<WorldbuildingHttpHandler>(wb_service);
+        wb_handler = std::make_shared<WorldbuildingHttpHandler>(wb_service);
         wb_handler->install_routes(server.raw_server());
     }
     auto port=parse_port(argc,argv);std::cout<<"merak serve listening on 127.0.0.1:"<<port<<"\n";server.listen(port);return 0;
