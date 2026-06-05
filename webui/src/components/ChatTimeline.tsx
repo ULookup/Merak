@@ -7,6 +7,7 @@ import StatusPill from './cells/StatusPill';
 import SystemCell from './cells/SystemCell';
 import ToolCell from './cells/ToolCell';
 import UserCell from './cells/UserCell';
+import styles from './ChatTimeline.module.css';
 
 function renderMessage(msg: Message) {
   switch (msg.kind) {
@@ -52,7 +53,7 @@ export default function ChatTimeline() {
   }, [state.messages]);
 
   return (
-    <div className="chat-area">
+    <div className={styles.area}>
       {state.messages.map(renderMessage)}
       <div ref={bottomRef} />
     </div>

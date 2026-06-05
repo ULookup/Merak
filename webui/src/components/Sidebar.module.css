@@ -1,0 +1,81 @@
+.sidebar {
+  width: 230px;
+  min-width: 230px;
+  background: #0b0d12;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #1e2028;
+}
+
+.section {
+  padding: 14px 16px;
+  border-bottom: 1px solid #14161d;
+}
+
+.label {
+  color: #555768;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 8px;
+}
+
+.select {
+  width: 100%;
+  background: #14161f;
+  color: #c8c9d4;
+  border: 1px solid #23252f;
+  border-radius: 5px;
+  padding: 7px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sessions {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sessionList {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sessionItem {
+  padding: 8px 12px;
+  border-radius: 5px;
+  color: #7d7f94;
+  cursor: pointer;
+  margin-bottom: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sessionItem:hover {
+  background: #11131d;
+  color: #b0b2c0;
+}
+
+.sessionItemActive {
+  background: #191b2a;
+  color: #e1e2ed;
+}
+
+.newBtn {
+  width: 100%;
+  background: none;
+  border: 1px dashed #252733;
+  color: #555768;
+  border-radius: 5px;
+  padding: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.newBtn:hover {
+  border-color: #444660;
+  color: #8e90a4;
+}

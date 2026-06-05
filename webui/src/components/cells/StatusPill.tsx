@@ -1,4 +1,5 @@
 import type { StatusLabel } from '../../api/types';
+import styles from './Cells.module.css';
 
 const colors: Record<StatusLabel, string> = {
   idle: '#22c55e',
@@ -14,7 +15,7 @@ interface Props {
 
 export default function StatusPill({ label }: Props) {
   return (
-    <div className="msg-pill" style={{ color: colors[label], borderColor: colors[label] }}>
+    <div className={styles.pill} style={{ color: colors[label], borderColor: colors[label] }}>
       {label === 'waiting_approval'
         ? 'Waiting Approval'
         : label.charAt(0).toUpperCase() + label.slice(1)}

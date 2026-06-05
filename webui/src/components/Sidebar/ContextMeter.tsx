@@ -1,4 +1,5 @@
 import { useAppState } from '../../AppState';
+import styles from './ContextMeter.module.css';
 
 export default function ContextMeter() {
   const { state } = useAppState();
@@ -8,10 +9,10 @@ export default function ContextMeter() {
   const pct = Math.min(100, Math.round((used / budget) * 100));
 
   return (
-    <div className="ctx-meter">
-      Context<span className="ctx-pct">{pct}%</span>
-      <div className="ctx-bar">
-        <div className="ctx-fill" style={{ width: `${pct}%` }} />
+    <div className={styles.meter}>
+      Context<span className={styles.pct}>{pct}%</span>
+      <div className={styles.bar}>
+        <div className={styles.fill} style={{ width: `${pct}%` }} />
       </div>
       {(used / 1000).toFixed(1)}K / {(budget / 1000).toFixed(0)}K tokens
     </div>

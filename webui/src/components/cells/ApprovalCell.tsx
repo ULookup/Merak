@@ -1,5 +1,6 @@
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
+import styles from './Cells.module.css';
 
 interface Props {
   approvalId: string;
@@ -28,16 +29,16 @@ export default function ApprovalCell({ approvalId, approvalName, approvalArgs }:
   }
 
   return (
-    <div className="msg-approval">
-      <span className="approval-label">Approval needed</span>
+    <div className={styles.approval}>
+      <span className={styles.approvalLabel}>Approval needed</span>
       <span>
         {approvalName}
         {approvalArgs ? ` ${approvalArgs}` : ''}
       </span>
-      <button className="btn-allow" onClick={() => handle(true)}>
+      <button className={styles.btnAllow} onClick={() => handle(true)} data-testid="approval-allow">
         Allow
       </button>
-      <button className="btn-deny" onClick={() => handle(false)}>
+      <button className={styles.btnDeny} onClick={() => handle(false)} data-testid="approval-deny">
         Deny
       </button>
     </div>

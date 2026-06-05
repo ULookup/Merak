@@ -1,0 +1,161 @@
+.msg {
+  max-width: 82%;
+  padding: 10px 15px;
+  border-radius: 7px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.msgUser {
+  background: #1e2a45;
+  align-self: flex-end;
+}
+
+.msgAssistant {
+  background: #13151d;
+  align-self: flex-start;
+  border: 1px solid #1f2230;
+}
+.msgAssistant pre {
+  background: #0b0d12;
+  border: 1px solid #1f2230;
+  border-radius: 4px;
+  padding: 10px 14px;
+  overflow-x: auto;
+  font-size: 12px;
+  margin: 6px 0;
+}
+.msgAssistant code {
+  font-size: 12px;
+}
+.msgAssistant p {
+  margin: 4px 0;
+}
+
+.pill {
+  align-self: center;
+  font-size: 11px;
+  padding: 4px 11px;
+  border-radius: 10px;
+  font-weight: 500;
+  background: #181a1e;
+  border: 1px solid #2a2c33;
+}
+
+.tool {
+  align-self: flex-start;
+  background: #0f121c;
+  border: 1px solid #1c2340;
+  border-radius: 7px;
+  padding: 9px 13px;
+  font-size: 12px;
+  color: #7da5d6;
+  min-width: 280px;
+}
+
+.toolError {
+  border-color: #4a2020;
+  color: #fca5a5;
+}
+
+.toolHeader {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.toolIndicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.toolIndicatorRunning {
+  background: #3b82f6;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.toolIndicatorDone {
+  background: #22c55e;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.toolMeta {
+  margin-top: 5px;
+  font-size: 11px;
+  color: #555768;
+}
+.toolMeta pre {
+  background: #0b0d12;
+  padding: 6px 10px;
+  border-radius: 3px;
+  margin-top: 3px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.approval {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  background: #0f0f15;
+  border: 1px solid #332f1a;
+  border-radius: 7px;
+  font-size: 12px;
+  color: #f59e0b;
+}
+
+.approvalLabel {
+  font-weight: 600;
+}
+
+.btnAllow,
+.btnDeny {
+  border: none;
+  border-radius: 4px;
+  padding: 4px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.btnAllow {
+  background: #14532d;
+  color: #22c55e;
+}
+.btnAllow:hover {
+  background: #166534;
+}
+
+.btnDeny {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+.btnDeny:hover {
+  background: #991b1b;
+}
+
+.system {
+  align-self: center;
+  font-size: 11px;
+  color: #555768;
+  padding: 4px 12px;
+}
+
+.systemError {
+  color: #fca5a5;
+}

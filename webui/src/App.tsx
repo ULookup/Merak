@@ -4,7 +4,7 @@ import { AppStateProvider, useAppState } from './AppState';
 import MainPanel from './components/MainPanel';
 import Sidebar from './components/Sidebar';
 import { useSSE } from './hooks/useSSE';
-import './App.css';
+import styles from './App.module.css';
 
 function AppInner() {
   const { state, dispatch } = useAppState();
@@ -48,7 +48,7 @@ function AppInner() {
   useSSE(sseUrl, dispatch, state.lastSeq);
 
   return (
-    <div className="webui-layout">
+    <div className={styles.layout}>
       <Sidebar />
       <MainPanel />
     </div>

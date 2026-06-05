@@ -1,5 +1,6 @@
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
+import styles from '../Sidebar.module.css';
 
 export default function SessionList() {
   const { state, dispatch } = useAppState();
@@ -34,20 +35,21 @@ export default function SessionList() {
   }
 
   return (
-    <div className="sb-section sb-sessions">
-      <div className="sb-label">Sessions</div>
-      <div className="sb-session-list">
+    <div className={`${styles.section} ${styles.sessions}`}>
+      <div className={styles.label}>Sessions</div>
+      <div className={styles.sessionList}>
         {state.sessions.map((s) => (
           <div
             key={s.id}
-            className={`sb-session-item ${s.id === state.sessionId ? 'active' : ''}`}
+            data-testid="session-item"
+            className={`${styles.sessionItem} ${s.id === state.sessionId ? styles.sessionItemActive : ''}`}
             onClick={() => select(s.id)}
           >
             {s.title || s.id.slice(0, 12)}
           </div>
         ))}
       </div>
-      <button className="sb-new-btn" onClick={create}>
+      <button className={styles.newBtn} onClick={create} data-testid="new-session-btn">
         New Session
       </button>
     </div>

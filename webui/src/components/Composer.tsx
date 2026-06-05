@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAppState } from '../AppState';
+import styles from './Composer.module.css';
 
 export default function Composer() {
   const { state, dispatch } = useAppState();
@@ -13,11 +14,6 @@ export default function Composer() {
     if (!msg || sending || !state.sessionId) return;
     setText('');
     setSending(true);
-
-    dispatch({
-      type: 'APPEND_MESSAGE',
-      message: { id: 'usr_' + Date.now(), kind: 'user', text: msg },
-    });
 
     try {
       await api.startRun(state.sessionId, msg, state.selectedModel);
@@ -39,11 +35,12 @@ export default function Composer() {
   }
 
   return (
-    <div className="composer-area">
-      <div className="composer-box">
+    <div className={styles.area}>
+      <div className={styles.box}>
         <textarea
           ref={ref}
-          className="composer-input"
+          className={styles.input}
+          data-testid="composer-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
@@ -51,11 +48,11 @@ export default function Composer() {
           rows={2}
           disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
         />
-        <button className="send-btn" onClick={send} disabled={sending || !text.trim()}>
+        <button className={styles.sendBtn} onClick={send} disabled={sending || !text.trim()} data-testid="send-btn">
           Send
         </button>
       </div>
-      <div className="composer-hint">
+      <div className={styles.hint}>
         Enter &middot; send &nbsp;|&nbsp; Shift+Enter &middot; newline
       </div>
     </div>
