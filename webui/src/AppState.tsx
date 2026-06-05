@@ -336,8 +336,14 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
     case 'text_delta':
       return reducer(state, { type: 'UPDATE_ASSISTANT', text: (p.text as string) ?? '' });
 
-    case 'state_changed':
-      return reducer(state, { type: 'SET_STATUS', status: (p.to as StatusLabel) ?? 'idle' });
+    case 'state_changed': {
+      const to = ((p.to as string) ?? '').toLowerCase();
+      // Terminal states have their own events (run_completed/run_failed)
+      if (to === 'complete' || to === 'error') return state;
+      const validLabels = new Set(['idle', 'thinking', 'responding', 'acting', 'observing', 'context_ready']);
+      const label = validLabels.has(to) ? (to as StatusLabel) : state.status;
+      return reducer(state, { type: 'SET_STATUS', status: label });
+    }
 
     case 'tool_started':
       return reducer(state, {

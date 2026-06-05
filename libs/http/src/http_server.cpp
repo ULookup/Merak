@@ -58,7 +58,7 @@ void HttpServer::install_routes(){
     server_.Post("/api/config/llm", [this](const auto& req, auto& res) { handle_config_set(req, res); });
     server_.Post("/api/config/llm/test", [this](const auto& req, auto& res) { handle_config_test(req, res); });
 }
-void HttpServer::listen(int port){server_.listen("127.0.0.1",port);}
+void HttpServer::listen(int port){if(!server_.listen("127.0.0.1",port))throw std::runtime_error("Failed to bind to port "+std::to_string(port)+" — already in use?");}
 void HttpServer::stop(){server_.stop();}
 void HttpServer::serve_static_dir(const std::string& mount_point, const std::string& dir_path) {
     server_.set_mount_point(mount_point.c_str(), dir_path.c_str());
