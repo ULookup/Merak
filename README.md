@@ -204,14 +204,6 @@ npm run lint
 npm run build
 ```
 
-## 文档
-
-| 文档 | 内容 |
-|------|------|
-| [docs/worldbuilding-novel-agent.md](docs/worldbuilding-novel-agent.md) | Worldbuilding 与长篇小说 Agent 设计 |
-| [config/prompts/merak_core.md](config/prompts/merak_core.md) | Merak 核心 Prompt |
-| [webui/](webui/) | Web UI 源码与开发入口 |
-
 ## 技术栈
 
 | 层级 | 技术 |
