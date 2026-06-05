@@ -1,0 +1,15 @@
+.area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (max-width: 767px) {
+  .area {
+    padding: 16px 12px;
+    padding-top: 44px;
+  }
+}

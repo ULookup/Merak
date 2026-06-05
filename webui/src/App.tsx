@@ -1,0 +1,84 @@
+import { useEffect, useState } from 'react';
+import { api } from './api/client';
+import { AppStateProvider, useAppState } from './AppState';
+import ConnectionBanner from './components/ConnectionBanner';
+import ErrorBoundary from './components/ErrorBoundary';
+import MainPanel from './components/MainPanel';
+import Sidebar from './components/Sidebar';
+import Skeleton from './components/Skeleton';
+import { ToastProvider } from './components/Toast';
+import { useSSE } from './hooks/useSSE';
+import styles from './App.module.css';
+
+function AppInner() {
+  const { state, dispatch } = useAppState();
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
+
+  useEffect(() => {
+    api
+      .metadata()
+      .then((meta) => {
+        dispatch({ type: 'SET_METADATA', metadata: meta });
+      })
+      .catch(() => {});
+    api
+      .listSessions()
+      .then((data) => {
+        dispatch({ type: 'SET_SESSIONS', sessions: data.sessions ?? [] });
+      })
+      .catch(() => {});
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (!state.sessionId) {
+      api
+        .createSession()
+        .then((data) => {
+          const id = data.session_id as string;
+          dispatch({ type: 'SET_SESSION', sessionId: id });
+        })
+        .catch(() => {});
+      return;
+    }
+    api
+      .listSessions()
+      .then((data) => {
+        dispatch({ type: 'SET_SESSIONS', sessions: data.sessions ?? [] });
+      })
+      .catch(() => {});
+  }, [state.sessionId, dispatch]);
+
+  const sseUrl = state.sessionId ? api.sseUrl(state.sessionId, state.lastSeq) : null;
+
+  const connState = useSSE(sseUrl, dispatch, state.lastSeq);
+
+  const isLoading = state.metadata === null && state.sessions.length === 0;
+
+  if (isLoading) {
+    return <Skeleton />;
+  }
+
+  return (
+    <ToastProvider>
+      <div className={styles.layout}>
+        <ErrorBoundary>
+          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        </ErrorBoundary>
+        <ErrorBoundary>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <ConnectionBanner state={connState} />
+            <MainPanel onToggleSidebar={() => setSidebarOpen((prev) => !prev)} sidebarOpen={sidebarOpen} />
+          </div>
+        </ErrorBoundary>
+      </div>
+    </ToastProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <AppStateProvider>
+      <AppInner />
+    </AppStateProvider>
+  );
+}
