@@ -4,6 +4,7 @@ import styles from './Cells.module.css';
 const colors: Record<StatusLabel, string> = {
   idle: '#22c55e',
   thinking: '#a78bfa',
+  responding: '#f472b6',
   acting: '#60a5fa',
   observing: '#94a3b8',
   waiting_approval: '#f59e0b',
