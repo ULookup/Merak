@@ -79,15 +79,29 @@ static std::string normalize_team_pattern(std::string pattern){
     return pattern;
 }
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+static std::filesystem::path exe_dir_path() {
+#ifdef _WIN32
+    WCHAR path[MAX_PATH];
+    if (GetModuleFileNameW(nullptr, path, MAX_PATH) == 0) return {};
+    std::filesystem::path p(path);
+    return p.parent_path();
+#else
+    return std::filesystem::canonical("/proc/self/exe").parent_path();
+#endif
+}
+
 static int run_server(int argc,char**argv) {
     auto cfg=load_config();
     // --- Portable PostgreSQL ---
     std::unique_ptr<PortablePg> portable_pg;
     {
-        auto exe_dir = std::filesystem::canonical(
-            std::filesystem::path(argv[0]).parent_path());
-        auto pg_path = exe_dir / "pg";
-        if (std::filesystem::exists(pg_path) && cfg.memory.db_connection.empty()) {
+        auto exe = exe_dir_path();
+        auto pg_path = exe / "pg";
+        if (!exe.empty() && std::filesystem::exists(pg_path) && cfg.memory.db_connection.empty()) {
             portable_pg = std::make_unique<PortablePg>(pg_path);
             if (portable_pg->start()) {
                 cfg.memory.db_connection = portable_pg->connection_string();
@@ -172,13 +186,12 @@ static int run_server(int argc,char**argv) {
     metadata.tools = tools->all_tools();
     metadata.mcp_servers = mcp_status;
     metadata.agents = runtime->agents();
-    HttpServer server(runtime, metadata, merak_home());
+    HttpServer server(runtime, metadata, merak_home(), llm);
     // Serve static WebUI files
     {
-        auto exe_dir = std::filesystem::canonical(
-            std::filesystem::path(argv[0]).parent_path());
-        auto webui_path = exe_dir / "webui";
-        if (std::filesystem::exists(webui_path)) {
+        auto exe = exe_dir_path();
+        auto webui_path = exe / "webui";
+        if (!exe.empty() && std::filesystem::exists(webui_path)) {
             server.serve_static_dir("/", webui_path.string());
             std::cout << "Serving WebUI from " << webui_path << "\n";
         }

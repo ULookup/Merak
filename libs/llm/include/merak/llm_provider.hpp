@@ -40,6 +40,7 @@ public:
 
     virtual std::string name() const = 0;
     virtual bool supports_caching() const { return false; }
+    virtual bool test_connection() { return false; }
 };
 
 struct CacheStats {

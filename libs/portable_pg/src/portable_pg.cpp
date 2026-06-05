@@ -106,6 +106,22 @@ bool PortablePg::start_server() {
     return true;
 }
 
+bool PortablePg::wait_ready(int timeout_seconds) {
+    for (int i = 0; i < timeout_seconds * 2; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock == INVALID_SOCKET) continue;
+        struct sockaddr_in addr = {};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(static_cast<u_short>(port_));
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+        int result = connect(sock, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr));
+        closesocket(sock);
+        if (result != SOCKET_ERROR) return true;
+    }
+    return false;
+}
+
 bool PortablePg::create_database() {
     auto psql_path = bin_dir() / "psql";
 #ifdef _WIN32
@@ -135,6 +151,10 @@ bool PortablePg::start() {
         std::cerr << "PortablePg: pg_ctl start failed\n";
         return false;
     }
+    if (!wait_ready()) {
+        std::cerr << "PortablePg: timed out waiting for PostgreSQL to accept connections\n";
+        return false;
+    }
     create_database();
     return true;
 }
@@ -153,7 +173,10 @@ void PortablePg::stop() {
 #else
         << " -m fast > /dev/null 2>&1";
 #endif
-    std::system(cmd.str().c_str());
+    int ret = std::system(cmd.str().c_str());
+    if (ret != 0) {
+        std::cerr << "PortablePg: pg_ctl stop returned " << ret << " (postgres may still be running)\n";
+    }
     running_ = false;
 }
 

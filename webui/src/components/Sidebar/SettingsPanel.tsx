@@ -19,7 +19,7 @@ export default function SettingsPanel() {
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'saved' | 'tested' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'saved' | 'test_ok' | 'test_fail' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -55,13 +55,11 @@ export default function SettingsPanel() {
     setTesting(true);
     setStatus('idle');
     try {
-      const res = await api.metadata();
-      if (res.provider) {
-        setStatus('tested');
-      }
-    } catch (e) {
-      setStatus('error');
-      setErrorMsg(e instanceof Error ? e.message : 'Connection test failed');
+      await api.testConfig();
+      setStatus('test_ok');
+    } catch {
+      setStatus('test_fail');
+      setErrorMsg('LLM connection test failed — check your API key and network.');
     } finally {
       setTesting(false);
     }
@@ -129,8 +127,13 @@ export default function SettingsPanel() {
         </button>
       </div>
 
-      {status === 'saved' && <div className={styles.ok}>Configuration saved.</div>}
-      {status === 'tested' && <div className={styles.ok}>Connection successful.</div>}
+      {status === 'saved' && (
+        <div className={styles.ok}>Configuration saved. Restart server to apply changes.</div>
+      )}
+      {status === 'test_ok' && (
+        <div className={styles.ok}>LLM connection test passed.</div>
+      )}
+      {status === 'test_fail' && <div className={styles.error}>{errorMsg}</div>}
       {status === 'error' && <div className={styles.error}>{errorMsg}</div>}
     </div>
   );

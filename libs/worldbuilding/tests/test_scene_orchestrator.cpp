@@ -17,6 +17,7 @@
 #include <string>
 
 using namespace merak::worldbuilding;
+using namespace merak::worldbuilding::test;
 
 namespace {
 

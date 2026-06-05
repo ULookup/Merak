@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <merak/worldbuilding/ids.hpp>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 
 #include "test_helpers.hpp"
@@ -8,6 +9,7 @@
 #include <string>
 
 using namespace merak::worldbuilding;
+using namespace merak::worldbuilding::test;
 
 namespace {
 

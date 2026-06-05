@@ -76,6 +76,8 @@ WorldStore::WorldStore(std::string_view pg_conninfo, std::filesystem::path data_
     : data_root_(std::move(data_root)),
       pool_(std::make_unique<PgPool>(pg_conninfo)) {}
 
+WorldStore::~WorldStore() = default;
+
 void WorldStore::initialize() {
     std::filesystem::create_directories(data_root_);
     std::filesystem::create_directories(data_root_ / "worlds");

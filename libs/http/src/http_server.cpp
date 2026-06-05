@@ -1,4 +1,6 @@
 #include <merak/http_server.hpp>
+#include <merak/config_loader.hpp>
+#include <merak/llm_provider.hpp>
 #include <fstream>
 
 namespace merak {
@@ -15,8 +17,24 @@ DelegationRequest delegation_request_from_json(const nlohmann::json&body){
 }
 }
 HttpServer::HttpServer(std::shared_ptr<RuntimeService>runtime,RuntimeMetadata metadata,
-                       std::string merak_home):runtime_(std::move(runtime)),metadata_(std::move(metadata)),
-      merak_home_path_(std::move(merak_home)){install_routes();}
+                       std::string merak_home,std::shared_ptr<LlmProvider>llm_provider)
+    :runtime_(std::move(runtime)),metadata_(std::move(metadata)),
+     merak_home_path_(std::move(merak_home)),llm_provider_(std::move(llm_provider)){
+    auto cfg_result=ConfigLoader::load();
+    if(cfg_result.has_value()){
+        auto&cfg=cfg_result.value();
+        cached_config_["provider"]=cfg.llm.provider;
+        cached_config_["api_base_url"]=cfg.llm.api_base_url;
+        cached_config_["default_model"]=cfg.llm.default_model;
+        cached_config_["max_output_tokens"]=cfg.llm.max_output_tokens;
+        const auto&key=cfg.llm.api_key;
+        if(key.length()>4){
+            cached_config_["api_key_masked"]=std::string(key.length()-4,'*')+key.substr(key.length()-4);
+        }else{
+            cached_config_["api_key_masked"]=key.empty()?"":"****";
+        }
+    }
+    install_routes();}
 HttpResult HttpServer::error(const std::string&code,const std::string&message,int status,bool retryable){return{status,{{"error",{{"code",code},{"message",message},{"retryable",retryable}}}}};}
 void HttpServer::json(httplib::Response&r,const HttpResult&v){r.status=v.status;r.set_content(v.body.dump(),"application/json");}
 HttpResult HttpServer::handle_runtime_metadata()const{nlohmann::json tools=nlohmann::json::array(),mcp=nlohmann::json::array(),agents=nlohmann::json::array(),models=nlohmann::json::array();for(const auto&t:metadata_.tools)tools.push_back({{"name",t.name},{"description",t.description},{"source",t.source}});for(const auto&s:metadata_.mcp_servers)mcp.push_back({{"name",s.name},{"alive",s.alive}});for(const auto&a:metadata_.agents)agents.push_back({{"id",a.id},{"description",a.description}});for(const auto&m:metadata_.models)models.push_back({{"name",m.name},{"provider",m.provider},{"max_context_tokens",m.max_context_tokens}});if(models.empty())models.push_back({{"name",metadata_.model},{"provider",metadata_.provider},{"max_context_tokens",128000}});return{200,{{"provider",metadata_.provider},{"model",metadata_.model},{"models",models},{"permission_mode",metadata_.permission_mode},{"memory",{{"enabled",metadata_.memory_enabled}}},{"tools",tools},{"mcp_servers",mcp},{"agents",agents},{"delegation_patterns",{"fan_out","sequential","pipeline"}}}};}
@@ -38,6 +56,7 @@ void HttpServer::install_routes(){
     server_.Get(R"(/v1/sessions/([^/]+)/events/stream)",[this](const auto&req,auto&r){auto id=req.matches[1].str();auto cursor=after(req);try{auto subscription=runtime_->subscribe(id);auto backlog=runtime_->events_after(id,cursor);r.set_chunked_content_provider("text/event-stream",[subscription,backlog=std::move(backlog),cursor](size_t,httplib::DataSink&sink)mutable{auto send=[&](const RuntimeEvent&e){if(e.seq<=cursor||e.type=="message_appended"||e.type=="compaction_applied")return true;auto payload=nlohmann::json(e).dump();auto frame="id: "+std::to_string(e.seq)+"\nevent: "+e.type+"\ndata: "+payload+"\n\n";if(!sink.write(frame.data(),frame.size()))return false;cursor=e.seq;return true;};while(!backlog.empty()){auto e=backlog.front();backlog.erase(backlog.begin());if(!send(e))return false;}RuntimeEvent live;if(subscription->wait_next(live,std::chrono::milliseconds(1000)))return send(live);auto ping=std::string(": keepalive\n\n");return sink.write(ping.data(),ping.size());});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),404));}});
     server_.Get("/api/config/llm", [this](const auto& req, auto& res) { handle_config_get(req, res); });
     server_.Post("/api/config/llm", [this](const auto& req, auto& res) { handle_config_set(req, res); });
+    server_.Post("/api/config/llm/test", [this](const auto& req, auto& res) { handle_config_test(req, res); });
 }
 void HttpServer::listen(int port){server_.listen("127.0.0.1",port);}
 void HttpServer::stop(){server_.stop();}
@@ -45,24 +64,11 @@ void HttpServer::serve_static_dir(const std::string& mount_point, const std::str
     server_.set_mount_point(mount_point.c_str(), dir_path.c_str());
 }
 void HttpServer::handle_config_get(const httplib::Request&, httplib::Response& res) {
-    auto cfg_result = ConfigLoader::load();
-    if (!cfg_result.has_value()) {
-        json(res, error("config_load_failed", cfg_result.error().what(), 500));
+    if (cached_config_.is_null()) {
+        json(res, error("config_load_failed", "no config loaded", 500));
         return;
     }
-    auto& cfg = cfg_result.value();
-    nlohmann::json body;
-    body["provider"] = cfg.llm.provider;
-    body["api_base_url"] = cfg.llm.api_base_url;
-    body["default_model"] = cfg.llm.default_model;
-    body["max_output_tokens"] = cfg.llm.max_output_tokens;
-    const auto& key = cfg.llm.api_key;
-    if (key.length() > 4) {
-        body["api_key_masked"] = std::string(key.length() - 4, '*') + key.substr(key.length() - 4);
-    } else {
-        body["api_key_masked"] = key.empty() ? "" : "****";
-    }
-    res.set_content(body.dump(), "application/json");
+    res.set_content(cached_config_.dump(), "application/json");
 }
 void HttpServer::handle_config_set(const httplib::Request& req, httplib::Response& res) {
     try {
@@ -89,9 +95,28 @@ void HttpServer::handle_config_set(const httplib::Request& req, httplib::Respons
         std::ofstream out(local_path);
         out << existing.dump(2);
 
-        res.set_content("{\"ok\":true}", "application/json");
+        nlohmann::json resp;
+        resp["ok"]=true;
+        resp["restart_required"]=true;
+        res.set_content(resp.dump(), "application/json");
     } catch (const std::exception& e) {
         json(res, error("config_save_failed", e.what(), 400));
+    }
+}
+void HttpServer::handle_config_test(const httplib::Request& req, httplib::Response& res) {
+    if (!llm_provider_) {
+        json(res, error("test_unavailable", "LLM provider not available", 503));
+        return;
+    }
+    try {
+        auto test_result = llm_provider_->test_connection();
+        if (test_result) {
+            res.set_content("{\"ok\":true,\"test\":\"passed\"}", "application/json");
+        } else {
+            json(res, error("test_failed", "LLM connection test failed", 502));
+        }
+    } catch (const std::exception& e) {
+        json(res, error("test_failed", e.what(), 502));
     }
 }
 } // namespace merak

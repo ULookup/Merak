@@ -37,6 +37,7 @@ private:
     std::filesystem::path data_dir() const { return pg_dir_ / "data"; }
     bool initdb();
     bool start_server();
+    bool wait_ready(int timeout_seconds = 30);
     bool create_database();
     int find_free_port();
     bool is_port_in_use(int port) const;

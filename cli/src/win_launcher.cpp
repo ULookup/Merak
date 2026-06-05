@@ -10,6 +10,7 @@
 #include <string>
 #include <thread>
 #include <chrono>
+#include <atomic>
 #include <cstdlib>
 
 #define WM_TRAYICON (WM_APP + 1)
@@ -22,7 +23,9 @@ static HINSTANCE g_hInst;
 static HWND g_hWnd;
 static NOTIFYICONDATA g_nid;
 static HANDLE g_hChildProcess = nullptr;
-static bool g_serverRunning = false;
+static std::atomic<bool> g_serverRunning{false};
+static std::atomic<bool> g_pollingStop{false};
+static std::thread g_pollThread;
 
 static std::wstring ExeDir() {
     WCHAR path[MAX_PATH];
@@ -49,9 +52,10 @@ static void StartServer() {
 
 static void StopServer() {
     if (g_hChildProcess) {
-        GenerateConsoleCtrlEvent(CTRL_C_EVENT, GetProcessId(g_hChildProcess));
-        WaitForSingleObject(g_hChildProcess, 5000);
-        TerminateProcess(g_hChildProcess, 0);
+        // Wait briefly for graceful shutdown, then force-terminate
+        if (WaitForSingleObject(g_hChildProcess, 3000) == WAIT_TIMEOUT) {
+            TerminateProcess(g_hChildProcess, 0);
+        }
         CloseHandle(g_hChildProcess);
         g_hChildProcess = nullptr;
     }
@@ -112,9 +116,11 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         wcscpy_s(g_nid.szTip, L"Merak Agent");
         Shell_NotifyIconW(NIM_ADD, &g_nid);
         // Poll for server readiness, then open browser
-        std::thread([]() {
-            for (int i = 0; i < 60; ++i) {
+        g_pollingStop = false;
+        g_pollThread = std::thread([]() {
+            for (int i = 0; i < 60 && !g_pollingStop; ++i) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                if (g_pollingStop) break;
                 SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
                 if (sock == INVALID_SOCKET) continue;
                 struct sockaddr_in addr = {};
@@ -130,7 +136,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 }
                 closesocket(sock);
             }
-        }).detach();
+        });
         return 0;
     }
     case WM_TRAYICON:
@@ -139,6 +145,8 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         return 0;
     case WM_DESTROY:
         Shell_NotifyIconW(NIM_DELETE, &g_nid);
+        g_pollingStop = true;
+        if (g_pollThread.joinable()) g_pollThread.join();
         StopServer();
         PostQuitMessage(0);
         return 0;

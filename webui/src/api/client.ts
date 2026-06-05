@@ -67,4 +67,6 @@ export const api = {
     default_model?: string;
     max_output_tokens?: number;
   }) => request('POST', '/api/config/llm', config),
+
+  testConfig: () => request('POST', '/api/config/llm/test'),
 };

@@ -1,6 +1,7 @@
 #include <merak/runtime_service.hpp>
 #include <merak/turn_state.hpp>
 #include <merak/prompts/compositor.hpp>
+#include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
 #include <sstream>

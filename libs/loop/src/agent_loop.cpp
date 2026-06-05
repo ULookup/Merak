@@ -299,8 +299,8 @@ void AgentLoop::maybe_compact(RunControl& control) {
     double pressure = (double)total_tokens / budget;
     int compacted = tool_result_compactor_->compact(session_history_, pressure);
     if (compacted > 0) {
-        spdlog::info("Loop: microcompact compressed {} tool results (pressure={:.1%})",
-            compacted, pressure);
+        spdlog::info("Loop: microcompact compressed {} tool results (pressure={:.1f}%)",
+            compacted, pressure * 100);
     }
 
     auto compaction_info = context_->analyze_compaction(session_history_);

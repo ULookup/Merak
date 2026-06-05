@@ -18,6 +18,7 @@ class AgentStore {
 public:
     AgentStore(WorldStore& worlds, std::string_view pg_conninfo,
                std::filesystem::path data_root);
+    ~AgentStore();
 
     AgentRecord create_manager(const std::string& world_id, AgentKind kind,
                                std::string name, std::string instructions);

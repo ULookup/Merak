@@ -8,6 +8,7 @@ add_library(merak-worldbuilding STATIC
     src/narrative_store.cpp
     src/secret_store.cpp
     src/pg_helpers.cpp
+    src/sqlite_helpers.cpp
     src/world_store.cpp
     src/voice_analyzer.cpp
     src/scene_orchestrator.cpp
@@ -23,6 +24,7 @@ target_link_libraries(merak-worldbuilding PUBLIC
     merak-tools
     nlohmann_json::nlohmann_json
     ${PostgreSQL_LIBRARIES}
+    SQLite::SQLite3
 )
 
 add_executable(worldbuilding_tests

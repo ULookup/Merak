@@ -52,6 +52,9 @@ add_executable(merak-tui-features-test
     ${CMAKE_SOURCE_DIR}/cli/src/theme/theme.cpp
     ${CMAKE_SOURCE_DIR}/cli/src/commands/command_registry.cpp
 )
-target_include_directories(merak-tui-features-test PRIVATE ${CMAKE_SOURCE_DIR}/cli/src)
-target_link_libraries(merak-tui-features-test PRIVATE merak-core ftxui::component)
+target_include_directories(merak-tui-features-test PRIVATE
+    ${CMAKE_SOURCE_DIR}/cli/src
+    ${tree-sitter_SOURCE_DIR}/lib/include
+)
+target_link_libraries(merak-tui-features-test PRIVATE merak-core ftxui::component tree-sitter)
 add_test(NAME merak-tui-features-test COMMAND merak-tui-features-test)

@@ -5,8 +5,11 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+#include <memory>
 
 namespace merak {
+
+class LlmProvider;
 
 struct McpServerStatus { std::string name; bool alive = false; };
 struct RuntimeMetadata {
@@ -24,7 +27,8 @@ struct HttpResult { int status; nlohmann::json body; };
 class HttpServer {
 public:
     HttpServer(std::shared_ptr<RuntimeService> runtime, RuntimeMetadata metadata,
-               std::string merak_home = "");
+               std::string merak_home = "",
+               std::shared_ptr<LlmProvider> llm_provider = nullptr);
     void serve_static_dir(const std::string& mount_point, const std::string& dir_path);
     void listen(int port);
     void stop();
@@ -44,6 +48,10 @@ private:
     void install_routes();
     void handle_config_get(const httplib::Request& req, httplib::Response& res);
     void handle_config_set(const httplib::Request& req, httplib::Response& res);
+    void handle_config_test(const httplib::Request& req, httplib::Response& res);
+
+    std::shared_ptr<LlmProvider> llm_provider_;
+    nlohmann::json cached_config_;
     static void json(httplib::Response& response, const HttpResult& result);
     static HttpResult error(const std::string& code, const std::string& message,
                             int status, bool retryable = false);

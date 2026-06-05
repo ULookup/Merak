@@ -18,7 +18,7 @@ ToolSpec ToolSearchTool::spec() const {
                     "- Multi-select: {\"query\": \"select:tool_a,tool_b\"} -- returns full schemas for multiple tools";
     s.source = "builtin";
     s.category = Category::Consultative;
-    s.parameters_json = R"({
+    s.parameters_json = R"JSON({
         "type": "object",
         "properties": {
             "query": {
@@ -31,7 +31,7 @@ ToolSpec ToolSearchTool::spec() const {
             }
         },
         "required": ["query"]
-    })";
+    })JSON";
     return s;
 }
 
