@@ -24,7 +24,10 @@ int main() {
         AssistantCell cell;
         cell.append("```cpp\nint main() { return 0; }\n```\n\n| Name | Count |\n| --- | ---: |\n| tea | 3 |\n+ added\n- removed\n<think>\nprivate chain\n</think>\n");
         cell.finalize();
-        auto rendered = cell.render(100);
+        Buffer buf;
+        buf.resize(100, 80);
+        cell.render(buf, 100);
+        auto rendered = buffer_to_lines(buf);
         assert(contains(rendered, "cpp"));
         assert(contains(rendered, "return"));
         assert(contains(rendered, "Name"));
@@ -41,7 +44,10 @@ int main() {
         AssistantCell bold_cell;
         bold_cell.append("**bold text**\n");
         bold_cell.finalize();
-        auto rendered = bold_cell.render(100);
+        Buffer buf;
+        buf.resize(100, 80);
+        bold_cell.render(buf, 100);
+        auto rendered = buffer_to_lines(buf);
         bool found_bold = false;
         for (const auto& line : rendered) {
             if (line.find("bold text") != std::string::npos) {
@@ -56,7 +62,10 @@ int main() {
         AssistantCell list_bold;
         list_bold.append("* **bold item**\n");
         list_bold.finalize();
-        auto rendered = list_bold.render(100);
+        Buffer buf;
+        buf.resize(100, 80);
+        list_bold.render(buf, 100);
+        auto rendered = buffer_to_lines(buf);
         bool found_bold = false;
         for (const auto& line : rendered) {
             if (line.find("bold item") != std::string::npos) {
@@ -147,7 +156,10 @@ int main() {
 
     {
         WelcomeCell cell("0.1.0", "deepseek-v4-pro", "fix/tui");
-        auto rendered = cell.render(80);
+        Buffer buf;
+        buf.resize(80, 40);
+        cell.render(buf, 80);
+        auto rendered = buffer_to_lines(buf);
         // figlet title (6 lines)
         assert(rendered.size() == 10); // 6 figlet + 4 box
         assert(rendered[0].find("███╗") != std::string::npos);
@@ -171,7 +183,10 @@ int main() {
     {
         // narrow terminal
         WelcomeCell cell("0.1.0", "m", "b");
-        auto rendered = cell.render(30);
+        Buffer buf;
+        buf.resize(30, 40);
+        cell.render(buf, 30);
+        auto rendered = buffer_to_lines(buf);
         assert(rendered.size() == 10);
         assert(contains(rendered, "agent 0.1.0"));
         assert(contains(rendered, "model m"));
@@ -181,7 +196,10 @@ int main() {
     {
         // very narrow terminal (edge case: width < 4)
         WelcomeCell cell("0.1.0", "m", "b");
-        auto rendered = cell.render(3);
+        Buffer buf;
+        buf.resize(3, 40);
+        cell.render(buf, 3);
+        auto rendered = buffer_to_lines(buf);
         assert(rendered.size() == 10);
     }
 

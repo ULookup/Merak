@@ -2,9 +2,13 @@
 #include "chat_timeline.hpp"
 #include "composer/chat_composer.hpp"
 #include "components/status_bar.hpp"
-#include "inline_terminal.hpp"
+#include "buffer.hpp"
+#include "diff_terminal.hpp"
 #include "terminal_event_reader.hpp"
 #include "../commands/command_registry.hpp"
+#include "overlay/resume_view.hpp"
+#include "persistence/resume.hpp"
+#include "persistence/transcript.hpp"
 #include <nlohmann/json.hpp>
 #include <atomic>
 #include <chrono>
@@ -22,12 +26,12 @@
 namespace merak::tui {
 
 class ScreenManager {
-    enum class Overlay { None, Help, Context, Model, Tools, Memory, Transcript, ToolBrowser, ToolDetail };
+    enum class Overlay { None, Help, Context, Model, Tools, Memory, Transcript, ToolBrowser, ToolDetail, Resume };
 
     ChatTimeline timeline_;
     ChatComposer composer_;
     StatusBar status_bar_;
-    InlineTerminal terminal_;
+    DiffTerminal terminal_;
     TerminalEventReader reader_;
     std::function<void(std::string)> on_command_;
     std::function<void()> on_cancel_;
@@ -45,6 +49,10 @@ class ScreenManager {
     size_t overlay_scroll_ = 0;
     bool memory_detail_ = false;
     std::string memory_filter_;
+    ResumeView resume_view_;
+    std::string session_id_;
+    size_t persisted_cell_count_ = 0;
+    mutable uint16_t composer_start_y_ = 0;
     int last_prompt_tokens_ = 0;
     int total_input_tokens_ = 0;
     int total_output_tokens_ = 0;
@@ -87,6 +95,10 @@ class ScreenManager {
             while (!input.empty() && std::isspace(static_cast<unsigned char>(input.back()))) {
                 input.pop_back();
             }
+            if (input == "/resume") {
+                open_resume();
+                return;
+            }
             if (on_command_) on_command_(std::move(input));
             return;
         }
@@ -109,6 +121,36 @@ class ScreenManager {
     void handle_overlay(const TerminalEvent& event) {
         if (event.type == TerminalEvent::Type::Escape) {
             overlay_ = overlay_ == Overlay::ToolDetail ? Overlay::ToolBrowser : Overlay::None;
+            return;
+        }
+        if (overlay_ == Overlay::Resume) {
+            if (event.type == TerminalEvent::Type::Up) resume_view_.handle_key("up");
+            if (event.type == TerminalEvent::Type::Down) resume_view_.handle_key("down");
+            if (event.type == TerminalEvent::Type::Enter) {
+                auto sid = resume_view_.selected_sid();
+                if (!sid.empty()) {
+                    auto result = persistence::restore(sid);
+                    timeline_ = std::move(result.timeline);
+                    session_id_ = sid;
+                    persisted_cell_count_ = timeline_.committed().size();
+                    status_bar_.set_state("Restored " + std::to_string(result.event_count) + " events");
+                }
+                overlay_ = Overlay::None;
+            }
+            if (event.type == TerminalEvent::Type::CtrlD) {
+                auto sid = resume_view_.selected_sid();
+                if (!sid.empty()) {
+                    persistence::delete_session(sid);
+                    resume_view_ = ResumeView{};
+                }
+            }
+            if (event.type == TerminalEvent::Type::Backspace) {
+                auto f = resume_view_.get_filter();
+                if (!f.empty()) { f.pop_back(); resume_view_.set_filter(f); }
+            }
+            if (event.type == TerminalEvent::Type::Character && event.text != "/") {
+                resume_view_.set_filter(resume_view_.get_filter() + event.text);
+            }
             return;
         }
         if (overlay_ == Overlay::Memory) {
@@ -231,8 +273,12 @@ class ScreenManager {
             lines = {ansi(theme::ANSI_ACCENT, "Transcript"), ""};
             std::vector<std::string> content;
             const auto& cells = timeline_.committed();
+            static constexpr uint16_t kMaxCellHeight = 80;
             for (size_t i = 0; i < cells.size(); ++i) {
-                auto rendered = cells[i]->render(terminal_.width());
+                Buffer cell_buf;
+                cell_buf.resize(terminal_.width(), kMaxCellHeight);
+                cells[i]->render(cell_buf, terminal_.width());
+                auto rendered = buffer_to_lines(cell_buf);
                 content.insert(content.end(), rendered.begin(), rendered.end());
                 content.push_back("");
             }
@@ -384,28 +430,63 @@ class ScreenManager {
                      content.begin() + static_cast<long>(start + capacity));
     }
 
-    std::vector<std::string> frame_lines() const {
-        std::vector<std::string> lines;
+    static void copy_to(Buffer& dst, const Buffer& src, uint16_t dst_y) {
+        for (uint16_t sy = 0; sy < src.h && dst_y + sy < dst.h; ++sy) {
+            for (uint16_t sx = 0; sx < src.w && sx < dst.w; ++sx) {
+                dst.at(sx, dst_y + sy) = src.at(sx, sy);
+            }
+        }
+    }
+
+    void frame_buffer(Buffer& buf) const {
+        buf.clear();
+        auto& t = theme::active_theme();
+        Style dim_style; dim_style.fg = t.dim; dim_style.dim(true);
+        uint16_t w = buf.w;
+        uint16_t y = 0;
+
+        if (overlay_ == Overlay::Resume) {
+            resume_view_.render(buf, w);
+            return;
+        }
+
+        static constexpr uint16_t kActiveCellMaxH = 80;
         if (timeline_.active()) {
-            lines = timeline_.active()->render(terminal_.width());
-            lines.push_back("");
+            Buffer cell_buf;
+            cell_buf.resize(w, kActiveCellMaxH);
+            timeline_.active()->render(cell_buf, w);
+            copy_to(buf, cell_buf, y);
+            y += cell_buf.h + 1;
         }
         if (approval_cell_) {
-            auto approval = approval_cell_->render();
-            lines.insert(lines.end(), approval.begin(), approval.end());
-            lines.push_back("");
+            Buffer approval_buf;
+            approval_buf.resize(w, 2);
+            approval_cell_->render(approval_buf);
+            copy_to(buf, approval_buf, y);
+            y += approval_buf.h + 1;
         }
-        lines.push_back(ansi(theme::ANSI_DIM, repeat_text("━", terminal_.width())));
-        auto pane = overlay_ == Overlay::None ? composer_.render() : overlay_lines();
-        lines.insert(lines.end(), pane.begin(), pane.end());
-        lines.push_back(ansi(theme::ANSI_DIM, "/ commands · Shift+Enter newline · Ctrl+O transcript · Ctrl+T tools"));
-        lines.push_back(ansi(theme::ANSI_DIM,
-            sanitize_terminal_text(status_bar_.plain_text(queued_messages_.size(), terminal_.width()))));
-        const auto max_height = terminal_.height();
-        if (lines.size() > max_height) {
-            lines.erase(lines.begin(), lines.end() - static_cast<long>(max_height));
+
+        buf.set_span(0, y, repeat_text("━", w), dim_style);
+        ++y;
+
+        if (overlay_ == Overlay::None) {
+            composer_start_y_ = y;
+            Buffer composer_buf;
+            composer_buf.resize(w, 15);
+            composer_.render(composer_buf);
+            copy_to(buf, composer_buf, y);
+            y += composer_buf.h;
+        } else {
+            auto pane_lines = overlay_lines();
+            for (size_t i = 0; i < pane_lines.size() && y < buf.h; ++i) {
+                buf.set_span(0, y, sanitize_terminal_text(pane_lines[i]), dim_style);
+                ++y;
+            }
         }
-        return lines;
+
+        buf.set_span(0, y, "/ commands · Shift+Enter newline · Ctrl+O transcript · Ctrl+T tools", dim_style);
+        ++y;
+        status_bar_.render(buf, w, y, queued_messages_.size());
     }
 
 public:
@@ -489,7 +570,7 @@ public:
         status_bar_.set_estimated_cost((total_input_tokens_ / 1000000.0) * 2.50
             + (total_output_tokens_ / 1000000.0) * 10.00);
     }
-    void record_turn_complete() { ++completed_turns_; ++messages_; }
+    void record_turn_complete() { ++completed_turns_; ++messages_; persist_turn(); }
     void record_tool_start() { ++tool_calls_; }
     void record_tool_end() { ++messages_; }
     void record_agent_start() { ++running_agents_; status_bar_.set_running_agents(running_agents_); }
@@ -506,6 +587,75 @@ public:
         overlay_scroll_ = 0;
         overlay_ = Overlay::ToolBrowser;
     }
+    void open_resume() {
+        resume_view_ = ResumeView{};
+        overlay_ = Overlay::Resume;
+    }
+
+    void ensure_session_id() {
+        if (!session_id_.empty()) return;
+        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        session_id_ = "session_" + std::to_string(now);
+        persistence::SessionMeta meta;
+        meta.session_id = session_id_;
+        meta.created_at = static_cast<uint64_t>(now);
+        meta.model = selected_model_;
+        meta.provider = status_bar_.provider();
+        meta.cwd = status_bar_.cwd();
+        persistence::update_index(session_id_, meta);
+    }
+
+    void persist_turn() {
+        ensure_session_id();
+        const auto& cells = timeline_.committed();
+        for (size_t i = persisted_cell_count_; i < cells.size(); ++i) {
+            auto json = cells[i]->to_json();
+            auto type = json.value("type", "");
+            if (type == "welcome") continue;
+            if (type == "user") {
+                persistence::append_event(session_id_,
+                    persistence::UserEvent{json.value("text", ""),
+                        static_cast<uint64_t>(
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch()).count())});
+            } else if (type == "assistant") {
+                persistence::append_event(session_id_,
+                    persistence::AssistantEvent{json.value("markdown", ""), selected_model_,
+                        static_cast<uint64_t>(
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch()).count())});
+            } else if (type == "tool") {
+                persistence::ToolEvent e;
+                e.tool_name = json.value("name", "");
+                e.output = json.value("output", "");
+                e.exit_code = json.value("exit_code", 0);
+                auto status_str = json.value("status", "success");
+                if (status_str == "running") e.status = persistence::ToolEvent::Status::running;
+                else if (status_str == "failed") e.status = persistence::ToolEvent::Status::error;
+                else e.status = persistence::ToolEvent::Status::success;
+                persistence::append_event(session_id_, e);
+            } else if (type == "system") {
+                auto level = json.value("error", false)
+                    ? persistence::SystemEvent::Level::error : persistence::SystemEvent::Level::info;
+                persistence::append_event(session_id_,
+                    persistence::SystemEvent{json.value("text", ""),
+                        level,
+                        static_cast<uint64_t>(
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch()).count())});
+            } else if (type == "turn_summary") {
+                persistence::append_event(session_id_,
+                    persistence::TurnSummaryEvent{
+                        static_cast<uint32_t>(json.value("tokens_in", 0)),
+                        static_cast<uint32_t>(json.value("tokens_out", 0)),
+                        0.0,
+                        static_cast<uint64_t>(json.value("elapsed_ms", 0)),
+                        static_cast<uint32_t>(json.value("tools", 0))});
+            }
+        }
+        persisted_cell_count_ = cells.size();
+    }
 
     void run() {
         while (running_) {
@@ -516,16 +666,15 @@ public:
                 submit_flash_until_ = {};
             }
             terminal_.flush_scrollback(timeline_.drain_scrollback(terminal_.width()));
-            auto frame = frame_lines();
-            terminal_.redraw(frame);
-            // Position cursor at composer for IME composition window
+            Buffer frame_buf;
+            frame_buf.resize(terminal_.width(), terminal_.height());
+            frame_buffer(frame_buf);
+            terminal_.draw(frame_buf);
             if (overlay_ == Overlay::None) {
-                auto composer_lines = composer_.render();
-                if (!composer_lines.empty()) {
-                    // composer is before the last 2 frame lines (help + status bar)
-                    size_t col = 2 + composer_.cursor_col_in_line();
-                    std::cout << "\x1b[2A\r\x1b[" << col << "C" << std::flush;
-                }
+                size_t col = 2 + composer_.cursor_col_in_line();
+                int cursor_y = static_cast<int>(composer_start_y_) + static_cast<int>(composer_.cursor_line());
+                int up = static_cast<int>(terminal_.height()) - cursor_y - 1;
+                if (up > 0) std::cout << "\x1b[" << up << "A\r\x1b[" << col << "C" << std::flush;
             }
             handle_event(reader_.next());
         }

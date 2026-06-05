@@ -4,6 +4,7 @@
 #include "text_area.hpp"
 #include "../../commands/command_registry.hpp"
 #include "../history_cell/history_cell.hpp"
+#include "../buffer.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
@@ -86,6 +87,14 @@ public:
         auto start = textarea_.text().rfind('\n', cur == 0 ? 0 : cur - 1);
         if (start == std::string::npos) return cur;
         return cur - start - 1;
+    }
+    size_t cursor_line() const {
+        size_t cur = textarea_.cursor();
+        size_t line = 0;
+        for (size_t i = 0; i < cur; ++i) {
+            if (textarea_.text()[i] == '\n') ++line;
+        }
+        return line;
     }
     void clear() { textarea_.clear(); history_index_.reset(); pasted_.clear(); }
     void set_text(std::string text) { textarea_.set_text(std::move(text)); }
@@ -195,28 +204,44 @@ public:
         return result;
     }
 
-    std::vector<std::string> render() const {
-        std::vector<std::string> lines;
+    void render(Buffer& buf) const {
+        auto& t = theme::active_theme();
+        Style accent; accent.fg = t.accent;
+        Style warning_fg; warning_fg.fg = t.warn;
+        Style dim_fg; dim_fg.fg = t.dim; dim_fg.dim(true);
+        Style cursor_style; cursor_style.fg = t.accent;
+        Style base;
+        std::vector<std::vector<Span>> lines;
+
         auto text_lines = textarea_.lines();
         for (size_t i = 0; i < text_lines.size(); ++i) {
-            lines.push_back((i == 0 ? ansi(submit_flash_ ? theme::ANSI_WARNING : theme::ANSI_ACCENT, "› ") : "  ")
-                + sanitize_terminal_text(text_lines[i])
-                + (i + 1 == text_lines.size() ? ansi(theme::ANSI_ACCENT, "▎") : ""));
+            std::vector<Span> line;
+            Style prompt_style = submit_flash_ ? warning_fg : accent;
+            line.push_back({i == 0 ? "> " : "  ", prompt_style});
+            line.push_back({sanitize_terminal_text(text_lines[i]), base});
+            if (i + 1 == text_lines.size()) line.push_back({"▎", cursor_style});
+            lines.push_back(line);
         }
-        if (empty()) lines = {ansi(theme::ANSI_ACCENT, "› ")
-            + ansi(theme::ANSI_DIM, "Ask merak to do anything") + ansi(theme::ANSI_ACCENT, "▎")};
+        if (empty()) {
+            lines.push_back({Span{"> ", accent},
+                             Span{"Ask merak to do anything", dim_fg},
+                             Span{"▎", cursor_style}});
+        }
         auto matches = slash_matches();
         for (size_t i = 0; i < matches.size(); ++i) {
-            lines.push_back(std::string(i == static_cast<size_t>(slash_selected_) ? "  › " : "    ")
-                + ansi(i == static_cast<size_t>(slash_selected_) ? theme::ANSI_ACCENT : theme::ANSI_DIM,
-                       matches[i]->name + "  " + matches[i]->description));
+            Style sel_style = (i == static_cast<size_t>(slash_selected_)) ? accent : dim_fg;
+            std::string prefix = (i == static_cast<size_t>(slash_selected_)) ? "  > " : "    ";
+            lines.push_back({Span{prefix + matches[i]->name + "  " + matches[i]->description, sel_style}});
         }
         if (mention_menu_.open()) {
             for (const auto& match : mention_menu_.matches()) {
-                lines.push_back("    " + ansi(theme::ANSI_DIM, "@" + match.path));
+                lines.push_back({Span{"    @" + match.path, dim_fg}});
             }
         }
-        return lines;
+
+        size_t total_lines = lines.size();
+        if (buf.h < total_lines) buf.resize(buf.w, total_lines);
+        write_spans(buf, lines);
     }
 };
 
