@@ -6,6 +6,9 @@
 #include "diff_terminal.hpp"
 #include "terminal_event_reader.hpp"
 #include "../commands/command_registry.hpp"
+#include "overlay/resume_view.hpp"
+#include "persistence/resume.hpp"
+#include "persistence/transcript.hpp"
 #include <nlohmann/json.hpp>
 #include <atomic>
 #include <chrono>
@@ -23,7 +26,7 @@
 namespace merak::tui {
 
 class ScreenManager {
-    enum class Overlay { None, Help, Context, Model, Tools, Memory, Transcript, ToolBrowser, ToolDetail };
+    enum class Overlay { None, Help, Context, Model, Tools, Memory, Transcript, ToolBrowser, ToolDetail, Resume };
 
     ChatTimeline timeline_;
     ChatComposer composer_;
@@ -46,6 +49,9 @@ class ScreenManager {
     size_t overlay_scroll_ = 0;
     bool memory_detail_ = false;
     std::string memory_filter_;
+    ResumeView resume_view_;
+    std::string session_id_;
+    size_t persisted_cell_count_ = 0;
     int last_prompt_tokens_ = 0;
     int total_input_tokens_ = 0;
     int total_output_tokens_ = 0;
@@ -88,6 +94,10 @@ class ScreenManager {
             while (!input.empty() && std::isspace(static_cast<unsigned char>(input.back()))) {
                 input.pop_back();
             }
+            if (input == "/resume") {
+                open_resume();
+                return;
+            }
             if (on_command_) on_command_(std::move(input));
             return;
         }
@@ -110,6 +120,35 @@ class ScreenManager {
     void handle_overlay(const TerminalEvent& event) {
         if (event.type == TerminalEvent::Type::Escape) {
             overlay_ = overlay_ == Overlay::ToolDetail ? Overlay::ToolBrowser : Overlay::None;
+            return;
+        }
+        if (overlay_ == Overlay::Resume) {
+            if (event.type == TerminalEvent::Type::Up) resume_view_.handle_key("up");
+            if (event.type == TerminalEvent::Type::Down) resume_view_.handle_key("down");
+            if (event.type == TerminalEvent::Type::Enter) {
+                auto sid = resume_view_.selected_sid();
+                if (!sid.empty()) {
+                    auto result = persistence::restore(sid);
+                    timeline_ = std::move(result.timeline);
+                    persisted_cell_count_ = timeline_.committed().size();
+                    status_bar_.set_state("Restored " + std::to_string(result.event_count) + " events");
+                }
+                overlay_ = Overlay::None;
+            }
+            if (event.type == TerminalEvent::Type::CtrlD) {
+                auto sid = resume_view_.selected_sid();
+                if (!sid.empty()) {
+                    persistence::delete_session(sid);
+                    resume_view_ = ResumeView{};
+                }
+            }
+            if (event.type == TerminalEvent::Type::Backspace) {
+                auto f = resume_view_.get_filter();
+                if (!f.empty()) { f.pop_back(); resume_view_.set_filter(f); }
+            }
+            if (event.type == TerminalEvent::Type::Character && event.text != "/") {
+                resume_view_.set_filter(resume_view_.get_filter() + event.text);
+            }
             return;
         }
         if (overlay_ == Overlay::Memory) {
@@ -403,6 +442,11 @@ class ScreenManager {
         uint16_t w = buf.w;
         uint16_t y = 0;
 
+        if (overlay_ == Overlay::Resume) {
+            resume_view_.render(buf, w);
+            return;
+        }
+
         if (timeline_.active()) {
             Buffer cell_buf;
             cell_buf.resize(w, 20);
@@ -521,7 +565,7 @@ public:
         status_bar_.set_estimated_cost((total_input_tokens_ / 1000000.0) * 2.50
             + (total_output_tokens_ / 1000000.0) * 10.00);
     }
-    void record_turn_complete() { ++completed_turns_; ++messages_; }
+    void record_turn_complete() { ++completed_turns_; ++messages_; persist_turn(); }
     void record_tool_start() { ++tool_calls_; }
     void record_tool_end() { ++messages_; }
     void record_agent_start() { ++running_agents_; status_bar_.set_running_agents(running_agents_); }
@@ -537,6 +581,71 @@ public:
             ? 0 : static_cast<int>(timeline_.tools().size() - 1);
         overlay_scroll_ = 0;
         overlay_ = Overlay::ToolBrowser;
+    }
+    void open_resume() {
+        resume_view_ = ResumeView{};
+        overlay_ = Overlay::Resume;
+    }
+
+    void ensure_session_id() {
+        if (!session_id_.empty()) return;
+        auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        session_id_ = "session_" + std::to_string(now);
+        persistence::SessionMeta meta;
+        meta.session_id = session_id_;
+        meta.created_at = static_cast<uint64_t>(now);
+        meta.model = selected_model_;
+        meta.provider = status_bar_.provider();
+        meta.cwd = status_bar_.cwd();
+        persistence::update_index(session_id_, meta);
+    }
+
+    void persist_turn() {
+        ensure_session_id();
+        const auto& cells = timeline_.committed();
+        for (size_t i = persisted_cell_count_; i < cells.size(); ++i) {
+            auto json = cells[i]->to_json();
+            auto type = json.value("type", "");
+            if (type == "welcome") continue;
+            if (type == "user") {
+                persistence::append_event(session_id_,
+                    persistence::UserEvent{json.value("text", ""),
+                        static_cast<uint64_t>(
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch()).count())});
+            } else if (type == "assistant") {
+                persistence::append_event(session_id_,
+                    persistence::AssistantEvent{json.value("markdown", ""), selected_model_,
+                        static_cast<uint64_t>(
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch()).count())});
+            } else if (type == "tool") {
+                persistence::ToolEvent e;
+                e.tool_name = json.value("name", "");
+                e.output = json.value("output", "");
+                e.exit_code = json.value("exit_code", 0);
+                e.status = json.value("is_error", false)
+                    ? persistence::ToolEvent::Status::error : persistence::ToolEvent::Status::success;
+                persistence::append_event(session_id_, e);
+            } else if (type == "system") {
+                persistence::append_event(session_id_,
+                    persistence::SystemEvent{json.value("text", ""),
+                        persistence::SystemEvent::Level::info,
+                        static_cast<uint64_t>(
+                            std::chrono::duration_cast<std::chrono::milliseconds>(
+                                std::chrono::system_clock::now().time_since_epoch()).count())});
+            } else if (type == "turn_summary") {
+                persistence::append_event(session_id_,
+                    persistence::TurnSummaryEvent{
+                        static_cast<uint32_t>(json.value("tokens_in", 0)),
+                        static_cast<uint32_t>(json.value("tokens_out", 0)),
+                        0.0,
+                        static_cast<uint64_t>(json.value("elapsed_ms", 0)),
+                        static_cast<uint32_t>(json.value("tools", 0))});
+            }
+        }
+        persisted_cell_count_ = cells.size();
     }
 
     void run() {

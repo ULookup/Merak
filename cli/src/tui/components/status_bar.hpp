@@ -42,7 +42,9 @@ class StatusBar {
 
 public:
     void set_provider(const std::string& p) { provider_ = p; }
+    const std::string& provider() const { return provider_; }
     void set_model(const std::string& m) { model_ = m; }
+    const std::string& model() const { return model_; }
     void set_state(const std::string& state) { state_ = state; }
     void set_git_branch(std::string branch) { git_branch_ = std::move(branch); }
     const std::string& git_branch() const { return git_branch_; }
