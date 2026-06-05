@@ -14,7 +14,7 @@ export interface AppState {
   selectedModel: string;
 }
 
-const initialState: AppState = {
+export const initialState: AppState = {
   sessionId: '',
   lastSeq: 0,
   currentRun: null,
@@ -51,7 +51,7 @@ export type Action =
   | { type: 'COMMIT_ACTIVE' }
   | { type: 'APPLY_SSE'; frame: SseFrame };
 
-function reducer(state: AppState, action: Action): AppState {
+export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_SESSION':
       return {
