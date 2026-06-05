@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -103,6 +104,90 @@ struct Cell {
     uint8_t width = 1;  // display width: 0 (combining), 1 (ASCII), 2 (CJK/emoji)
 
     bool operator==(const Cell&) const = default;
+};
+
+struct Diff {
+    uint16_t x, y;
+    Cell cell;
+};
+
+struct Buffer {
+    std::vector<Cell> cells;
+    uint16_t w = 0, h = 0;
+
+    void resize(uint16_t width, uint16_t height) {
+        w = width;
+        h = height;
+        cells.assign(static_cast<size_t>(w) * h, Cell{});
+    }
+
+    void clear() {
+        std::fill(cells.begin(), cells.end(), Cell{});
+    }
+
+    Cell& at(uint16_t x, uint16_t y) {
+        return cells[static_cast<size_t>(y) * w + x];
+    }
+    const Cell& at(uint16_t x, uint16_t y) const {
+        return cells[static_cast<size_t>(y) * w + x];
+    }
+
+    void set_span(uint16_t x, uint16_t y, std::string_view text, Style style) {
+        size_t pos = 0;
+        uint16_t cx = x;
+        while (pos < text.size() && cx < w) {
+            size_t prev = pos;
+            char32_t cp = utf8_decode(text, pos);
+            if (cp == U'\n' || cp == U'\r') continue;
+            uint8_t cw = char_width(cp);
+            if (cw == 0 && cx > 0) {
+                continue;
+            }
+            auto& cell = at(cx, y);
+            cell.ch = cp;
+            cell.style = style;
+            cell.width = cw;
+            cx += cw > 0 ? cw : 1;
+        }
+    }
+
+    void set_line(uint16_t x, uint16_t y, std::string_view text, Style style) {
+        uint16_t cy = y;
+        size_t start = 0;
+        for (size_t i = 0; i <= text.size(); ++i) {
+            if (i == text.size() || text[i] == '\n') {
+                set_span(x, cy, text.substr(start, i - start), style);
+                ++cy;
+                start = i + 1;
+            }
+        }
+    }
+
+    std::vector<Diff> diff(const Buffer& prev) const {
+        std::vector<Diff> diffs;
+        uint16_t max_h = std::min(h, prev.h);
+        uint16_t max_w = std::min(w, prev.w);
+        for (uint16_t y = 0; y < max_h; ++y) {
+            for (uint16_t x = 0; x < max_w; ++x) {
+                if (at(x, y) != prev.at(x, y)) {
+                    diffs.push_back({x, y, at(x, y)});
+                }
+            }
+            for (uint16_t x = max_w; x < w; ++x) {
+                if (at(x, y).ch != U' ') {
+                    diffs.push_back({x, y, at(x, y)});
+                }
+            }
+        }
+        for (uint16_t y = max_h; y < h; ++y) {
+            for (uint16_t x = 0; x < w; ++x) {
+                if (at(x, y).ch != U' ') {
+                    diffs.push_back({x, y, at(x, y)});
+                }
+            }
+        }
+        return diffs;
+    }
 };
 
 } // namespace merak::tui
