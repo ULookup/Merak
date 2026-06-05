@@ -5,9 +5,27 @@ import ToolPanel from './Sidebar/ToolPanel';
 import WorldSelector from './Sidebar/WorldSelector';
 import styles from './Sidebar.module.css';
 
-export default function Sidebar() {
+interface SidebarProps {
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ open = true, onClose }: SidebarProps) {
   return (
-    <aside className={styles.sidebar} role="navigation" aria-label="Sidebar">
+    <aside
+      className={`${styles.sidebar} ${open ? styles.sidebarOpen : ''}`}
+      role="navigation"
+      aria-label="Sidebar"
+    >
+      {open && <div className={styles.overlay} onClick={onClose} data-testid="sidebar-overlay" />}
+      <button
+        className={styles.closeBtn}
+        onClick={onClose}
+        aria-label="Close sidebar"
+        data-testid="close-sidebar-btn"
+      >
+        &#10005;
+      </button>
       <WorldSelector />
       <SessionList />
       <ModelSelector />

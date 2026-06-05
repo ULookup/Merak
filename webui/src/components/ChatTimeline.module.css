@@ -6,3 +6,10 @@
   flex-direction: column;
   gap: 10px;
 }
+
+@media (max-width: 767px) {
+  .area {
+    padding: 16px 12px;
+    padding-top: 44px;
+  }
+}

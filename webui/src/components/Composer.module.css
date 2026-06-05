@@ -69,3 +69,9 @@
   color: #3e4055;
   margin-top: 5px;
 }
+
+@media (max-width: 767px) {
+  .area {
+    padding: 10px 12px;
+  }
+}

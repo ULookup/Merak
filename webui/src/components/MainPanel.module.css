@@ -3,4 +3,31 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
+}
+
+.menuBtn {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .menuBtn {
+    display: block;
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 10;
+    background: #14161f;
+    border: 1px solid #23252f;
+    border-radius: 5px;
+    color: #c8c9d4;
+    font-size: 18px;
+    padding: 4px 10px;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .menuBtn:hover {
+    background: #1e2130;
+  }
 }

@@ -79,3 +79,57 @@
   border-color: #444660;
   color: #8e90a4;
 }
+
+/* ---- Mobile ---- */
+.overlay {
+  display: none;
+}
+
+.closeBtn {
+  display: none;
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #7d7f94;
+  font-size: 18px;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.closeBtn:hover {
+  color: #e1e2ed;
+}
+
+@media (max-width: 767px) {
+  .overlay {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+
+  .closeBtn {
+    display: block;
+  }
+}

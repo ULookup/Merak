@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from './api/client';
 import { AppStateProvider, useAppState } from './AppState';
 import ConnectionBanner from './components/ConnectionBanner';
@@ -12,6 +12,7 @@ import styles from './App.module.css';
 
 function AppInner() {
   const { state, dispatch } = useAppState();
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
 
   useEffect(() => {
     api
@@ -61,12 +62,12 @@ function AppInner() {
     <ToastProvider>
       <div className={styles.layout}>
         <ErrorBoundary>
-          <Sidebar />
+          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         </ErrorBoundary>
         <ErrorBoundary>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <ConnectionBanner state={connState} />
-            <MainPanel />
+            <MainPanel onToggleSidebar={() => setSidebarOpen((prev) => !prev)} sidebarOpen={sidebarOpen} />
           </div>
         </ErrorBoundary>
       </div>
