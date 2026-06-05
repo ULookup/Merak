@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <merak/tool_meta.hpp>
 
 namespace merak {
 
@@ -9,6 +10,7 @@ struct ToolSpec {
     std::string description;     // 自然语言描述，LLM 据此判断何时调用
     std::string parameters_json; // JSON Schema 格式的参数定义
     std::string source;          // "builtin" | "mcp://server_name"
+    Category category = Category::ReadOnly;
 };
 
 } // namespace merak

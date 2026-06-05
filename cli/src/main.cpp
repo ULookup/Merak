@@ -8,6 +8,19 @@
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
 #include <merak/worldbuilding_http_handler.hpp>
+#include <merak/tool_catalog.hpp>
+#include <merak/tool_search_tool.hpp>
+#include <merak/git_tool.hpp>
+#include <merak/web_fetch_tool.hpp>
+#include <merak/web_search_tool.hpp>
+#include <merak/lsp_tool.hpp>
+#include <merak/symbols_tool.hpp>
+#include <merak/memory_tool.hpp>
+#include <merak/session_tool.hpp>
+#include <merak/agent_tool.hpp>
+#include <merak/task_tool.hpp>
+#include <merak/ask_user_tool.hpp>
+#include <merak/plan_mode_tools.hpp>
 #include "client/runtime_client.hpp"
 #include "commands/worldbuilding_commands.hpp"
 #include "tui/screen_manager.hpp"
@@ -82,8 +95,26 @@ static int run_server(int argc,char**argv) {
         ?std::static_pointer_cast<LlmProvider>(std::make_shared<AnthropicProvider>(cfg.llm))
         :std::static_pointer_cast<LlmProvider>(std::make_shared<OpenAIProvider>(cfg.llm));
     auto tools=std::make_shared<ToolRegistry>();tools->register_tool(std::make_unique<tools::ReadFileTool>());tools->register_tool(std::make_unique<tools::WriteFileTool>());tools->register_tool(std::make_unique<tools::StrReplaceTool>());tools->register_tool(std::make_unique<tools::MultiEditTool>());tools->register_tool(std::make_unique<tools::DeleteFileTool>());tools->register_tool(std::make_unique<tools::ListDirTool>());tools->register_tool(std::make_unique<tools::GlobTool>());tools->register_tool(std::make_unique<tools::GrepTool>());tools->register_tool(std::make_unique<tools::BashTool>());tools->set_permission_mode(cfg.agent.permission_mode);
+    // Pinned meta-tool: always available for tool discovery
+    tools->register_tool(std::make_unique<tools::ToolSearchTool>(tools));
+    // Deferred platform tools (12)
+    tools->register_tool(std::make_unique<tools::GitTool>());
+    tools->register_tool(std::make_unique<tools::WebFetchTool>());
+    tools->register_tool(std::make_unique<tools::WebSearchTool>());
+    tools->register_tool(std::make_unique<tools::LspTool>());
+    tools->register_tool(std::make_unique<tools::SymbolsTool>());
+    tools->register_tool(std::make_unique<tools::MemoryTool>());
+    tools->register_tool(std::make_unique<tools::SessionTool>());
+    tools->register_tool(std::make_unique<tools::AgentTool>());
+    tools->register_tool(std::make_unique<tools::TaskTool>());
+    tools->register_tool(std::make_unique<tools::AskUserTool>());
+    tools->register_tool(std::make_unique<tools::EnterPlanModeTool>());
+    tools->register_tool(std::make_unique<tools::ExitPlanModeTool>());
+    // Set default platform capabilities (empty = all non-gated tools visible)
+    tools->set_capabilities(CapabilitySet::platform_default());
     // Register Worldbuilding tools if service is available
     if (wb_service) {
+        tools->set_capabilities(tools->capabilities() | Capability::Worldbuilding);
         worldbuilding::WorldbuildingTools wb_tools(*wb_service);
         auto wb_ctx = worldbuilding::ToolContext{};
         auto god_tools = wb_tools.create_tools(worldbuilding::AgentKind::God, wb_ctx);
