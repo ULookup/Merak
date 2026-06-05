@@ -132,21 +132,47 @@ struct Buffer {
         return cells[static_cast<size_t>(y) * w + x];
     }
 
+    bool is_blank(uint16_t x, uint16_t y) const {
+        const auto& cell = at(x, y);
+        return cell.width == 0 || cell.ch == U' ';
+    }
+
+    void clear_wide_around(uint16_t x, uint16_t y) {
+        if (x >= w || y >= h) return;
+        auto& cell = at(x, y);
+        if (cell.width == 0 && x > 0 && at(static_cast<uint16_t>(x - 1), y).width == 2) {
+            at(static_cast<uint16_t>(x - 1), y) = Cell{};
+        }
+        if (cell.width == 2 && x + 1 < w) {
+            at(static_cast<uint16_t>(x + 1), y) = Cell{};
+        }
+        cell = Cell{};
+    }
+
     void set_span(uint16_t x, uint16_t y, std::string_view text, Style style) {
         size_t pos = 0;
         uint16_t cx = x;
-        while (pos < text.size() && cx < w) {
-            size_t prev = pos;
+        while (pos < text.size() && cx < w && y < h) {
             char32_t cp = utf8_decode(text, pos);
             if (cp == U'\n' || cp == U'\r') continue;
             uint8_t cw = char_width(cp);
             if (cw == 0 && cx > 0) {
                 continue;
             }
+            if (cw == 2 && cx + 1 >= w) break;
+            clear_wide_around(cx, y);
+            if (cw == 2) {
+                clear_wide_around(static_cast<uint16_t>(cx + 1), y);
+            }
             auto& cell = at(cx, y);
             cell.ch = cp;
             cell.style = style;
             cell.width = cw;
+            if (cw == 2) {
+                auto& continuation = at(static_cast<uint16_t>(cx + 1), y);
+                continuation = Cell{};
+                continuation.width = 0;
+            }
             cx += cw > 0 ? cw : 1;
         }
     }
@@ -169,19 +195,20 @@ struct Buffer {
         uint16_t max_w = std::min(w, prev.w);
         for (uint16_t y = 0; y < max_h; ++y) {
             for (uint16_t x = 0; x < max_w; ++x) {
+                if (at(x, y).width == 0) continue;
                 if (at(x, y) != prev.at(x, y)) {
                     diffs.push_back({x, y, at(x, y)});
                 }
             }
             for (uint16_t x = max_w; x < w; ++x) {
-                if (at(x, y).ch != U' ') {
+                if (!is_blank(x, y)) {
                     diffs.push_back({x, y, at(x, y)});
                 }
             }
         }
         for (uint16_t y = max_h; y < h; ++y) {
             for (uint16_t x = 0; x < w; ++x) {
-                if (at(x, y).ch != U' ') {
+                if (!is_blank(x, y)) {
                     diffs.push_back({x, y, at(x, y)});
                 }
             }

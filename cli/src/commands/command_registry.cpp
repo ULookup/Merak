@@ -99,7 +99,7 @@ const std::vector<CommandMeta>& all_commands() {
             "/memory", "Browse and search memories",
             CommandGroup::Memory,
             {{"list", "List memories"}, {"search", "Search memories"}, {"stats", "Memory stats"}},
-            "[list | search <q> | stats]", {}
+            "[list | search <q> | stats | @agent latest | @agent search <q>]", {}
         },
 
         // ── System ──
@@ -168,12 +168,6 @@ const std::vector<CommandMeta>& all_commands() {
             CommandGroup::Worldbuilding,
             {{"check", "Check all voices"}, {"group", "Group similar voices"}, {"compare", "Compare voices"}},
             "[check|group|compare]", {}
-        },
-        CommandMeta{
-            "/memory", "Agent memory and diary",
-            CommandGroup::Worldbuilding,
-            {{"<@agent> latest", "Latest memories"}, {"<@agent> search", "Search memories"}},
-            "[@agent latest|search]", {}
         },
         CommandMeta{
             "/diary", "Show agent diary",

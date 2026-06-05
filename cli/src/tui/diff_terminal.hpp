@@ -38,6 +38,13 @@ class DiffTerminal {
         move_absolute(x, static_cast<uint16_t>(viewport_top_ + y));
     }
 
+    static bool tail_is_blank(const Buffer& buf, uint16_t y, uint16_t x) {
+        for (uint16_t cx = x; cx < buf.w; ++cx) {
+            if (!buf.is_blank(cx, y)) return false;
+        }
+        return true;
+    }
+
     void clear_viewport() {
         if (viewport_height_ == 0) return;
         move_absolute(0, viewport_top_);
@@ -153,9 +160,14 @@ public:
             move_cursor(run_start_x, y);
             std::string out;
             for (uint16_t x = run_start_x; x <= run_end_x; ++x) {
-                utf8_encode(curr.at(x, y).ch, out);
+                const auto& cell = curr.at(x, y);
+                if (cell.width == 0) continue;
+                utf8_encode(cell.ch, out);
             }
-            std::cout << out << "\x1b[K";
+            std::cout << out;
+            if (tail_is_blank(curr, y, static_cast<uint16_t>(run_end_x + 1))) {
+                std::cout << "\x1b[K";
+            }
         };
 
         for (const auto& d : diffs) {

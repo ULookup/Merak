@@ -15,7 +15,7 @@ inline std::vector<std::string> buffer_to_lines(const Buffer& buf) {
     while (height > 0) {
         bool empty = true;
         for (uint16_t x = 0; x < buf.w; ++x) {
-            if (buf.at(x, height - 1).ch != U' ') {
+            if (!buf.is_blank(x, static_cast<uint16_t>(height - 1))) {
                 empty = false;
                 break;
             }
@@ -27,11 +27,12 @@ inline std::vector<std::string> buffer_to_lines(const Buffer& buf) {
         std::string line;
         Style curr;
         auto line_width = buf.w;
-        while (line_width > 0 && buf.at(line_width - 1, y).ch == U' ') {
+        while (line_width > 0 && buf.is_blank(static_cast<uint16_t>(line_width - 1), y)) {
             --line_width;
         }
         for (uint16_t x = 0; x < line_width; ++x) {
             const auto& cell = buf.at(x, y);
+            if (cell.width == 0) continue;
             if (cell.ch == U' ') { line.push_back(' '); continue; }
             if (!(cell.style == curr)) {
                 line += "\x1b[0m";
@@ -63,7 +64,7 @@ class ChatTimeline {
         while (height > 0) {
             bool empty = true;
             for (uint16_t x = 0; x < buf.w; ++x) {
-                if (buf.at(x, height - 1).ch != U' ') {
+                if (!buf.is_blank(x, static_cast<uint16_t>(height - 1))) {
                     empty = false;
                     break;
                 }

@@ -287,6 +287,37 @@ TEST(WorldbuildingCommands, NonWorldbuildingCommandReturnsNullopt) {
     EXPECT_FALSE(cmd.has_value());
 }
 
+TEST(WorldbuildingCommands, MissingWorldContextDoesNotCallHttp) {
+    WorldbuildingCommand cmd;
+    cmd.action = WorldbuildingAction::AgentList;
+    bool called = false;
+    auto result = execute_worldbuilding_command(cmd,
+        [&called](const std::string&, const std::string&, const nlohmann::json&) {
+            called = true;
+            return nlohmann::json::object();
+        });
+    EXPECT_FALSE(called);
+    EXPECT_NE(result.find("select a world first"), std::string::npos);
+}
+
+TEST(WorldbuildingCommands, WorldDeleteUsesDeleteRoute) {
+    WorldbuildingCommand cmd;
+    cmd.action = WorldbuildingAction::WorldDelete;
+    cmd.args = {"world_xyz"};
+    std::string method_seen;
+    std::string path_seen;
+    auto result = execute_worldbuilding_command(cmd,
+        [&method_seen, &path_seen](const std::string& method, const std::string& path,
+                                   const nlohmann::json&) {
+            method_seen = method;
+            path_seen = path;
+            return nlohmann::json{{"ok", true}};
+        });
+    EXPECT_EQ(method_seen, "DELETE");
+    EXPECT_EQ(path_seen, "/api/worldbuilding/worlds/world_xyz");
+    EXPECT_NE(result.find("\"ok\": true"), std::string::npos);
+}
+
 TEST(WorldbuildingCommands, HelpTextNotEmpty) {
     auto help = worldbuilding_help_text();
     EXPECT_FALSE(help.empty());

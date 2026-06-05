@@ -109,6 +109,28 @@ static std::optional<Config> parse_config_file(const std::string& filepath) {
             }
         }
 
+        if (j.contains("tui")) {
+            auto& tui = j["tui"];
+            if (tui.contains("theme")) {
+                auto& theme = tui["theme"];
+                if (theme.contains("preset")) {
+                    cfg.tui.theme.preset = theme["preset"];
+                    cfg.tui.theme.preset_set = true;
+                }
+                auto parse_color_map = [&](const nlohmann::json& source) {
+                    for (auto& [key, value] : source.items()) {
+                        if (key == "preset" || value.is_object() || value.is_array()) continue;
+                        if (value.is_number_integer()) cfg.tui.theme.colors[key] = std::to_string(value.get<int>());
+                        else if (value.is_string()) cfg.tui.theme.colors[key] = value.get<std::string>();
+                    }
+                };
+                parse_color_map(theme);
+                if (theme.contains("colors") && theme["colors"].is_object()) {
+                    parse_color_map(theme["colors"]);
+                }
+            }
+        }
+
         return cfg;
     } catch (const nlohmann::json::exception& e) {
         std::cerr << "Config parse error in " << filepath << ": " << e.what() << std::endl;
@@ -148,6 +170,14 @@ void ConfigLoader::merge(Config& base, const Config& override_cfg) {
     if (a.memory_budget_ratio > 0.0) base.agent.memory_budget_ratio = a.memory_budget_ratio;
     if (!a.permission_mode.empty()) base.agent.permission_mode = a.permission_mode;
     if (!a.sub_agents.empty()) base.agent.sub_agents = a.sub_agents;
+
+    if (override_cfg.tui.theme.preset_set && !override_cfg.tui.theme.preset.empty()) {
+        base.tui.theme.preset = override_cfg.tui.theme.preset;
+        base.tui.theme.preset_set = true;
+    }
+    for (const auto& [key, value] : override_cfg.tui.theme.colors) {
+        base.tui.theme.colors[key] = value;
+    }
 }
 
 // ——— 环境变量覆盖 ———
@@ -185,6 +215,10 @@ void ConfigLoader::apply_env_overrides(Config& cfg) {
     if (auto* v = env_str("MERAK_SYSTEM_PROMPT")) cfg.agent.system_prompt = v;
     if (auto v = env_int("MERAK_MAX_TOOL_TURNS")) cfg.agent.max_tool_turns = *v;
     if (auto* v = env_str("MERAK_PERMISSION_MODE")) cfg.agent.permission_mode = v;
+    if (auto* v = env_str("MERAK_TUI_THEME")) {
+        cfg.tui.theme.preset = v;
+        cfg.tui.theme.preset_set = true;
+    }
 }
 
 static void apply_provider_defaults(Config& cfg) {

@@ -18,6 +18,8 @@ struct RuntimeMetadata {
     std::vector<ModelEntry> models;
     std::string permission_mode;
     bool memory_enabled = false;
+    bool worldbuilding_enabled = false;
+    nlohmann::json tui_theme = nlohmann::json::object();
     std::vector<ToolSpec> tools;
     std::vector<McpServerStatus> mcp_servers;
     std::vector<AgentMetadata> agents;
