@@ -38,16 +38,33 @@ export default function SessionList() {
     <div className={`${styles.section} ${styles.sessions}`}>
       <div className={styles.label}>Sessions</div>
       <div className={styles.sessionList}>
-        {state.sessions.map((s) => (
+        {state.sessions.length === 0 ? (
           <div
-            key={s.id}
-            data-testid="session-item"
-            className={`${styles.sessionItem} ${s.id === state.sessionId ? styles.sessionItemActive : ''}`}
-            onClick={() => select(s.id)}
+            style={{
+              padding: '16px 12px',
+              color: '#555768',
+              fontSize: 12,
+              textAlign: 'center',
+              lineHeight: 1.5,
+            }}
+            data-testid="session-list-empty"
           >
-            {s.title || s.id.slice(0, 12)}
+            No sessions yet.
+            <br />
+            Create one to get started.
           </div>
-        ))}
+        ) : (
+          state.sessions.map((s) => (
+            <div
+              key={s.id}
+              data-testid="session-item"
+              className={`${styles.sessionItem} ${s.id === state.sessionId ? styles.sessionItemActive : ''}`}
+              onClick={() => select(s.id)}
+            >
+              {s.title || s.id.slice(0, 12)}
+            </div>
+          ))
+        )}
       </div>
       <button className={styles.newBtn} onClick={create} data-testid="new-session-btn">
         New Session
