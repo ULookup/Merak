@@ -42,7 +42,7 @@ describe('Cell components', () => {
 
 describe('ToolPanel source-to-style mapping', () => {
   it('builtin tools map to safe icon and badge', () => {
-    const source = 'builtin';
+    const source: string = 'builtin';
     const icon = source === 'mcp' ? 'iconAsk' : 'iconSafe';
     const badge = source === 'mcp' ? 'badgeAsk' : 'badgeSafe';
     expect(icon).toBe('iconSafe');
@@ -50,7 +50,7 @@ describe('ToolPanel source-to-style mapping', () => {
   });
 
   it('mcp tools map to ask icon and badge', () => {
-    const source = 'mcp';
+    const source: string = 'mcp';
     const icon = source === 'mcp' ? 'iconAsk' : 'iconSafe';
     const badge = source === 'mcp' ? 'badgeAsk' : 'badgeSafe';
     expect(icon).toBe('iconAsk');
@@ -58,7 +58,7 @@ describe('ToolPanel source-to-style mapping', () => {
   });
 
   it('unknown source falls back to safe', () => {
-    const source = 'unknown';
+    const source: string = 'unknown';
     const icon = source === 'mcp' ? 'iconAsk' : 'iconSafe';
     expect(icon).toBe('iconSafe');
   });
