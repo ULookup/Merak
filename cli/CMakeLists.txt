@@ -30,6 +30,7 @@ set_target_properties(merak-cli PROPERTIES OUTPUT_NAME merak)
 target_link_libraries(merak-cli PRIVATE
     merak-http merak-runtime merak-storage merak-loop merak-config
     merak-llm merak-tools merak-mcp merak-memory merak-context
+    merak-portable-pg
     CURL::libcurl
     tree-sitter ${TS_LANGUAGES}
 )

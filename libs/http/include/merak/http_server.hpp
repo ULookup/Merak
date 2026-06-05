@@ -3,6 +3,7 @@
 #include <merak/runtime_service.hpp>
 #include <httplib.h>
 #include <nlohmann/json.hpp>
+#include <string>
 #include <vector>
 
 namespace merak {
@@ -22,7 +23,9 @@ struct HttpResult { int status; nlohmann::json body; };
 
 class HttpServer {
 public:
-    HttpServer(std::shared_ptr<RuntimeService> runtime, RuntimeMetadata metadata);
+    HttpServer(std::shared_ptr<RuntimeService> runtime, RuntimeMetadata metadata,
+               std::string merak_home = "");
+    void serve_static_dir(const std::string& mount_point, const std::string& dir_path);
     void listen(int port);
     void stop();
     httplib::Server& raw_server() { return server_; }
@@ -37,7 +40,10 @@ private:
     std::shared_ptr<RuntimeService> runtime_;
     RuntimeMetadata metadata_;
     httplib::Server server_;
+    std::string merak_home_path_;
     void install_routes();
+    void handle_config_get(const httplib::Request& req, httplib::Response& res);
+    void handle_config_set(const httplib::Request& req, httplib::Response& res);
     static void json(httplib::Response& response, const HttpResult& result);
     static HttpResult error(const std::string& code, const std::string& message,
                             int status, bool retryable = false);
