@@ -5,15 +5,15 @@ interface Props {
 }
 
 const styles: Record<ConnectionState, { bg: string; border: string; color: string }> = {
-  connecting:   { bg: '#0f1a2e', border: '#1e3a5f', color: '#60a5fa' },
-  connected:    { bg: 'transparent', border: 'transparent', color: 'transparent' },
-  reconnecting: { bg: '#2a1f0e', border: '#5a4a1e', color: '#f59e0b' },
-  disconnected: { bg: '#1a0f0f', border: '#4a2020', color: '#fca5a5' },
+  connecting: { bg: '#eef2ff', border: '#c7d2fe', color: '#4f46e5' },
+  connected: { bg: 'transparent', border: 'transparent', color: 'transparent' },
+  reconnecting: { bg: '#fff7ed', border: '#fed7aa', color: '#b7791f' },
+  disconnected: { bg: '#fff1f2', border: '#fecaca', color: '#be123c' },
 };
 
 const labels: Record<ConnectionState, string> = {
-  connecting:   'Connecting...',
-  connected:    '',
+  connecting: 'Connecting...',
+  connected: '',
   reconnecting: 'Connection lost. Reconnecting...',
   disconnected: 'Unable to connect. Check if the server is running.',
 };

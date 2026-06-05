@@ -7,10 +7,18 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 10px;
-  border-radius: 3px;
-  color: #8d8fa2;
+  padding: 7px 9px;
+  border-radius: 11px;
+  color: var(--muted-strong);
   font-size: 12px;
+  transition:
+    background 180ms var(--ease),
+    transform 180ms var(--ease);
+}
+
+.row:hover {
+  background: var(--surface-muted);
+  transform: translateX(2px);
 }
 
 .rowName {
@@ -26,27 +34,27 @@
 }
 
 .iconSafe {
-  background: #22c55e;
+  background: var(--teal);
 }
 
 .iconAsk {
-  background: #f59e0b;
+  background: var(--amber);
 }
 
 .badge {
   font-size: 9px;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: 8px;
-  font-weight: 500;
+  font-weight: 850;
   text-transform: uppercase;
 }
 
 .badgeSafe {
-  background: #132a1c;
-  color: #22c55e;
+  background: var(--teal-soft);
+  color: var(--teal);
 }
 
 .badgeAsk {
-  background: #2a1f0e;
-  color: #f59e0b;
+  background: var(--amber-soft);
+  color: var(--amber);
 }

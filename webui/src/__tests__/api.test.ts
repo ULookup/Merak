@@ -47,4 +47,38 @@ describe('api client', () => {
     const { api } = await import('../api/client');
     await expect(api.startRun('s1', 'hi')).rejects.toThrow('session busy');
   });
+
+  it('worldbuilding readers call the selected world endpoints', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      status: 200,
+      json: async () => ({ ok: true, agents: [] }),
+    } as Response);
+
+    const { api } = await import('../api/client');
+    await api.listAgents('world_1');
+    await api.listForeshadowing('world_1');
+    await api.listSecrets('world_1');
+    await api.getWorldTime('world_1');
+
+    expect(vi.mocked(fetch)).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:3888/api/worldbuilding/world_1/agents',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(vi.mocked(fetch)).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:3888/api/worldbuilding/world_1/foreshadowing',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(vi.mocked(fetch)).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:3888/api/worldbuilding/world_1/secrets',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(vi.mocked(fetch)).toHaveBeenNthCalledWith(
+      4,
+      'http://127.0.0.1:3888/api/worldbuilding/world_1/time',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
 });

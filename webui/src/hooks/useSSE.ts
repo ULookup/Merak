@@ -28,9 +28,7 @@ export function useSSE(url: string | null, dispatch: Dispatch<Action>, lastSeq: 
   const lastSeqRef = useRef(lastSeq);
   lastSeqRef.current = lastSeq;
 
-  const [connState, setConnState] = useState<ConnectionState>(
-    url ? 'connecting' : 'disconnected',
-  );
+  const [connState, setConnState] = useState<ConnectionState>(url ? 'connecting' : 'disconnected');
 
   if (!url) return connState;
 

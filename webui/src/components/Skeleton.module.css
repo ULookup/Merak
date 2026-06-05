@@ -2,20 +2,26 @@
   display: flex;
   height: 100vh;
   overflow: hidden;
+  padding: 12px;
+  gap: 12px;
+  background: var(--page);
 }
 
 .sidebar {
-  width: 230px;
-  min-width: 230px;
-  background: #0b0d12;
+  width: 284px;
+  min-width: 284px;
+  background: rgba(255, 255, 255, 0.82);
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #1e2028;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
 }
 
 .sbSection {
   padding: 14px 16px;
-  border-bottom: 1px solid #14161d;
+  border-bottom: 1px solid var(--border);
 }
 
 .sbGrow {
@@ -27,6 +33,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: var(--shadow-md);
 }
 
 .chatArea {
@@ -39,20 +49,24 @@
 }
 
 .composerArea {
-  border-top: 1px solid #1e2028;
+  border-top: 1px solid var(--border);
   padding: 12px 22px;
 }
 
 .shimmer {
-  background: linear-gradient(90deg, #1a1c26 25%, #252733 50%, #1a1c26 75%);
+  background: linear-gradient(90deg, #edf4ef 25%, #ffffff 50%, #edf4ef 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
-  border-radius: 4px;
+  border-radius: 12px;
 }
 
 @keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .labelPlaceholder {
@@ -77,7 +91,7 @@
 .msgPlaceholder {
   max-width: 82%;
   height: 36px;
-  border-radius: 7px;
+  border-radius: 16px;
 }
 
 .msgRight {
@@ -92,6 +106,6 @@
 
 .inputPlaceholder {
   width: 100%;
-  height: 40px;
-  border-radius: 6px;
+  height: 52px;
+  border-radius: 18px;
 }

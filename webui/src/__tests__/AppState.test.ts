@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { reducer, initialState, type AppState } from '../AppState';
+import { describe, expect, it } from 'vitest';
+import { initialState, reducer, type AppState } from '../AppState';
 
 function state(overrides: Partial<AppState> = {}): AppState {
   return { ...initialState, sessionId: 'test-session', ...overrides };
@@ -21,9 +21,15 @@ describe('AppState reducer', () => {
     const next = reducer(prev, {
       type: 'SET_METADATA',
       metadata: {
-        provider: 'openai', model: 'gpt-4o', models: [],
-        permission_mode: 'default', memory: { enabled: false },
-        tools: [], mcp_servers: [], agents: [], delegation_patterns: [],
+        provider: 'openai',
+        model: 'gpt-4o',
+        models: [],
+        permission_mode: 'default',
+        memory: { enabled: false },
+        tools: [],
+        mcp_servers: [],
+        agents: [],
+        delegation_patterns: [],
       },
     });
     expect(next.metadata?.model).toBe('gpt-4o');
@@ -34,10 +40,52 @@ describe('AppState reducer', () => {
     const prev = state();
     const next = reducer(prev, {
       type: 'SET_SESSIONS',
-      sessions: [{ id: 's1', title: 'Test', last_seq: 0, created_at: '', updated_at: '', archived_at: null }],
+      sessions: [
+        { id: 's1', title: 'Test', last_seq: 0, created_at: '', updated_at: '', archived_at: null },
+      ],
     });
     expect(next.sessions).toHaveLength(1);
     expect(next.sessions[0].id).toBe('s1');
+  });
+
+  it('stores worldbuilding data and resets detail panes when the world changes', () => {
+    const prev = state({
+      worldId: 'old_world',
+      worlds: [{ id: 'old_world', name: 'Old World', description: '', created_at: '' }],
+      agents: [{ id: 'a1', name: 'agent_lian', display_name: 'Lian', kind: 'character' }],
+      foreshadowing: [{ id: 'f1', content: 'A silver key', status: 'open' }],
+      secrets: [{ id: 's1', title: 'Hidden heir', status: 'sealed' }],
+      worldTime: 'Third moon',
+      worldbuildingStatus: 'ready',
+    });
+
+    const selected = reducer(prev, { type: 'SET_WORLD', worldId: 'new_world' });
+    expect(selected.worldId).toBe('new_world');
+    expect(selected.agents).toHaveLength(0);
+    expect(selected.foreshadowing).toHaveLength(0);
+    expect(selected.secrets).toHaveLength(0);
+    expect(selected.worldTime).toBeNull();
+
+    const next = reducer(selected, {
+      type: 'SET_WORLDBUILDING_DATA',
+      worlds: [{ id: 'new_world', name: 'New World', description: 'Draft realm', created_at: '' }],
+      agents: [{ id: 'a2', name: 'agent_mira', display_name: 'Mira', kind: 'manager' }],
+      foreshadowing: [{ id: 'f2', content: 'The clock stops at dusk', status: 'open' }],
+      secrets: [{ id: 's2', title: 'The queen remembers', status: 'secret' }],
+      worldTime: 'Dusk, day 4',
+    });
+
+    expect(next.worlds[0].name).toBe('New World');
+    expect(next.agents[0].display_name).toBe('Mira');
+    expect(next.foreshadowing[0].content).toContain('clock');
+    expect(next.secrets[0].title).toContain('queen');
+    expect(next.worldTime).toBe('Dusk, day 4');
+    expect(next.worldbuildingStatus).toBe('ready');
+  });
+
+  it('tracks the selected inspector tab', () => {
+    const next = reducer(state(), { type: 'SET_INSPECTOR_TAB', tab: 'agents' });
+    expect(next.inspectorTab).toBe('agents');
   });
 
   it('UPDATE_ASSISTANT appends to existing assistant message', () => {
@@ -62,7 +110,9 @@ describe('AppState reducer', () => {
     const prev = state();
     const next = reducer(prev, {
       type: 'SET_TOOL_RUNNING',
-      toolCallId: 'tc1', name: 'read_file', args: '{"path":"/x"}',
+      toolCallId: 'tc1',
+      name: 'read_file',
+      args: '{"path":"/x"}',
     });
     expect(next.messages).toHaveLength(1);
     const toolMsg = next.messages[0];
@@ -80,7 +130,9 @@ describe('AppState reducer', () => {
     });
     const next = reducer(prev, {
       type: 'SET_TOOL_DONE',
-      toolCallId: 'tc1', output: 'file contents', isError: false,
+      toolCallId: 'tc1',
+      output: 'file contents',
+      isError: false,
     });
     expect(next.messages).toHaveLength(1);
     expect(next.messages[0].toolRunning).toBe(false);
@@ -92,7 +144,9 @@ describe('AppState reducer', () => {
     const prev = state();
     const next = reducer(prev, {
       type: 'SET_APPROVAL',
-      approvalId: 'a1', name: 'bash', args: 'rm -rf /',
+      approvalId: 'a1',
+      name: 'bash',
+      args: 'rm -rf /',
     });
     expect(next.status).toBe('waiting_approval');
     expect(next.messages).toHaveLength(1);
@@ -150,7 +204,8 @@ describe('AppState reducer', () => {
     it('creates user message from payload.message', () => {
       const prev = state();
       const frame = {
-        seq: 1, type: 'run_started',
+        seq: 1,
+        type: 'run_started',
         payload: { run_id: 'r1', message: 'Hello world' },
       };
       const next = reducer(prev, { type: 'APPLY_SSE', frame });
@@ -162,7 +217,8 @@ describe('AppState reducer', () => {
     it('sets currentRun', () => {
       const prev = state();
       const frame = {
-        seq: 1, type: 'run_started',
+        seq: 1,
+        type: 'run_started',
         payload: { run_id: 'r99', message: 'hi' },
       };
       const next = reducer(prev, { type: 'APPLY_SSE', frame });
@@ -181,13 +237,93 @@ describe('AppState reducer', () => {
       expect(next.currentRun).toBeNull();
       expect(next.messages[0].toolCallId).toBeUndefined();
     });
+
+    it('keeps generated writing on disk instead of capturing assistant text as a draft', () => {
+      const prev = state({
+        currentRun: 'r1',
+        inspectorTab: 'story',
+        messages: [
+          {
+            id: 'm1',
+            kind: 'assistant',
+            text: 'The Bridge at Dusk\n\nKaelen crossed under a copper sky.',
+            toolCallId: 'active',
+          },
+        ],
+      });
+      const frame = { seq: 2, type: 'run_completed', payload: {} };
+      const next = reducer(prev, { type: 'APPLY_SSE', frame });
+      expect(next.generatedFiles).toHaveLength(0);
+      expect(next.inspectorTab).toBe('story');
+      expect(next.messages[0].toolCallId).toBeUndefined();
+    });
+  });
+
+  it('tracks generated file entries and output directory', () => {
+    const withDir = reducer(state(), {
+      type: 'SET_OUTPUT_DIRECTORY',
+      path: '/Users/me/novel',
+    });
+    const next = reducer(withDir, {
+      type: 'REGISTER_GENERATED_FILE',
+      file: {
+        id: 'file_1',
+        title: 'chapter-12',
+        path: '/Users/me/novel/chapter-12.md',
+        updatedAt: 1,
+      },
+    });
+    expect(next.outputDirectory).toBe('/Users/me/novel');
+    expect(next.generatedFiles[0].path).toBe('/Users/me/novel/chapter-12.md');
+    expect(next.inspectorTab).toBe('files');
+  });
+
+  it('detects generated file paths from successful tool output', () => {
+    const prev = state({
+      messages: [
+        { id: 'm1', kind: 'tool', toolCallId: 'tc1', toolName: 'write_file', toolRunning: true },
+      ],
+    });
+    const next = reducer(prev, {
+      type: 'SET_TOOL_DONE',
+      toolCallId: 'tc1',
+      output: 'Wrote /Users/me/novel/chapter-12.md',
+      isError: false,
+    });
+    expect(next.generatedFiles[0].path).toBe('/Users/me/novel/chapter-12.md');
+    expect(next.outputDirectory).toBe('/Users/me/novel');
+    expect(next.inspectorTab).toBe('files');
+  });
+
+  it('opens generated files into an editable buffer', () => {
+    const prev = state({
+      generatedFiles: [
+        {
+          id: 'file_1',
+          title: 'chapter-12',
+          path: '/Users/me/novel/chapter-12.md',
+          updatedAt: 1,
+        },
+      ],
+    });
+    const opened = reducer(prev, { type: 'OPEN_GENERATED_FILE', fileId: 'file_1' });
+    expect(opened.activeEditorFileId).toBe('file_1');
+    expect(opened.editorBuffers.file_1).toBe('');
+
+    const edited = reducer(opened, {
+      type: 'UPDATE_EDITOR_BUFFER',
+      fileId: 'file_1',
+      content: 'The revised chapter begins here.',
+    });
+    expect(edited.editorBuffers.file_1).toBe('The revised chapter begins here.');
   });
 
   describe('SSE frame: run_failed', () => {
     it('commits active and adds error message', () => {
       const prev = state({ currentRun: 'r1' });
       const frame = {
-        seq: 2, type: 'run_failed',
+        seq: 2,
+        type: 'run_failed',
         payload: { error: 'Something broke' },
       };
       const next = reducer(prev, { type: 'APPLY_SSE', frame });

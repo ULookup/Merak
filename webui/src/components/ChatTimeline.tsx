@@ -49,11 +49,28 @@ export default function ChatTimeline() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   }, [state.messages]);
 
   return (
     <div className={styles.area} role="log" aria-live="polite" aria-label="Messages">
+      {state.messages.length === 0 && (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyMark} role="img" aria-label="Scene ready mark">
+            <svg viewBox="0 0 80 70" aria-hidden="true">
+              <ellipse cx="42" cy="35" rx="27" ry="12" transform="rotate(-18 42 35)" />
+              <path d="M20 56L33.5 23.5C34.4 21.3 37.4 21 38.8 22.9L46 32.5C47.2 34 46.7 36.3 45 37.3L20 56Z" />
+              <circle cx="45" cy="33" r="16" />
+              <path d="M38 19C45.4 21.2 51 26.9 52.8 34.5C47.9 32.5 42.6 31.8 37.4 32.4C38.6 28 38.8 23.6 38 19Z" />
+              <circle cx="64" cy="15" r="4" />
+            </svg>
+          </div>
+          <h2>Type your world</h2>
+          <p>
+            Start with a scene, a character voice, or a fragment of lore. Merak will help shape it.
+          </p>
+        </div>
+      )}
       {state.messages.map(renderMessage)}
       <div ref={bottomRef} />
     </div>

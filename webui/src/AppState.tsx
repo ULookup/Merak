@@ -1,5 +1,25 @@
 import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
-import type { Message, RuntimeMetadata, SessionSummary, SseFrame, StatusLabel } from './api/types';
+import type {
+  ForeshadowingItem,
+  Message,
+  RuntimeMetadata,
+  SecretItem,
+  SessionSummary,
+  SseFrame,
+  StatusLabel,
+  WorldAgent,
+  WorldSummary,
+} from './api/types';
+
+export type InspectorTab = 'story' | 'files' | 'agents' | 'run';
+export type WorldbuildingStatus = 'idle' | 'loading' | 'ready' | 'error';
+
+export interface GeneratedFileEntry {
+  id: string;
+  title: string;
+  path: string;
+  updatedAt: number;
+}
 
 export interface AppState {
   sessionId: string;
@@ -12,6 +32,18 @@ export interface AppState {
   sessions: SessionSummary[];
   worldId: string | null;
   selectedModel: string;
+  inspectorTab: InspectorTab;
+  worlds: WorldSummary[];
+  agents: WorldAgent[];
+  foreshadowing: ForeshadowingItem[];
+  secrets: SecretItem[];
+  worldTime: string | null;
+  worldbuildingStatus: WorldbuildingStatus;
+  worldbuildingError: string | null;
+  outputDirectory: string | null;
+  generatedFiles: GeneratedFileEntry[];
+  activeEditorFileId: string | null;
+  editorBuffers: Record<string, string>;
 }
 
 export const initialState: AppState = {
@@ -25,6 +57,18 @@ export const initialState: AppState = {
   sessions: [],
   worldId: null,
   selectedModel: '',
+  inspectorTab: 'story',
+  worlds: [],
+  agents: [],
+  foreshadowing: [],
+  secrets: [],
+  worldTime: null,
+  worldbuildingStatus: 'idle',
+  worldbuildingError: null,
+  outputDirectory: null,
+  generatedFiles: [],
+  activeEditorFileId: null,
+  editorBuffers: {},
 };
 
 let nextId = 1;
@@ -37,6 +81,21 @@ export type Action =
   | { type: 'SET_METADATA'; metadata: RuntimeMetadata }
   | { type: 'SET_SESSIONS'; sessions: SessionSummary[] }
   | { type: 'SET_WORLD'; worldId: string | null }
+  | { type: 'SET_INSPECTOR_TAB'; tab: InspectorTab }
+  | { type: 'SET_WORLDS'; worlds: WorldSummary[] }
+  | { type: 'SET_WORLDBUILDING_STATUS'; status: WorldbuildingStatus; error?: string | null }
+  | {
+      type: 'SET_WORLDBUILDING_DATA';
+      worlds?: WorldSummary[];
+      agents: WorldAgent[];
+      foreshadowing: ForeshadowingItem[];
+      secrets: SecretItem[];
+      worldTime: string | null;
+    }
+  | { type: 'SET_OUTPUT_DIRECTORY'; path: string | null }
+  | { type: 'REGISTER_GENERATED_FILE'; file: GeneratedFileEntry }
+  | { type: 'OPEN_GENERATED_FILE'; fileId: string }
+  | { type: 'UPDATE_EDITOR_BUFFER'; fileId: string; content: string }
   | { type: 'SET_MODEL'; model: string }
   | { type: 'SET_LAST_SEQ'; seq: number }
   | { type: 'APPEND_MESSAGE'; message: Message }
@@ -70,7 +129,103 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, sessions: action.sessions };
 
     case 'SET_WORLD':
-      return { ...state, worldId: action.worldId };
+      return {
+        ...state,
+        worldId: action.worldId,
+        agents: [],
+        foreshadowing: [],
+        secrets: [],
+        worldTime: null,
+        worldbuildingStatus: action.worldId ? 'loading' : 'idle',
+        worldbuildingError: null,
+      };
+
+    case 'SET_INSPECTOR_TAB':
+      return { ...state, inspectorTab: action.tab };
+
+    case 'SET_OUTPUT_DIRECTORY':
+      return { ...state, outputDirectory: action.path };
+
+    case 'REGISTER_GENERATED_FILE':
+      return {
+        ...state,
+        generatedFiles: [
+          action.file,
+          ...state.generatedFiles.filter((file) => file.path !== action.file.path),
+        ],
+        outputDirectory:
+          state.outputDirectory ?? directoryFromPath(action.file.path) ?? state.outputDirectory,
+        inspectorTab: 'files',
+      };
+
+    case 'OPEN_GENERATED_FILE': {
+      const file = state.generatedFiles.find((item) => item.id === action.fileId);
+      if (!file) return state;
+      return {
+        ...state,
+        activeEditorFileId: file.id,
+        inspectorTab: 'files',
+        editorBuffers: {
+          ...state.editorBuffers,
+          [file.id]: state.editorBuffers[file.id] ?? '',
+        },
+      };
+    }
+
+    case 'UPDATE_EDITOR_BUFFER':
+      return {
+        ...state,
+        editorBuffers: {
+          ...state.editorBuffers,
+          [action.fileId]: action.content,
+        },
+      };
+
+    case 'SET_TOOL_DONE': {
+      const msgs = state.messages.map((m) =>
+        m.kind === 'tool' && m.toolCallId === action.toolCallId
+          ? { ...m, toolRunning: false, toolOutput: action.output, toolIsError: action.isError }
+          : m,
+      );
+      const files = action.isError ? [] : generatedFilesFromText(action.output);
+      return {
+        ...state,
+        messages: msgs,
+        generatedFiles: [
+          ...files,
+          ...state.generatedFiles.filter(
+            (file) => !files.some((newFile) => newFile.path === file.path),
+          ),
+        ],
+        outputDirectory:
+          state.outputDirectory ??
+          files.map((file) => directoryFromPath(file.path)).find(Boolean) ??
+          null,
+        inspectorTab: files.length > 0 ? 'files' : state.inspectorTab,
+      };
+    }
+
+    case 'SET_WORLDS':
+      return { ...state, worlds: action.worlds };
+
+    case 'SET_WORLDBUILDING_STATUS':
+      return {
+        ...state,
+        worldbuildingStatus: action.status,
+        worldbuildingError: action.error ?? null,
+      };
+
+    case 'SET_WORLDBUILDING_DATA':
+      return {
+        ...state,
+        worlds: action.worlds ?? state.worlds,
+        agents: action.agents,
+        foreshadowing: action.foreshadowing,
+        secrets: action.secrets,
+        worldTime: action.worldTime,
+        worldbuildingStatus: 'ready',
+        worldbuildingError: null,
+      };
 
     case 'SET_MODEL':
       return { ...state, selectedModel: action.model };
@@ -102,15 +257,6 @@ export function reducer(state: AppState, action: Action): AppState {
         toolArgs: action.args,
         toolRunning: true,
       });
-      return { ...state, messages: msgs };
-    }
-
-    case 'SET_TOOL_DONE': {
-      const msgs = state.messages.map((m) =>
-        m.kind === 'tool' && m.toolCallId === action.toolCallId
-          ? { ...m, toolRunning: false, toolOutput: action.output, toolIsError: action.isError }
-          : m,
-      );
       return { ...state, messages: msgs };
     }
 
@@ -237,6 +383,11 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       });
 
     case 'run_completed':
+      return reducer(reducer(state, { type: 'COMMIT_ACTIVE' }), {
+        type: 'SET_CURRENT_RUN',
+        runId: null,
+      });
+
     case 'run_failed':
     case 'run_cancelled':
     case 'run_interrupted':
@@ -258,6 +409,41 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
     default:
       return state;
   }
+}
+
+function generatedFilesFromText(text: string): GeneratedFileEntry[] {
+  const paths = new Set<string>();
+  const filePattern =
+    /(?:^|\s)(\/[^\s"'`]+?\.(?:md|markdown|txt|docx|json|ya?ml)|[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+\.(?:md|markdown|txt|docx|json|ya?ml))/gi;
+
+  for (const match of text.matchAll(filePattern)) {
+    const path = match[1]?.replace(/[),.;:]+$/, '');
+    if (path) paths.add(path);
+  }
+
+  return [...paths].map((path) => ({
+    id: `file_${path}`,
+    title: fileTitle(path),
+    path,
+    updatedAt: Date.now(),
+  }));
+}
+
+function directoryFromPath(path: string): string | null {
+  const index = path.lastIndexOf('/');
+  if (index <= 0) return null;
+  return path.slice(0, index);
+}
+
+function fileTitle(path: string): string {
+  return (
+    path
+      .split('/')
+      .filter(Boolean)
+      .pop()
+      ?.replace(/\.(md|markdown|txt|docx|json|ya?ml)$/i, '')
+      .replace(/[-_]+/g, ' ') || 'Generated file'
+  );
 }
 
 const AppContext = createContext<{
