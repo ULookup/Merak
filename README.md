@@ -1,267 +1,244 @@
-# Merak Agent
+# Merak
 
-> 一个用于学习现代 Agent Runtime 内部机制的 C++23 项目。当前形态是本地常驻 Agent 服务端，加上独立 TUI 客户端。
+> 为长篇小说和世界观构建而生的 AI Agent 运行时。
 
-## 项目定位
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Merak 不以生产部署为目标，而是通过可阅读、可拆解的实现理解现代 Coding Agent 的核心机制：
+Merak 是一个可自部署的 AI Agent 服务。它在 LLM 之上提供了一套完整的写作工作流引擎——管理你的世界观、角色、伏笔和叙事结构，让 AI 成为真正理解你创作意图的写作伙伴。
 
-- **Agent Loop**：LLM 推理、工具调用、结果观察和多轮状态机。
-- **Runtime**：Session、Run、事件流、审批、取消和恢复。
-- **上下文管理**：Token 预算、前缀缓存意识、历史压缩和摘要。
-- **工具系统**：内置工具、权限检查、MCP 动态工具和取消传播。
-- **持久化**：SQLite 当前状态索引和 JSONL 追加式事件日志。
-- **终端客户端**：通过 HTTP + SSE 连接 runtime 的 TUI，不持有 Agent 核心状态。
+**核心设计：**
 
-## 当前架构
+- **分层 Agent 系统**：God（全知叙事者）、Manager（专业领域顾问）、Character（角色模拟）三层 Agent 各司其职，协作推进创作
+- **叙事骨架**：Arc → Chapter → Section → Scene 四级结构，AI 永远知道你当前在写哪一章
+- **伏笔生命周期**：每条伏笔有 Open → Paid → Abandoned 三态，关键节点自动提醒回收
+- **信息不对称模型**：每个角色维护 Public / Secret / Unknown 三套知识边界，泄密自动检测
+- **角色声音指纹**：分析句式、修饰词、签名词，保持角色说话风格稳定，不自动改写
+- **角色记忆演化**：角色卡版本历史 + 日记 + 关系网 + 记忆摘要，角色随故事推进"成长"
 
-Merak 已从单进程 CLI 拆分为两个运行角色：
+**使用方式：**
 
-```text
-merak tui
-   │
-   │ HTTP + SSE
-   ▼
-merak serve                     仅监听 127.0.0.1
-   │
-   ├── merak-http               REST 路由、SSE backlog/live stream
-   ├── merak-runtime            Session、Run、EventBus、审批、取消
-   ├── merak-storage            SQLite 索引、JSONL journal、启动恢复
-   ├── merak-loop               Agent 状态机、工具循环、上下文压缩
-   ├── merak-context            上下文组装、Token 预算、缓存前缀分析
-   ├── merak-tools              内置工具、权限、MCP 包装
-   ├── merak-mcp                MCP stdio 客户端、远端工具发现
-   ├── merak-llm                OpenAI / Anthropic 流式 Provider
-   ├── merak-memory             工作记忆、pgvector 长期记忆接口
-   ├── merak-config             分层配置加载
-   └── merak-core               共享类型、执行端口、错误定义
-```
+本地启动服务端，终端客户端（TUI）或浏览器（Web UI）连接使用，体验一致。
 
-TUI 只负责输入和渲染。LLM Provider、工具、MCP、Memory 和 AgentLoop 全部由 `merak serve` 初始化。
+**数据主权：** 全部数据落在本机 PostgreSQL + JSONL，`~/.merak/` 目录下管理。你的故事永远属于你。
 
-### 依赖关系
+---
 
-```text
-merak-core
-├── merak-config
-├── merak-mcp
-├── merak-llm
-├── merak-memory
-├── merak-storage
-├── merak-tools        ← core, mcp
-├── merak-context      ← core, memory, llm
-├── merak-loop         ← core, config, llm, memory, tools, context
-├── merak-runtime      ← core, storage, loop
-├── merak-http         ← core, runtime
-├── merak-worldbuilding ← SQLite, nlohmann_json
-└── merak-cli          ← HTTP server composition root + TUI HTTP/SSE client
-```
+## 为什么需要 Merak？
 
-## Runtime 模型
+通用 AI 聊天工具在长篇创作中会暴露系统性问题，Merak 针对每一个做了专门设计：
 
-### Session
+| 痛点 | 表现 | Merak 的解决 |
+|------|------|-------------|
+| **角色遗忘** | 写到第三章，AI 忘了角色最初的性格和动机 | 角色卡版本历史 + 记忆摘要，每次对话自动注入角色当前状态 |
+| **语言同质化** | 将军和公主说话一个腔调，旁白和角色内心独白分不清 | 角色声音指纹——分析每个角色的句式、修饰词、签名词，在上下文中锚定风格 |
+| **世界观漂移** | 第一章说过"这个世界没有魔法"，第五章 AI 突然掏出了火球术 | 集中维护的 World 系统——地图、历史、魔法体系、势力关系在每次调用时作为锚定上下文注入 |
+| **伏笔丢失** | 第三章埋了一条线索，写到第八章完全忘了这回事 | 伏笔生命周期管理——Open / Paid / Abandoned 三态追踪，关键节点提醒回收 |
+| **情节跃进** | AI 为了快速收尾，跳过必要的铺垫直接跳到结局 | 叙事骨架约束——Arc → Chapter → Section → Scene 四级结构，AI 必须遍历当前节点才能推进 |
+| **角色全知** | 反派莫名其妙知道了主角在另一个城市的秘密计划 | 信息不对称模型——每个角色维护 Public / Secret / Unknown 三套知识，泄密检测并标记 |
+| **上下文稀释** | 百万字长篇后，AI 对新章节的理解越来越模糊 | Token 预算 + 前缀缓存 + 历史压缩，在上下文窗口内保留最相关的叙事信息 |
+| **风格漂移** | 写到一半，AI 从严肃奇幻偏到了轻小说风格 | 项目级 System Prompt 固化创作基调，不随单次对话漂移 |
 
-Session 是长期存在的对话线程。关闭 TUI 不会关闭 Session。
+---
 
-```text
-active → archived
-```
+## 与 SillyTavern（酒馆）的区别
 
-### Run
+SillyTavern 是一个优秀的 AI 角色扮演前端——你和 AI 角色聊天互动。Merak 同样可以做到这一点。
 
-每次用户消息会创建一个 Run。同一 Session 同时只允许一个未完成 Run。
+区别在于：酒馆的聊天就是终点，而 Merak 的聊天是创作过程的一部分。
+
+| | SillyTavern（酒馆） | Merak |
+|---|---|---|
+| **核心体验** | 和 AI 角色聊天互动 | 在完整世界观框架下和角色互动，产出的对话是小说的创作素材 |
+| **角色的"记忆"** | 依赖 LLM 上下文窗口，切对话就忘 | 角色卡版本历史 + 记忆摘要 + 关系网，跨 Session 持续演化 |
+| **世界观一致性** | Lorebook 手动维护，容易遗漏 | World 系统在每次 Agent 调用时自动注入锚定上下文，角色永远知道自己身在哪个世界 |
+| **角色间协作** | 群聊模式（多个 AI 角色同台对话） | 分层 Agent 协作——God 掌控全局叙事，Manager 管理领域设定，Character 在约束下自主行动 |
+| **信息不对称** | 无 | 每个角色维护 Public / Secret / Unknown 三套知识，泄密自动检测 |
+| **叙事管理** | 无 | Arc → Chapter → Section → Scene 四级结构，伏笔生命周期追踪 |
+| **输出产物** | 聊天记录 | 聊天记录 + 世界观文档 + 角色档案 + 结构化章节内容 |
+| **适合场景** | 角色扮演、聊天互动 | 写小说、构建世界，同时可以和角色聊天来推进创作 |
+
+---
+
+## 架构一览
+
+Merak 采用服务端-客户端分离架构。服务端负责所有 AI 能力（Agent Loop、工具、上下文、持久化），客户端只做输入和渲染。
 
 ```text
-queued
-  → running
-  → waiting_approval
-  → running
-  → completed
-
-running          → failed
-running          → cancelled
-running          → interrupted
-waiting_approval → cancelled
+┌─────────────────────────────────────────┐
+│              客  户  端                   │
+│  ┌──────────┐          ┌──────────────┐ │
+│  │  TUI     │          │   Web UI     │ │
+│  │ (FTXUI)  │          │   (React)    │ │
+│  └────┬─────┘          └──────┬───────┘ │
+│       │    HTTP + SSE          │         │
+└───────┼────────────────────────┼─────────┘
+        │                        │
+        ▼                        ▼
+┌──────────────────────────────────────────┐
+│             merak serve                   │
+│  ┌─────────────────────────────────────┐ │
+│  │  HTTP Layer — REST 路由 + SSE 推送   │ │
+│  ├─────────────────────────────────────┤ │
+│  │  Runtime — Session · Run · EventBus │ │
+│  ├─────────────────────────────────────┤ │
+│  │  AgentLoop — 状态机 · 工具循环 · 压缩│ │
+│  ├─────────────────────────────────────┤ │
+│  │  Context — Token 预算 · 前缀缓存     │ │
+│  ├──────────┬──────────────────────────┤ │
+│  │  Tools   │  Worldbuilding           │ │
+│  │  内置+MCP│  World·Agent·Narrative   │ │
+│  ├──────────┴──────────────────────────┤ │
+│  │  Storage — PostgreSQL + JSONL       │ │
+│  └─────────────────────────────────────┘ │
+└──────────────────────────────────────────┘
 ```
 
-服务端重启时：
-
-- `running` Run 会标记为 `interrupted`。
-- `waiting_approval` Run 会保留；审批后可从 journal 重建消息并继续。
-- 正在执行中的网络请求或 Shell 进程不会跨进程恢复。
-
-### 事件流
-
-Runtime 先追加 JSONL journal，再更新 SQLite 索引，最后广播 SSE。TUI 断线重连时携带最后一个 `seq`，服务端先补发缺失事件，再继续发送实时事件。
-
-公开事件包括：
-
-```text
-session_created
-run_started
-state_changed
-text_delta
-usage_updated
-tool_started
-tool_completed
-approval_requested
-approval_resolved
-delegation_started
-sub_run_started
-sub_run_state_changed
-sub_run_text_delta
-sub_run_tool_started
-sub_run_tool_completed
-sub_run_completed
-delegation_completed
-run_completed
-run_failed
-run_cancelled
-run_interrupted
-```
-
-内部恢复记录包括：
-
-```text
-message_appended
-compaction_applied
-```
-
-## HTTP API
-
-`merak serve` 默认监听 `127.0.0.1:3888`。第一版没有鉴权，因此不提供局域网监听参数。
-
-```text
-GET  /v1/runtime
-POST /v1/sessions
-GET  /v1/sessions
-GET  /v1/sessions/{id}
-GET  /v1/sessions/{id}/events?after={seq}
-GET  /v1/sessions/{id}/events/stream?after={seq}
-POST /v1/sessions/{id}/runs
-POST /v1/sessions/{id}/delegations
-POST /v1/approvals/{id}
-POST /v1/runs/{id}/cancel
-```
-
-## Worldbuilding Novel Agent
-
-`merak-worldbuilding` 是世界观/长篇小说创作领域库。详情见 [docs/worldbuilding-novel-agent.md](docs/worldbuilding-novel-agent.md)。
-
-核心能力：
-- **World 隔离**：每个世界独立目录 + SQLite 索引
-- **Agent 分层**：God（全知叙事者）→ Manager（地图/历史/魔法/势力）→ Character（个体/群体）
-- **叙事骨架**：Arc → Chapter → Section → Scene 层级
-- **伏笔系统**：Open/Paid/Abandoned 生命周期，最后一幕提醒
-- **秘密系统**：三态信息不对称（Public/Secret/Unknown），泄密检测
-- **声音指纹**：句式、修饰词、签名词分析，不自动改写角色
-- **角色记忆**：角色卡版本历史、日记、关系、记忆摘要
-
-`merak serve` 启动时初始化 WorldbuildingService，数据落在 `~/.merak/worlds/{world_id}`。
-
-## Agent Loop
-
-单个 Run 内的状态机：
-
-```text
-IDLE
-  → CONTEXT_READY
-  → THINKING
-  → [ACTING → OBSERVING → CONTEXT_READY] × N
-  → RESPONDING
-  → COMPLETE
-```
-
-安全机制：
-
-- 最多 25 轮工具调用，可配置。
-- 工具连续失败 3 次后触发熔断。
-- Token 压力过高时压缩历史，并将摘要写入 journal。
-- OpenAI 和 Anthropic 请求支持通过 libcurl progress callback 取消。
-- Shell 使用独立进程组，取消 Run 时终止整个子进程组。
-- MCP 等无法立即中止的调用会在返回后丢弃已取消 Run 的结果。
-
-## 工具系统
-
-当前注册 6 个内置工具：
-
-| 工具 | 权限 | 用途 |
-|------|------|------|
-| `read_file` | `safe` | 读取文件 |
-| `write_file` | `ask` | 写入文件 |
-| `edit_file` | `ask` | 精确替换文件内容 |
-| `glob` | `safe` | 匹配文件 |
-| `grep` | `safe` | 搜索代码 |
-| `execute_bash` | `ask` | 执行 Shell 命令 |
-
-MCP Server 可通过配置启动，并将远端工具动态注册进同一 `ToolRegistry`。
-
-## 持久化
-
-默认存储目录：
-
-```text
-~/.merak/runtime.sqlite3
-~/.merak/sessions/{session_id}.jsonl
-```
-
-- SQLite 保存 Session、Run 和 Approval 的当前状态。
-- JSONL 保存不可变事件历史，用于审计、SSE 补发和恢复。
-- 服务端启动时会根据 journal 修复 SQLite 中落后的 `last_seq`。
-
-## 构建与运行
-
-### 依赖
-
-- GCC >= 13 或 Clang >= 17
-- CMake >= 3.22
-- Conan >= 2.0
-- PostgreSQL >= 14 和 pgvector，可选
-
-主要第三方库：
-
-| 类别 | 技术 |
-|------|------|
-| 语言 | C++23 |
-| 构建 | CMake + Conan 2 |
-| HTTP Server | cpp-httplib |
-| HTTP Client | libcurl |
-| Runtime 状态 | SQLite |
-| 长期记忆 | PostgreSQL + pgvector |
-| JSON | nlohmann/json |
-| 日志 | spdlog |
-| TUI | FTXUI + inline terminal renderer |
-
-### 安装依赖并构建
+**启动方式：**
 
 ```bash
+# 启动服务端
+merak serve
+
+# 终端客户端
+merak tui
+
+# 或 Web UI（另起终端）
+cd webui && npm run dev
+```
+
+TUI 和 Web UI 功能一致，连接同一个服务端，共享 Session 和 Run。
+
+### 模块依赖
+
+```text
+merak-core            共享类型 · 错误定义
+├── config            分层配置加载
+├── llm               OpenAI / Anthropic Provider
+├── mcp               MCP stdio 客户端
+├── memory            工作记忆 · 长期记忆接口
+├── storage           PostgreSQL 索引 · JSONL 日志
+├── tools             内置工具 · MCP 动态注册
+├── context           Token 预算 · 回压缩
+├── loop              Agent 状态机 · 工具循环
+├── runtime           Session · Run · EventBus · Approval
+├── http              REST + SSE
+├── worldbuilding     World · Agent · Narrative · Foreshadowing
+└── cli               serve / tui 入口
+```
+
+---
+
+## Worldbuilding 引擎
+
+Worldbuilding 是 Merak 的核心领域引擎，专为长篇小说和世界观构建设计，包含六个子系统：
+
+### 分层 Agent 架构
+
+不是用一个大而全的 prompt 应付所有任务，而是三层 Agent 各司其职：
+
+| Agent | 职责 | 示例 |
+|-------|------|------|
+| **God** | 全知叙事者，把控整体剧情走向、节奏和基调 | "第三章的高潮太弱了，需要再铺垫一章" |
+| **Manager** | 专业领域顾问——地图、历史、魔法体系、势力关系 | "这个世界没有传送魔法，角色跨越大陆至少需要两周" |
+| **Character** | 个体或群体角色模拟，在自身知识边界内行动 | 作为角色回应事件、更新日记、做出符合人设的决策 |
+
+### 叙事骨架
+
+强制性的四级结构，AI 永远知道自己当前在哪里：
+
+```text
+Arc（卷）
+ └── Chapter（章）
+      └── Section（节）
+           └── Scene（场景）
+```
+
+AI 必须遍历当前节点才能推进，从架构层面防止情节跃进。每个节点可附加独立设定和上下文。
+
+### 伏笔系统
+
+| 状态 | 含义 |
+|------|------|
+| **Open** | 已埋下，等待回收 |
+| **Paid** | 已回收，闭环完成 |
+| **Abandoned** | 已废弃，记录原因 |
+
+每进入新章节时自动检查未回收伏笔，提醒作者哪些线索该回收了。
+
+### 信息不对称
+
+角色的认知不是全知的。每个角色维护三套知识边界：
+
+| 级别 | 含义 |
+|------|------|
+| **Public** | 角色知道，且知道别人也知道 |
+| **Secret** | 角色知道，但知道别人不知道 |
+| **Unknown** | 角色不知道 |
+
+当角色在对话或行动中越界使用 Unknown 信息时，系统检测并标记为泄密事件。
+
+### 角色声音指纹
+
+防止语言同质化的机制，分析并锚定每个角色的表达特征：
+
+- 句式偏好（长句/短句、疑问/感叹/陈述比例）
+- 修饰词风格（形容词密度、常用副词）
+- 签名词（角色特有的称呼、口头禅、语癖）
+
+在 Character Agent 的 System Prompt 中注入，让角色保持稳定的说话风格。
+
+### 角色记忆系统
+
+角色不会"忘记"自己做过什么：
+
+- **角色卡**：角色的核心设定，支持版本历史，记录设定变更
+- **日记**：以角色第一人称记录关键事件和情感变化
+- **关系网**：角色之间的社会关系，随情节演化
+- **记忆摘要**：用上下文空间换角色一致性，每次对话自动注入角色当前应该记得的信息
+
+---
+
+## 快速开始
+
+### 环境要求
+
+| 依赖 | 版本 |
+|------|------|
+| GCC 或 Clang | GCC ≥ 13 / Clang ≥ 17 |
+| CMake | ≥ 3.22 |
+| Conan | ≥ 2.0 |
+| PostgreSQL | ≥ 14 |
+
+### 安装与构建
+
+```bash
+# 1. 安装 C++ 依赖
 conan install . --build=missing -s build_type=Debug
+
+# 2. 构建
 cmake -B build \
   -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake \
   -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j
-```
 
-### 初始化
-
-```bash
+# 3. 初始化配置
 ./build/cli/merak --init
 ```
 
-编辑 `~/.merak/settings.local.json`，填入 API Key。
+编辑 `~/.merak/settings.local.json`，填入 LLM API Key。
 
 ### 启动
 
-在一个终端启动服务端：
-
 ```bash
+# 终端1：启动服务端
 ./build/cli/merak serve
-```
 
-在另一个终端启动 TUI：
-
-```bash
+# 终端2：启动 TUI 客户端
 ./build/cli/merak tui
+
+# 或者启动 Web UI
+cd webui && npm install && npm run dev
+# 打开 http://localhost:5173
 ```
 
 恢复已有 Session：
@@ -270,80 +247,91 @@ cmake --build build -j
 ./build/cli/merak tui --session <session_id>
 ```
 
-### TUI 命令
-
-```text
-/session list
-/session new
-/session use <id>
-/tools
-/agents
-/team fanout <agent1,agent2> <task>
-/team sequential <agent1,agent2> <task>
-/team pipeline <agent1,agent2> <task>
-/context
-/transcript
-/tool-calls
-/clear
-/exit
-```
-
-执行期间按 `Ctrl+C` 会先取消当前 Run；空闲时按 `Ctrl+C` 退出 TUI。
-
-### 测试
+### 运行测试
 
 ```bash
-cd build
-ctest --output-on-failure
+cd build && ctest --output-on-failure       # C++ 测试
+cd webui && npm test                         # Web UI 测试
 ```
 
-测试源码覆盖 storage、runtime、HTTP 契约和 TUI runtime client。
+---
 
 ## 项目结构
 
 ```text
 Merak/
 ├── libs/
-│   ├── core/          # 共享类型、执行端口
-│   ├── config/        # 配置加载
-│   ├── llm/           # OpenAI / Anthropic Provider
-│   ├── memory/        # 工作记忆、长期记忆接口
-│   ├── mcp/           # MCP stdio 客户端
-│   ├── tools/         # 内置工具、ToolRegistry
-│   ├── context/       # 上下文预算、压缩
-│   ├── loop/          # AgentLoop、SubAgentRunner
-│   ├── storage/       # SQLite + JSONL
-│   ├── runtime/       # Session、Run、EventBus、Approval
-│   ├── http/          # REST + SSE
-│   └── worldbuilding/ # World、Agent、Narrative、Foreshadowing、Secret、Voice
-├── cli/               # serve / tui 入口和终端客户端
-└── tests/             # CTest 注册
+│   ├── core/             共享类型 · 执行端口
+│   ├── config/           分层配置加载
+│   ├── llm/              OpenAI / Anthropic Provider
+│   ├── memory/           工作记忆 · 长期记忆接口
+│   ├── mcp/              MCP stdio 客户端 · 远端工具发现
+│   ├── tools/            内置工具 · ToolRegistry · 权限检查
+│   ├── context/          Token 预算 · 前缀缓存 · 历史压缩
+│   ├── loop/             Agent 状态机 · SubAgentRunner
+│   ├── storage/          PostgreSQL 索引 · JSONL 日志
+│   ├── runtime/          Session · Run · EventBus · Approval
+│   ├── http/             REST API + SSE 流
+│   ├── prompts/          System Prompt 模板
+│   └── worldbuilding/    World · Agent · Narrative · Foreshadowing · Secret · Voice
+├── cli/                  serve / tui 入口
+├── webui/                React Web UI
+├── config/prompts/       业务 Prompt 配置
+├── scripts/              部署脚本
+└── tests/                CTest 注册
 ```
 
-## 当前边界
+---
 
-已有实现但仍需后续完善：
+## Web UI
 
-- 长期记忆 pgvector 接口已存在，但 CLI composition root 尚未接入 EmbeddingProvider。
-- `SubAgentRunner` 提供委派、fan-out 和串行执行库能力，但尚未暴露为 TUI 工作流。
-- 测试源码已补齐，但当前提交没有执行 Conan 安装、编译或测试验证。
+基于 React 19 + TypeScript + Vite 的单页应用，通过 HTTP + SSE 连接 `merak serve`。
 
-暂未包含：
+```bash
+cd webui
+cp .env.example .env          # VITE_API_BASE 默认 http://localhost:3888
+npm install && npm run dev
+```
 
-- Web UI
-- 鉴权和多用户隔离
-- 远程 Edge 工具执行
-- Shell 沙箱
-- Hook / Skill / Plugin 系统
-- 后台 Durable Job
-- 云端部署
+核心能力：Session 管理、聊天时间线、Markdown 渲染（含代码高亮）、工具面板、审批流程、SSE 连接状态监控、响应式布局、骨架屏加载。
 
-## 参考资料
+---
 
-- 本地 `../astra` 项目：Runtime、Session Journal、审批与恢复设计参考
-- Claude Code / Codex CLI 架构分析
-- [Model Context Protocol](https://modelcontextprotocol.io/)
+## 文档索引
+
+README 聚焦概览，详细内容见以下文档：
+
+| 文档 | 内容 |
+|------|------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 完整架构设计——模块详解、依赖关系、数据流 |
+| [docs/RUNTIME.md](docs/RUNTIME.md) | Runtime 模型——Session / Run 生命周期、事件流、审批与取消 |
+| [docs/AGENT_LOOP.md](docs/AGENT_LOOP.md) | Agent Loop——状态机、工具调用循环、安全机制 |
+| [docs/HTTP_API.md](docs/HTTP_API.md) | HTTP API——端点列表、请求/响应格式、SSE 协议 |
+| [docs/WORLDBUILDING.md](docs/WORLDBUILDING.md) | Worldbuilding 引擎——分层 Agent、叙事骨架、伏笔、声音指纹 |
+| [docs/TOOLS.md](docs/TOOLS.md) | 工具系统——内置工具、权限模型、MCP 集成 |
+| [docs/PERSISTENCE.md](docs/PERSISTENCE.md) | 持久化——PostgreSQL 索引、JSONL 日志、启动恢复 |
+| [docs/TUI.md](docs/TUI.md) | TUI 客户端——命令参考、快捷键 |
+| [webui/](webui/) | Web UI——技术栈、组件结构、开发指南 |
+
+---
+
+## 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 语言 | C++23 / TypeScript |
+| 构建 | CMake + Conan 2 / Vite |
+| HTTP Server | cpp-httplib |
+| HTTP Client | libcurl |
+| 存储 | PostgreSQL + JSONL |
+| JSON | nlohmann/json |
+| 日志 | spdlog |
+| TUI | FTXUI |
+| Web UI | React 19 + CSS Modules |
+| 测试 | GTest / Vitest |
+
+---
 
 ## 许可证
 
-MIT
+[MIT](LICENSE)
