@@ -1,6 +1,7 @@
 #pragma once
 #include "../../theme/theme.hpp"
 #include "../buffer.hpp"
+#include "../widget/markdown_view.hpp"
 #include <merak/message.hpp>
 #include <nlohmann/json.hpp>
 #include <algorithm>
@@ -100,11 +101,6 @@ inline std::string repeat_text(std::string_view text, size_t count) {
     return out;
 }
 
-struct Span {
-    std::string text;
-    Style style;
-};
-
 inline void write_spans(Buffer& buf, const std::vector<std::vector<Span>>& lines) {
     for (uint16_t y = 0; y < lines.size() && y < buf.h; ++y) {
         uint16_t x = 0;
@@ -158,55 +154,6 @@ class AssistantCell final : public HistoryCell {
     bool live_ = true;
     int frozen_gutter_ = 178;
 
-    static std::vector<Span> render_inline_spans(std::string line, const theme::Theme& t) {
-        std::vector<Span> spans;
-        Style base;
-        Style bold; bold.bold(true);
-        Style accent; accent.fg = t.accent;
-        Style dim_fg; dim_fg.fg = t.dim; dim_fg.dim(true);
-
-        // Headings
-        if (line.starts_with("# ")) { spans.push_back({line.substr(2), bold}); return spans; }
-        if (line.starts_with("## ")) { spans.push_back({line.substr(3), bold}); return spans; }
-
-        // Blockquote
-        if (line.starts_with("> ")) {
-            spans.push_back({"│ ", dim_fg});
-            auto inner = render_inline_spans(line.substr(2), t);
-            spans.insert(spans.end(), inner.begin(), inner.end());
-            return spans;
-        }
-
-        // Inline parsing: `code`, **bold**, __italic__
-        bool in_code = false, in_bold = false, in_italic = false;
-        std::string buf;
-        auto flush = [&] {
-            if (buf.empty()) return;
-            Style s;
-            if (in_code) s = accent;
-            else if (in_bold) s = bold;
-            else if (in_italic) s = accent;
-            else s = base;
-            spans.push_back({buf, s});
-            buf.clear();
-        };
-        for (size_t i = 0; i < line.size(); ++i) {
-            char c = line[i];
-            if (c == '`') { flush(); in_code = !in_code; }
-            else if (c == '*' && i+1 < line.size() && line[i+1] == '*') { flush(); in_bold = !in_bold; ++i; }
-            else if (c == '_' && i+1 < line.size() && line[i+1] == '_') { flush(); in_italic = !in_italic; ++i; }
-            else buf.push_back(c);
-        }
-        flush();
-
-        // List items
-        if (line.starts_with("* ") || line.starts_with("- ")) {
-            if (!spans.empty() && spans[0].text.size() >= 2) {
-                spans[0].text = "• " + spans[0].text.substr(2);
-            }
-        }
-        return spans;
-    }
     static bool is_separator_row(const std::string& line) {
         if (line.find('|') == std::string::npos) return false;
         for (char c : line) {
@@ -355,8 +302,26 @@ public:
                 lines.push_back({Span{line, success_fg}});
             } else if (line.starts_with("-")) {
                 lines.push_back({Span{line, error_fg}});
+            } else if (line.starts_with("# ")) {
+                Style bold; bold.bold(true);
+                lines.push_back({Span{line.substr(2), bold}});
+            } else if (line.starts_with("## ")) {
+                Style bold; bold.bold(true);
+                lines.push_back({Span{line.substr(3), bold}});
+            } else if (line.starts_with("> ")) {
+                std::vector<Span> bq;
+                bq.push_back({"│ ", dim_fg});
+                auto inner = MarkdownView::parse_inline_spans(line.substr(2), t);
+                bq.insert(bq.end(), inner.begin(), inner.end());
+                lines.push_back(bq);
+            } else if (line.starts_with("* ") || line.starts_with("- ")) {
+                auto list_spans = MarkdownView::parse_inline_spans(line, t);
+                if (!list_spans.empty() && list_spans[0].text.size() >= 2) {
+                    list_spans[0].text = "• " + list_spans[0].text.substr(2);
+                }
+                lines.push_back(list_spans);
             } else {
-                lines.push_back(render_inline_spans(line, t));
+                lines.push_back(MarkdownView::parse_inline_spans(line, t));
             }
         }
 

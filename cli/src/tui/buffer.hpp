@@ -190,4 +190,9 @@ struct Buffer {
     }
 };
 
+struct Span {
+    std::string text;
+    Style style;
+};
+
 } // namespace merak::tui
