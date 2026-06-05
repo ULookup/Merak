@@ -136,13 +136,11 @@ public:
                 move_cursor(0, y);
                 std::cout << "\x1b[K";
             }
-            if (viewport_height_ > curr.h) {
-                std::cout << "\x1b[" << (viewport_height_ - curr.h) << "A";
-            }
+            std::cout << "\x1b[" << (prev_buffer_.h - curr.h) << "A";
         }
         if (curr.w < prev_buffer_.w) {
             for (uint16_t y = 0; y < curr.h; ++y) {
-                move_cursor(prev_buffer_.w, y);
+                move_cursor(curr.w, y);
                 std::cout << "\x1b[K";
             }
         }

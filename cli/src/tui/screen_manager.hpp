@@ -449,9 +449,10 @@ class ScreenManager {
             return;
         }
 
+        static constexpr uint16_t kActiveCellMaxH = 80;
         if (timeline_.active()) {
             Buffer cell_buf;
-            cell_buf.resize(w, 20);
+            cell_buf.resize(w, kActiveCellMaxH);
             timeline_.active()->render(cell_buf, w);
             copy_to(buf, cell_buf, y);
             y += cell_buf.h + 1;

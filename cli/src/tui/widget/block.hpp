@@ -16,7 +16,7 @@ public:
         Rect inner_area = {1, 1,
             area.w > 2 ? static_cast<uint16_t>(area.w - 2) : 0,
             area.h > 2 ? static_cast<uint16_t>(area.h - 2) : 0};
-        Buffer inner_buf = inner_->render(inner_area);
+        Buffer inner_buf = inner_ ? inner_->render(inner_area) : Buffer{};
         Buffer buf;
         buf.resize(area.w, area.h);
         if (area.w >= 2) {

@@ -98,6 +98,7 @@ static void test_session_meta_roundtrip() {
     assert(e2.session_id == "sess_001");
     assert(e2.terminal_w == 120);
     assert(e2.terminal_h == 40);
+    assert(e2.system_prompt_hash == "abc123");
 }
 
 static void test_variant_roundtrip() {

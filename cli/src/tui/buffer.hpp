@@ -190,6 +190,16 @@ struct Buffer {
     }
 };
 
+inline uint16_t display_width(std::string_view text) {
+    uint16_t w = 0;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        auto cp = utf8_decode(text, pos);
+        w += std::max(uint8_t(1), char_width(cp));
+    }
+    return w;
+}
+
 struct Span {
     std::string text;
     Style style;

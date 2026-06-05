@@ -72,13 +72,13 @@ public:
                 if (seg_start > pos) {
                     auto text = code_.substr(pos, seg_start - pos);
                     buf.set_span(x, y, text, Style{});
-                    x += text.size();
+                    x += display_width(text);
                 }
                 if (seg_end > seg_start) {
                     auto text = code_.substr(seg_start, seg_end - seg_start);
                     auto style = theme_.style_for(span.token);
                     buf.set_span(x, y, text, style);
-                    x += text.size();
+                    x += display_width(text);
                 }
                 pos = seg_end;
             }
