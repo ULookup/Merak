@@ -55,6 +55,7 @@ std::future<AgentResponse> AgentLoop::run(
 std::future<AgentResponse> AgentLoop::resume(RunControl& control) {
     return std::async(std::launch::async,
         [this, &control]() -> AgentResponse {
+            tool_failure_streak_.clear();
             return run_loop(control);
         });
 }
@@ -279,7 +280,9 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
 void AgentLoop::maybe_compact(RunControl& control) {
     // Microcompact: compress old tool results first (cheap, no LLM call)
     int total_tokens = counter_->count(session_history_);
-    double pressure = (double)total_tokens / context_->effective_budget();
+    int budget = context_->effective_budget();
+    if (budget <= 0) return;
+    double pressure = (double)total_tokens / budget;
     int compacted = tool_result_compactor_->compact(session_history_, pressure);
     if (compacted > 0) {
         spdlog::info("Loop: microcompact compressed {} tool results (pressure={:.1%})",

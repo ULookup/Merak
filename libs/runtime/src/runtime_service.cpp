@@ -239,7 +239,7 @@ void RuntimeService::resume_after_restarted_approval(RunRecord run,ApprovalRecor
     if(allowed){auto temp_loop=loop_factory_("");result=temp_loop->tools()->execute(call,ToolExecutionContext{token}).get();}
     else{result.is_error=true;result.output="User denied permission for tool: "+call.name;}
     control->emit_tool_completed(call,result);Message tool;tool.role="tool";tool.content=result.output;tool.tool_call_id=result.call_id;history.push_back(tool);control->append_message(tool);
-    auto loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_("")));loop->restore_history(std::move(history));{std::lock_guard lock(session_loops_mutex_);session_loops_[run.session_id]=loop;}
+    auto loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_("")));loop->restore_history(std::move(history));{std::lock_guard lock(session_loops_mutex_);if(session_loops_.count(run.session_id))spdlog::warn("Resume after restart: overwriting existing session loop for {}",run.session_id);session_loops_[run.session_id]=loop;}
     std::thread([self=shared_from_this(),run,control,token,loop]()mutable{try{loop->resume(*control).get();if(token->cancelled()){self->store_.update_run_status(run.id,RunStatus::Cancelled);self->emit(run.session_id,run.id,"run_cancelled");}else{self->store_.update_run_status(run.id,RunStatus::Completed);self->emit(run.session_id,run.id,"run_completed");}}catch(const std::exception&e){self->store_.update_run_status(run.id,RunStatus::Failed,e.what());self->emit(run.session_id,run.id,"run_failed",{{"error",e.what()}});}std::lock_guard lock(self->mutex_);self->tokens_.erase(run.id);self->controls_.erase(run.id);}).detach();
 }
 } // namespace merak
