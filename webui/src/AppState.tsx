@@ -321,7 +321,9 @@ export function reducer(state: AppState, action: Action): AppState {
 
 function applySseFrame(state: AppState, frame: SseFrame): AppState {
   const { type, payload } = frame;
-  const p = (payload ?? {}) as Record<string, unknown>;
+  const outer = (payload ?? {}) as Record<string, unknown>;
+  const inner = (outer.payload as Record<string, unknown>) ?? {};
+  const p = { ...outer, ...inner } as Record<string, unknown>;
 
   switch (type) {
     case 'run_started':
