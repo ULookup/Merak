@@ -14,19 +14,27 @@
 
 namespace merak::tui {
 
+inline int utf8_sequence_length(unsigned char lead) {
+    if (lead < 0x80) return 1;
+    if ((lead & 0xE0) == 0xC0) return 2;
+    if ((lead & 0xF0) == 0xE0) return 3;
+    if ((lead & 0xF8) == 0xF0) return 4;
+    return 0;
+}
+
 inline std::string sanitize_terminal_text(std::string_view input) {
     std::string out;
     out.reserve(input.size());
     for (size_t i = 0; i < input.size(); ++i) {
         auto c = static_cast<unsigned char>(input[i]);
+        // Strip ANSI escape sequences
         if (c == 0x1b || c == 0x9b) {
             if (c == 0x1b && i + 1 < input.size() && input[i + 1] == ']') {
                 i += 2;
                 while (i < input.size()) {
                     if (input[i] == '\a') break;
                     if (input[i] == '\x1b' && i + 1 < input.size() && input[i + 1] == '\\') {
-                        ++i;
-                        break;
+                        ++i; break;
                     }
                     ++i;
                 }
@@ -39,7 +47,27 @@ inline std::string sanitize_terminal_text(std::string_view input) {
             }
             continue;
         }
-        if (c == '\n' || c == '\t' || (c >= 0x20 && c != 0x7f && c != 0x9b)) {
+        // Preserve valid UTF-8 multi-byte sequences
+        if (c >= 0x80) {
+            int seq_len = utf8_sequence_length(c);
+            if (seq_len > 1) {
+                bool valid = true;
+                for (int j = 1; j < seq_len; ++j) {
+                    if (i + j >= input.size() ||
+                        (static_cast<unsigned char>(input[i + j]) & 0xC0) != 0x80) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (valid) {
+                    for (int j = 0; j < seq_len; ++j) out.push_back(input[i + j]);
+                    i += seq_len - 1;
+                }
+            }
+            continue;
+        }
+        // Printable ASCII
+        if (c == '\n' || c == '\t' || (c >= 0x20 && c != 0x7f)) {
             out.push_back(static_cast<char>(c));
         }
     }
@@ -103,14 +131,19 @@ class AssistantCell final : public HistoryCell {
     int frozen_gutter_ = 178;
 
     static std::string render_inline(std::string line) {
+        // Headings
         if (line.starts_with("# ")) return ansi(theme::ANSI_BOLD, line.substr(2));
         if (line.starts_with("## ")) return ansi(theme::ANSI_BOLD, line.substr(3));
-        if (line.starts_with("> ")) return ansi(theme::ANSI_DIM, "│ " + line.substr(2));
-        if (line.starts_with("- ") || line.starts_with("* ")) {
-            return ansi(theme::ANSI_ACCENT, "• ") + line.substr(2);
+
+        // Blockquote: strip prefix, recursively inline-parse remainder
+        if (line.starts_with("> ")) {
+            return ansi(theme::ANSI_DIM, "│ ") + render_inline(line.substr(2));
         }
+
+        // Inline parsing: `code`, **bold**, __italic__
         bool in_code = false;
         bool in_bold = false;
+        bool in_italic = false;
         std::string out;
         for (size_t i = 0; i < line.size(); ++i) {
             auto c = line[i];
@@ -121,11 +154,21 @@ class AssistantCell final : public HistoryCell {
                 out += in_bold ? theme::ANSI_RESET : theme::ANSI_BOLD;
                 in_bold = !in_bold;
                 ++i;
+            } else if (c == '_' && i + 1 < line.size() && line[i + 1] == '_') {
+                out += in_italic ? theme::ANSI_RESET : theme::ANSI_ACCENT;
+                in_italic = !in_italic;
+                ++i;
             } else {
                 out.push_back(c);
             }
         }
-        if (in_code || in_bold) out += theme::ANSI_RESET;
+        if (in_code || in_bold || in_italic) out += theme::ANSI_RESET;
+
+        // List items: replace leading "* " or "- " with bullet AFTER inline parsing
+        if (line.starts_with("* ") || line.starts_with("- ")) {
+            return ansi(theme::ANSI_ACCENT, "• ") + out.substr(2);
+        }
+
         return out;
     }
     static bool is_separator_row(const std::string& line) {
