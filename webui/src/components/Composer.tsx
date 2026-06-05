@@ -22,7 +22,11 @@ export default function Composer() {
 
   const send = useCallback(async () => {
     const msg = text.trim();
-    if (!msg || sending || !state.sessionId) return;
+    if (!msg || sending) return;
+    if (!state.sessionId) {
+      showToast('Waiting for session...', 'info');
+      return;
+    }
     setText('');
     setSending(true);
 

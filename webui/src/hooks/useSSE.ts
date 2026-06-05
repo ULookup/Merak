@@ -28,14 +28,15 @@ export function useSSE(url: string | null, dispatch: Dispatch<Action>, lastSeq: 
   const lastSeqRef = useRef(lastSeq);
   lastSeqRef.current = lastSeq;
 
-  const [connState, setConnState] = useState<ConnectionState>(url ? 'connecting' : 'disconnected');
-
-  if (!url) return connState;
-
-  setConnState('connecting');
+  const [connState, setConnState] = useState<ConnectionState>('disconnected');
 
   useEffect(() => {
-    if (!url) return;
+    if (!url) {
+      setConnState('disconnected');
+      return;
+    }
+
+    setConnState('connecting');
 
     let cancelled = false;
     let retries = 0;
