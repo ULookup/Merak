@@ -53,7 +53,7 @@ export default function ChatTimeline() {
   }, [state.messages]);
 
   return (
-    <div className={styles.area}>
+    <div className={styles.area} role="log" aria-live="polite" aria-label="Messages">
       {state.messages.map(renderMessage)}
       <div ref={bottomRef} />
     </div>

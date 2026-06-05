@@ -25,6 +25,8 @@ export default function ConnectionBanner({ state }: Props) {
 
   return (
     <div
+      role="status"
+      aria-live="polite"
       style={{
         background: s.bg,
         borderBottom: `1px solid ${s.border}`,

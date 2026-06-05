@@ -49,6 +49,7 @@ export default function Composer() {
           ref={ref}
           className={styles.input}
           data-testid="composer-input"
+          aria-label="Type a message"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
@@ -57,11 +58,11 @@ export default function Composer() {
           disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
         />
         {isRunning ? (
-          <button className={styles.cancelBtn} onClick={cancel} data-testid="cancel-btn">
+          <button className={styles.cancelBtn} onClick={cancel} data-testid="cancel-btn" aria-label="Cancel run">
             Cancel
           </button>
         ) : (
-          <button className={styles.sendBtn} onClick={send} disabled={sending || !text.trim()} data-testid="send-btn">
+          <button className={styles.sendBtn} onClick={send} disabled={sending || !text.trim()} data-testid="send-btn" aria-label="Send message">
             Send
           </button>
         )}

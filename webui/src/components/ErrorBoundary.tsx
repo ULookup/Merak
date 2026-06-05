@@ -25,6 +25,7 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         this.props.fallback ?? (
           <div
+            role="alert"
             style={{
               padding: 24,
               margin: 16,
@@ -62,6 +63,7 @@ export default class ErrorBoundary extends Component<Props, State> {
                 fontWeight: 600,
               }}
               data-testid="error-dismiss"
+              aria-label="Dismiss error"
             >
               Dismiss
             </button>

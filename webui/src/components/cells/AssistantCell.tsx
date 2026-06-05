@@ -38,6 +38,7 @@ export default function AssistantCell({ text }: Props) {
           fontSize: 11,
           cursor: 'pointer',
         }}
+        aria-label={copied ? 'Copied' : 'Copy message'}
       >
         {copied ? 'Copied' : 'Copy'}
       </button>

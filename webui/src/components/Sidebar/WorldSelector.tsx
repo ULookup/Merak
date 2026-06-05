@@ -12,6 +12,7 @@ export default function WorldSelector() {
         value={state.worldId ?? ''}
         onChange={(e) => dispatch({ type: 'SET_WORLD', worldId: e.target.value || null })}
         data-testid="world-select"
+        aria-label="Select world"
       >
         <option value="">None</option>
       </select>

@@ -29,10 +29,10 @@ export default function ApprovalCell({ approvalId, approvalName, approvalArgs }:
         {approvalName}
         {approvalArgs ? ` ${approvalArgs}` : ''}
       </span>
-      <button className={styles.btnAllow} onClick={() => handle(true)} data-testid="approval-allow">
+      <button className={styles.btnAllow} onClick={() => handle(true)} data-testid="approval-allow" aria-label="Allow tool">
         Allow
       </button>
-      <button className={styles.btnDeny} onClick={() => handle(false)} data-testid="approval-deny">
+      <button className={styles.btnDeny} onClick={() => handle(false)} data-testid="approval-deny" aria-label="Deny tool">
         Deny
       </button>
     </div>

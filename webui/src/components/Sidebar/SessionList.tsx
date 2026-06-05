@@ -63,13 +63,14 @@ export default function SessionList() {
               data-testid="session-item"
               className={`${styles.sessionItem} ${s.id === state.sessionId ? styles.sessionItemActive : ''}`}
               onClick={() => select(s.id)}
+              aria-label={s.title || s.id.slice(0, 12)}
             >
               {s.title || s.id.slice(0, 12)}
             </div>
           ))
         )}
       </div>
-      <button className={styles.newBtn} onClick={create} data-testid="new-session-btn">
+      <button className={styles.newBtn} onClick={create} data-testid="new-session-btn" aria-label="New session">
         New Session
       </button>
     </div>

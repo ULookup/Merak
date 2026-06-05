@@ -13,6 +13,7 @@ export default function ModelSelector() {
         value={state.selectedModel}
         onChange={(e) => dispatch({ type: 'SET_MODEL', model: e.target.value })}
         data-testid="model-select"
+        aria-label="Select model"
       >
         {models.map((m) => (
           <option key={m.name} value={m.name}>
