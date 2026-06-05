@@ -88,6 +88,14 @@ public:
         if (start == std::string::npos) return cur;
         return cur - start - 1;
     }
+    size_t cursor_line() const {
+        size_t cur = textarea_.cursor();
+        size_t line = 0;
+        for (size_t i = 0; i < cur; ++i) {
+            if (textarea_.text()[i] == '\n') ++line;
+        }
+        return line;
+    }
     void clear() { textarea_.clear(); history_index_.reset(); pasted_.clear(); }
     void set_text(std::string text) { textarea_.set_text(std::move(text)); }
     void replace_range(size_t start, size_t end, std::string_view value) { textarea_.replace_range(start, end, value); refresh_mention(); }

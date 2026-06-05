@@ -52,6 +52,7 @@ class ScreenManager {
     ResumeView resume_view_;
     std::string session_id_;
     size_t persisted_cell_count_ = 0;
+    mutable uint16_t composer_start_y_ = 0;
     int last_prompt_tokens_ = 0;
     int total_input_tokens_ = 0;
     int total_output_tokens_ = 0;
@@ -469,6 +470,7 @@ class ScreenManager {
         ++y;
 
         if (overlay_ == Overlay::None) {
+            composer_start_y_ = y;
             Buffer composer_buf;
             composer_buf.resize(w, 15);
             composer_.render(composer_buf);
@@ -628,13 +630,17 @@ public:
                 e.tool_name = json.value("name", "");
                 e.output = json.value("output", "");
                 e.exit_code = json.value("exit_code", 0);
-                e.status = json.value("is_error", false)
-                    ? persistence::ToolEvent::Status::error : persistence::ToolEvent::Status::success;
+                auto status_str = json.value("status", "success");
+                if (status_str == "running") e.status = persistence::ToolEvent::Status::running;
+                else if (status_str == "failed") e.status = persistence::ToolEvent::Status::error;
+                else e.status = persistence::ToolEvent::Status::success;
                 persistence::append_event(session_id_, e);
             } else if (type == "system") {
+                auto level = json.value("error", false)
+                    ? persistence::SystemEvent::Level::error : persistence::SystemEvent::Level::info;
                 persistence::append_event(session_id_,
                     persistence::SystemEvent{json.value("text", ""),
-                        persistence::SystemEvent::Level::info,
+                        level,
                         static_cast<uint64_t>(
                             std::chrono::duration_cast<std::chrono::milliseconds>(
                                 std::chrono::system_clock::now().time_since_epoch()).count())});
@@ -666,7 +672,9 @@ public:
             terminal_.draw(frame_buf);
             if (overlay_ == Overlay::None) {
                 size_t col = 2 + composer_.cursor_col_in_line();
-                std::cout << "\x1b[2A\r\x1b[" << col << "C" << std::flush;
+                int cursor_y = static_cast<int>(composer_start_y_) + static_cast<int>(composer_.cursor_line());
+                int up = static_cast<int>(terminal_.height()) - cursor_y - 1;
+                if (up > 0) std::cout << "\x1b[" << up << "A\r\x1b[" << col << "C" << std::flush;
             }
             handle_event(reader_.next());
         }
