@@ -56,6 +56,14 @@ jobs:
           cp config/prompts merak-pkg/config/ -r 2>/dev/null || true
           cp scripts/start.sh merak-pkg/ 2>/dev/null || true
 
+      - name: Download PostgreSQL 17 (Linux)
+        run: |
+          PG_VERSION="17.4"
+          curl -fsSL "https://get.enterprisedb.com/postgresql/postgresql-${PG_VERSION}-1-linux-x64-binaries.tar.gz" \
+            -o /tmp/pg.tar.gz
+          tar xzf /tmp/pg.tar.gz -C /tmp
+          mv /tmp/pgsql merak-pkg/pg
+
       - name: Package
         run: tar czf merak-linux-x64.tar.gz -C merak-pkg .
 
@@ -116,6 +124,15 @@ jobs:
           cp build/cli/Release/merak-launcher.exe merak-pkg/ 2>/dev/null || true
           cp -r webui/dist/* merak-pkg/webui/
           cp config/prompts merak-pkg/config/ -r 2>/dev/null || true
+
+      - name: Download PostgreSQL 17 (Windows)
+        shell: bash
+        run: |
+          PG_VERSION="17.4"
+          curl -fsSL "https://get.enterprisedb.com/postgresql/postgresql-${PG_VERSION}-1-windows-x64-binaries.zip" \
+            -o /tmp/pg.zip
+          unzip -q /tmp/pg.zip -d /tmp
+          mv /tmp/pgsql merak-pkg/pg
 
       - name: Package
         shell: bash
