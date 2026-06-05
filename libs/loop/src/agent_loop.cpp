@@ -87,7 +87,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         req.messages = context_messages;
         req.enable_cache = config_.enable_cache;
 
-        auto tool_specs = tools_->all_tools();
+        auto tool_specs = tools_->pinned_schemas();
         req.tools = tool_specs;
 
         std::vector<ToolCall> accumulated_tool_calls;
@@ -209,7 +209,21 @@ std::vector<Message> AgentLoop::build_context() {
 
     return context_->assemble(
         config_.system_prompt,
-        tools_->all_tools_json(),
+        [&]() -> nlohmann::json {
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& spec : tools_->pinned_schemas()) {
+                nlohmann::json item;
+                item["type"] = "function";
+                item["function"]["name"] = spec.name;
+                item["function"]["description"] = spec.description;
+                if (!spec.parameters_json.empty()) {
+                    item["function"]["parameters"] =
+                        nlohmann::json::parse(spec.parameters_json);
+                }
+                arr.push_back(item);
+            }
+            return arr;
+        }(),
         session_history_,
         mem_snippets
     );

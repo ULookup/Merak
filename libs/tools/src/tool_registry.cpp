@@ -1,9 +1,12 @@
 #include <merak/tool_registry.hpp>
 #include <merak/mcp_client.hpp>
 #include <merak/mcp_tool_wrapper.hpp>
+#include <merak/tool_catalog.hpp>
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <cctype>
 #include <expected>
+#include <sstream>
 
 namespace merak {
 
@@ -184,6 +187,144 @@ bool ToolRegistry::requires_approval(const std::string& tool_name) const {
     if (it == tools_.end()) return false;
     return it->second->permission() == PermissionLevel::ask
         && permission_mode_ == "ask";
+}
+
+namespace {
+
+// Simple relevance score: count query word matches in text
+int match_score(const std::string& query, const std::string& text) {
+    int score = 0;
+    std::string q_lower = query;
+    std::string t_lower = text;
+    std::transform(q_lower.begin(), q_lower.end(), q_lower.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    std::transform(t_lower.begin(), t_lower.end(), t_lower.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    // Exact substring match gets high score
+    if (t_lower.find(q_lower) != std::string::npos) {
+        score += 10;
+    }
+
+    // Word-by-word matching
+    std::istringstream q_stream(q_lower);
+    std::string word;
+    while (q_stream >> word) {
+        if (t_lower.find(word) != std::string::npos) {
+            score += 1;
+        }
+    }
+
+    return score;
+}
+
+} // anonymous namespace
+
+std::vector<ToolMeta> ToolRegistry::visible_metas() const {
+    std::vector<ToolMeta> result;
+    for (const auto& meta : tools::TOOL_CATALOG) {
+        if (capabilities_.has_all(meta.requires_caps)) {
+            result.push_back(meta);
+        }
+    }
+    return result;
+}
+
+std::vector<ToolSpec> ToolRegistry::pinned_schemas() const {
+    std::vector<ToolSpec> result;
+    for (const auto& meta : tools::TOOL_CATALOG) {
+        if (!meta.pinned) continue;
+        if (!capabilities_.has_all(meta.requires_caps)) continue;
+
+        auto spec_opt = find_spec(meta.name);
+        if (spec_opt) {
+            result.push_back(*spec_opt);
+        }
+    }
+    return result;
+}
+
+std::string ToolRegistry::search_tools(const std::string& query, size_t max_results) const {
+    struct ScoredMeta {
+        const tools::ToolMeta* meta;
+        int score;
+    };
+    std::vector<ScoredMeta> scored;
+
+    for (const auto& meta : tools::TOOL_CATALOG) {
+        if (meta.pinned) continue;  // skip pinned — already in prompt
+        if (!capabilities_.has_all(meta.requires_caps)) continue;
+
+        int score = match_score(query, std::string(meta.name));
+        score += match_score(query, std::string(meta.description));
+        for (const auto& trigger : meta.triggers) {
+            score += match_score(query, trigger);
+        }
+        if (score > 0) {
+            scored.push_back({&meta, score});
+        }
+    }
+
+    std::sort(scored.begin(), scored.end(),
+              [](const ScoredMeta& a, const ScoredMeta& b) { return a.score > b.score; });
+
+    if (scored.size() > max_results) {
+        scored.resize(max_results);
+    }
+
+    nlohmann::json matches = nlohmann::json::array();
+    for (const auto& sm : scored) {
+        std::string desc(sm.meta->description);
+        if (desc.size() > 100) {
+            desc = desc.substr(0, 100) + "...";
+        }
+        matches.push_back({
+            {"name", sm.meta->name},
+            {"description", desc},
+            {"score", sm.score}
+        });
+    }
+
+    size_t total_deferred = 0;
+    for (const auto& meta : tools::TOOL_CATALOG) {
+        if (!meta.pinned && capabilities_.has_all(meta.requires_caps)) total_deferred++;
+    }
+
+    return nlohmann::json{
+        {"query", query},
+        {"matches", matches},
+        {"total_tools", total_deferred}
+    }.dump();
+}
+
+std::string ToolRegistry::select_tool(const std::string& name) const {
+    const tools::ToolMeta* meta = tools::find_meta(name);
+    if (!meta) {
+        return nlohmann::json{{"error", "tool not found: " + name}}.dump();
+    }
+    if (!capabilities_.has_all(meta->requires_caps)) {
+        return nlohmann::json{{"error", "tool not available: " + name}}.dump();
+    }
+
+    auto spec_opt = find_spec(name);
+    if (!spec_opt) {
+        return nlohmann::json{{"error", "tool spec not registered: " + name}}.dump();
+    }
+
+    nlohmann::json params = nlohmann::json::object();
+    if (!spec_opt->parameters_json.empty()) {
+        try {
+            params = nlohmann::json::parse(spec_opt->parameters_json);
+        } catch (const nlohmann::json::parse_error&) {
+            return nlohmann::json{{"error", "invalid parameters JSON for: " + name}}.dump();
+        }
+    }
+
+    return nlohmann::json{
+        {"name", spec_opt->name},
+        {"description", spec_opt->description},
+        {"parameters", params}
+    }.dump();
 }
 
 } // namespace merak
