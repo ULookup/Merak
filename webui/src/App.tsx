@@ -5,6 +5,7 @@ import ConnectionBanner from './components/ConnectionBanner';
 import ErrorBoundary from './components/ErrorBoundary';
 import MainPanel from './components/MainPanel';
 import Sidebar from './components/Sidebar';
+import { ToastProvider } from './components/Toast';
 import { useSSE } from './hooks/useSSE';
 import styles from './App.module.css';
 
@@ -50,17 +51,19 @@ function AppInner() {
   const connState = useSSE(sseUrl, dispatch, state.lastSeq);
 
   return (
-    <div className={styles.layout}>
-      <ErrorBoundary>
-        <Sidebar />
-      </ErrorBoundary>
-      <ErrorBoundary>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <ConnectionBanner state={connState} />
-          <MainPanel />
-        </div>
-      </ErrorBoundary>
-    </div>
+    <ToastProvider>
+      <div className={styles.layout}>
+        <ErrorBoundary>
+          <Sidebar />
+        </ErrorBoundary>
+        <ErrorBoundary>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <ConnectionBanner state={connState} />
+            <MainPanel />
+          </div>
+        </ErrorBoundary>
+      </div>
+    </ToastProvider>
   );
 }
 

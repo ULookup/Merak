@@ -1,5 +1,6 @@
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
+import { useToast } from '../Toast';
 import styles from './Cells.module.css';
 
 interface Props {
@@ -10,21 +11,14 @@ interface Props {
 
 export default function ApprovalCell({ approvalId, approvalName, approvalArgs }: Props) {
   const { dispatch } = useAppState();
+  const { showToast } = useToast();
 
   async function handle(allow: boolean) {
     try {
       await api.resolveApproval(approvalId, allow);
       dispatch({ type: 'CLEAR_APPROVAL' });
     } catch (e) {
-      dispatch({
-        type: 'APPEND_MESSAGE',
-        message: {
-          id: 'err_' + Date.now(),
-          kind: 'system',
-          text: `Approval error: ${e}`,
-          error: true,
-        },
-      });
+      showToast(`Approval error: ${e}`, 'error');
     }
   }
 
