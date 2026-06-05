@@ -1,6 +1,7 @@
 #pragma once
 #include "history_cell/history_cell.hpp"
 #include "buffer.hpp"
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <utility>
@@ -10,10 +11,26 @@ namespace merak::tui {
 
 inline std::vector<std::string> buffer_to_lines(const Buffer& buf) {
     std::vector<std::string> lines;
-    for (uint16_t y = 0; y < buf.h; ++y) {
+    auto height = buf.h;
+    while (height > 0) {
+        bool empty = true;
+        for (uint16_t x = 0; x < buf.w; ++x) {
+            if (buf.at(x, height - 1).ch != U' ') {
+                empty = false;
+                break;
+            }
+        }
+        if (!empty) break;
+        --height;
+    }
+    for (uint16_t y = 0; y < height; ++y) {
         std::string line;
         Style curr;
-        for (uint16_t x = 0; x < buf.w; ++x) {
+        auto line_width = buf.w;
+        while (line_width > 0 && buf.at(line_width - 1, y).ch == U' ') {
+            --line_width;
+        }
+        for (uint16_t x = 0; x < line_width; ++x) {
             const auto& cell = buf.at(x, y);
             if (cell.ch == U' ') { line.push_back(' '); continue; }
             if (!(cell.style == curr)) {
@@ -40,6 +57,41 @@ class ChatTimeline {
     std::map<std::string, std::shared_ptr<ToolCell>> tools_by_id_;
     std::vector<std::shared_ptr<ToolCell>> tools_;
     size_t scrollback_watermark_ = 0;
+
+    static uint16_t content_height(const Buffer& buf) {
+        auto height = buf.h;
+        while (height > 0) {
+            bool empty = true;
+            for (uint16_t x = 0; x < buf.w; ++x) {
+                if (buf.at(x, height - 1).ch != U' ') {
+                    empty = false;
+                    break;
+                }
+            }
+            if (!empty) break;
+            --height;
+        }
+        return height;
+    }
+
+    static Buffer render_cell(const HistoryCell& cell, uint16_t width) {
+        static constexpr uint16_t kMaxCellHeight = 80;
+        Buffer cell_buf;
+        cell_buf.resize(width, kMaxCellHeight);
+        cell.render(cell_buf, width);
+        auto height = content_height(cell_buf);
+        if (height != cell_buf.h) {
+            Buffer trimmed;
+            trimmed.resize(width, height);
+            for (uint16_t y = 0; y < height; ++y) {
+                for (uint16_t x = 0; x < width; ++x) {
+                    trimmed.at(x, y) = cell_buf.at(x, y);
+                }
+            }
+            return trimmed;
+        }
+        return cell_buf;
+    }
 
 public:
     const std::vector<std::shared_ptr<HistoryCell>>& committed() const { return committed_; }
@@ -95,18 +147,44 @@ public:
         commit(std::move(cell));
     }
 
-    std::vector<std::string> drain_scrollback(size_t width) {
+    std::vector<std::string> pending_scrollback(size_t width) const {
         std::vector<std::string> lines;
-        static constexpr uint16_t kMaxCellHeight = 80;
-        while (scrollback_watermark_ < committed_.size()) {
-            Buffer cell_buf;
-            cell_buf.resize(width, kMaxCellHeight);
-            committed_[scrollback_watermark_++]->render(cell_buf, width);
+        for (size_t i = scrollback_watermark_; i < committed_.size(); ++i) {
+            auto cell_buf = render_cell(*committed_[i],
+                                        static_cast<uint16_t>(width));
             auto cell_lines = buffer_to_lines(cell_buf);
             lines.insert(lines.end(), cell_lines.begin(), cell_lines.end());
             lines.push_back("");
         }
         return lines;
+    }
+
+    void mark_scrollback_drained() {
+        scrollback_watermark_ = committed_.size();
+    }
+
+    std::vector<std::string> drain_scrollback(size_t width) {
+        auto lines = pending_scrollback(width);
+        mark_scrollback_drained();
+        return lines;
+    }
+
+    Buffer render_active_buffer(uint16_t width) const {
+        if (!active_ || width == 0) return {};
+        return render_cell(*active_, width);
+    }
+
+    uint16_t render_active(Buffer& dst, uint16_t width, uint16_t max_height) const {
+        if (!active_ || max_height == 0 || width == 0) return 0;
+        auto cell_buf = render_active_buffer(width);
+        const auto visible = std::min<uint16_t>(cell_buf.h, max_height);
+        const auto first = static_cast<uint16_t>(cell_buf.h - visible);
+        for (uint16_t y = 0; y < visible && y < dst.h; ++y) {
+            for (uint16_t x = 0; x < width && x < dst.w; ++x) {
+                dst.at(x, y) = cell_buf.at(x, first + y);
+            }
+        }
+        return visible;
     }
 };
 
