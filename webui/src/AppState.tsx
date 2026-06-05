@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
-import type { Message, RuntimeMetadata, SessionSummary, StatusLabel, SseFrame } from './api/types';
+import type { Message, RuntimeMetadata, SessionSummary, SseFrame, StatusLabel } from './api/types';
 
 export interface AppState {
   sessionId: string;
@@ -54,7 +54,14 @@ export type Action =
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case 'SET_SESSION':
-      return { ...state, sessionId: action.sessionId, messages: [], lastSeq: 0, currentRun: null, status: 'idle' };
+      return {
+        ...state,
+        sessionId: action.sessionId,
+        messages: [],
+        lastSeq: 0,
+        currentRun: null,
+        status: 'idle',
+      };
 
     case 'SET_METADATA':
       return { ...state, metadata: action.metadata, selectedModel: action.metadata.model };
@@ -88,17 +95,21 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_TOOL_RUNNING': {
       const msgs = [...state.messages];
       msgs.push({
-        id: msgId(), kind: 'tool', toolCallId: action.toolCallId,
-        toolName: action.name, toolArgs: action.args, toolRunning: true,
+        id: msgId(),
+        kind: 'tool',
+        toolCallId: action.toolCallId,
+        toolName: action.name,
+        toolArgs: action.args,
+        toolRunning: true,
       });
       return { ...state, messages: msgs };
     }
 
     case 'SET_TOOL_DONE': {
-      const msgs = state.messages.map(m =>
+      const msgs = state.messages.map((m) =>
         m.kind === 'tool' && m.toolCallId === action.toolCallId
           ? { ...m, toolRunning: false, toolOutput: action.output, toolIsError: action.isError }
-          : m
+          : m,
       );
       return { ...state, messages: msgs };
     }
@@ -110,8 +121,11 @@ function reducer(state: AppState, action: Action): AppState {
         messages: [
           ...state.messages,
           {
-            id: msgId(), kind: 'approval', approvalId: action.approvalId,
-            approvalName: action.name, approvalArgs: action.args,
+            id: msgId(),
+            kind: 'approval',
+            approvalId: action.approvalId,
+            approvalName: action.name,
+            approvalArgs: action.args,
           },
         ],
       };
@@ -142,8 +156,8 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, currentRun: action.runId };
 
     case 'COMMIT_ACTIVE': {
-      const msgs = state.messages.map(m =>
-        m.toolCallId === 'active' ? { ...m, toolCallId: undefined } : m
+      const msgs = state.messages.map((m) =>
+        m.toolCallId === 'active' ? { ...m, toolCallId: undefined } : m,
       );
       return { ...state, messages: msgs };
     }
@@ -167,7 +181,10 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
     case 'run_started':
       return reducer(
         reducer(state, { type: 'SET_CURRENT_RUN', runId: (p.run_id as string) ?? '' }),
-        { type: 'APPEND_MESSAGE', message: { id: msgId(), kind: 'user', text: (p.message as string) ?? '' } }
+        {
+          type: 'APPEND_MESSAGE',
+          message: { id: msgId(), kind: 'user', text: (p.message as string) ?? '' },
+        },
       );
 
     case 'text_delta':
@@ -226,8 +243,16 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       return reducer(
         reducer(state, { type: 'COMMIT_ACTIVE' }),
         type === 'run_failed'
-          ? { type: 'APPEND_MESSAGE', message: { id: msgId(), kind: 'system', text: (p.error as string) ?? 'Run failed', error: true } }
-          : { type: 'SET_CURRENT_RUN', runId: null }
+          ? {
+              type: 'APPEND_MESSAGE',
+              message: {
+                id: msgId(),
+                kind: 'system',
+                text: (p.error as string) ?? 'Run failed',
+                error: true,
+              },
+            }
+          : { type: 'SET_CURRENT_RUN', runId: null },
       );
 
     default:
@@ -242,11 +267,7 @@ const AppContext = createContext<{
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  return (
-    <AppContext.Provider value={{ state, dispatch }}>
-      {children}
-    </AppContext.Provider>
-  );
+  return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>;
 }
 
 export function useAppState() {

@@ -15,8 +15,9 @@ interface Props {
 export default function StatusPill({ label }: Props) {
   return (
     <div className="msg-pill" style={{ color: colors[label], borderColor: colors[label] }}>
-      {label === 'waiting_approval' ? 'Waiting Approval' :
-       label.charAt(0).toUpperCase() + label.slice(1)}
+      {label === 'waiting_approval'
+        ? 'Waiting Approval'
+        : label.charAt(0).toUpperCase() + label.slice(1)}
     </div>
   );
 }

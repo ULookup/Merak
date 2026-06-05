@@ -19,15 +19,13 @@ async function request(method: string, path: string, body?: unknown) {
 export const api = {
   metadata: () => request('GET', '/v1/runtime'),
 
-  createSession: (title = '') =>
-    request('POST', '/v1/sessions', { title }),
+  createSession: (title = '') => request('POST', '/v1/sessions', { title }),
 
   listSessions: () => request('GET', '/v1/sessions'),
 
   getSession: (id: string) => request('GET', `/v1/sessions/${id}`),
 
-  events: (id: string, after = 0) =>
-    request('GET', `/v1/sessions/${id}/events?after=${after}`),
+  events: (id: string, after = 0) => request('GET', `/v1/sessions/${id}/events?after=${after}`),
 
   memory: (id: string) => request('GET', `/v1/sessions/${id}/memory`),
 
@@ -39,9 +37,8 @@ export const api = {
     pattern: string,
     agents: string[],
     task: string,
-    aggregation = 'all_results'
-  ) =>
-    request('POST', `/v1/sessions/${id}/delegations`, { pattern, agents, task, aggregation }),
+    aggregation = 'all_results',
+  ) => request('POST', `/v1/sessions/${id}/delegations`, { pattern, agents, task, aggregation }),
 
   resolveApproval: (id: string, allow: boolean) =>
     request('POST', `/v1/approvals/${id}`, { decision: allow ? 'allow' : 'deny' }),
@@ -50,6 +47,5 @@ export const api = {
 
   listWorlds: () => request('GET', '/api/worldbuilding/worlds'),
 
-  sseUrl: (id: string, after = 0) =>
-    `${BASE}/v1/sessions/${id}/events/stream?after=${after}`,
+  sseUrl: (id: string, after = 0) => `${BASE}/v1/sessions/${id}/events/stream?after=${after}`,
 };

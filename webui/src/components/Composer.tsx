@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
-import { useAppState } from '../AppState';
+import { useCallback, useRef, useState } from 'react';
 import { api } from '../api/client';
+import { useAppState } from '../AppState';
 
 export default function Composer() {
   const { state, dispatch } = useAppState();

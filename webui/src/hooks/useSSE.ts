@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Dispatch } from 'react';
-import type { Action } from '../AppState';
 import type { SseFrame } from '../api/types';
+import type { Action } from '../AppState';
 
 function parseSseFrame(raw: string): SseFrame | null {
   let seq = 0;
@@ -20,11 +20,7 @@ function parseSseFrame(raw: string): SseFrame | null {
   }
 }
 
-export function useSSE(
-  url: string | null,
-  dispatch: Dispatch<Action>,
-  lastSeq: number
-) {
+export function useSSE(url: string | null, dispatch: Dispatch<Action>, lastSeq: number) {
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
   const lastSeqRef = useRef(lastSeq);

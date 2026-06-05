@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('api client', () => {
   beforeEach(() => {
@@ -20,7 +20,7 @@ describe('api client', () => {
     expect(result.model).toBe('gpt-4o');
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
       'http://127.0.0.1:3888/v1/runtime',
-      expect.objectContaining({ method: 'GET' })
+      expect.objectContaining({ method: 'GET' }),
     );
   });
 

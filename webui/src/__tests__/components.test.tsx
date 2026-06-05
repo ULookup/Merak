@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import UserCell from '../components/cells/UserCell';
+import { describe, expect, it } from 'vitest';
 import AssistantCell from '../components/cells/AssistantCell';
-import SystemCell from '../components/cells/SystemCell';
 import StatusPill from '../components/cells/StatusPill';
+import SystemCell from '../components/cells/SystemCell';
 import ToolCell from '../components/cells/ToolCell';
+import UserCell from '../components/cells/UserCell';
 
 describe('Cell components', () => {
   it('UserCell renders text', () => {

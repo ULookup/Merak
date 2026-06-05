@@ -4,13 +4,7 @@ export interface SseFrame {
   payload: Record<string, unknown>;
 }
 
-export type MessageKind =
-  | 'user'
-  | 'assistant'
-  | 'tool'
-  | 'system'
-  | 'approval'
-  | 'status_pill';
+export type MessageKind = 'user' | 'assistant' | 'tool' | 'system' | 'approval' | 'status_pill';
 
 export type StatusLabel = 'idle' | 'thinking' | 'acting' | 'observing' | 'waiting_approval';
 

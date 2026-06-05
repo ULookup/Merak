@@ -1,0 +1,14 @@
+{
+  "rules": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn",
+    "no-var": "error",
+    "no-console": "warn",
+    "eqeqeq": "error",
+    "typescript/no-explicit-any": "warn",
+    "react/jsx-key": "error",
+    "react/jsx-no-duplicate-props": "error",
+    "react/jsx-no-undef": "error"
+  }
+}

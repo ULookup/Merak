@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 describe('AppState reducer logic', () => {
   it('SET_SESSION resets messages and status', () => {

@@ -13,7 +13,9 @@ export default function ModelSelector() {
         onChange={(e) => dispatch({ type: 'SET_MODEL', model: e.target.value })}
       >
         {models.map((m) => (
-          <option key={m.name} value={m.name}>{m.name}</option>
+          <option key={m.name} value={m.name}>
+            {m.name}
+          </option>
         ))}
       </select>
     </div>

@@ -8,14 +8,22 @@ interface Props {
   toolIsError?: boolean;
 }
 
-export default function ToolCell({ toolName, toolArgs, toolOutput, toolRunning, toolIsError }: Props) {
+export default function ToolCell({
+  toolName,
+  toolArgs,
+  toolOutput,
+  toolRunning,
+  toolIsError,
+}: Props) {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className={`msg msg-tool ${toolIsError ? 'tool-error' : ''}`}>
       <div className="th" onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer' }}>
         <span className={`tool-indicator ${toolRunning ? 'running' : 'done'}`} />
         <strong>{toolName}</strong>
-        <span style={{ color: '#555768', fontSize: 12 }}>{toolRunning ? 'running...' : 'done'}</span>
+        <span style={{ color: '#555768', fontSize: 12 }}>
+          {toolRunning ? 'running...' : 'done'}
+        </span>
       </div>
       {expanded && toolArgs && (
         <div className="tool-meta">

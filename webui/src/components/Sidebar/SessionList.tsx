@@ -1,5 +1,5 @@
-import { useAppState } from '../../AppState';
 import { api } from '../../api/client';
+import { useAppState } from '../../AppState';
 
 export default function SessionList() {
   const { state, dispatch } = useAppState();
@@ -11,19 +11,26 @@ export default function SessionList() {
       for (const ev of data.events ?? []) {
         dispatch({ type: 'APPLY_SSE', frame: ev });
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   async function create() {
     try {
       const data = await api.createSession();
       const id = data.session_id;
-      dispatch({ type: 'SET_SESSIONS', sessions: [
-        ...state.sessions,
-        { id, title: '', last_seq: 0, created_at: '', updated_at: '', archived_at: null },
-      ]});
+      dispatch({
+        type: 'SET_SESSIONS',
+        sessions: [
+          ...state.sessions,
+          { id, title: '', last_seq: 0, created_at: '', updated_at: '', archived_at: null },
+        ],
+      });
       select(id);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   return (
@@ -40,7 +47,9 @@ export default function SessionList() {
           </div>
         ))}
       </div>
-      <button className="sb-new-btn" onClick={create}>New Session</button>
+      <button className="sb-new-btn" onClick={create}>
+        New Session
+      </button>
     </div>
   );
 }

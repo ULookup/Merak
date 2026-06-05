@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { useAppState } from '../AppState';
 import type { Message } from '../api/types';
-import UserCell from './cells/UserCell';
-import AssistantCell from './cells/AssistantCell';
-import ToolCell from './cells/ToolCell';
+import { useAppState } from '../AppState';
 import ApprovalCell from './cells/ApprovalCell';
-import SystemCell from './cells/SystemCell';
+import AssistantCell from './cells/AssistantCell';
 import StatusPill from './cells/StatusPill';
+import SystemCell from './cells/SystemCell';
+import ToolCell from './cells/ToolCell';
+import UserCell from './cells/UserCell';
 
 function renderMessage(msg: Message) {
   switch (msg.kind) {
@@ -16,7 +16,8 @@ function renderMessage(msg: Message) {
       return <AssistantCell key={msg.id} text={msg.text ?? ''} />;
     case 'tool':
       return (
-        <ToolCell key={msg.id}
+        <ToolCell
+          key={msg.id}
           toolName={msg.toolName ?? ''}
           toolArgs={msg.toolArgs}
           toolOutput={msg.toolOutput}
@@ -26,7 +27,8 @@ function renderMessage(msg: Message) {
       );
     case 'approval':
       return (
-        <ApprovalCell key={msg.id}
+        <ApprovalCell
+          key={msg.id}
           approvalId={msg.approvalId ?? ''}
           approvalName={msg.approvalName ?? ''}
           approvalArgs={msg.approvalArgs}

@@ -1,5 +1,5 @@
-import { useAppState } from '../../AppState';
 import { api } from '../../api/client';
+import { useAppState } from '../../AppState';
 
 interface Props {
   approvalId: string;
@@ -17,7 +17,12 @@ export default function ApprovalCell({ approvalId, approvalName, approvalArgs }:
     } catch (e) {
       dispatch({
         type: 'APPEND_MESSAGE',
-        message: { id: 'err_' + Date.now(), kind: 'system', text: `Approval error: ${e}`, error: true },
+        message: {
+          id: 'err_' + Date.now(),
+          kind: 'system',
+          text: `Approval error: ${e}`,
+          error: true,
+        },
       });
     }
   }
@@ -25,9 +30,16 @@ export default function ApprovalCell({ approvalId, approvalName, approvalArgs }:
   return (
     <div className="msg-approval">
       <span className="approval-label">Approval needed</span>
-      <span>{approvalName}{approvalArgs ? ` ${approvalArgs}` : ''}</span>
-      <button className="btn-allow" onClick={() => handle(true)}>Allow</button>
-      <button className="btn-deny" onClick={() => handle(false)}>Deny</button>
+      <span>
+        {approvalName}
+        {approvalArgs ? ` ${approvalArgs}` : ''}
+      </span>
+      <button className="btn-allow" onClick={() => handle(true)}>
+        Allow
+      </button>
+      <button className="btn-deny" onClick={() => handle(false)}>
+        Deny
+      </button>
     </div>
   );
 }
