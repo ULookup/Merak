@@ -155,6 +155,35 @@ int main() {
     }
 
     {
+        ChatTimeline timeline;
+        timeline.submit_user("pending");
+        auto pending = timeline.pending_scrollback(80);
+        assert(contains(pending, "pending"));
+        assert(contains(timeline.pending_scrollback(80), "pending"));
+        timeline.mark_scrollback_drained();
+        assert(timeline.pending_scrollback(80).empty());
+    }
+
+    {
+        ChatTimeline timeline;
+        timeline.submit_user("existing content");
+        timeline.append_assistant("new content");
+        auto drained = timeline.drain_scrollback(80);
+        assert(contains(drained, "existing content"));
+        assert(!contains(drained, "new content"));
+
+        Buffer active;
+        active.resize(80, 8);
+        auto active_rows = timeline.render_active(active, 80, 8);
+        assert(active_rows > 0);
+        assert(contains(buffer_to_lines(active), "new content"));
+
+        timeline.commit_active();
+        drained = timeline.drain_scrollback(80);
+        assert(contains(drained, "new content"));
+    }
+
+    {
         WelcomeCell cell("0.1.0", "deepseek-v4-pro", "fix/tui");
         Buffer buf;
         buf.resize(80, 40);

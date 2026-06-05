@@ -10,6 +10,7 @@
 #include "persistence/resume.hpp"
 #include "persistence/transcript.hpp"
 #include <nlohmann/json.hpp>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cctype>
@@ -438,25 +439,66 @@ class ScreenManager {
         }
     }
 
-    void frame_buffer(Buffer& buf) const {
+    uint16_t composer_rows() const {
+        return static_cast<uint16_t>(std::clamp<size_t>(
+            composer_.cursor_line() + 2, 3, 10));
+    }
+
+    uint16_t desired_viewport_height(uint16_t screen_height, uint16_t active_cell_height) const {
+        if (screen_height == 0) return 0;
+        if (overlay_ == Overlay::Resume) return screen_height;
+        if (overlay_ != Overlay::None) {
+            return std::min<uint16_t>(screen_height, static_cast<uint16_t>(std::max<uint16_t>(
+                8, static_cast<uint16_t>((screen_height * 4) / 5))));
+        }
+
+        const uint16_t approval_rows = approval_cell_ ? 3 : 0;
+        const uint16_t base_rows = static_cast<uint16_t>(
+            1 + composer_rows() + 1 + 1 + approval_rows);
+        const uint16_t available_for_active = screen_height > base_rows
+            ? static_cast<uint16_t>(screen_height - base_rows) : 0;
+        const uint16_t active_rows = active_cell_height == 0
+            ? 0 : std::min<uint16_t>(
+                static_cast<uint16_t>(active_cell_height + 1),
+                available_for_active);
+        return std::min<uint16_t>(screen_height,
+                                  static_cast<uint16_t>(base_rows + active_rows));
+    }
+
+    static uint16_t copy_bottom_to(Buffer& dst, const Buffer& src, uint16_t dst_y, uint16_t max_height) {
+        const auto visible = std::min<uint16_t>(src.h, max_height);
+        const auto first = static_cast<uint16_t>(src.h - visible);
+        for (uint16_t y = 0; y < visible && dst_y + y < dst.h; ++y) {
+            for (uint16_t x = 0; x < src.w && x < dst.w; ++x) {
+                dst.at(x, static_cast<uint16_t>(dst_y + y)) = src.at(x, first + y);
+            }
+        }
+        return visible;
+    }
+
+    void frame_buffer(Buffer& buf, const Buffer* active_cell_buf) const {
         buf.clear();
         auto& t = theme::active_theme();
         Style dim_style; dim_style.fg = t.dim; dim_style.dim(true);
         uint16_t w = buf.w;
         uint16_t y = 0;
+        const auto composer_row_count = composer_rows();
 
         if (overlay_ == Overlay::Resume) {
             resume_view_.render(buf, w);
             return;
         }
 
-        static constexpr uint16_t kActiveCellMaxH = 80;
-        if (timeline_.active()) {
-            Buffer cell_buf;
-            cell_buf.resize(w, kActiveCellMaxH);
-            timeline_.active()->render(cell_buf, w);
-            copy_to(buf, cell_buf, y);
-            y += cell_buf.h + 1;
+        const bool has_overlay = overlay_ != Overlay::None;
+        const uint16_t approval_rows = approval_cell_ ? 3 : 0;
+        const uint16_t reserved_rows = static_cast<uint16_t>(
+            1 + 1 + 1 + composer_row_count + approval_rows);
+        const uint16_t active_height = !has_overlay && buf.h > reserved_rows
+            ? static_cast<uint16_t>(buf.h - reserved_rows) : 0;
+        if (active_height > 0 && active_cell_buf && active_cell_buf->h > 0) {
+            const auto rendered = copy_bottom_to(buf, *active_cell_buf, y, active_height);
+            y += rendered;
+            if (rendered > 0 && y < buf.h) ++y;
         }
         if (approval_cell_) {
             Buffer approval_buf;
@@ -465,27 +507,32 @@ class ScreenManager {
             copy_to(buf, approval_buf, y);
             y += approval_buf.h + 1;
         }
+        if (y >= buf.h) return;
 
         buf.set_span(0, y, repeat_text("━", w), dim_style);
         ++y;
+        if (y >= buf.h) return;
 
         if (overlay_ == Overlay::None) {
             composer_start_y_ = y;
             Buffer composer_buf;
-            composer_buf.resize(w, 15);
+            composer_buf.resize(w, composer_row_count);
             composer_.render(composer_buf);
             copy_to(buf, composer_buf, y);
             y += composer_buf.h;
+            if (y >= buf.h) return;
         } else {
             auto pane_lines = overlay_lines();
             for (size_t i = 0; i < pane_lines.size() && y < buf.h; ++i) {
                 buf.set_span(0, y, sanitize_terminal_text(pane_lines[i]), dim_style);
                 ++y;
             }
+            if (y >= buf.h) return;
         }
 
         buf.set_span(0, y, "/ commands · Shift+Enter newline · Ctrl+O transcript · Ctrl+T tools", dim_style);
         ++y;
+        if (y >= buf.h) return;
         status_bar_.render(buf, w, y, queued_messages_.size());
     }
 
@@ -665,16 +712,27 @@ public:
                 composer_.set_submit_flash(false);
                 submit_flash_until_ = {};
             }
-            terminal_.flush_scrollback(timeline_.drain_scrollback(terminal_.width()));
             Buffer frame_buf;
-            frame_buf.resize(terminal_.width(), terminal_.height());
-            frame_buffer(frame_buf);
+            const auto width = static_cast<uint16_t>(terminal_.width());
+            const auto height = static_cast<uint16_t>(terminal_.height());
+            auto active_buf = timeline_.render_active_buffer(width);
+            frame_buf.resize(width, desired_viewport_height(height, active_buf.h));
+            if (frame_buf.h < height) {
+                auto pending_history = timeline_.pending_scrollback(width);
+                if (terminal_.flush_scrollback(pending_history, frame_buf.h)) {
+                    timeline_.mark_scrollback_drained();
+                }
+            }
+            frame_buffer(frame_buf, active_buf.h > 0 ? &active_buf : nullptr);
             terminal_.draw(frame_buf);
             if (overlay_ == Overlay::None) {
-                size_t col = 2 + composer_.cursor_col_in_line();
-                int cursor_y = static_cast<int>(composer_start_y_) + static_cast<int>(composer_.cursor_line());
-                int up = static_cast<int>(terminal_.height()) - cursor_y - 1;
-                if (up > 0) std::cout << "\x1b[" << up << "A\r\x1b[" << col << "C" << std::flush;
+                const auto cursor_col = std::min<size_t>(
+                    2 + composer_.cursor_col_in_line(), width > 0 ? width - 1 : 0);
+                const auto cursor_row = std::min<size_t>(
+                    static_cast<size_t>(composer_start_y_) + composer_.cursor_line(),
+                    frame_buf.h > 0 ? frame_buf.h - 1 : 0);
+                terminal_.place_cursor(static_cast<uint16_t>(cursor_col),
+                                       static_cast<uint16_t>(cursor_row));
             }
             handle_event(reader_.next());
         }

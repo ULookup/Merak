@@ -1,6 +1,6 @@
 #pragma once
 #include "buffer.hpp"
-#include "scrollback_writer.hpp"
+#include <algorithm>
 #include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
@@ -14,7 +14,9 @@ namespace merak::tui {
 class DiffTerminal {
     termios original_{};
     bool raw_ = false;
-    size_t viewport_height_ = 0;
+    uint16_t viewport_top_ = 0;
+    uint16_t viewport_height_ = 0;
+    uint16_t viewport_width_ = 0;
     Buffer prev_buffer_;
 
     static void write_style(const Style& style, const Style& prev) {
@@ -28,15 +30,55 @@ class DiffTerminal {
         if (style.underline()) std::cout << "\x1b[4m";
     }
 
-    void move_cursor(uint16_t x, uint16_t y) {
+    static void move_absolute(uint16_t x, uint16_t y) {
         std::cout << "\x1b[" << (y + 1) << ";" << (x + 1) << "H";
     }
 
+    void move_cursor(uint16_t x, uint16_t y) {
+        move_absolute(x, static_cast<uint16_t>(viewport_top_ + y));
+    }
+
     void clear_viewport() {
-        if (viewport_height_ > 1) {
-            std::cout << "\x1b[" << (viewport_height_ - 1) << "A";
+        if (viewport_height_ == 0) return;
+        move_absolute(0, viewport_top_);
+        std::cout << "\x1b[J";
+    }
+
+    void update_viewport(uint16_t height) {
+        const auto screen_h = static_cast<uint16_t>(this->height());
+        const auto screen_w = static_cast<uint16_t>(this->width());
+        const auto next_height = std::min<uint16_t>(height, screen_h);
+        const auto next_top = static_cast<uint16_t>(screen_h - next_height);
+        if (next_height == viewport_height_ && next_top == viewport_top_
+            && screen_w == viewport_width_) {
+            return;
         }
-        std::cout << "\r\x1b[J";
+
+        if (viewport_height_ > 0) {
+            const auto clear_top = std::min(viewport_top_, next_top);
+            move_absolute(0, clear_top);
+            std::cout << "\x1b[J";
+        }
+        viewport_top_ = next_top;
+        viewport_height_ = next_height;
+        viewport_width_ = screen_w;
+        prev_buffer_ = Buffer{};
+    }
+
+    bool insert_history_lines(const std::vector<std::string>& lines) {
+        if (lines.empty()) return true;
+        if (viewport_top_ == 0) return false;
+
+        const auto region_bottom = viewport_top_;
+        std::cout << "\x1b[1;" << region_bottom << "r";
+        move_absolute(0, static_cast<uint16_t>(viewport_top_ - 1));
+        for (const auto& line : lines) {
+            std::cout << "\r\n\x1b[K" << line << "\x1b[0m";
+        }
+        std::cout << "\x1b[r";
+        move_absolute(0, viewport_top_);
+        std::cout.flush();
+        return true;
     }
 
 public:
@@ -55,8 +97,11 @@ public:
 
     ~DiffTerminal() {
         clear_viewport();
+        if (viewport_height_ > 0) {
+            move_absolute(0, static_cast<uint16_t>(viewport_top_ + viewport_height_ - 1));
+        }
         if (raw_) tcsetattr(STDIN_FILENO, TCSAFLUSH, &original_);
-        std::cout << "\x1b[?2004l\x1b[?25h\r\n" << std::flush;
+        std::cout << "\x1b[r\x1b[?2004l\x1b[?25h\r\n" << std::flush;
     }
 
     void with_cooked_terminal(const std::function<void()>& fn) {
@@ -89,7 +134,7 @@ public:
     }
 
     void draw(Buffer& curr) {
-        viewport_height_ = curr.h;
+        update_viewport(curr.h);
         if (viewport_height_ == 0) return;
 
         auto diffs = curr.diff(prev_buffer_);
@@ -149,17 +194,24 @@ public:
         prev_buffer_ = std::move(curr);
     }
 
-    void flush_scrollback(const std::vector<std::string>& lines) {
-        if (lines.empty()) return;
-        clear_viewport();
-        viewport_height_ = 0;
-        ScrollbackWriter::write(lines);
+    bool flush_scrollback(const std::vector<std::string>& lines, uint16_t viewport_height) {
+        if (lines.empty()) return true;
+        update_viewport(viewport_height);
+        const auto inserted = insert_history_lines(lines);
+        if (!inserted) return false;
         prev_buffer_ = Buffer{};
+        return true;
     }
 
     void invalidate() {
+        clear_viewport();
         viewport_height_ = 0;
         prev_buffer_ = Buffer{};
+    }
+
+    void place_cursor(uint16_t x, uint16_t y) {
+        move_cursor(x, y);
+        std::cout.flush();
     }
 };
 
