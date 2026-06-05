@@ -1,11 +1,10 @@
 #pragma once
-#include "../colors.hpp"
 #include "../history_cell/history_cell.hpp"
+#include "../buffer.hpp"
 #include <cstdio>
 #include <chrono>
 #include <string>
 #include <vector>
-#include <ftxui/dom/elements.hpp>
 
 namespace merak::tui {
 
@@ -78,6 +77,49 @@ public:
         if (token_budget_limit_ <= 0) return 0;
         return static_cast<int>((100LL * token_budget_used_) / token_budget_limit_);
     }
+
+    void render(Buffer& buf, uint16_t width, uint16_t y, size_t queued_msgs = 0) const {
+        std::vector<std::string> chips;
+        chips.push_back(provider_ + " | " + model_);
+        chips.push_back(spinner_prefix(state_));
+        if (has_usage_ || usage_missing_) {
+            chips.push_back("↑" + format_tokens(total_input_tokens_)
+                + " ↓" + format_tokens(total_output_tokens_));
+        }
+        if (!git_branch_.empty()) chips.push_back(git_branch_);
+        if (!cwd_.empty()) chips.push_back(truncate_path(cwd_));
+        if (token_budget_limit_ > 0) {
+            chips.push_back(std::to_string(token_budget_percent()) + "%");
+        }
+        if (estimated_cost_ > 0.0) {
+            char cost_buf[32];
+            std::snprintf(cost_buf, sizeof(cost_buf), "$%.2f", estimated_cost_);
+            chips.push_back(cost_buf);
+        }
+        chips.push_back(permission_mode_);
+        if (pending_approvals_ > 0) chips.push_back(std::to_string(pending_approvals_) + "⏸");
+        if (running_agents_ > 0) chips.push_back(std::to_string(running_agents_) + "⚡");
+        if (queued_msgs > 0) chips.push_back(std::to_string(queued_msgs) + "⏳");
+
+        std::string full;
+        for (size_t i = 0; i < chips.size(); ++i) {
+            if (i > 0) full += " │ ";
+            full += chips[i];
+        }
+        while (full.size() > width && chips.size() > 3) {
+            chips.pop_back();
+            full.clear();
+            for (size_t i = 0; i < chips.size(); ++i) {
+                if (i > 0) full += " │ ";
+                full += chips[i];
+            }
+        }
+        if (full.size() > width && width > 3) full = full.substr(0, width - 3) + "...";
+
+        Style dim_style; dim_style.fg = theme::active_theme().dim; dim_style.dim(true);
+        buf.set_span(0, y, full, dim_style);
+    }
+
     std::string plain_text(size_t queued = 0, size_t width = 0) const {
         auto usage = has_exact_usage()
             ? "Σ " + format_tokens(total_input_tokens_) + " in / "
@@ -111,23 +153,6 @@ public:
         }
         if (width > 0 && text.size() > width) text = truncate_text(text, width);
         return text;
-    }
-
-    ftxui::Element render() {
-        using namespace ftxui;
-        auto usage = has_exact_usage()
-            ? "Σ " + format_tokens(total_input_tokens_) + " in / "
-                + format_tokens(total_output_tokens_) + " out"
-            : "Σ n/a";
-        auto state_color = colors::info;
-        if (state_ == "Idle") state_color = colors::muted;
-        if (state_ == "Error") state_color = colors::error;
-        if (state_ == "Waiting for approval...") state_color = colors::accent;
-        return hbox({
-            text(provider_ + " │ " + model_ + " │ ") | color(colors::muted),
-            text(spinner_prefix(state_)) | color(state_color),
-            text(" │ " + usage) | color(colors::muted),
-        }) | borderLight | size(HEIGHT, EQUAL, 1);
     }
 };
 

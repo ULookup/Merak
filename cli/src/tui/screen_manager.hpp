@@ -437,7 +437,7 @@ class ScreenManager {
 
         buf.set_span(0, y, "/ commands · Shift+Enter newline · Ctrl+O transcript · Ctrl+T tools", dim_style);
         ++y;
-        buf.set_span(0, y, sanitize_terminal_text(status_bar_.plain_text(queued_messages_.size(), w)), dim_style);
+        status_bar_.render(buf, w, y, queued_messages_.size());
     }
 
 public:
