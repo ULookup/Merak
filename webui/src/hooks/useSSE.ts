@@ -36,47 +36,66 @@ export function useSSE(url: string | null, dispatch: Dispatch<Action>, lastSeq: 
       return;
     }
 
-    setConnState('connecting');
-
     let cancelled = false;
     let retries = 0;
-    let es: EventSource | null = null;
+    let controller: AbortController | null = null;
 
-    function connect(after: number) {
+    async function connect(after: number) {
       const target = url! + (url!.includes('?') ? '&' : '?') + 'after=' + after;
-      es = new EventSource(target);
+      controller = new AbortController();
 
-      es.onmessage = (e) => {
-        const frame = parseSseFrame(e.data);
-        if (frame) {
-          dispatchRef.current({ type: 'APPLY_SSE', frame });
-          dispatchRef.current({ type: 'SET_LAST_SEQ', seq: frame.seq });
-        }
-      };
+      try {
+        setConnState(retries === 0 ? 'connecting' : 'reconnecting');
+        const res = await fetch(target, {
+          headers: { Accept: 'text/event-stream' },
+          signal: controller.signal,
+        });
 
-      es.onerror = () => {
-        es?.close();
-        if (retries < 10) {
-          if (!cancelled) setConnState('reconnecting');
-          const delay = Math.min(1000 * Math.pow(2, retries), 30000);
-          retries++;
-          if (!cancelled) setTimeout(() => connect(lastSeqRef.current), delay);
-        } else {
-          if (!cancelled) setConnState('disconnected');
-        }
-      };
-
-      es.onopen = () => {
+        if (!res.ok || !res.body) throw new Error('SSE connection failed');
+        setConnState('connected');
         retries = 0;
-        if (!cancelled) setConnState('connected');
-      };
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (!cancelled) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() ?? '';
+
+          for (const part of parts) {
+            const frame = parseSseFrame(part);
+            if (frame) {
+              dispatchRef.current({ type: 'APPLY_SSE', frame });
+              dispatchRef.current({ type: 'SET_LAST_SEQ', seq: frame.seq });
+            }
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+      }
+
+      controller = null;
+
+      if (!cancelled && retries < 10) {
+        setConnState('reconnecting');
+        const delay = Math.min(1000 * Math.pow(2, retries), 30000);
+        retries++;
+        if (!cancelled) setTimeout(() => connect(lastSeqRef.current), delay);
+      } else if (!cancelled) {
+        setConnState('disconnected');
+      }
     }
 
     connect(lastSeq);
 
     return () => {
       cancelled = true;
-      es?.close();
+      controller?.abort();
     };
   }, [url]);
 
