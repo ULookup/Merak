@@ -1,7 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
 import type { SseFrame } from '../api/types';
 import type { Action } from '../AppState';
+
+export type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
 function parseSseFrame(raw: string): SseFrame | null {
   let seq = 0;
@@ -26,9 +28,18 @@ export function useSSE(url: string | null, dispatch: Dispatch<Action>, lastSeq: 
   const lastSeqRef = useRef(lastSeq);
   lastSeqRef.current = lastSeq;
 
+  const [connState, setConnState] = useState<ConnectionState>(
+    url ? 'connecting' : 'disconnected',
+  );
+
+  if (!url) return connState;
+
+  setConnState('connecting');
+
   useEffect(() => {
     if (!url) return;
 
+    let cancelled = false;
     let retries = 0;
     let es: EventSource | null = null;
 
@@ -47,21 +58,28 @@ export function useSSE(url: string | null, dispatch: Dispatch<Action>, lastSeq: 
       es.onerror = () => {
         es?.close();
         if (retries < 10) {
+          if (!cancelled) setConnState('reconnecting');
           const delay = Math.min(1000 * Math.pow(2, retries), 30000);
           retries++;
-          setTimeout(() => connect(lastSeqRef.current), delay);
+          if (!cancelled) setTimeout(() => connect(lastSeqRef.current), delay);
+        } else {
+          if (!cancelled) setConnState('disconnected');
         }
       };
 
       es.onopen = () => {
         retries = 0;
+        if (!cancelled) setConnState('connected');
       };
     }
 
     connect(lastSeq);
 
     return () => {
+      cancelled = true;
       es?.close();
     };
   }, [url]);
+
+  return connState;
 }

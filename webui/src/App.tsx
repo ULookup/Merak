@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { api } from './api/client';
 import { AppStateProvider, useAppState } from './AppState';
+import ConnectionBanner from './components/ConnectionBanner';
 import ErrorBoundary from './components/ErrorBoundary';
 import MainPanel from './components/MainPanel';
 import Sidebar from './components/Sidebar';
@@ -46,7 +47,7 @@ function AppInner() {
 
   const sseUrl = state.sessionId ? api.sseUrl(state.sessionId, state.lastSeq) : null;
 
-  useSSE(sseUrl, dispatch, state.lastSeq);
+  const connState = useSSE(sseUrl, dispatch, state.lastSeq);
 
   return (
     <div className={styles.layout}>
@@ -54,7 +55,10 @@ function AppInner() {
         <Sidebar />
       </ErrorBoundary>
       <ErrorBoundary>
-        <MainPanel />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <ConnectionBanner state={connState} />
+          <MainPanel />
+        </div>
       </ErrorBoundary>
     </div>
   );
