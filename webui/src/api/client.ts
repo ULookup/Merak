@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:3888';
+const BASE = import.meta.env.VITE_API_BASE ?? '';
 
 async function request(method: string, path: string, body?: unknown) {
   const opts: RequestInit = {
@@ -9,9 +9,15 @@ async function request(method: string, path: string, body?: unknown) {
     opts.body = JSON.stringify(body);
   }
   const res = await fetch(`${BASE}${path}`, opts);
-  const json = await res.json();
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    const text = await res.text().catch(() => '<unreadable>');
+    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
+  }
   if (res.status >= 400) {
-    throw new Error(json?.error?.message ?? `HTTP ${res.status}`);
+    throw new Error((json as { error?: { message?: string } })?.error?.message ?? `HTTP ${res.status}`);
   }
   return json;
 }

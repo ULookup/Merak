@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from './api/client';
 import styles from './App.module.css';
 import { AppStateProvider, useAppState } from './AppState';
@@ -90,15 +90,22 @@ function AppInner() {
     };
   }, [state.worldId, dispatch]);
 
+  const creatingRef = useRef(false);
+
   useEffect(() => {
     if (!state.sessionId) {
+      if (creatingRef.current) return;
+      creatingRef.current = true;
       api
         .createSession()
         .then((data) => {
           const id = data.session_id as string;
           dispatch({ type: 'SET_SESSION', sessionId: id });
         })
-        .catch(() => {});
+        .catch((e) => {
+          creatingRef.current = false;
+          console.error('Failed to create session:', e);
+        });
       return;
     }
     api
@@ -106,7 +113,9 @@ function AppInner() {
       .then((data) => {
         dispatch({ type: 'SET_SESSIONS', sessions: data.sessions ?? [] });
       })
-      .catch(() => {});
+      .catch((e) => {
+        console.error('Failed to list sessions:', e);
+      });
   }, [state.sessionId, dispatch]);
 
   const sseUrl = state.sessionId ? api.sseUrl(state.sessionId, state.lastSeq) : null;
