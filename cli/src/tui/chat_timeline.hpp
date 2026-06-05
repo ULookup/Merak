@@ -8,7 +8,7 @@
 
 namespace merak::tui {
 
-static std::vector<std::string> buffer_to_lines(const Buffer& buf) {
+inline std::vector<std::string> buffer_to_lines(const Buffer& buf) {
     std::vector<std::string> lines;
     for (uint16_t y = 0; y < buf.h; ++y) {
         std::string line;
@@ -97,9 +97,10 @@ public:
 
     std::vector<std::string> drain_scrollback(size_t width) {
         std::vector<std::string> lines;
+        static constexpr uint16_t kMaxCellHeight = 80;
         while (scrollback_watermark_ < committed_.size()) {
             Buffer cell_buf;
-            cell_buf.resize(width, 20);
+            cell_buf.resize(width, kMaxCellHeight);
             committed_[scrollback_watermark_++]->render(cell_buf, width);
             auto cell_lines = buffer_to_lines(cell_buf);
             lines.insert(lines.end(), cell_lines.begin(), cell_lines.end());

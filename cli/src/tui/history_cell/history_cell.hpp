@@ -106,11 +106,12 @@ inline void write_spans(Buffer& buf, const std::vector<std::vector<Span>>& lines
         uint16_t x = 0;
         for (const auto& span : lines[y]) {
             buf.set_span(x, y, span.text, span.style);
-            // approximate x advance - set_span handles exact widths
             size_t pos = 0;
             while (pos < span.text.size()) {
                 auto cp = utf8_decode(span.text, pos);
-                x += std::max(uint8_t(1), char_width(cp));
+                uint8_t cw = char_width(cp);
+                if (cw == 0 && x > 0) continue;
+                x += cw > 0 ? cw : uint16_t(1);
             }
         }
     }

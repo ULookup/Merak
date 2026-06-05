@@ -130,6 +130,7 @@ class ScreenManager {
                 if (!sid.empty()) {
                     auto result = persistence::restore(sid);
                     timeline_ = std::move(result.timeline);
+                    session_id_ = sid;
                     persisted_cell_count_ = timeline_.committed().size();
                     status_bar_.set_state("Restored " + std::to_string(result.event_count) + " events");
                 }
@@ -271,9 +272,10 @@ class ScreenManager {
             lines = {ansi(theme::ANSI_ACCENT, "Transcript"), ""};
             std::vector<std::string> content;
             const auto& cells = timeline_.committed();
+            static constexpr uint16_t kMaxCellHeight = 80;
             for (size_t i = 0; i < cells.size(); ++i) {
                 Buffer cell_buf;
-                cell_buf.resize(terminal_.width(), 20);
+                cell_buf.resize(terminal_.width(), kMaxCellHeight);
                 cells[i]->render(cell_buf, terminal_.width());
                 auto rendered = buffer_to_lines(cell_buf);
                 content.insert(content.end(), rendered.begin(), rendered.end());

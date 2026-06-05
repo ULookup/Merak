@@ -131,6 +131,22 @@ public:
 
         if (prev_y != UINT16_MAX) flush_run(prev_y);
 
+        if (curr.h < prev_buffer_.h) {
+            for (uint16_t y = curr.h; y < prev_buffer_.h; ++y) {
+                move_cursor(0, y);
+                std::cout << "\x1b[K";
+            }
+            if (viewport_height_ > curr.h) {
+                std::cout << "\x1b[" << (viewport_height_ - curr.h) << "A";
+            }
+        }
+        if (curr.w < prev_buffer_.w) {
+            for (uint16_t y = 0; y < curr.h; ++y) {
+                move_cursor(prev_buffer_.w, y);
+                std::cout << "\x1b[K";
+            }
+        }
+
         std::cout << "\x1b[0m" << std::flush;
         prev_buffer_ = std::move(curr);
     }

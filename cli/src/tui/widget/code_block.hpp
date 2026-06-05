@@ -16,6 +16,20 @@ class CodeBlock : public Block {
     mutable std::string cached_lang_;
     mutable std::vector<syntax::HighlightSpan> cached_spans_;
 
+    static std::vector<std::string> split_lines_code(const std::string& text) {
+        std::vector<std::string> lines;
+        size_t start = 0;
+        for (size_t i = 0; i < text.size(); ++i) {
+            if (text[i] == '\n') {
+                lines.push_back(text.substr(start, i - start));
+                start = i + 1;
+            }
+        }
+        if (start < text.size()) lines.push_back(text.substr(start));
+        else if (start == text.size()) lines.push_back("");
+        return lines;
+    }
+
 public:
     CodeBlock(std::string code, std::string language, std::unique_ptr<Widget> inner = nullptr)
         : Block(std::move(inner), language), code_(std::move(code)), language_(std::move(language)) {}
@@ -29,42 +43,50 @@ public:
         }
 
         Buffer buf;
+        uint16_t inner_w = area.w > 2 ? area.w - 2 : area.w;
         buf.resize(area.w, area.h);
 
-        size_t pos = 0;
+        // Draw border from Block base
+        buf = Block::render(area);
+
+        auto lines = split_lines_code(code_);
         uint16_t y = 1;
-        uint16_t x = 1;
-        Style current_style;
+        uint16_t max_h = area.h > 1 ? area.h - 1 : 0;
 
-        for (const auto& span : cached_spans_) {
-            while (pos < span.start_byte && y < area.h - 1) {
-                char c = code_[pos];
-                if (c == '\n') {
-                    ++y; x = 1;
-                } else if (c != '\r') {
-                    if (x < area.w - 1) {
-                        buf.at(x, y).ch = static_cast<char32_t>(static_cast<unsigned char>(c));
-                        buf.at(x, y).style = current_style;
-                        ++x;
-                    }
-                }
-                ++pos;
-            }
+        for (size_t line_idx = 0; line_idx < lines.size() && y < max_h; ++line_idx) {
+            const auto& line = lines[line_idx];
+            uint32_t line_start_byte = 0;
+            for (size_t prev = 0; prev < line_idx; ++prev)
+                line_start_byte += static_cast<uint32_t>(lines[prev].size() + 1);
+            uint32_t line_end_byte = line_start_byte + static_cast<uint32_t>(line.size());
 
-            auto span_style = theme_.style_for(span.token);
-            for (uint32_t i = span.start_byte; i < span.end_byte && y < area.h - 1; ++i) {
-                char c = code_[i];
-                if (c == '\n') {
-                    ++y; x = 1;
-                } else if (c != '\r') {
-                    if (x < area.w - 1) {
-                        buf.at(x, y).ch = static_cast<char32_t>(static_cast<unsigned char>(c));
-                        buf.at(x, y).style = span_style;
-                        ++x;
-                    }
+            uint16_t x = 1;
+            uint32_t pos = line_start_byte;
+            for (const auto& span : cached_spans_) {
+                if (span.end_byte <= line_start_byte) continue;
+                if (span.start_byte >= line_end_byte) break;
+
+                uint32_t seg_start = std::max(span.start_byte, line_start_byte);
+                uint32_t seg_end = std::min(span.end_byte, line_end_byte);
+
+                if (seg_start > pos) {
+                    auto text = code_.substr(pos, seg_start - pos);
+                    buf.set_span(x, y, text, Style{});
+                    x += text.size();
                 }
+                if (seg_end > seg_start) {
+                    auto text = code_.substr(seg_start, seg_end - seg_start);
+                    auto style = theme_.style_for(span.token);
+                    buf.set_span(x, y, text, style);
+                    x += text.size();
+                }
+                pos = seg_end;
             }
-            pos = span.end_byte;
+            if (pos < line_end_byte && x < inner_w) {
+                auto text = code_.substr(pos, line_end_byte - pos);
+                buf.set_span(x, y, text, Style{});
+            }
+            ++y;
         }
 
         return buf;

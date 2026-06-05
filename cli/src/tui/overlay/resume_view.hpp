@@ -24,8 +24,6 @@ class ResumeView {
     std::vector<SessionEntry> entries_;
     int selected_ = 0;
     std::string filter_;
-    int scroll_ = 0;
-    bool show_preview_ = false;
 
     void load_index() {
         auto path = persistence::index_path();
@@ -70,8 +68,7 @@ public:
 
     void handle_key(const std::string& key) {
         if (key == "up" && selected_ > 0) --selected_;
-        if (key == "down" && selected_ + 1 < static_cast<int>(filtered().size())) ++selected_;
-        if (key == "ctrl+r") show_preview_ = !show_preview_;
+        else if (key == "down" && selected_ + 1 < static_cast<int>(filtered().size())) ++selected_;
     }
 
     void set_filter(const std::string& f) { filter_ = f; selected_ = 0; }
@@ -95,7 +92,8 @@ public:
 
         buf.set_span(0, y, std::string(width, '─'), dim); ++y;
 
-        int start = std::max(0, selected_ - static_cast<int>(buf.h) + 8);
+        static constexpr int kHeaderFooterRows = 8;
+        int start = std::max(0, selected_ - static_cast<int>(buf.h) + kHeaderFooterRows);
         for (size_t i = start; i < f.size() && y < buf.h - 2; ++i, ++y) {
             bool sel = (static_cast<int>(i) == selected_);
             Style line_style;
@@ -114,7 +112,7 @@ public:
 
         if (y < buf.h) {
             buf.set_span(0, buf.h - 1,
-                "↑↓ select  Enter resume  / search  Ctrl+R preview  Ctrl+D delete  Esc back", dim);
+                "↑↓ select  Enter resume  / search  Ctrl+D delete  Esc back", dim);
         }
     }
 };

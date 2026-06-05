@@ -50,6 +50,16 @@ public:
     }
 };
 
+inline uint16_t display_width(std::string_view text) {
+    uint16_t w = 0;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        auto cp = utf8_decode(text, pos);
+        w += std::max(uint8_t(1), char_width(cp));
+    }
+    return w;
+}
+
 class SpanParagraph : public Widget {
     std::vector<Span> spans_;
 public:
@@ -58,19 +68,19 @@ public:
     Buffer render(Rect area) override {
         Buffer buf;
         // Tokenize spans into styled atoms (words, spaces, newlines)
-        struct Atom { std::string text; Style style; };
+        struct Atom { std::string text; Style style; uint16_t disp_w; };
         std::vector<Atom> atoms;
         for (const auto& sp : spans_) {
             if (sp.text.empty()) continue;
             std::string word;
+            uint16_t word_dw = 0;
             for (size_t i = 0; i < sp.text.size(); ) {
                 char c = sp.text[i];
                 if (c == ' ' || c == '\n') {
-                    if (!word.empty()) { atoms.push_back({word, sp.style}); word.clear(); }
-                    atoms.push_back({c == '\n' ? "\n" : " ", sp.style});
+                    if (!word.empty()) { atoms.push_back({word, sp.style, word_dw}); word.clear(); word_dw = 0; }
+                    atoms.push_back({c == '\n' ? "\n" : " ", sp.style, uint16_t(1)});
                     ++i;
                 } else {
-                    // Grab the full UTF-8 sequence for this codepoint
                     auto lead = static_cast<unsigned char>(c);
                     int len = 1;
                     if ((lead & 0xE0) == 0xC0) len = 2;
@@ -79,9 +89,12 @@ public:
                     if (i + len > sp.text.size()) len = static_cast<int>(sp.text.size() - i);
                     word.append(sp.text, i, len);
                     i += len;
+                    size_t cp_pos = 0;
+                    auto cp = utf8_decode(sp.text.substr(i - len, len), cp_pos);
+                    word_dw += std::max(uint8_t(1), char_width(cp));
                 }
             }
-            if (!word.empty()) atoms.push_back({word, sp.style});
+            if (!word.empty()) atoms.push_back({word, sp.style, word_dw});
         }
 
         uint16_t y = 0, x = 0;
@@ -91,13 +104,13 @@ public:
                 if (y >= area.h) break;
                 continue;
             }
-            if (x > 0 && x + atom.text.size() > area.w) {
+            if (x > 0 && x + atom.disp_w > area.w) {
                 x = 0; ++y;
                 if (y >= area.h) break;
             }
-            if (x + atom.text.size() <= area.w) {
+            if (x + atom.disp_w <= area.w) {
                 buf.set_span(x, y, atom.text, atom.style);
-                x += atom.text.size();
+                x += atom.disp_w;
             }
         }
         uint16_t h = std::min<uint16_t>(y + 1, area.h);

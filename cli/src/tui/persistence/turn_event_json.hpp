@@ -37,6 +37,7 @@ inline void to_json(nlohmann::json& j, const ApprovalEvent& e) {
 inline void to_json(nlohmann::json& j, const SessionMeta& e) {
     j = {{"kind", "session_meta"}, {"sid", e.session_id}, {"created_at", e.created_at},
         {"model", e.model}, {"provider", e.provider}, {"permission_mode", e.permission_mode},
+        {"system_prompt_hash", e.system_prompt_hash},
         {"cwd", e.cwd}, {"term_w", e.terminal_w}, {"term_h", e.terminal_h},
         {"version", e.merak_version}};
 }
