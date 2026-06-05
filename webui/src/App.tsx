@@ -5,6 +5,7 @@ import ConnectionBanner from './components/ConnectionBanner';
 import ErrorBoundary from './components/ErrorBoundary';
 import MainPanel from './components/MainPanel';
 import Sidebar from './components/Sidebar';
+import Skeleton from './components/Skeleton';
 import { ToastProvider } from './components/Toast';
 import { useSSE } from './hooks/useSSE';
 import styles from './App.module.css';
@@ -49,6 +50,12 @@ function AppInner() {
   const sseUrl = state.sessionId ? api.sseUrl(state.sessionId, state.lastSeq) : null;
 
   const connState = useSSE(sseUrl, dispatch, state.lastSeq);
+
+  const isLoading = state.metadata === null && state.sessions.length === 0;
+
+  if (isLoading) {
+    return <Skeleton />;
+  }
 
   return (
     <ToastProvider>
