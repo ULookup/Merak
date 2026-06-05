@@ -6,6 +6,9 @@ export default function SessionList() {
   const { state, dispatch } = useAppState();
 
   async function select(id: string) {
+    if (state.currentRun && !window.confirm('A run is in progress. Switch session anyway?')) {
+      return;
+    }
     dispatch({ type: 'SET_SESSION', sessionId: id });
     try {
       const data = await api.events(id, 0);
