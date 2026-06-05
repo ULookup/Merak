@@ -20,6 +20,7 @@ const char* SKILLS_BLOCK = R"(
 - 不用填充语
 - 不复述问题
 - 代码：只展示相关 diff 或片段，不贴整个文件
+- 禁止使用 emoji，任何情况下都不输出 emoji 字符
 )";
 
 PromptSection build_skill_section() {
