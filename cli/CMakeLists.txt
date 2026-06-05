@@ -54,3 +54,13 @@ target_compile_features(test_persistence PRIVATE cxx_std_17)
 add_test(NAME test_persistence COMMAND test_persistence)
 
 install(TARGETS merak-cli RUNTIME DESTINATION bin)
+
+if(WIN32)
+    add_executable(merak-launcher src/win_launcher.cpp)
+    target_compile_features(merak-launcher PRIVATE cxx_std_23)
+    target_link_libraries(merak-launcher PRIVATE ws2_32 shell32 user32)
+    set_target_properties(merak-launcher PROPERTIES
+        RUNTIME_OUTPUT_NAME "merak-launcher"
+        WIN32_EXECUTABLE TRUE
+    )
+endif()
