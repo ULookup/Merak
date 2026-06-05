@@ -18,7 +18,12 @@ AgentLoop::AgentLoop(
     , context_(std::move(context))
     , compactor_(std::move(compactor))
     , counter_(std::make_shared<TokenCounter>())
+    , tool_result_compactor_(std::make_shared<ToolResultCompactor>())
 {
+}
+
+void AgentLoop::restore_history(std::vector<Message> history) {
+    session_history_ = std::move(history);
 }
 
 void AgentLoop::transition_to(TurnState next, RunControl& control) {
@@ -30,94 +35,85 @@ void AgentLoop::transition_to(TurnState next, RunControl& control) {
 
 std::future<AgentResponse> AgentLoop::run(
     const std::string& user_message,
-    RunControl& control,
-    std::vector<Message> initial_history,
-    bool append_user_message) {
+    RunControl& control) {
     return std::async(std::launch::async,
-        [this, user_message, &control, initial_history = std::move(initial_history),
-         append_user_message]() mutable
-        -> AgentResponse {
-        AgentResponse response;
-        session_history_ = std::move(initial_history);
+        [this, user_message, &control]() -> AgentResponse {
 
-        if (append_user_message) {
             Message user_msg;
             user_msg.role = "user";
             user_msg.content = user_message;
             session_history_.push_back(user_msg);
             memory_->append_message(user_msg);
             control.append_message(user_msg);
+
+            tool_failure_streak_.clear();
+
+            return run_loop(control);
+        });
+}
+
+std::future<AgentResponse> AgentLoop::resume(RunControl& control) {
+    return std::async(std::launch::async,
+        [this, &control]() -> AgentResponse {
+            tool_failure_streak_.clear();
+            return run_loop(control);
+        });
+}
+
+AgentResponse AgentLoop::run_loop(RunControl& control) {
+    AgentResponse response;
+
+    transition_to(TurnState::ContextReady, control);
+    int turn_count = 0;
+
+    while (turn_count < config_.max_turns) {
+        if (config_.enable_compaction) {
+            maybe_compact(control);
         }
+        if (control.cancelled()) throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
 
-        tool_failure_streak_.clear();
+        auto context_messages = build_context();
 
-        transition_to(TurnState::ContextReady, control);
-        int turn_count = 0;
+        auto split = CacheAwareContext::split(context_messages);
+        spdlog::debug("Loop: turn {} — {}", turn_count,
+            CacheAwareContext::info(split));
 
-        while (turn_count < config_.max_turns) {
-            if (config_.enable_compaction) {
-                maybe_compact(control);
-            }
-            if (control.cancelled()) throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
+        transition_to(TurnState::Thinking, control);
+        turn_count++;
 
-            auto context_messages = build_context(user_message);
+        ChatRequest req;
+        req.model = config_.default_model;
+        req.max_output_tokens = config_.max_output_tokens;
+        req.messages = context_messages;
+        req.enable_cache = config_.enable_cache;
 
-            auto split = CacheAwareContext::split(context_messages);
-            spdlog::debug("Loop: turn {} — {}", turn_count,
-                CacheAwareContext::info(split));
+        auto tool_specs = tools_->pinned_schemas();
+        req.tools = tool_specs;
 
-            transition_to(TurnState::Thinking, control);
-            turn_count++;
+        std::vector<ToolCall> accumulated_tool_calls;
 
-            ChatRequest req;
-            req.model = config_.default_model;
-            req.max_output_tokens = config_.max_output_tokens;
-            req.messages = context_messages;
-            req.enable_cache = config_.enable_cache;
+        auto llm_future = llm_->chat(req,
+            [&](StreamChunk chunk) {
+                if (chunk.is_final) return;
+                if (!chunk.is_tool_call) {
+                    control.emit_text_delta(chunk.text);
+                    response.text += chunk.text;
+                }
+            }, control.cancellation_token());
 
-            auto tool_specs = tools_->all_tools();
-            req.tools = tool_specs;
+        auto llm_response = llm_future.get();
+        response.total_input_tokens += llm_response.total_input_tokens;
+        response.total_output_tokens += llm_response.total_output_tokens;
+        response.has_usage = response.has_usage || llm_response.has_usage;
+        response.usage_missing = response.usage_missing || !llm_response.has_usage;
+        control.emit_usage(llm_response.total_input_tokens,
+            llm_response.total_output_tokens, llm_response.has_usage);
+        if (control.cancelled()) throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
 
-            std::vector<ToolCall> accumulated_tool_calls;
+        accumulated_tool_calls = llm_response.tool_calls;
 
-            auto llm_future = llm_->chat(req,
-                [&](StreamChunk chunk) {
-                    if (chunk.is_final) return;
-                    if (!chunk.is_tool_call) {
-                        control.emit_text_delta(chunk.text);
-                        response.text += chunk.text;
-                    }
-                }, control.cancellation_token());
-
-            auto llm_response = llm_future.get();
-            response.total_input_tokens += llm_response.total_input_tokens;
-            response.total_output_tokens += llm_response.total_output_tokens;
-            response.has_usage = response.has_usage || llm_response.has_usage;
-            response.usage_missing = response.usage_missing || !llm_response.has_usage;
-            control.emit_usage(llm_response.total_input_tokens,
-                llm_response.total_output_tokens, llm_response.has_usage);
-            if (control.cancelled()) throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
-
-            accumulated_tool_calls = llm_response.tool_calls;
-
-            if (accumulated_tool_calls.empty()) {
-                transition_to(TurnState::Responding, control);
-
-                Message assistant_msg;
-                assistant_msg.role = "assistant";
-                assistant_msg.content = llm_response.text;
-                assistant_msg.tool_calls = accumulated_tool_calls;
-                assistant_msg.provider_content_blocks_json =
-                    llm_response.provider_content_blocks_json;
-                session_history_.push_back(assistant_msg);
-                memory_->append_message(assistant_msg);
-                control.append_message(assistant_msg);
-
-                transition_to(TurnState::Complete, control);
-                return response;
-            }
-
-            transition_to(TurnState::Acting, control);
+        if (accumulated_tool_calls.empty()) {
+            transition_to(TurnState::Responding, control);
 
             Message assistant_msg;
             assistant_msg.role = "assistant";
@@ -129,57 +125,80 @@ std::future<AgentResponse> AgentLoop::run(
             memory_->append_message(assistant_msg);
             control.append_message(assistant_msg);
 
-            auto tool_results = handle_tool_calls(accumulated_tool_calls, control);
-
-            for (auto& tr : tool_results) {
-                response.tool_results.push_back(tr);
-
-                Message tool_msg;
-                tool_msg.role = "tool";
-                tool_msg.content = tr.output;
-                tool_msg.tool_call_id = tr.call_id;
-                session_history_.push_back(tool_msg);
-                memory_->append_message(tool_msg);
-                control.append_message(tool_msg);
-            }
-
-            transition_to(TurnState::Observing, control);
-            transition_to(TurnState::ContextReady, control);
+            transition_to(TurnState::Complete, control);
+            return response;
         }
 
-        spdlog::warn("Loop: max turns ({}) reached, forcing text response",
-            config_.max_turns);
+        transition_to(TurnState::Acting, control);
 
-        transition_to(TurnState::Thinking, control);
-        ChatRequest final_req;
-        final_req.model = config_.default_model;
-        final_req.max_output_tokens = config_.max_output_tokens;
-        final_req.messages = build_context(
-            "Please provide your final answer as text. Do not use any tools.");
-        final_req.tools = {};
-        final_req.enable_cache = false;
+        Message assistant_msg;
+        assistant_msg.role = "assistant";
+        assistant_msg.content = llm_response.text;
+        assistant_msg.tool_calls = accumulated_tool_calls;
+        assistant_msg.provider_content_blocks_json =
+            llm_response.provider_content_blocks_json;
+        session_history_.push_back(assistant_msg);
+        memory_->append_message(assistant_msg);
+        control.append_message(assistant_msg);
 
-        auto final_future = llm_->chat(final_req,
-            [&](StreamChunk chunk) {
-                if (!chunk.is_final) control.emit_text_delta(chunk.text);
-                response.text += chunk.text;
-            }, control.cancellation_token());
-        auto final_resp = final_future.get();
-        response.text = final_resp.text;
-        response.total_input_tokens += final_resp.total_input_tokens;
-        response.total_output_tokens += final_resp.total_output_tokens;
-        response.has_usage = response.has_usage || final_resp.has_usage;
-        response.usage_missing = response.usage_missing || !final_resp.has_usage;
-        control.emit_usage(final_resp.total_input_tokens,
-            final_resp.total_output_tokens, final_resp.has_usage);
+        auto tool_results = handle_tool_calls(accumulated_tool_calls, control);
 
-        transition_to(TurnState::Complete, control);
-        return response;
-    });
+        for (auto& tr : tool_results) {
+            response.tool_results.push_back(tr);
+
+            Message tool_msg;
+            tool_msg.role = "tool";
+            tool_msg.content = tr.output;
+            tool_msg.tool_call_id = tr.call_id;
+            session_history_.push_back(tool_msg);
+            memory_->append_message(tool_msg);
+            control.append_message(tool_msg);
+        }
+
+        transition_to(TurnState::Observing, control);
+        transition_to(TurnState::ContextReady, control);
+    }
+
+    spdlog::warn("Loop: max turns ({}) reached, forcing text response",
+        config_.max_turns);
+
+    transition_to(TurnState::Thinking, control);
+    ChatRequest final_req;
+    final_req.model = config_.default_model;
+    final_req.max_output_tokens = config_.max_output_tokens;
+    final_req.messages = build_context();
+    final_req.tools = {};
+    final_req.enable_cache = false;
+
+    auto final_future = llm_->chat(final_req,
+        [&](StreamChunk chunk) {
+            if (!chunk.is_final) control.emit_text_delta(chunk.text);
+            response.text += chunk.text;
+        }, control.cancellation_token());
+    auto final_resp = final_future.get();
+    response.text = final_resp.text;
+    response.total_input_tokens += final_resp.total_input_tokens;
+    response.total_output_tokens += final_resp.total_output_tokens;
+    response.has_usage = response.has_usage || final_resp.has_usage;
+    response.usage_missing = response.usage_missing || !final_resp.has_usage;
+    control.emit_usage(final_resp.total_input_tokens,
+        final_resp.total_output_tokens, final_resp.has_usage);
+
+    transition_to(TurnState::Complete, control);
+    return response;
 }
 
-std::vector<Message> AgentLoop::build_context(const std::string& user_message) {
-    auto mem_future = memory_->search(user_message, 5);
+std::vector<Message> AgentLoop::build_context() {
+    // Use the latest user message content for memory search.
+    std::string query;
+    for (int i = (int)session_history_.size() - 1; i >= 0; i--) {
+        if (session_history_[i].role == "user") {
+            query = session_history_[i].content;
+            break;
+        }
+    }
+
+    auto mem_future = memory_->search(query, 5);
     std::vector<MemorySnippet> mem_snippets;
     if (mem_future.valid()) {
         auto mem_result = mem_future.get();
@@ -190,7 +209,21 @@ std::vector<Message> AgentLoop::build_context(const std::string& user_message) {
 
     return context_->assemble(
         config_.system_prompt,
-        tools_->all_tools_json(),
+        [&]() -> nlohmann::json {
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& spec : tools_->pinned_schemas()) {
+                nlohmann::json item;
+                item["type"] = "function";
+                item["function"]["name"] = spec.name;
+                item["function"]["description"] = spec.description;
+                if (!spec.parameters_json.empty()) {
+                    item["function"]["parameters"] =
+                        nlohmann::json::parse(spec.parameters_json);
+                }
+                arr.push_back(item);
+            }
+            return arr;
+        }(),
         session_history_,
         mem_snippets
     );
@@ -206,7 +239,6 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
         if (control.cancelled()) break;
         control.emit_tool_started(call);
 
-        // 熔断器检查：连续 3 次失败则跳过
         auto it = tool_failure_streak_.find(call.name);
         if (it != tool_failure_streak_.end() && it->second >= kCircuitBreakerThreshold) {
             ToolResult blocked;
@@ -245,7 +277,6 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
             call, ToolExecutionContext{control.cancellation_token()});
         auto result = result_future.get();
 
-        // 更新失败计数
         if (result.is_error) {
             tool_failure_streak_[call.name]++;
         } else {
@@ -261,6 +292,17 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
 }
 
 void AgentLoop::maybe_compact(RunControl& control) {
+    // Microcompact: compress old tool results first (cheap, no LLM call)
+    int total_tokens = counter_->count(session_history_);
+    int budget = context_->effective_budget();
+    if (budget <= 0) return;
+    double pressure = (double)total_tokens / budget;
+    int compacted = tool_result_compactor_->compact(session_history_, pressure);
+    if (compacted > 0) {
+        spdlog::info("Loop: microcompact compressed {} tool results (pressure={:.1f}%)",
+            compacted, pressure * 100);
+    }
+
     auto compaction_info = context_->analyze_compaction(session_history_);
 
     if (!compaction_info.needed) return;

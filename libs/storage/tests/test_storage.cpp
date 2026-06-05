@@ -16,6 +16,14 @@ int main() {
 
     auto run = store.create_run(session.id, "hello");
     assert(store.has_unfinished_run(session.id));
+    auto sub_run = store.create_run(
+        session.id, "sub task", run.id, "delegation_test", "researcher", "sub_run");
+    auto loaded_sub_run = store.get_run(sub_run.id);
+    assert(loaded_sub_run.has_value());
+    assert(loaded_sub_run->parent_run_id == run.id);
+    assert(loaded_sub_run->delegation_id == "delegation_test");
+    assert(loaded_sub_run->agent_id == "researcher");
+    assert(loaded_sub_run->run_kind == "sub_run");
     store.update_run_status(run.id, RunStatus::WaitingApproval);
 
     ApprovalRecord approval;

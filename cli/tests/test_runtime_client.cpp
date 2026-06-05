@@ -15,4 +15,6 @@ int main() {
 
     auto url = events_stream_url("http://127.0.0.1:3888", "session_1", 9);
     assert(url == "http://127.0.0.1:3888/v1/sessions/session_1/events/stream?after=9");
+
+    assert(delegations_path("session_1") == "/v1/sessions/session_1/delegations");
 }

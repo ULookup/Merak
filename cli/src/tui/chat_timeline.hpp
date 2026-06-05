@@ -1,11 +1,38 @@
 #pragma once
 #include "history_cell/history_cell.hpp"
+#include "buffer.hpp"
 #include <map>
 #include <memory>
 #include <utility>
 #include <vector>
 
 namespace merak::tui {
+
+inline std::vector<std::string> buffer_to_lines(const Buffer& buf) {
+    std::vector<std::string> lines;
+    for (uint16_t y = 0; y < buf.h; ++y) {
+        std::string line;
+        Style curr;
+        for (uint16_t x = 0; x < buf.w; ++x) {
+            const auto& cell = buf.at(x, y);
+            if (cell.ch == U' ') { line.push_back(' '); continue; }
+            if (!(cell.style == curr)) {
+                line += "\x1b[0m";
+                if (cell.style.fg != 252) line += "\x1b[38;5;" + std::to_string(cell.style.fg) + "m";
+                if (cell.style.bg != 255) line += "\x1b[48;5;" + std::to_string(cell.style.bg) + "m";
+                if (cell.style.bold()) line += "\x1b[1m";
+                if (cell.style.dim()) line += "\x1b[2m";
+                if (cell.style.italic()) line += "\x1b[3m";
+                if (cell.style.underline()) line += "\x1b[4m";
+                curr = cell.style;
+            }
+            utf8_encode(cell.ch, line);
+        }
+        line += "\x1b[0m";
+        lines.push_back(line);
+    }
+    return lines;
+}
 
 class ChatTimeline {
     std::vector<std::shared_ptr<HistoryCell>> committed_;
@@ -70,9 +97,13 @@ public:
 
     std::vector<std::string> drain_scrollback(size_t width) {
         std::vector<std::string> lines;
+        static constexpr uint16_t kMaxCellHeight = 80;
         while (scrollback_watermark_ < committed_.size()) {
-            auto rendered = committed_[scrollback_watermark_++]->render(width);
-            lines.insert(lines.end(), rendered.begin(), rendered.end());
+            Buffer cell_buf;
+            cell_buf.resize(width, kMaxCellHeight);
+            committed_[scrollback_watermark_++]->render(cell_buf, width);
+            auto cell_lines = buffer_to_lines(cell_buf);
+            lines.insert(lines.end(), cell_lines.begin(), cell_lines.end());
             lines.push_back("");
         }
         return lines;

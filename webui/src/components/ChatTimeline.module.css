@@ -1,0 +1,103 @@
+.area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 28px clamp(16px, 3vw, 44px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.7)),
+    repeating-linear-gradient(0deg, transparent 0, transparent 31px, rgba(122, 79, 19, 0.035) 32px);
+  scroll-behavior: smooth;
+}
+
+.emptyState {
+  margin: auto;
+  width: min(430px, 100%);
+  max-width: 100%;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--border-strong);
+  background: rgba(255, 255, 255, 0.62);
+  border-radius: 24px;
+  padding: 34px 32px;
+  box-shadow: var(--shadow-sm);
+  animation: emptyFloat 520ms var(--ease);
+}
+
+.emptyMark {
+  width: 72px;
+  height: 58px;
+  margin: 0 auto 14px;
+  display: grid;
+  place-items: center;
+  color: var(--brand);
+  filter: drop-shadow(0 14px 24px rgba(122, 79, 19, 0.2));
+}
+
+.emptyMark svg {
+  width: 100%;
+  height: 100%;
+}
+
+.emptyMark ellipse {
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 56 12;
+}
+
+.emptyMark path:nth-of-type(1) {
+  fill: var(--brand-strong);
+}
+
+.emptyMark circle:nth-of-type(1) {
+  fill: var(--brand);
+}
+
+.emptyMark path:nth-of-type(2) {
+  fill: var(--brand-wash);
+  opacity: 0.8;
+}
+
+.emptyMark circle:nth-of-type(2) {
+  fill: #b8892c;
+}
+
+.emptyState h2 {
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+
+.emptyState p {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@keyframes emptyFloat {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 767px) {
+  .area {
+    padding: 16px 12px;
+  }
+
+  .emptyState {
+    align-self: stretch;
+    width: auto;
+    margin: auto 4px;
+    padding: 26px 20px;
+  }
+}

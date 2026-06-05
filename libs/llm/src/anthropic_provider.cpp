@@ -135,6 +135,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
             +[](void* userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
@@ -306,6 +307,29 @@ std::future<AgentResponse> AnthropicProvider::chat(
         stats_.total_requests++;
         return response;
     });
+}
+
+bool AnthropicProvider::test_connection() {
+    std::string url = "https://api.anthropic.com/v1/messages";
+    std::string body_str = R"({"model":")" + config_.default_model +
+        R"(","max_tokens":1,"messages":[{"role":"user","content":"Hi"}]})";
+    CURL* curl = curl_easy_init();
+    if (!curl) return false;
+    struct curl_slist* headers = nullptr;
+    headers = curl_slist_append(headers, ("x-api-key: " + config_.api_key).c_str());
+    headers = curl_slist_append(headers, "anthropic-version: 2023-06-01");
+    headers = curl_slist_append(headers, "Content-Type: application/json");
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body_str.c_str());
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    long http_code = 0;
+    CURLcode res = curl_easy_perform(curl);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(curl);
+    return res == CURLE_OK && http_code >= 200 && http_code < 300;
 }
 
 } // namespace merak

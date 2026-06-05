@@ -1,0 +1,298 @@
+#include <merak/worldbuilding/world_store.hpp>
+
+#include <merak/worldbuilding/ids.hpp>
+#include <merak/worldbuilding/pg_helpers.hpp>
+#include <nlohmann/json.hpp>
+
+#include <array>
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+
+namespace merak::worldbuilding {
+namespace {
+
+constexpr std::array<std::string_view, 13> kWorldDirectories = {
+    "world_knowledge", "god",         "managers/map",   "managers/history",
+    "managers/magic",  "managers/faction", "agents",    "scenes",
+    "chapters",        "arcs",        "secrets",        "foreshadows",
+    "sessions"};
+
+AgentKind agent_kind_from_string(const std::string& value) {
+    if (value == "god") return AgentKind::God;
+    if (value == "map_manager") return AgentKind::MapManager;
+    if (value == "history_manager") return AgentKind::HistoryManager;
+    if (value == "magic_system_manager") return AgentKind::MagicSystemManager;
+    if (value == "faction_manager") return AgentKind::FactionManager;
+    if (value == "group") return AgentKind::Group;
+    if (value == "individual") return AgentKind::Individual;
+    throw std::runtime_error("unknown agent kind: " + value);
+}
+
+WorldMeta world_meta_from_row(const PgResult& res, int row) {
+    return WorldMeta{
+        .id = res.get(row, 0),
+        .name = res.get(row, 1),
+        .description = res.get(row, 2),
+        .created_at = res.get(row, 3),
+        .updated_at = res.get(row, 4),
+    };
+}
+
+AgentRecord agent_record_from_row(const PgResult& res, int row) {
+    return AgentRecord{
+        .id = res.get(row, 0),
+        .world_id = res.get(row, 1),
+        .name = res.get(row, 2),
+        .display_name = res.get(row, 3),
+        .created_at = res.get(row, 5),
+        .updated_at = res.get(row, 6),
+        .kind = agent_kind_from_string(res.get(row, 4)),
+    };
+}
+
+WorldKnowledge world_knowledge_from_row(const PgResult& res, int row) {
+    WorldKnowledge wk;
+    wk.id = res.get(row, 0);
+    wk.category = res.get(row, 1);
+    wk.content = res.get(row, 2);
+    wk.created_at = res.get(row, 3);
+    try { wk.tags = nlohmann::json::parse(res.get(row, 4)).get<std::vector<std::string>>(); } catch (...) {}
+    try { wk.aliases = nlohmann::json::parse(res.get(row, 5)).get<std::vector<std::string>>(); } catch (...) {}
+    try { wk.related_ids = nlohmann::json::parse(res.get(row, 6)).get<std::vector<std::string>>(); } catch (...) {}
+    return wk;
+}
+
+void remove_all_no_throw(const std::filesystem::path& path) noexcept {
+    try { std::filesystem::remove_all(path); } catch (...) {}
+}
+
+} // namespace
+
+WorldStore::WorldStore(std::string_view pg_conninfo, std::filesystem::path data_root)
+    : data_root_(std::move(data_root)),
+      pool_(std::make_unique<PgPool>(pg_conninfo)) {}
+
+WorldStore::~WorldStore() = default;
+
+void WorldStore::initialize() {
+    std::filesystem::create_directories(data_root_);
+    std::filesystem::create_directories(data_root_ / "worlds");
+}
+
+WorldMeta WorldStore::create_world(const std::string& name,
+                                   const std::string& description) {
+    initialize();
+
+    const auto timestamp = now_iso_utc();
+    WorldMeta world{
+        .id = make_id("world"),
+        .name = name,
+        .description = description,
+        .created_at = timestamp,
+        .updated_at = timestamp,
+    };
+
+    const auto root = world_path(world.id);
+    PgConn conn(*pool_);
+
+    try {
+        std::filesystem::create_directories(root);
+        for (const auto directory : kWorldDirectories) {
+            std::filesystem::create_directories(root / directory);
+        }
+
+        {
+            std::ofstream timeline(root / "timeline.json");
+            if (!timeline) {
+                throw std::runtime_error("create world timeline failed");
+            }
+            timeline << R"({"events":[]})";
+        }
+
+        conn.exec("BEGIN");
+        conn.execute(
+            "INSERT INTO worlds(id, name, description, created_at, updated_at) "
+            "VALUES($1, $2, $3, $4, $5)",
+            {world.id, world.name, world.description, world.created_at, world.updated_at});
+
+        const auto agent_id = make_id("agent");
+        conn.execute(
+            "INSERT INTO agents(id, world_id, name, display_name, kind, created_at, updated_at) "
+            "VALUES($1, $2, $3, $4, $5, $6, $7)",
+            {agent_id, world.id, "god", "god", to_string(AgentKind::God), timestamp, timestamp});
+
+        conn.exec("COMMIT");
+    } catch (...) {
+        try { conn.exec("ROLLBACK"); } catch (...) {}
+        remove_all_no_throw(root);
+        throw;
+    }
+
+    return world;
+}
+
+std::optional<WorldMeta>
+WorldStore::get_world(const std::string& world_id) const {
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, name, description, created_at, updated_at "
+        "FROM worlds WHERE id = $1",
+        {world_id});
+    if (res.ntuples() == 0) return std::nullopt;
+    return world_meta_from_row(res, 0);
+}
+
+std::vector<WorldMeta> WorldStore::list_worlds() const {
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, name, description, created_at, updated_at "
+        "FROM worlds ORDER BY created_at ASC, id ASC");
+    std::vector<WorldMeta> worlds;
+    for (int i = 0; i < res.ntuples(); i++) {
+        worlds.push_back(world_meta_from_row(res, i));
+    }
+    return worlds;
+}
+
+bool WorldStore::delete_world(const std::string& world_id) {
+    PgConn conn(*pool_);
+
+    auto check = conn.query("SELECT 1 FROM worlds WHERE id = $1", {world_id});
+    if (check.ntuples() == 0) return false;
+
+    const auto root = world_path(world_id);
+
+    conn.exec("BEGIN");
+    try {
+        conn.execute("DELETE FROM world_knowledge WHERE world_id = $1", {world_id});
+        conn.execute("DELETE FROM agents WHERE world_id = $1", {world_id});
+        int affected = conn.execute("DELETE FROM worlds WHERE id = $1", {world_id});
+        conn.exec("COMMIT");
+        if (std::filesystem::exists(root)) {
+            std::filesystem::remove_all(root);
+        }
+        return affected > 0;
+    } catch (...) {
+        try { conn.exec("ROLLBACK"); } catch (...) {}
+        throw;
+    }
+}
+
+void WorldStore::add_world_knowledge(const std::string& world_id,
+                                     WorldKnowledge item) {
+    if (item.id.empty()) item.id = make_id("knowledge");
+    if (item.created_at.empty()) item.created_at = now_iso_utc();
+
+    PgConn conn(*pool_);
+    conn.execute(
+        "INSERT INTO world_knowledge(id, world_id, category, content, created_at, "
+        "tags, aliases, related_ids) "
+        "VALUES($1, $2, $3, $4, $5, $6, $7, $8)",
+        {item.id, world_id, item.category, item.content, item.created_at,
+         nlohmann::json(item.tags).dump(),
+         nlohmann::json(item.aliases).dump(),
+         nlohmann::json(item.related_ids).dump()});
+}
+
+std::vector<WorldKnowledge>
+WorldStore::get_world_knowledge(const std::string& world_id,
+                                const std::string& category) const {
+    PgConn conn(*pool_);
+    PgResult res;
+    if (!category.empty()) {
+        res = conn.query(
+            "SELECT id, category, content, created_at, tags, aliases, related_ids "
+            "FROM world_knowledge "
+            "WHERE world_id = $1 AND category = $2 "
+            "ORDER BY created_at ASC, id ASC",
+            {world_id, category});
+    } else {
+        res = conn.query(
+            "SELECT id, category, content, created_at, tags, aliases, related_ids "
+            "FROM world_knowledge "
+            "WHERE world_id = $1 "
+            "ORDER BY created_at ASC, id ASC",
+            {world_id});
+    }
+
+    std::vector<WorldKnowledge> items;
+    for (int i = 0; i < res.ntuples(); i++) {
+        items.push_back(world_knowledge_from_row(res, i));
+    }
+    return items;
+}
+
+std::vector<WorldKnowledge>
+WorldStore::search_world_knowledge(const std::string& world_id,
+                                    const std::string& query,
+                                    const std::string& category,
+                                    int max_results) const {
+    PgConn conn(*pool_);
+    std::vector<WorldKnowledge> items;
+
+    // Try hybrid search (FTS + vector weighting via stored function)
+    try {
+        int limit = std::clamp(max_results, 0, 100);
+        auto res = conn.query(
+            "SELECT id, category, content, created_at, tags, aliases, related_ids "
+            "FROM hybrid_search_knowledge($1, $2, $3, $4)",
+            {world_id, query, category, std::to_string(limit)});
+
+        for (int i = 0; i < res.ntuples(); i++) {
+            items.push_back(world_knowledge_from_row(res, i));
+        }
+    } catch (...) {}
+
+    if (!items.empty()) return items;
+
+    // Fallback: LIKE-based search
+    PgResult fallback;
+    int limit = std::clamp(max_results, 0, 100);
+    if (!category.empty()) {
+        fallback = conn.query(
+            "SELECT id, category, content, created_at, tags, aliases, related_ids "
+            "FROM world_knowledge "
+            "WHERE world_id = $1 AND category = $2 AND content LIKE $3 "
+            "ORDER BY created_at DESC, id DESC LIMIT $4",
+            {world_id, category, "%" + query + "%", std::to_string(limit)});
+    } else {
+        fallback = conn.query(
+            "SELECT id, category, content, created_at, tags, aliases, related_ids "
+            "FROM world_knowledge "
+            "WHERE world_id = $1 AND content LIKE $2 "
+            "ORDER BY created_at DESC, id DESC LIMIT $3",
+            {world_id, "%" + query + "%", std::to_string(limit)});
+    }
+
+    for (int i = 0; i < fallback.ntuples(); i++) {
+        items.push_back(world_knowledge_from_row(fallback, i));
+    }
+    return items;
+}
+
+std::vector<AgentRecord>
+WorldStore::list_agents(const std::string& world_id) const {
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, world_id, name, display_name, kind, created_at, updated_at "
+        "FROM agents WHERE world_id = $1 "
+        "ORDER BY created_at ASC, id ASC",
+        {world_id});
+
+    std::vector<AgentRecord> agents;
+    for (int i = 0; i < res.ntuples(); i++) {
+        agents.push_back(agent_record_from_row(res, i));
+    }
+    return agents;
+}
+
+std::filesystem::path
+WorldStore::world_path(const std::string& world_id) const {
+    return data_root_ / "worlds" / world_id;
+}
+
+} // namespace merak::worldbuilding

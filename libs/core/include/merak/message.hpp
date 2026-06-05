@@ -16,6 +16,10 @@ struct ToolResult {
     std::string call_id;     // 关联到 ToolCall.id
     std::string output;      // 工具输出文本（给 LLM 看的）
     bool is_error = false;   // 工具执行失败时为 true
+    bool truncated = false;  // 输出被截断
+    int exit_code = 0;       // 进程退出码（shell 工具用）
+    long duration_ms = 0;    // 执行耗时（毫秒）
+    bool cached = false;     // 结果来自缓存
 };
 
 // ——— 一条消息：对话中的一根线 ———

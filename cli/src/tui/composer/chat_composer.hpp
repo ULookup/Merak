@@ -1,7 +1,10 @@
 #pragma once
+#include "external_editor.hpp"
+#include "mention_menu.hpp"
 #include "text_area.hpp"
 #include "../../commands/command_registry.hpp"
 #include "../history_cell/history_cell.hpp"
+#include "../buffer.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
@@ -21,6 +24,8 @@ class ChatComposer {
     std::vector<std::pair<std::string, std::string>> pasted_;
     unsigned paste_counter_ = 0;
     int slash_selected_ = 0;
+    MentionMenu mention_menu_;
+    bool submit_flash_ = false;
 
     static std::filesystem::path history_path() {
         auto home = std::getenv("HOME");
@@ -69,27 +74,62 @@ class ChatComposer {
         } catch (...) {
         }
     }
+    void refresh_mention() { mention_menu_.update_from(textarea_.text(), textarea_.cursor()); }
 
 public:
     ChatComposer() { load_history(); }
     bool empty() const { return textarea_.empty(); }
     const std::string& text() const { return textarea_.text(); }
+    size_t cursor() const { return textarea_.cursor(); }
+    size_t cursor_col_in_line() const {
+        size_t cur = textarea_.cursor();
+        if (cur == 0) return 0;
+        auto start = textarea_.text().rfind('\n', cur == 0 ? 0 : cur - 1);
+        if (start == std::string::npos) return cur;
+        return cur - start - 1;
+    }
+    size_t cursor_line() const {
+        size_t cur = textarea_.cursor();
+        size_t line = 0;
+        for (size_t i = 0; i < cur; ++i) {
+            if (textarea_.text()[i] == '\n') ++line;
+        }
+        return line;
+    }
     void clear() { textarea_.clear(); history_index_.reset(); pasted_.clear(); }
     void set_text(std::string text) { textarea_.set_text(std::move(text)); }
-    void insert_char(char c) { textarea_.insert_char(c); slash_selected_ = 0; }
-    void newline() { textarea_.newline(); }
-    void backspace() { textarea_.backspace(); slash_selected_ = 0; }
-    void delete_forward() { textarea_.delete_forward(); }
-    void move_left() { textarea_.move_left(); }
-    void move_right() { textarea_.move_right(); }
-    void move_home() { textarea_.move_home(); }
-    void move_end() { textarea_.move_end(); }
-    void move_word_left() { textarea_.move_word_left(); }
-    void move_word_right() { textarea_.move_word_right(); }
-    void kill_to_start() { textarea_.kill_to_start(); }
-    void kill_to_end() { textarea_.kill_to_end(); }
-    void delete_word_left() { textarea_.delete_word_left(); }
-    void yank() { textarea_.yank(); }
+    void replace_range(size_t start, size_t end, std::string_view value) { textarea_.replace_range(start, end, value); refresh_mention(); }
+    void insert_text(std::string_view text) { textarea_.insert(text); slash_selected_ = 0; refresh_mention(); }
+    void newline() { textarea_.newline(); refresh_mention(); }
+    void backspace() { textarea_.backspace(); slash_selected_ = 0; refresh_mention(); }
+    void delete_forward() { textarea_.delete_forward(); refresh_mention(); }
+    void move_left() { textarea_.move_left(); refresh_mention(); }
+    void move_right() { textarea_.move_right(); refresh_mention(); }
+    void move_home() { textarea_.move_home(); refresh_mention(); }
+    void move_end() { textarea_.move_end(); refresh_mention(); }
+    void move_word_left() { textarea_.move_word_left(); refresh_mention(); }
+    void move_word_right() { textarea_.move_word_right(); refresh_mention(); }
+    void kill_to_start() { textarea_.kill_to_start(); refresh_mention(); }
+    void kill_to_end() { textarea_.kill_to_end(); refresh_mention(); }
+    void delete_word_left() { textarea_.delete_word_left(); refresh_mention(); }
+    void yank() { textarea_.yank(); refresh_mention(); }
+    bool open_external_editor() {
+        auto edited = edit_text_external(textarea_.text());
+        if (!edited) return false;
+        textarea_.set_text(*edited);
+        refresh_mention();
+        return true;
+    }
+    bool mention_open() const { return mention_menu_.open(); }
+    void mention_next() { mention_menu_.next(); }
+    void mention_prev() { mention_menu_.prev(); }
+    void mention_accept() {
+        if (!mention_menu_.open()) return;
+        textarea_.replace_range(mention_menu_.trigger_start(), textarea_.cursor(),
+                                mention_menu_.accepted_text());
+        refresh_mention();
+    }
+    void set_submit_flash(bool value) { submit_flash_ = value; }
 
     bool slash_open() const { return !text().empty() && text()[0] == '/' && text().find(' ') == std::string::npos; }
     std::vector<const commands::CommandMeta*> slash_matches() const {
@@ -106,6 +146,7 @@ public:
             % static_cast<int>(matches.size());
     }
     void slash_complete() {
+        if (mention_menu_.open()) { mention_accept(); return; }
         auto matches = slash_matches();
         if (matches.empty()) return;
         if (slash_selected_ >= static_cast<int>(matches.size())) slash_selected_ = 0;
@@ -163,23 +204,44 @@ public:
         return result;
     }
 
-    std::vector<std::string> render() const {
-        std::vector<std::string> lines;
+    void render(Buffer& buf) const {
+        auto& t = theme::active_theme();
+        Style accent; accent.fg = t.accent;
+        Style warning_fg; warning_fg.fg = t.warn;
+        Style dim_fg; dim_fg.fg = t.dim; dim_fg.dim(true);
+        Style cursor_style; cursor_style.fg = t.accent;
+        Style base;
+        std::vector<std::vector<Span>> lines;
+
         auto text_lines = textarea_.lines();
         for (size_t i = 0; i < text_lines.size(); ++i) {
-            lines.push_back((i == 0 ? ansi(theme::ANSI_ACCENT, "› ") : "  ")
-                + sanitize_terminal_text(text_lines[i])
-                + (i + 1 == text_lines.size() ? ansi(theme::ANSI_ACCENT, "▎") : ""));
+            std::vector<Span> line;
+            Style prompt_style = submit_flash_ ? warning_fg : accent;
+            line.push_back({i == 0 ? "> " : "  ", prompt_style});
+            line.push_back({sanitize_terminal_text(text_lines[i]), base});
+            if (i + 1 == text_lines.size()) line.push_back({"▎", cursor_style});
+            lines.push_back(line);
         }
-        if (empty()) lines = {ansi(theme::ANSI_ACCENT, "› ")
-            + ansi(theme::ANSI_DIM, "Ask merak to do anything") + ansi(theme::ANSI_ACCENT, "▎")};
+        if (empty()) {
+            lines.push_back({Span{"> ", accent},
+                             Span{"Ask merak to do anything", dim_fg},
+                             Span{"▎", cursor_style}});
+        }
         auto matches = slash_matches();
         for (size_t i = 0; i < matches.size(); ++i) {
-            lines.push_back(std::string(i == static_cast<size_t>(slash_selected_) ? "  › " : "    ")
-                + ansi(i == static_cast<size_t>(slash_selected_) ? theme::ANSI_ACCENT : theme::ANSI_DIM,
-                       matches[i]->name + "  " + matches[i]->description));
+            Style sel_style = (i == static_cast<size_t>(slash_selected_)) ? accent : dim_fg;
+            std::string prefix = (i == static_cast<size_t>(slash_selected_)) ? "  > " : "    ";
+            lines.push_back({Span{prefix + matches[i]->name + "  " + matches[i]->description, sel_style}});
         }
-        return lines;
+        if (mention_menu_.open()) {
+            for (const auto& match : mention_menu_.matches()) {
+                lines.push_back({Span{"    @" + match.path, dim_fg}});
+            }
+        }
+
+        size_t total_lines = lines.size();
+        if (buf.h < total_lines) buf.resize(buf.w, total_lines);
+        write_spans(buf, lines);
     }
 };
 

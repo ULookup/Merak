@@ -31,6 +31,13 @@ public:
     void insert(std::string_view value) { text_.insert(cursor_, value); cursor_ += value.size(); }
     void insert_char(char c) { text_.insert(text_.begin() + static_cast<long>(cursor_), c); ++cursor_; }
     void newline() { insert_char('\n'); }
+    void replace_range(size_t start, size_t end, std::string_view value) {
+        if (start > text_.size()) start = text_.size();
+        if (end > text_.size()) end = text_.size();
+        if (end < start) end = start;
+        text_.replace(start, end - start, value);
+        cursor_ = start + value.size();
+    }
 
     void backspace() {
         if (cursor_ == 0) return;

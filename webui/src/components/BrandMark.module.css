@@ -1,0 +1,33 @@
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.compact {
+  gap: 0;
+}
+
+.logo {
+  width: 50px;
+  height: 42px;
+  filter: drop-shadow(0 12px 18px rgba(122, 79, 19, 0.2));
+  flex: 0 0 auto;
+}
+
+.wordmark {
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.tagline {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+}

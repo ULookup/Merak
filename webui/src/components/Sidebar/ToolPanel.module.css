@@ -1,0 +1,60 @@
+.panel {
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 9px;
+  border-radius: 11px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  transition:
+    background 180ms var(--ease),
+    transform 180ms var(--ease);
+}
+
+.row:hover {
+  background: var(--surface-muted);
+  transform: translateX(2px);
+}
+
+.rowName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.iconSafe {
+  background: var(--teal);
+}
+
+.iconAsk {
+  background: var(--amber);
+}
+
+.badge {
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 8px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.badgeSafe {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.badgeAsk {
+  background: var(--amber-soft);
+  color: var(--amber);
+}

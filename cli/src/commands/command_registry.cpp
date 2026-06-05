@@ -12,7 +12,8 @@ const char* group_name(CommandGroup g) {
         case CommandGroup::Config:  return "Config";
         case CommandGroup::Memory:  return "Memory";
         case CommandGroup::System:  return "System";
-        case CommandGroup::Mcp:     return "MCP";
+        case CommandGroup::Mcp:            return "MCP";
+    case CommandGroup::Worldbuilding:  return "Worldbuilding";
     }
     return "Unknown";
 }
@@ -69,6 +70,16 @@ const std::vector<CommandMeta>& all_commands() {
             CommandGroup::Tools, {}, {}, {}
         },
         CommandMeta{
+            "/agents", "List configured sub agents",
+            CommandGroup::Tools, {}, {}, {}
+        },
+        CommandMeta{
+            "/team", "Run an explicit multi-agent workflow",
+            CommandGroup::Tools,
+            {{"fanout", "Run agents in parallel"}, {"sequential", "Run agents in order"}, {"pipeline", "Pass each output to the next agent"}},
+            "[fanout|sequential|pipeline] <agent1,agent2> <task>", {}
+        },
+        CommandMeta{
             "/mcp", "MCP server management",
             CommandGroup::Tools,
             {{"list", "List servers"}, {"tools", "List MCP tools"}, {"status", "Server status"}},
@@ -97,6 +108,76 @@ const std::vector<CommandMeta>& all_commands() {
             CommandGroup::System,
             {{"auto", "Auto-approve"}, {"plan", "Read-only"}, {"prompt", "Ask before"}, {"deny", "Deny all"}},
             "[auto | plan | prompt | deny]", {}
+        },
+
+        // ── Worldbuilding ──
+        CommandMeta{
+            "/world", "Worldbuilding world management",
+            CommandGroup::Worldbuilding,
+            {{"list", "List worlds"}, {"create", "Create a world"}, {"use", "Switch to a world"}, {"delete", "Delete a world"}},
+            "[list|create|use|delete]", {}
+        },
+        CommandMeta{
+            "/agent", "List or create worldbuilding agents",
+            CommandGroup::Worldbuilding,
+            {{"list", "List agents"}, {"create", "Create agent"}, {"edit", "Edit agent"}, {"history", "Agent history"}, {"delete", "Delete agent"}},
+            "[list|create|edit|history|delete]", {}
+        },
+        CommandMeta{
+            "/story", "Show story overview",
+            CommandGroup::Worldbuilding, {}, "overview", {}
+        },
+        CommandMeta{
+            "/chapter", "Chapter management",
+            CommandGroup::Worldbuilding,
+            {{"new", "Create chapter"}, {"use", "Use chapter"}, {"list", "List chapters"}, {"curve", "Show emotional curve"}},
+            "[new|use|list|curve]", {}
+        },
+        CommandMeta{
+            "/arc", "Story arc management",
+            CommandGroup::Worldbuilding,
+            {{"new", "Create arc"}, {"list", "List arcs"}},
+            "[new|list]", {}
+        },
+        CommandMeta{
+            "/scene", "Scene management",
+            CommandGroup::Worldbuilding,
+            {{"new", "Create scene"}, {"list", "List scenes"}, {"use", "Use scene"}, {"end", "End scene"}, {"jump", "Jump to time"}},
+            "[new|list|use|end|jump]", {}
+        },
+        CommandMeta{
+            "/time", "World time management",
+            CommandGroup::Worldbuilding,
+            {{"now", "Current time"}, {"advance", "Advance time"}, {"calendar", "Show calendar"}},
+            "[now|advance|calendar]", {}
+        },
+        CommandMeta{
+            "/foreshadow", "Foreshadowing management",
+            CommandGroup::Worldbuilding,
+            {{"list", "List items"}, {"plant", "Plant new"}, {"pay", "Pay off"}, {"abandon", "Abandon"}, {"check", "Check open"}, {"stats", "Show stats"}},
+            "[list|plant|pay|abandon|check|stats]", {}
+        },
+        CommandMeta{
+            "/secret", "Secret management",
+            CommandGroup::Worldbuilding,
+            {{"list", "List secrets"}, {"create", "Create secret"}, {"expose", "Expose secret"}, {"check", "Check leaks"}},
+            "[list|create|expose|check]", {}
+        },
+        CommandMeta{
+            "/voice", "Voice fingerprint analysis",
+            CommandGroup::Worldbuilding,
+            {{"check", "Check all voices"}, {"group", "Group similar voices"}, {"compare", "Compare voices"}},
+            "[check|group|compare]", {}
+        },
+        CommandMeta{
+            "/memory", "Agent memory and diary",
+            CommandGroup::Worldbuilding,
+            {{"<@agent> latest", "Latest memories"}, {"<@agent> search", "Search memories"}},
+            "[@agent latest|search]", {}
+        },
+        CommandMeta{
+            "/diary", "Show agent diary",
+            CommandGroup::Worldbuilding, {}, "[@agent show]", {}
         },
     };
     return cmds;

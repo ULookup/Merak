@@ -1,6 +1,7 @@
 #pragma once
 #include <merak/tool_base.hpp>
 #include <merak/config.hpp>
+#include <merak/tool_meta.hpp>
 #include <nlohmann/json.hpp>
 #include <map>
 #include <vector>
@@ -17,6 +18,15 @@ enum class ExecutionPolicy {
     Sequential,
     Parallel,
     FailFast
+};
+
+struct OutputCap {
+    size_t per_tool   = 50000;
+    size_t grep       = 10000;
+    size_t glob       = 100000;
+    size_t aggregate  = 200000;
+    size_t soft       = 120000;
+    size_t persist_threshold = 50000;
 };
 
 class ToolRegistry {
@@ -51,10 +61,31 @@ public:
         permission_mode_ = mode;
     }
 
+    void set_output_caps(const OutputCap& caps) { caps_ = caps; }
+    const OutputCap& caps() const { return caps_; }
+
+    /// Set the capability set for this registry (filters which tools are visible).
+    void set_capabilities(const CapabilitySet& caps) { capabilities_ = caps; }
+    const CapabilitySet& capabilities() const { return capabilities_; }
+
+    /// ToolMeta entries visible to the current capability set.
+    std::vector<ToolMeta> visible_metas() const;
+
+    /// Full ToolSpecs for all pinned tools visible under current caps.
+    std::vector<ToolSpec> pinned_schemas() const;
+
+    /// Keyword search over visible deferred tools' name + description.
+    std::string search_tools(const std::string& query, size_t max_results = 5) const;
+
+    /// Select a specific tool by name, returning its full ToolSpec as JSON.
+    std::string select_tool(const std::string& name) const;
+
 private:
     std::map<std::string, std::unique_ptr<Tool>> tools_;
     std::map<std::string, std::string> source_;
     std::string permission_mode_ = "ask";
+    OutputCap caps_;
+    CapabilitySet capabilities_;
 };
 
 } // namespace merak

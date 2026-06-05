@@ -1,5 +1,6 @@
 #include <merak/token_counter.hpp>
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 
 namespace merak {
 
@@ -44,6 +45,27 @@ int TokenCounter::fit_in_budget(
         int msg_tokens = count(messages[i]);
         if (total + msg_tokens > token_limit) break;
         total += msg_tokens;
+        kept++;
+    }
+
+    // Protect message pairing: if the first kept message is a "tool" role,
+    // walk backwards to include its corresponding "assistant" (with tool_calls)
+    // or "user" message. This prevents sending orphaned tool messages to the
+    // LLM API without their parent assistant message containing the matching tool_call.
+    int start_idx = (int)messages.size() - kept;
+    while (start_idx > 0 && messages[start_idx].role == "tool") {
+        int extra = count(messages[start_idx - 1]);
+        if (total + extra > token_limit * 1.5) {
+            // Walk-back would blow the budget by more than 50%.
+            // Drop the orphaned tool message instead of breaking the API request.
+            spdlog::warn("Context: pairing guard budget overflow ({} + {} > {}), "
+                "dropping orphaned tool message at idx {}",
+                total, extra, static_cast<int>(token_limit * 1.5), start_idx);
+            start_idx++;
+            kept--;
+            break;
+        }
+        start_idx--;
         kept++;
     }
 
