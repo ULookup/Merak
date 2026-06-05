@@ -1,3 +1,4 @@
+import 'highlight.js/styles/github-dark.css';
 import './styles/global.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
