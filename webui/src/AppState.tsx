@@ -342,7 +342,7 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       const to = ((p.to as string) ?? '').toLowerCase();
       // Terminal states have their own events (run_completed/run_failed)
       if (to === 'complete' || to === 'error') return state;
-      const validLabels = new Set(['idle', 'thinking', 'responding', 'acting', 'observing', 'context_ready']);
+      const validLabels = new Set(['idle', 'thinking', 'responding', 'acting', 'observing']);
       const label = validLabels.has(to) ? (to as StatusLabel) : state.status;
       return reducer(state, { type: 'SET_STATUS', status: label });
     }
