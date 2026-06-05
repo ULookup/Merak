@@ -3,6 +3,7 @@ import styles from '../Sidebar.module.css';
 
 export default function WorldSelector() {
   const { state, dispatch } = useAppState();
+  const worlds = state.worlds;
 
   return (
     <div className={styles.section}>
@@ -15,6 +16,11 @@ export default function WorldSelector() {
         aria-label="Select world"
       >
         <option value="">None</option>
+        {worlds.map((world) => (
+          <option key={world.id} value={world.id}>
+            {world.name || world.id}
+          </option>
+        ))}
       </select>
     </div>
   );

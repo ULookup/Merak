@@ -1,29 +1,45 @@
 .msg {
   max-width: 82%;
-  padding: 10px 15px;
-  border-radius: 7px;
+  padding: 12px 16px;
+  border-radius: 16px;
   font-size: 13px;
   line-height: 1.55;
+  animation: messageIn 320ms var(--ease);
+  box-shadow: var(--shadow-sm);
 }
 
 .msgUser {
-  background: #1e2a45;
+  background: linear-gradient(135deg, var(--brand-strong), var(--brand), #b8892c);
+  color: #fff;
   align-self: flex-end;
+  border-bottom-right-radius: 6px;
 }
 
 .msgAssistant {
-  background: #13151d;
+  background: rgba(255, 255, 255, 0.94);
   align-self: flex-start;
-  border: 1px solid #1f2230;
+  border: 1px solid var(--border);
+  color: var(--ink);
+  border-bottom-left-radius: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.msgAssistant::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(var(--brand), transparent);
 }
 .msgAssistant pre {
-  background: #0b0d12;
-  border: 1px solid #1f2230;
-  border-radius: 4px;
-  padding: 10px 14px;
+  background: #f7faf8;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
   overflow-x: auto;
   font-size: 12px;
-  margin: 6px 0;
+  margin: 8px 0;
 }
 .msgAssistant code {
   font-size: 12px;
@@ -35,27 +51,31 @@
 .pill {
   align-self: center;
   font-size: 11px;
-  padding: 4px 11px;
-  border-radius: 10px;
-  font-weight: 500;
-  background: #181a1e;
-  border: 1px solid #2a2c33;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 850;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .tool {
   align-self: flex-start;
-  background: #0f121c;
-  border: 1px solid #1c2340;
-  border-radius: 7px;
-  padding: 9px 13px;
+  background: linear-gradient(135deg, #fff, #f5fbf8);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  padding: 11px 13px;
   font-size: 12px;
-  color: #7da5d6;
+  color: var(--teal);
   min-width: 280px;
+  box-shadow: var(--shadow-sm);
+  animation: messageIn 320ms var(--ease);
 }
 
 .toolError {
-  border-color: #4a2020;
-  color: #fca5a5;
+  border-color: #fecaca;
+  color: var(--ruby);
+  background: #fff1f2;
 }
 
 .toolHeader {
@@ -65,18 +85,18 @@
 }
 
 .toolIndicator {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
 }
 
 .toolIndicatorRunning {
-  background: #3b82f6;
+  background: var(--teal);
   animation: pulse 1.2s ease-in-out infinite;
 }
 
 .toolIndicatorDone {
-  background: #22c55e;
+  background: #16a34a;
 }
 
 @keyframes pulse {
@@ -90,14 +110,15 @@
 }
 
 .toolMeta {
-  margin-top: 5px;
+  margin-top: 8px;
   font-size: 11px;
-  color: #555768;
+  color: var(--muted);
 }
 .toolMeta pre {
-  background: #0b0d12;
-  padding: 6px 10px;
-  border-radius: 3px;
+  background: #f7faf8;
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  border-radius: 10px;
   margin-top: 3px;
   max-height: 200px;
   overflow-y: auto;
@@ -111,12 +132,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 16px;
-  background: #0f0f15;
-  border: 1px solid #332f1a;
-  border-radius: 7px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, var(--amber-soft), #fff);
+  border: 1px solid #f4d58d;
+  border-radius: 16px;
   font-size: 12px;
-  color: #f59e0b;
+  color: var(--amber);
+  box-shadow: var(--shadow-sm);
+  animation: approvalGlow 1.8s ease-in-out infinite alternate;
 }
 
 .approvalLabel {
@@ -126,36 +149,93 @@
 .btnAllow,
 .btnDeny {
   border: none;
-  border-radius: 4px;
-  padding: 4px 14px;
+  border-radius: 10px;
+  padding: 6px 14px;
   cursor: pointer;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 850;
 }
 
 .btnAllow {
-  background: #14532d;
-  color: #22c55e;
+  background: linear-gradient(135deg, var(--brand-strong), var(--brand));
+  color: #fff;
 }
 .btnAllow:hover {
-  background: #166534;
+  transform: translateY(-1px);
 }
 
 .btnDeny {
-  background: #7f1d1d;
-  color: #fca5a5;
+  background: var(--ruby-soft);
+  color: var(--ruby);
 }
 .btnDeny:hover {
-  background: #991b1b;
+  transform: translateY(-1px);
 }
 
 .system {
   align-self: center;
   font-size: 11px;
-  color: #555768;
-  padding: 4px 12px;
+  color: var(--muted);
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--border);
+  border-radius: 999px;
 }
 
 .systemError {
-  color: #fca5a5;
+  color: var(--ruby);
+  border-color: #fecaca;
+  background: #fff1f2;
+}
+
+.copyBtn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 180ms var(--ease),
+    color 180ms var(--ease),
+    background 180ms var(--ease);
+}
+
+.copyBtn:hover {
+  color: var(--brand);
+  transform: translateY(-1px);
+}
+
+.copyBtnDone {
+  background: var(--brand-soft);
+  border-color: rgba(122, 79, 19, 0.28);
+  color: var(--brand);
+}
+
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes approvalGlow {
+  from {
+    box-shadow: var(--shadow-sm);
+  }
+  to {
+    box-shadow:
+      0 0 0 4px rgba(183, 121, 31, 0.1),
+      var(--shadow-sm);
+  }
 }

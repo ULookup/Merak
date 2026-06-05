@@ -1,35 +1,55 @@
 .sidebar {
-  width: 230px;
-  min-width: 230px;
-  background: #0b0d12;
+  width: 284px;
+  min-width: 284px;
+  background: rgba(255, 255, 255, 0.82);
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #1e2028;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  backdrop-filter: blur(18px);
 }
 
 .section {
-  padding: 14px 16px;
-  border-bottom: 1px solid #14161d;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brandSection {
+  padding: 18px 16px;
+  border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(135deg, rgba(247, 234, 210, 0.78), rgba(255, 255, 255, 0.86)), var(--surface);
 }
 
 .label {
-  color: #555768;
+  color: var(--muted);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 850;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0;
   margin-bottom: 8px;
 }
 
 .select {
   width: 100%;
-  background: #14161f;
-  color: #c8c9d4;
-  border: 1px solid #23252f;
-  border-radius: 5px;
-  padding: 7px 10px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px 11px;
   font-size: 13px;
   cursor: pointer;
+  transition:
+    border-color 180ms var(--ease),
+    box-shadow 180ms var(--ease),
+    transform 180ms var(--ease);
+}
+
+.select:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
 }
 
 .sessions {
@@ -44,40 +64,69 @@
   overflow-y: auto;
 }
 
+.emptyState {
+  padding: 18px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.5;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
 .sessionItem {
-  padding: 8px 12px;
-  border-radius: 5px;
-  color: #7d7f94;
+  padding: 9px 11px;
+  border-radius: 12px;
+  color: var(--muted-strong);
   cursor: pointer;
-  margin-bottom: 1px;
+  margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  border: 1px solid transparent;
+  transition:
+    transform 180ms var(--ease),
+    background 180ms var(--ease),
+    border-color 180ms var(--ease),
+    box-shadow 180ms var(--ease);
 }
 .sessionItem:hover {
-  background: #11131d;
-  color: #b0b2c0;
+  background: var(--surface);
+  color: var(--ink);
+  transform: translateX(3px);
+  box-shadow: var(--shadow-sm);
 }
 
 .sessionItemActive {
-  background: #191b2a;
-  color: #e1e2ed;
+  background: linear-gradient(90deg, var(--brand-soft), #fff);
+  border-color: rgba(122, 79, 19, 0.18);
+  color: var(--brand);
+  box-shadow:
+    inset 3px 0 0 var(--brand),
+    var(--shadow-sm);
 }
 
 .newBtn {
   width: 100%;
-  background: none;
-  border: 1px dashed #252733;
-  color: #555768;
-  border-radius: 5px;
-  padding: 6px;
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  color: var(--brand);
+  border-radius: 12px;
+  padding: 9px;
   cursor: pointer;
   font-size: 12px;
+  font-weight: 800;
   margin-top: 6px;
+  transition:
+    transform 180ms var(--ease),
+    box-shadow 180ms var(--ease),
+    background 180ms var(--ease);
 }
 .newBtn:hover {
-  border-color: #444660;
-  color: #8e90a4;
+  background: var(--brand-soft);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ---- Mobile ---- */
@@ -90,16 +139,19 @@
   position: absolute;
   top: 10px;
   right: 12px;
-  background: none;
-  border: none;
-  color: #7d7f94;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
   font-size: 18px;
+  border-radius: 10px;
+  width: 32px;
+  height: 32px;
   cursor: pointer;
   z-index: 10;
 }
 
 .closeBtn:hover {
-  color: #e1e2ed;
+  color: var(--ink);
 }
 
 @media (max-width: 767px) {
@@ -121,8 +173,8 @@
     height: 100vh;
     z-index: 1000;
     transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.4);
+    transition: transform 0.28s var(--ease);
+    border-radius: 0 22px 22px 0;
   }
 
   .sidebarOpen {

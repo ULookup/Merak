@@ -1,9 +1,10 @@
+import BrandMark from './BrandMark';
+import styles from './Sidebar.module.css';
 import ContextMeter from './Sidebar/ContextMeter';
 import ModelSelector from './Sidebar/ModelSelector';
 import SessionList from './Sidebar/SessionList';
 import ToolPanel from './Sidebar/ToolPanel';
 import WorldSelector from './Sidebar/WorldSelector';
-import styles from './Sidebar.module.css';
 
 interface SidebarProps {
   open?: boolean;
@@ -26,6 +27,9 @@ export default function Sidebar({ open = true, onClose }: SidebarProps) {
       >
         &#10005;
       </button>
+      <div className={styles.brandSection}>
+        <BrandMark />
+      </div>
       <WorldSelector />
       <SessionList />
       <ModelSelector />

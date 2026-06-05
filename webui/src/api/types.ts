@@ -67,3 +67,30 @@ export interface SessionSummary {
   updated_at: string;
   archived_at: string | null;
 }
+
+export interface WorldSummary {
+  id: string;
+  name: string;
+  description: string;
+  created_at: string;
+}
+
+export interface WorldAgent {
+  id: string;
+  name: string;
+  display_name: string;
+  kind: string;
+}
+
+export interface ForeshadowingItem {
+  id: string;
+  content: string;
+  status?: string;
+}
+
+export interface SecretItem {
+  id: string;
+  title?: string;
+  content?: string;
+  status?: string;
+}

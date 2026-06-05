@@ -47,5 +47,14 @@ export const api = {
 
   listWorlds: () => request('GET', '/api/worldbuilding/worlds'),
 
+  listAgents: (worldId: string) => request('GET', `/api/worldbuilding/${worldId}/agents`),
+
+  listForeshadowing: (worldId: string) =>
+    request('GET', `/api/worldbuilding/${worldId}/foreshadowing`),
+
+  listSecrets: (worldId: string) => request('GET', `/api/worldbuilding/${worldId}/secrets`),
+
+  getWorldTime: (worldId: string) => request('GET', `/api/worldbuilding/${worldId}/time`),
+
   sseUrl: (id: string, after = 0) => `${BASE}/v1/sessions/${id}/events/stream?after=${after}`,
 };

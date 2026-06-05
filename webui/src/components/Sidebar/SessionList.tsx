@@ -42,16 +42,7 @@ export default function SessionList() {
       <div className={styles.label}>Sessions</div>
       <div className={styles.sessionList}>
         {state.sessions.length === 0 ? (
-          <div
-            style={{
-              padding: '16px 12px',
-              color: '#555768',
-              fontSize: 12,
-              textAlign: 'center',
-              lineHeight: 1.5,
-            }}
-            data-testid="session-list-empty"
-          >
+          <div className={styles.emptyState} data-testid="session-list-empty">
             No sessions yet.
             <br />
             Create one to get started.
@@ -70,7 +61,12 @@ export default function SessionList() {
           ))
         )}
       </div>
-      <button className={styles.newBtn} onClick={create} data-testid="new-session-btn" aria-label="New session">
+      <button
+        className={styles.newBtn}
+        onClick={create}
+        data-testid="new-session-btn"
+        aria-label="New session"
+      >
         New Session
       </button>
     </div>

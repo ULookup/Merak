@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAppState } from '../AppState';
-import { useToast } from './Toast';
 import styles from './Composer.module.css';
+import { useToast } from './Toast';
 
 export default function Composer() {
   const { state, dispatch } = useAppState();
@@ -15,7 +15,9 @@ export default function Composer() {
     if (!state.currentRun) return;
     try {
       await api.cancelRun(state.currentRun);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, [state.currentRun]);
 
   const send = useCallback(async () => {
@@ -33,7 +35,8 @@ export default function Composer() {
     }
   }, [text, sending, state.sessionId, state.selectedModel, dispatch]);
 
-  const isRunning = state.currentRun !== null && state.status !== 'idle' && state.status !== 'waiting_approval';
+  const isRunning =
+    state.currentRun !== null && state.status !== 'idle' && state.status !== 'waiting_approval';
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -58,11 +61,22 @@ export default function Composer() {
           disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
         />
         {isRunning ? (
-          <button className={styles.cancelBtn} onClick={cancel} data-testid="cancel-btn" aria-label="Cancel run">
+          <button
+            className={styles.cancelBtn}
+            onClick={cancel}
+            data-testid="cancel-btn"
+            aria-label="Cancel run"
+          >
             Cancel
           </button>
         ) : (
-          <button className={styles.sendBtn} onClick={send} disabled={sending || !text.trim()} data-testid="send-btn" aria-label="Send message">
+          <button
+            className={styles.sendBtn}
+            onClick={send}
+            disabled={sending || !text.trim()}
+            data-testid="send-btn"
+            aria-label="Send message"
+          >
             Send
           </button>
         )}
