@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { api } from './api/client';
 import { AppStateProvider, useAppState } from './AppState';
+import ErrorBoundary from './components/ErrorBoundary';
 import MainPanel from './components/MainPanel';
 import Sidebar from './components/Sidebar';
 import { useSSE } from './hooks/useSSE';
@@ -49,8 +50,12 @@ function AppInner() {
 
   return (
     <div className={styles.layout}>
-      <Sidebar />
-      <MainPanel />
+      <ErrorBoundary>
+        <Sidebar />
+      </ErrorBoundary>
+      <ErrorBoundary>
+        <MainPanel />
+      </ErrorBoundary>
     </div>
   );
 }
