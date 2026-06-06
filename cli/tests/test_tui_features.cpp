@@ -21,6 +21,23 @@ static bool contains(const std::vector<std::string>& lines, const std::string& n
 
 int main() {
     {
+        auto theme = merak::theme::load_theme_from_metadata({
+            {"preset", "light"},
+            {"accent", "blue"},
+            {"selected_bg", 236},
+            {"selected_fg", "bright_white"},
+            {"gutter_frozen", 61},
+            {"quote", "green"},
+        });
+        assert(theme.fg == 16);
+        assert(theme.accent == 4);
+        assert(theme.selected_bg == 236);
+        assert(theme.selected_fg == 15);
+        assert(theme.gutter_frozen == 61);
+        assert(theme.quote == 2);
+    }
+
+    {
         AssistantCell cell;
         cell.append("```cpp\nint main() { return 0; }\n```\n\n| Name | Count |\n| --- | ---: |\n| tea | 3 |\n+ added\n- removed\n<think>\nprivate chain\n</think>\n");
         cell.finalize();
@@ -92,6 +109,24 @@ int main() {
     }
 
     {
+        Buffer buf;
+        buf.resize(40, 4);
+        const std::string text = "我是一个创作助手";
+        buf.set_span(0, 0, text, Style{});
+        assert(buf.at(0, 0).width == 2);
+        assert(buf.at(1, 0).width == 0);
+        assert(buf.at(2, 0).width == 2);
+        auto rendered = buffer_to_lines(buf);
+        assert(contains(rendered, text));
+        assert(!contains(rendered, "我 是"));
+
+        buf.set_span(0, 0, "ab", Style{});
+        rendered = buffer_to_lines(buf);
+        assert(contains(rendered, "ab"));
+        assert(!contains(rendered, text));
+    }
+
+    {
         StatusBar bar;
         bar.set_provider("openai");
         bar.set_model("gpt-4o");
@@ -147,11 +182,59 @@ int main() {
     }
 
     {
+        ChatComposer composer;
+        composer.set_text("/wo");
+        assert(composer.slash_open());
+        auto matches = composer.slash_matches();
+        assert(!matches.empty());
+        assert(matches.front().name == "/world");
+        composer.slash_complete();
+        assert(composer.text() == "/world ");
+        composer.set_text("/world cr");
+        matches = composer.slash_matches();
+        assert(!matches.empty());
+        assert(matches.front().name == "create");
+        composer.slash_complete();
+        assert(composer.text() == "/world create ");
+        composer.set_text("/world create 北境");
+        assert(!composer.slash_open());
+    }
+
+    {
         ChatTimeline timeline;
         timeline.submit_user("hello");
         auto drained = timeline.drain_scrollback(80);
         assert(contains(drained, "hello"));
         assert(timeline.drain_scrollback(80).empty());
+    }
+
+    {
+        ChatTimeline timeline;
+        timeline.submit_user("pending");
+        auto pending = timeline.pending_scrollback(80);
+        assert(contains(pending, "pending"));
+        assert(contains(timeline.pending_scrollback(80), "pending"));
+        timeline.mark_scrollback_drained();
+        assert(timeline.pending_scrollback(80).empty());
+    }
+
+    {
+        ChatTimeline timeline;
+        timeline.submit_user("existing content");
+        timeline.append_assistant("new content");
+        auto drained = timeline.drain_scrollback(80);
+        assert(contains(drained, "existing content"));
+        assert(!contains(drained, "new content"));
+
+        Buffer active;
+        active.resize(80, 8);
+        auto active_rows = timeline.render_active(active, 80, 8);
+        assert(active_rows > 0);
+        assert(contains(buffer_to_lines(active), "new content"));
+
+        timeline.commit_active();
+        drained = timeline.drain_scrollback(80);
+        assert(contains(drained, "new content"));
     }
 
     {

@@ -88,7 +88,7 @@ static void test_approval_event_roundtrip() {
 }
 
 static void test_session_meta_roundtrip() {
-    SessionMeta e{"sess_001", 9999999999ULL, "claude-opus-4-7", "anthropic",
+    SessionMeta e{"sess_001", "", 9999999999ULL, "claude-opus-4-7", "anthropic",
                    "Prompt", "abc123", "/home/user/project", uint16_t{120}, uint16_t{40}, "1.2.3"};
     auto j = to_json(e);
     assert(j["kind"] == "session_meta");

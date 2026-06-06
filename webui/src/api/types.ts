@@ -6,7 +6,7 @@ export interface SseFrame {
 
 export type MessageKind = 'user' | 'assistant' | 'tool' | 'system' | 'approval' | 'status_pill';
 
-export type StatusLabel = 'idle' | 'thinking' | 'acting' | 'observing' | 'waiting_approval';
+export type StatusLabel = 'idle' | 'thinking' | 'responding' | 'acting' | 'observing' | 'waiting_approval';
 
 export interface Message {
   id: string;

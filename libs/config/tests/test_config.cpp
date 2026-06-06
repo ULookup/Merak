@@ -48,6 +48,16 @@ int main() {
                         "tool_allowlist": ["read_file", "edit_file"]
                     }
                 }
+            },
+            "tui": {
+                "theme": {
+                    "preset": "dark",
+                    "accent": "magenta",
+                    "colors": {
+                        "selected_bg": 236,
+                        "selected_fg": "bright_white"
+                    }
+                }
             }
         })";
 
@@ -77,6 +87,10 @@ int main() {
         assert(cfg.agent.sub_agents["researcher"].can_delegate == false);
         assert(cfg.agent.sub_agents["builder"].id == "builder");
         assert(cfg.agent.sub_agents["builder"].can_delegate == false);
+        assert(cfg.tui.theme.preset == "dark");
+        assert(cfg.tui.theme.colors["accent"] == "magenta");
+        assert(cfg.tui.theme.colors["selected_bg"] == "236");
+        assert(cfg.tui.theme.colors["selected_fg"] == "bright_white");
 
         std::remove("/tmp/test_merak_config.json");
     }

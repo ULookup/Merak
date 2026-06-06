@@ -156,6 +156,21 @@ SessionRecord SessionStore::create_session(const std::string& title) {
     if (sqlite3_step(s) != SQLITE_DONE) { sqlite3_finalize(s); throw std::runtime_error("create session failed"); }
     sqlite3_finalize(s); return r;
 }
+void SessionStore::update_session(const std::string& id, const std::string& title) {
+    std::lock_guard lock(mutex_);
+    sqlite3_stmt* s = nullptr;
+    sqlite3_prepare_v2(db_,
+        "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?",
+        -1, &s, nullptr);
+    bind_text(s, 1, title);
+    bind_text(s, 2, now_iso());
+    bind_text(s, 3, id);
+    if (sqlite3_step(s) != SQLITE_DONE) {
+        sqlite3_finalize(s);
+        throw std::runtime_error("update session failed");
+    }
+    sqlite3_finalize(s);
+}
 std::optional<SessionRecord> SessionStore::get_session(const std::string& id) const {
     std::lock_guard lock(mutex_); sqlite3_stmt* s=nullptr;
     sqlite3_prepare_v2(db_,"SELECT id,title,last_seq,created_at,updated_at,archived_at FROM sessions WHERE id=?",-1,&s,nullptr); bind_text(s,1,id);

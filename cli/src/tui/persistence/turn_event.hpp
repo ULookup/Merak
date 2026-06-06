@@ -62,6 +62,7 @@ struct ApprovalEvent {
 
 struct SessionMeta {
     std::string session_id;
+    std::string title;
     uint64_t created_at = 0;
     std::string model;
     std::string provider;

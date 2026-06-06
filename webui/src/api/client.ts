@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE ?? 'http://127.0.0.1:3888';
+const BASE = import.meta.env.VITE_API_BASE ?? '';
 
 async function request(method: string, path: string, body?: unknown) {
   const opts: RequestInit = {
@@ -9,9 +9,15 @@ async function request(method: string, path: string, body?: unknown) {
     opts.body = JSON.stringify(body);
   }
   const res = await fetch(`${BASE}${path}`, opts);
-  const json = await res.json();
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    const text = await res.text().catch(() => '<unreadable>');
+    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
+  }
   if (res.status >= 400) {
-    throw new Error(json?.error?.message ?? `HTTP ${res.status}`);
+    throw new Error((json as { error?: { message?: string } })?.error?.message ?? `HTTP ${res.status}`);
   }
   return json;
 }
@@ -20,6 +26,12 @@ export const api = {
   metadata: () => request('GET', '/v1/runtime'),
 
   createSession: (title = '') => request('POST', '/v1/sessions', { title }),
+
+  updateSession: (id: string, title: string) =>
+    request('PATCH', `/v1/sessions/${id}`, { title }),
+
+  generateTitle: (id: string) =>
+    request('POST', `/v1/sessions/${id}/generate-title`),
 
   listSessions: () => request('GET', '/v1/sessions'),
 
@@ -46,6 +58,9 @@ export const api = {
   cancelRun: (id: string) => request('POST', `/v1/runs/${id}/cancel`),
 
   listWorlds: () => request('GET', '/api/worldbuilding/worlds'),
+
+  updateWorld: (id: string, name?: string, description?: string) =>
+    request('PATCH', `/api/worldbuilding/worlds/${id}`, { name, description }),
 
   listAgents: (worldId: string) => request('GET', `/api/worldbuilding/${worldId}/agents`),
 

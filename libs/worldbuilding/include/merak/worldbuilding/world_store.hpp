@@ -21,6 +21,9 @@ public:
     void initialize();
     WorldMeta create_world(const std::string& name,
                            const std::string& description);
+    WorldMeta update_world(const std::string& world_id,
+                           const std::optional<std::string>& name,
+                           const std::optional<std::string>& description);
     std::optional<WorldMeta> get_world(const std::string& world_id) const;
     std::vector<WorldMeta> list_worlds() const;
     bool delete_world(const std::string& world_id);

@@ -321,7 +321,9 @@ export function reducer(state: AppState, action: Action): AppState {
 
 function applySseFrame(state: AppState, frame: SseFrame): AppState {
   const { type, payload } = frame;
-  const p = (payload ?? {}) as Record<string, unknown>;
+  const outer = (payload ?? {}) as Record<string, unknown>;
+  const inner = (outer.payload as Record<string, unknown>) ?? {};
+  const p = { ...outer, ...inner } as Record<string, unknown>;
 
   switch (type) {
     case 'run_started':
@@ -336,8 +338,14 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
     case 'text_delta':
       return reducer(state, { type: 'UPDATE_ASSISTANT', text: (p.text as string) ?? '' });
 
-    case 'state_changed':
-      return reducer(state, { type: 'SET_STATUS', status: (p.to as StatusLabel) ?? 'idle' });
+    case 'state_changed': {
+      const to = ((p.to as string) ?? '').toLowerCase();
+      // Terminal states have their own events (run_completed/run_failed)
+      if (to === 'complete' || to === 'error') return state;
+      const validLabels = new Set(['idle', 'thinking', 'responding', 'acting', 'observing']);
+      const label = validLabels.has(to) ? (to as StatusLabel) : state.status;
+      return reducer(state, { type: 'SET_STATUS', status: label });
+    }
 
     case 'tool_started':
       return reducer(state, {

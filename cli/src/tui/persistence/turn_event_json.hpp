@@ -35,7 +35,8 @@ inline void to_json(nlohmann::json& j, const ApprovalEvent& e) {
         {"ts", e.timestamp_ms}};
 }
 inline void to_json(nlohmann::json& j, const SessionMeta& e) {
-    j = {{"kind", "session_meta"}, {"sid", e.session_id}, {"created_at", e.created_at},
+    j = {{"kind", "session_meta"}, {"sid", e.session_id}, {"title", e.title},
+        {"created_at", e.created_at},
         {"model", e.model}, {"provider", e.provider}, {"permission_mode", e.permission_mode},
         {"system_prompt_hash", e.system_prompt_hash},
         {"cwd", e.cwd}, {"term_w", e.terminal_w}, {"term_h", e.terminal_h},
@@ -69,7 +70,7 @@ inline TurnEvent from_json(const nlohmann::json& j) {
         return ApprovalEvent{j.value("tool", ""), j.value("summary", ""), d == "denied" ? ApprovalEvent::Decision::denied : ApprovalEvent::Decision::approved, j.value("ts", 0ULL)};
     }
     if (kind == "session_meta") {
-        return SessionMeta{j.value("sid", ""), j.value("created_at", 0ULL), j.value("model", ""), j.value("provider", ""), j.value("permission_mode", ""), j.value("system_prompt_hash", ""), j.value("cwd", ""), j.value("term_w", uint16_t{0}), j.value("term_h", uint16_t{0}), j.value("version", "")};
+        return SessionMeta{j.value("sid", ""), j.value("title", ""), j.value("created_at", 0ULL), j.value("model", ""), j.value("provider", ""), j.value("permission_mode", ""), j.value("system_prompt_hash", ""), j.value("cwd", ""), j.value("term_w", uint16_t{0}), j.value("term_h", uint16_t{0}), j.value("version", "")};
     }
     return UserEvent{};
 }

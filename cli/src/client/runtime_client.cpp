@@ -3,18 +3,43 @@
 #include <stdexcept>
 
 namespace merak::client {
+
+// Replace invalid UTF-8 bytes with replacement character U+FFFD
+static std::string fix_utf8(std::string s) {
+    size_t i = 0, out = 0;
+    while (i < s.size()) {
+        auto c = static_cast<unsigned char>(s[i]);
+        int len = 1;
+        if (c >= 0x80) {
+            if ((c & 0xE0) == 0xC0) len = 2;
+            else if ((c & 0xF0) == 0xE0) len = 3;
+            else if ((c & 0xF8) == 0xF0) len = 4;
+            else { s[out++] = '\xEF'; s[out++] = '\xBF'; s[out++] = '\xBD'; ++i; continue; }
+            if (i + len > s.size()) { s[out++] = '\xEF'; s[out++] = '\xBF'; s[out++] = '\xBD'; break; }
+            for (int j = 1; j < len; ++j) {
+                if ((static_cast<unsigned char>(s[i + j]) & 0xC0) != 0x80) {
+                    len = 0; break;
+                }
+            }
+            if (len == 0) { s[out++] = '\xEF'; s[out++] = '\xBF'; s[out++] = '\xBD'; ++i; continue; }
+        }
+        for (int j = 0; j < len; ++j) s[out++] = s[i++];
+    }
+    s.resize(out);
+    return s;
+}
 std::optional<SseFrame>parse_sse_frame(const std::string&f){SseFrame out;std::string data;size_t start=0;while(start<f.size()){auto end=f.find('\n',start);auto line=f.substr(start,end==std::string::npos?std::string::npos:end-start);if(line.rfind("id: ",0)==0)out.seq=std::stoll(line.substr(4));else if(line.rfind("event: ",0)==0)out.type=line.substr(7);else if(line.rfind("data: ",0)==0)data+=line.substr(6);if(end==std::string::npos)break;start=end+1;}if(out.type.empty()||data.empty())return std::nullopt;out.payload=nlohmann::json::parse(data);return out;}
 std::string events_stream_url(const std::string&s,const std::string&id,long long after){return s+"/v1/sessions/"+id+"/events/stream?after="+std::to_string(after);}
 std::string delegations_path(const std::string&id){return"/v1/sessions/"+id+"/delegations";}
 RuntimeClient::RuntimeClient(std::string server):server_(std::move(server)){while(!server_.empty()&&server_.back()=='/')server_.pop_back();}
-nlohmann::json RuntimeClient::request(const std::string&method,const std::string&path,const nlohmann::json&body){CURL*c=curl_easy_init();if(!c)throw std::runtime_error("Cannot initialize HTTP client");std::string response,payload=body.dump();curl_slist*h=nullptr;h=curl_slist_append(h,"Content-Type: application/json");curl_easy_setopt(c,CURLOPT_URL,(server_+path).c_str());curl_easy_setopt(c,CURLOPT_HTTPHEADER,h);curl_easy_setopt(c,CURLOPT_CONNECTTIMEOUT_MS,2000L);if(method=="POST"){curl_easy_setopt(c,CURLOPT_POST,1L);curl_easy_setopt(c,CURLOPT_POSTFIELDS,payload.c_str());}curl_easy_setopt(c,CURLOPT_WRITEFUNCTION,+[](char*p,size_t s,size_t n,void*u){static_cast<std::string*>(u)->append(p,s*n);return s*n;});curl_easy_setopt(c,CURLOPT_WRITEDATA,&response);auto code=curl_easy_perform(c);long status=0;curl_easy_getinfo(c,CURLINFO_RESPONSE_CODE,&status);curl_slist_free_all(h);curl_easy_cleanup(c);if(code!=CURLE_OK)throw std::runtime_error("Cannot connect to merak serve");auto json=response.empty()?nlohmann::json::object():nlohmann::json::parse(response);if(status>=400)throw std::runtime_error(json.value("error","HTTP error"));return json;}
+nlohmann::json RuntimeClient::request(const std::string&method,const std::string&path,const nlohmann::json&body){CURL*c=curl_easy_init();if(!c)throw std::runtime_error("Cannot initialize HTTP client");std::string response,payload=body.dump();curl_easy_setopt(c,CURLOPT_URL,(server_+path).c_str());curl_easy_setopt(c,CURLOPT_CONNECTTIMEOUT_MS,2000L);if(method=="POST"){curl_easy_setopt(c,CURLOPT_POST,1L);curl_easy_setopt(c,CURLOPT_COPYPOSTFIELDS,payload.c_str());}else if(method!="GET"){curl_easy_setopt(c,CURLOPT_CUSTOMREQUEST,method.c_str());if(!body.is_null()&&!body.empty())curl_easy_setopt(c,CURLOPT_COPYPOSTFIELDS,payload.c_str());}curl_slist*h=nullptr;h=curl_slist_append(h,"Content-Type: application/json");curl_easy_setopt(c,CURLOPT_HTTPHEADER,h);curl_easy_setopt(c,CURLOPT_WRITEFUNCTION,+[](char*p,size_t s,size_t n,void*u){static_cast<std::string*>(u)->append(p,s*n);return s*n;});curl_easy_setopt(c,CURLOPT_WRITEDATA,&response);auto code=curl_easy_perform(c);long status=0;curl_easy_getinfo(c,CURLINFO_RESPONSE_CODE,&status);curl_slist_free_all(h);curl_easy_cleanup(c);if(code!=CURLE_OK)throw std::runtime_error("Cannot connect to merak serve");auto json=response.empty()?nlohmann::json::object():nlohmann::json::parse(response,nullptr,false);if(json.is_discarded())json=nlohmann::json::object();if(status>=400){std::string message="HTTP "+std::to_string(status);if(json.contains("error")){const auto&error=json["error"];if(error.is_string())message=error.get<std::string>();else if(error.is_object())message=error.value("message",message);}throw std::runtime_error(message);}return json;}
 nlohmann::json RuntimeClient::metadata(){return request("GET","/v1/runtime");}
 nlohmann::json RuntimeClient::create_session(const std::string&t){return request("POST","/v1/sessions",{{"title",t}});}
 nlohmann::json RuntimeClient::list_sessions(){return request("GET","/v1/sessions");}
 nlohmann::json RuntimeClient::session(const std::string&id){return request("GET","/v1/sessions/"+id);}
 nlohmann::json RuntimeClient::events(const std::string&id,long long after){return request("GET","/v1/sessions/"+id+"/events?after="+std::to_string(after));}
 nlohmann::json RuntimeClient::memory(const std::string&id){return request("GET","/v1/sessions/"+id+"/memory");}
-nlohmann::json RuntimeClient::start_run(const std::string&id,const std::string&m,const std::string&model){auto body=nlohmann::json{{"message",m}};if(!model.empty())body["model"]=model;return request("POST","/v1/sessions/"+id+"/runs",body);}
+nlohmann::json RuntimeClient::start_run(const std::string&id,const std::string&m,const std::string&model){auto body=nlohmann::json{{"message",fix_utf8(m)}};if(!model.empty())body["model"]=model;return request("POST","/v1/sessions/"+id+"/runs",body);}
 nlohmann::json RuntimeClient::start_delegation(const std::string&id,const std::string&p,const std::vector<std::string>&agents,const std::string&t,const std::string&a){return request("POST",delegations_path(id),{{"pattern",p},{"agents",agents},{"task",t},{"aggregation",a}});}
 nlohmann::json RuntimeClient::resolve_approval(const std::string&id,bool allow){return request("POST","/v1/approvals/"+id,{{"decision",allow?"allow":"deny"}});}
 nlohmann::json RuntimeClient::cancel_run(const std::string&id){return request("POST","/v1/runs/"+id+"/cancel");}

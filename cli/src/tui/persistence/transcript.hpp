@@ -55,6 +55,7 @@ inline void update_index(const std::string& session_id, const SessionMeta& meta)
         [&](const auto& e) { return e.value("sid", "") == session_id; }), index.end());
     index.push_back({
         {"sid", session_id},
+        {"title", meta.title},
         {"ts", meta.created_at},
         {"model", meta.model},
         {"msg_count", 0},
