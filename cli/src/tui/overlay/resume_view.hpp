@@ -14,6 +14,7 @@ namespace merak::tui {
 
 struct SessionEntry {
     std::string sid;
+    std::string title;
     uint64_t ts = 0;
     std::string model;
     int msg_count = 0;
@@ -35,6 +36,7 @@ class ResumeView {
         for (const auto& e : index) {
             entries_.push_back({
                 e.value("sid", ""),
+                e.value("title", ""),
                 e.value("ts", 0ULL),
                 e.value("model", ""),
                 e.value("msg_count", 0),
