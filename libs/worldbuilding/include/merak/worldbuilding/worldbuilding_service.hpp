@@ -22,6 +22,9 @@ public:
 
     // World
     WorldMeta create_world(std::string name, std::string description);
+    WorldMeta update_world(const std::string& world_id,
+                           const std::optional<std::string>& name,
+                           const std::optional<std::string>& description);
     std::vector<WorldMeta> list_worlds() const;
 
     // Agents

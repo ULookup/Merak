@@ -135,6 +135,31 @@ WorldMeta WorldStore::create_world(const std::string& name,
     return world;
 }
 
+WorldMeta WorldStore::update_world(const std::string& world_id,
+                                    const std::optional<std::string>& name,
+                                    const std::optional<std::string>& description) {
+    initialize();
+    auto existing = get_world(world_id);
+    if (!existing) throw std::runtime_error("world not found: " + world_id);
+
+    std::string new_name = name.value_or(existing->name);
+    std::string new_desc = description.value_or(existing->description);
+    std::string timestamp = now_iso_utc();
+
+    PgConn conn(*pool_);
+    conn.execute(
+        "UPDATE worlds SET name = $1, description = $2, updated_at = $3 WHERE id = $4",
+        {new_name, new_desc, timestamp, world_id});
+
+    return WorldMeta{
+        .id = world_id,
+        .name = new_name,
+        .description = new_desc,
+        .created_at = existing->created_at,
+        .updated_at = timestamp,
+    };
+}
+
 std::optional<WorldMeta>
 WorldStore::get_world(const std::string& world_id) const {
     PgConn conn(*pool_);

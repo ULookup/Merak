@@ -25,6 +25,12 @@ WorldMeta WorldbuildingService::create_world(std::string name,
     return worlds_.create_world(std::move(name), std::move(description));
 }
 
+WorldMeta WorldbuildingService::update_world(const std::string& world_id,
+                                              const std::optional<std::string>& name,
+                                              const std::optional<std::string>& description) {
+    return worlds_.update_world(world_id, name, description);
+}
+
 std::vector<WorldMeta> WorldbuildingService::list_worlds() const {
     return worlds_.list_worlds();
 }
