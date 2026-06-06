@@ -42,3 +42,12 @@ target_link_libraries(worldbuilding_tests PRIVATE
     SQLite::SQLite3
 )
 add_test(NAME worldbuilding_tests COMMAND worldbuilding_tests)
+
+add_executable(test_creation_flow
+    tests/test_creation_flow.cpp
+)
+target_link_libraries(test_creation_flow PRIVATE
+    merak-worldbuilding
+    GTest::gtest_main
+    SQLite::SQLite3
+)
