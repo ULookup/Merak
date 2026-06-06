@@ -60,6 +60,7 @@ public:
 
     SessionRecord create_session(const std::string& title = "");
     void update_session(const std::string& id, const std::string& title);
+    SessionRecord archive_session(const std::string& id, bool archived);
     std::optional<SessionRecord> get_session(const std::string& id) const;
     std::vector<SessionRecord> list_sessions() const;
     RunRecord create_run(

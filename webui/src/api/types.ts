@@ -114,6 +114,7 @@ export interface WorldSummary {
   name: string;
   description: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface WorldListResponse {
@@ -144,6 +145,11 @@ export interface ForeshadowingItem {
   id: string;
   content: string;
   status?: string;
+  pay_off_idea?: string;
+  hint_level?: string;
+  tags?: string[];
+  planted_at?: string;
+  paid_at?: string;
 }
 
 export interface ForeshadowingListResponse {
@@ -156,7 +162,12 @@ export interface SecretItem {
   id: string;
   title?: string;
   content?: string;
+  truth?: string;
+  public_version?: string;
+  stakes?: string;
   status?: string;
+  aware_character_ids?: string[];
+  suspicious_character_ids?: string[];
 }
 
 export interface SecretListResponse {
@@ -191,4 +202,159 @@ export interface OkResponse {
 export interface OpenWorkspacePathResponse {
   ok: boolean;
   path: string;
+}
+
+export interface UiCapabilities {
+  files: boolean;
+  story_overview: boolean;
+  session_archive: boolean;
+  world_create: boolean;
+  editor_save: boolean;
+}
+
+export interface CapabilitiesResponse {
+  ok: boolean;
+  capabilities: UiCapabilities;
+  fallback?: boolean;
+}
+
+export interface WorldDetailResponse {
+  ok: boolean;
+  world: WorldSummary & {
+    stats?: {
+      chapters?: number;
+      scenes?: number;
+      agents?: number;
+      foreshadowing_open?: number;
+      secrets_active?: number;
+    };
+  };
+  fallback?: boolean;
+}
+
+export interface StoryChapter {
+  id: string;
+  title: string;
+  number: number;
+  status: string;
+  arc_id?: string;
+  scene_count: number;
+  updated_at: string;
+}
+
+export interface StoryScene {
+  id: string;
+  title: string;
+  chapter_id: string;
+  world_time: string;
+  status: string;
+  participant_ids: string[];
+  updated_at: string;
+}
+
+export interface StoryOverview {
+  current_arc?: {
+    id: string;
+    title: string;
+    status: string;
+    purpose?: string;
+  };
+  current_chapter?: StoryChapter;
+  current_scene?: StoryScene;
+  agents: WorldAgent[];
+  foreshadowing: ForeshadowingItem[];
+  secrets: SecretItem[];
+  world_time: string | null;
+  fallback?: boolean;
+}
+
+export interface StoryOverviewResponse {
+  ok: boolean;
+  overview: StoryOverview;
+  fallback?: boolean;
+}
+
+export interface ChapterListResponse {
+  ok: boolean;
+  chapters: StoryChapter[];
+  fallback?: boolean;
+}
+
+export interface SceneListResponse {
+  ok: boolean;
+  scenes: StoryScene[];
+  fallback?: boolean;
+}
+
+export interface WorkspaceFile {
+  id: string;
+  path: string;
+  name: string;
+  ext: string;
+  mime: string;
+  size: number;
+  updated_at: string;
+  generated_by_run_id?: string;
+  dirty: boolean;
+  fallback?: boolean;
+}
+
+export interface WorkspaceFileListResponse {
+  ok: boolean;
+  root: string;
+  files: WorkspaceFile[];
+  fallback?: boolean;
+}
+
+export interface WorkspaceFileContent {
+  path: string;
+  content: string;
+  encoding: 'utf-8';
+  updated_at: string;
+  version: string;
+  fallback?: boolean;
+}
+
+export interface WorkspaceFileContentResponse {
+  ok: boolean;
+  file: WorkspaceFileContent;
+  fallback?: boolean;
+}
+
+export interface SaveWorkspaceFileResponse {
+  ok: boolean;
+  file: Pick<WorkspaceFileContent, 'path' | 'updated_at' | 'version'>;
+  fallback?: boolean;
+}
+
+export interface ArchiveSessionResponse {
+  ok: boolean;
+  session: SessionSummary;
+  fallback?: boolean;
+}
+
+export interface RunTimelineToolCall {
+  id: string;
+  name: string;
+  status: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface RunDetail {
+  id: string;
+  session_id: string;
+  status: string;
+  model: string;
+  started_at: string;
+  completed_at?: string;
+  input_tokens: number;
+  output_tokens: number;
+  tool_calls: RunTimelineToolCall[];
+}
+
+export interface RunDetailResponse {
+  ok: boolean;
+  run: RunDetail;
+  fallback?: boolean;
 }

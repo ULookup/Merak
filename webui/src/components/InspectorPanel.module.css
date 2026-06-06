@@ -1,6 +1,6 @@
 .panel {
-  width: 360px;
-  min-width: 360px;
+  width: 380px;
+  min-width: 380px;
   border-left: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.74);
   backdrop-filter: blur(20px);
@@ -63,13 +63,13 @@
   padding: 4px;
   background: var(--surface-muted);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 8px;
 }
 
 .tab {
   border: none;
   background: transparent;
-  border-radius: 9px;
+  border-radius: 6px;
   color: var(--muted);
   padding: 8px 10px;
   font-size: 12px;
@@ -102,7 +102,7 @@
   border: 1px dashed var(--border-strong);
   background: rgba(255, 255, 255, 0.62);
   color: var(--muted);
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 26px;
   text-align: center;
   line-height: 1.5;
@@ -113,7 +113,7 @@
 .runCard {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   box-shadow: var(--shadow-sm);
   padding: 16px;
   animation: panelRise 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -149,11 +149,79 @@
 }
 
 .sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   color: var(--ink);
   font-size: 12px;
   text-transform: uppercase;
   font-weight: 850;
   margin-bottom: 10px;
+}
+
+.notice {
+  border: 1px solid rgba(183, 121, 31, 0.26);
+  background: var(--amber-soft);
+  color: var(--brand-strong);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.storyStats {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.storyStats span,
+.contextGrid div {
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  border-radius: 8px;
+  padding: 9px;
+}
+
+.storyStats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.storyStats svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--teal);
+}
+
+.contextGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.contextGrid span,
+.contextGrid small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.contextGrid strong {
+  display: block;
+  margin: 3px 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .thread,
@@ -174,7 +242,7 @@
 .outputCard {
   background: linear-gradient(135deg, var(--brand-wash), #fff);
   border: 1px solid rgba(122, 79, 19, 0.16);
-  border-radius: 16px;
+  border-radius: 8px;
   box-shadow: var(--shadow-sm);
   padding: 16px;
   display: flex;
@@ -201,7 +269,7 @@
   justify-content: center;
   gap: 7px;
   border: none;
-  border-radius: 12px;
+  border-radius: 8px;
   background: linear-gradient(135deg, var(--brand-strong), var(--brand), #b8892c);
   color: #fff;
   cursor: pointer;
@@ -243,7 +311,7 @@
   width: 100%;
   border: 1px solid var(--border);
   background: var(--surface);
-  border-radius: 13px;
+  border-radius: 8px;
   padding: 11px;
   color: var(--ink);
   display: flex;
@@ -290,6 +358,56 @@
   font-size: 11px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.fileItem small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fileToolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.fileToolbar label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 0 10px;
+}
+
+.fileToolbar svg {
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.fileToolbar input,
+.fileToolbar > select {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  padding: 9px 10px;
+  font: inherit;
+}
+
+.fileToolbar label input {
+  border: none;
+  background: transparent;
+  padding: 9px 0;
 }
 
 .editorPanel {
@@ -354,6 +472,36 @@
   line-height: 1.7;
   font-size: 13px;
   font-family: inherit;
+}
+
+.editorActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.editorActions span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.thread small,
+.secret small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.secret strong {
+  display: block;
+  color: var(--ink);
+  line-height: 1.35;
 }
 
 @media (max-width: 420px) {
@@ -523,6 +671,39 @@
 
 .error svg {
   flex: 0 0 auto;
+}
+
+.timelineList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timelineItem {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 10px;
+}
+
+.timelineItem span,
+.timelineItem code {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.timelineItem strong {
+  display: block;
+  margin: 3px 0;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.timelineItem code {
+  overflow-wrap: anywhere;
 }
 
 .mobileScrim {

@@ -81,6 +81,7 @@ public:
     void initialize();
     SessionRecord create_session(const std::string& title = "");
     void update_session(const std::string& id, const std::string& title);
+    SessionRecord archive_session(const std::string& id, bool archived);
     std::string generate_title(const std::string& session_id);
     std::vector<SessionRecord> list_sessions() const;
     std::optional<SessionRecord> get_session(const std::string& id) const;
@@ -100,6 +101,8 @@ public:
     void cancel_run(const std::string& id);
     std::vector<RuntimeEvent> events_after(const std::string& session_id, long long after) const;
     std::shared_ptr<EventSubscription> subscribe(const std::string& session_id);
+    RuntimeEvent emit_event(const std::string& session_id, const std::string& run_id,
+                            const std::string& type, nlohmann::json payload = {});
 
 private:
     class Control;

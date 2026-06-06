@@ -1,3 +1,54 @@
+.session-list {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.session-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.session-list ul {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.session-list li {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--muted-strong);
+  cursor: pointer;
+  padding: 7px 8px;
+}
+
+.session-list li.active {
+  border-color: rgba(122, 79, 19, 0.2);
+  background: var(--brand-wash);
+  color: var(--brand);
+}
+
+.session-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .session-rename-input {
   width: 100%;
   padding: 2px 4px;
@@ -36,4 +87,22 @@
 .session-new-btn svg,
 .session-generate-btn svg {
   display: block;
+}
+
+.session-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.session-badge {
+  border: 1px solid var(--border, #555);
+  border-radius: 999px;
+  color: var(--muted, #888);
+  font-size: 9px;
+  font-weight: 850;
+  margin-left: 6px;
+  padding: 2px 5px;
+  text-transform: uppercase;
 }

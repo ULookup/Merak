@@ -612,4 +612,98 @@ std::optional<Scene> NarrativeStore::get_scene(const std::string& world_id,
     return scene_from_json(read_json(path));
 }
 
+std::vector<ArcSummary> NarrativeStore::list_arcs(const std::string& world_id) const {
+    ensure_world_exists(worlds_, world_id);
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, name, description, status, updated_at::text"
+        " FROM arcs WHERE world_id = $1 ORDER BY updated_at DESC, id ASC",
+        {world_id});
+
+    std::vector<ArcSummary> out;
+    for (int i = 0; i < res.ntuples(); ++i) {
+        out.push_back({res.get(i, 0), res.get(i, 1), res.get(i, 2),
+                       res.get(i, 3), res.get(i, 4)});
+    }
+    return out;
+}
+
+std::vector<ChapterSummary>
+NarrativeStore::list_chapters(const std::string& world_id,
+                              std::optional<ChapterStatus> status) const {
+    ensure_world_exists(worlds_, world_id);
+    PgConn conn(*pool_);
+    std::string sql =
+        "SELECT c.id, c.name, c.position, c.status, c.arc_id,"
+        " c.updated_at::text, COUNT(s.id)::int"
+        " FROM chapters c"
+        " LEFT JOIN scenes s ON s.world_id = c.world_id AND s.chapter_id = c.id"
+        " WHERE c.world_id = $1";
+    std::vector<std::string> params{world_id};
+    if (status.has_value()) {
+        sql += " AND c.status = $2";
+        params.push_back(to_string(*status));
+    }
+    sql += " GROUP BY c.id, c.name, c.position, c.status, c.arc_id, c.updated_at"
+           " ORDER BY c.position ASC, c.updated_at DESC, c.id ASC";
+    auto res = conn.query(sql, params);
+
+    std::vector<ChapterSummary> out;
+    for (int i = 0; i < res.ntuples(); ++i) {
+        ChapterSummary chapter;
+        chapter.id = res.get(i, 0);
+        chapter.title = res.get(i, 1);
+        chapter.number = std::stoi(res.get(i, 2).empty() ? "0" : res.get(i, 2));
+        chapter.status = res.get(i, 3);
+        if (!res.get(i, 4).empty()) chapter.arc_id = res.get(i, 4);
+        chapter.updated_at = res.get(i, 5);
+        chapter.scene_count = std::stoi(res.get(i, 6).empty() ? "0" : res.get(i, 6));
+        out.push_back(std::move(chapter));
+    }
+    return out;
+}
+
+std::vector<SceneSummary>
+NarrativeStore::list_scenes(const std::string& world_id,
+                            const std::optional<std::string>& chapter_id,
+                            std::optional<SceneStatus> status) const {
+    ensure_world_exists(worlds_, world_id);
+    PgConn conn(*pool_);
+    std::string sql =
+        "SELECT id, name, COALESCE(chapter_id, ''), COALESCE(world_time, ''),"
+        " status, participants, updated_at::text"
+        " FROM scenes WHERE world_id = $1";
+    std::vector<std::string> params{world_id};
+    int next_param = 2;
+    if (chapter_id.has_value() && !chapter_id->empty()) {
+        sql += " AND chapter_id = $" + std::to_string(next_param++);
+        params.push_back(*chapter_id);
+    }
+    if (status.has_value()) {
+        sql += " AND status = $" + std::to_string(next_param++);
+        params.push_back(to_string(*status));
+    }
+    sql += " ORDER BY updated_at DESC, world_time DESC, id ASC";
+    auto res = conn.query(sql, params);
+
+    std::vector<SceneSummary> out;
+    for (int i = 0; i < res.ntuples(); ++i) {
+        SceneSummary scene;
+        scene.id = res.get(i, 0);
+        scene.title = res.get(i, 1);
+        scene.chapter_id = res.get(i, 2);
+        scene.world_time = res.get(i, 3);
+        scene.status = res.get(i, 4);
+        try {
+            scene.participant_ids =
+                nlohmann::json::parse(res.get(i, 5)).get<std::vector<std::string>>();
+        } catch (...) {
+            scene.participant_ids = {};
+        }
+        scene.updated_at = res.get(i, 6);
+        out.push_back(std::move(scene));
+    }
+    return out;
+}
+
 } // namespace merak::worldbuilding

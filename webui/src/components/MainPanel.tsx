@@ -1,4 +1,4 @@
-import { Menu, PanelRight } from 'lucide-react';
+import { CircleHelp, Menu, PanelRight } from 'lucide-react';
 import type { ConnectionState } from '../hooks/useSSE';
 import BrandMark from './BrandMark';
 import ChatTimeline from './ChatTimeline';
@@ -8,6 +8,7 @@ import styles from './MainPanel.module.css';
 interface MainPanelProps {
   onToggleSidebar?: () => void;
   onToggleInspector?: () => void;
+  onOpenGuide?: () => void;
   sidebarOpen?: boolean;
   inspectorOpen?: boolean;
   connectionState?: ConnectionState;
@@ -16,6 +17,7 @@ interface MainPanelProps {
 export default function MainPanel({
   onToggleSidebar,
   onToggleInspector,
+  onOpenGuide,
   sidebarOpen,
   inspectorOpen,
   connectionState = 'connecting',
@@ -45,6 +47,14 @@ export default function MainPanel({
           <span className={styles.liveDot} />
           {connectionState === 'connected' ? 'Live SSE' : connectionState}
         </div>
+        <button
+          className={styles.iconBtn}
+          onClick={onOpenGuide}
+          aria-label="Open workbench guide"
+          title="Open workbench guide"
+        >
+          <CircleHelp size={18} aria-hidden="true" strokeWidth={2.2} />
+        </button>
         <button
           className={styles.iconBtn}
           onClick={onToggleInspector}

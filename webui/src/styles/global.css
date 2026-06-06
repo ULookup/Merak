@@ -7,8 +7,8 @@
 }
 
 :root {
-  --page: #f6f8f5;
-  --page-warm: #fffaf0;
+  --page: #f4f7f6;
+  --page-warm: #f8f5ed;
   --surface: #ffffff;
   --surface-muted: #eef3f0;
   --surface-strong: #f9fbf8;
@@ -23,7 +23,7 @@
   --brand: #7a4f13;
   --brand-strong: #4f330b;
   --brand-soft: #f7ead2;
-  --brand-wash: #fff8ea;
+  --brand-wash: #fcf4e4;
   --amber: #b7791f;
   --amber-soft: #fff3cf;
   --ruby: #be123c;
@@ -41,8 +41,7 @@ body,
 #root {
   height: 100%;
   background:
-    radial-gradient(circle at 18% 10%, rgba(122, 79, 19, 0.08), transparent 32%),
-    linear-gradient(135deg, var(--page), #fbf7ed 52%, #eef6f2);
+    linear-gradient(135deg, var(--page), #f8f5ed 46%, #eef6f2);
   color: var(--ink);
   font-family:
     Inter,

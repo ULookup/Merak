@@ -20,6 +20,22 @@ struct ChapterContext {
     std::vector<std::string> open_foreshadowing_ids;
 };
 
+struct ArcSummary {
+    std::string id, title, purpose, status, updated_at;
+};
+
+struct ChapterSummary {
+    std::string id, title, status, updated_at;
+    int number = 0;
+    std::optional<std::string> arc_id;
+    int scene_count = 0;
+};
+
+struct SceneSummary {
+    std::string id, title, chapter_id, world_time, status, updated_at;
+    std::vector<std::string> participant_ids;
+};
+
 class NarrativeStore {
 public:
     NarrativeStore(WorldStore& worlds, std::string_view pg_conninfo,
@@ -47,6 +63,14 @@ public:
                                    const std::string& chapter_id) const;
     std::optional<Scene> get_scene(const std::string& world_id,
                                     const std::string& scene_id) const;
+    std::vector<ArcSummary> list_arcs(const std::string& world_id) const;
+    std::vector<ChapterSummary>
+    list_chapters(const std::string& world_id,
+                  std::optional<ChapterStatus> status = std::nullopt) const;
+    std::vector<SceneSummary>
+    list_scenes(const std::string& world_id,
+                const std::optional<std::string>& chapter_id = std::nullopt,
+                std::optional<SceneStatus> status = std::nullopt) const;
 
 private:
     void initialize();

@@ -1,6 +1,6 @@
 .world-selector {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-columns: minmax(0, 1fr) 34px 34px;
   gap: 8px;
   padding: 16px;
   border-bottom: 1px solid var(--border);

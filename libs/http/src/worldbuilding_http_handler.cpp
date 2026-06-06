@@ -1,5 +1,9 @@
 #include <merak/worldbuilding_http_handler.hpp>
+#include <merak/runtime_service.hpp>
 #include <merak/worldbuilding/world_models.hpp>
+
+#include <algorithm>
+#include <optional>
 
 namespace merak {
 namespace {
@@ -9,16 +13,154 @@ void json_response(httplib::Response& r, const nlohmann::json& body, int status 
     r.set_content(body.dump(), "application/json");
 }
 
-void error_response(httplib::Response& r, const std::string& msg, int status = 400) {
+void error_response(httplib::Response& r, const std::string& msg, int status = 400,
+                    const std::string& code = "invalid_request") {
     r.status = status;
-    r.set_content(nlohmann::json({{"ok", false}, {"error", msg}}).dump(), "application/json");
+    r.set_content(nlohmann::json({
+        {"ok", false},
+        {"error", {{"code", code}, {"message", msg}, {"retryable", false}}}
+    }).dump(), "application/json");
+}
+
+nlohmann::json world_json(const worldbuilding::WorldMeta& w) {
+    return {
+        {"id", w.id},
+        {"name", w.name},
+        {"description", w.description},
+        {"created_at", w.created_at},
+        {"updated_at", w.updated_at}
+    };
+}
+
+nlohmann::json agent_json(const worldbuilding::AgentRecord& a) {
+    return {
+        {"id", a.id},
+        {"world_id", a.world_id},
+        {"name", a.name},
+        {"display_name", a.display_name},
+        {"kind", worldbuilding::to_string(a.kind)},
+        {"created_at", a.created_at},
+        {"updated_at", a.updated_at}
+    };
+}
+
+nlohmann::json arc_json(const worldbuilding::ArcSummary& arc) {
+    return {
+        {"id", arc.id},
+        {"title", arc.title},
+        {"purpose", arc.purpose},
+        {"status", arc.status},
+        {"updated_at", arc.updated_at}
+    };
+}
+
+nlohmann::json chapter_json(const worldbuilding::ChapterSummary& chapter) {
+    nlohmann::json json{
+        {"id", chapter.id},
+        {"title", chapter.title},
+        {"number", chapter.number},
+        {"status", chapter.status},
+        {"scene_count", chapter.scene_count},
+        {"updated_at", chapter.updated_at}
+    };
+    json["arc_id"] = chapter.arc_id.has_value() ? nlohmann::json(*chapter.arc_id) : nlohmann::json(nullptr);
+    return json;
+}
+
+nlohmann::json scene_json(const worldbuilding::SceneSummary& scene) {
+    return {
+        {"id", scene.id},
+        {"title", scene.title},
+        {"chapter_id", scene.chapter_id},
+        {"world_time", scene.world_time},
+        {"status", scene.status},
+        {"participant_ids", scene.participant_ids},
+        {"updated_at", scene.updated_at}
+    };
+}
+
+nlohmann::json foreshadow_json(const worldbuilding::Foreshadowing& item) {
+    nlohmann::json json{
+        {"id", item.id},
+        {"content", item.content},
+        {"pay_off_idea", item.pay_off_idea},
+        {"status", worldbuilding::to_string(item.status)},
+        {"hint_level", worldbuilding::to_string(item.hint_level)},
+        {"tags", item.tags}
+    };
+    json["planted_at"] = item.planted_at.has_value() ? nlohmann::json(*item.planted_at) : nlohmann::json(nullptr);
+    json["paid_at"] = item.paid_at.has_value() ? nlohmann::json(*item.paid_at) : nlohmann::json(nullptr);
+    return json;
+}
+
+nlohmann::json secret_json(const worldbuilding::Secret& secret) {
+    return {
+        {"id", secret.id},
+        {"title", secret.holder_id.empty() ? secret.public_version : secret.holder_id},
+        {"truth", secret.truth},
+        {"public_version", secret.public_version},
+        {"stakes", secret.stakes},
+        {"status", worldbuilding::to_string(secret.status)},
+        {"aware_character_ids", secret.aware_character_ids},
+        {"suspicious_character_ids", secret.suspicious_character_ids}
+    };
+}
+
+std::optional<worldbuilding::ChapterStatus> chapter_status_from_query(const std::string& value) {
+    if (value.empty()) return std::nullopt;
+    if (value == "outline") return worldbuilding::ChapterStatus::Outline;
+    if (value == "drafting") return worldbuilding::ChapterStatus::Drafting;
+    if (value == "completed") return worldbuilding::ChapterStatus::Completed;
+    if (value == "revised") return worldbuilding::ChapterStatus::Revised;
+    throw std::runtime_error("invalid chapter status: " + value);
+}
+
+std::optional<worldbuilding::SceneStatus> scene_status_from_query(const std::string& value) {
+    if (value.empty()) return std::nullopt;
+    if (value == "draft") return worldbuilding::SceneStatus::Draft;
+    if (value == "writing") return worldbuilding::SceneStatus::Writing;
+    if (value == "completed") return worldbuilding::SceneStatus::Completed;
+    throw std::runtime_error("invalid scene status: " + value);
+}
+
+std::optional<worldbuilding::ForeshadowStatus> foreshadow_status_from_query(const std::string& value) {
+    if (value.empty()) return std::nullopt;
+    if (value == "open") return worldbuilding::ForeshadowStatus::Open;
+    if (value == "paid") return worldbuilding::ForeshadowStatus::Paid;
+    if (value == "abandoned") return worldbuilding::ForeshadowStatus::Abandoned;
+    throw std::runtime_error("invalid foreshadowing status: " + value);
+}
+
+std::optional<worldbuilding::SecretStatus> secret_status_from_query(const std::string& value) {
+    if (value.empty()) return std::nullopt;
+    if (value == "active") return worldbuilding::SecretStatus::Active;
+    if (value == "exposed") return worldbuilding::SecretStatus::Exposed;
+    if (value == "abandoned") return worldbuilding::SecretStatus::Abandoned;
+    throw std::runtime_error("invalid secret status: " + value);
+}
+
+void emit_story_update(const std::shared_ptr<RuntimeService>& runtime,
+                       const std::string& session_id,
+                       const std::string& world_id,
+                       const std::string& resource_type,
+                       const std::string& resource_id) {
+    if (!runtime || session_id.empty()) return;
+    try {
+        runtime->emit_event(session_id, "", "story_context_updated", {
+            {"world_id", world_id},
+            {"resource_type", resource_type},
+            {"resource_id", resource_id}
+        });
+    } catch (...) {
+    }
 }
 
 } // namespace
 
 WorldbuildingHttpHandler::WorldbuildingHttpHandler(
-    std::shared_ptr<worldbuilding::WorldbuildingService> service)
-    : service_(std::move(service)) {}
+    std::shared_ptr<worldbuilding::WorldbuildingService> service,
+    std::shared_ptr<RuntimeService> runtime)
+    : service_(std::move(service)), runtime_(std::move(runtime)) {}
 
 void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
     // World
@@ -26,6 +168,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_list_worlds(req, res); });
     server.Post("/api/worldbuilding/worlds",
         [this](const auto& req, auto& res) { handle_create_world(req, res); });
+    server.Get(R"(/api/worldbuilding/worlds/([^/]+))",
+        [this](const auto& req, auto& res) { handle_get_world(req, res); });
     server.Delete(R"(/api/worldbuilding/worlds/([^/]+))",
         [this](const auto& req, auto& res) { handle_delete_world(req, res); });
     server.Patch(R"(/api/worldbuilding/worlds/([^/]+))",
@@ -42,6 +186,12 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_load_agent_prompt(req, res); });
 
     // Narrative
+    server.Get(R"(/api/worldbuilding/([^/]+)/overview)",
+        [this](const auto& req, auto& res) { handle_overview(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/chapters)",
+        [this](const auto& req, auto& res) { handle_list_chapters(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/scenes)",
+        [this](const auto& req, auto& res) { handle_list_scenes(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes)",
         [this](const auto& req, auto& res) { handle_scene_new(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/end)",
@@ -73,16 +223,38 @@ void WorldbuildingHttpHandler::handle_list_worlds(const httplib::Request&, httpl
         auto worlds = service_->list_worlds();
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& w : worlds) {
-            arr.push_back({
-                {"id", w.id},
-                {"name", w.name},
-                {"description", w.description},
-                {"created_at", w.created_at}
-            });
+            arr.push_back(world_json(w));
         }
         json_response(res, {{"ok", true}, {"worlds", arr}});
     } catch (const std::exception& e) {
         error_response(res, e.what());
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_world(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string world_id = req.matches[1];
+        auto world = service_->worlds().get_world(world_id);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+        auto foreshadow_stats = service_->foreshadowing().stats(world_id);
+        auto active_secrets = service_->secrets().list(world_id, worldbuilding::SecretStatus::Active);
+        auto chapters = service_->narrative().list_chapters(world_id);
+        auto scenes = service_->narrative().list_scenes(world_id);
+        auto agents = service_->agents().list_agents(world_id);
+        auto json = world_json(*world);
+        json["stats"] = {
+            {"agents", agents.size()},
+            {"chapters", chapters.size()},
+            {"scenes", scenes.size()},
+            {"open_foreshadowing", foreshadow_stats.open},
+            {"active_secrets", active_secrets.size()}
+        };
+        json_response(res, {{"ok", true}, {"world", json}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
     }
 }
 
@@ -94,8 +266,10 @@ void WorldbuildingHttpHandler::handle_create_world(const httplib::Request& req, 
         auto world = service_->create_world(name, description);
         json_response(res, {
             {"ok", true},
+            {"world", world_json(world)},
             {"world_id", world.id},
-            {"name", world.name}
+            {"name", world.name},
+            {"description", world.description}
         }, 201);
     } catch (const std::exception& e) {
         error_response(res, e.what());
@@ -176,6 +350,7 @@ void WorldbuildingHttpHandler::handle_create_agent(const httplib::Request& req, 
         }
 
         auto agent = service_->create_character(wid, card);
+        emit_story_update(runtime_, body.value("session_id", ""), wid, "agent", agent.id);
         json_response(res, {
             {"ok", true},
             {"agent_id", agent.id},
@@ -213,6 +388,101 @@ void WorldbuildingHttpHandler::handle_get_agent(const httplib::Request& req, htt
 
 // --- Narrative handlers ---
 
+void WorldbuildingHttpHandler::handle_overview(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        if (!service_->worlds().get_world(wid)) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+
+        auto arcs = service_->narrative().list_arcs(wid);
+        auto chapters = service_->narrative().list_chapters(wid);
+        auto agents = service_->agents().list_agents(wid);
+        auto foreshadows = service_->foreshadowing().list(wid, worldbuilding::ForeshadowStatus::Open);
+        auto secrets = service_->secrets().list(wid, worldbuilding::SecretStatus::Active);
+
+        std::optional<worldbuilding::ChapterSummary> current_chapter;
+        for (const auto& chapter : chapters) {
+            if (chapter.status != "completed" && chapter.status != "revised") {
+                current_chapter = chapter;
+            }
+        }
+        if (!current_chapter.has_value() && !chapters.empty()) current_chapter = chapters.back();
+
+        std::optional<worldbuilding::SceneSummary> current_scene;
+        if (current_chapter.has_value()) {
+            auto chapter_scenes = service_->narrative().list_scenes(wid, current_chapter->id);
+            for (const auto& scene : chapter_scenes) {
+                if (scene.status == "writing" || scene.status == "draft") {
+                    current_scene = scene;
+                    break;
+                }
+            }
+            if (!current_scene.has_value() && !chapter_scenes.empty()) current_scene = chapter_scenes.front();
+        }
+
+        nlohmann::json agent_arr = nlohmann::json::array();
+        for (const auto& agent : agents) agent_arr.push_back(agent_json(agent));
+        nlohmann::json foreshadow_arr = nlohmann::json::array();
+        for (const auto& item : foreshadows) foreshadow_arr.push_back(foreshadow_json(item));
+        nlohmann::json secret_arr = nlohmann::json::array();
+        for (const auto& secret : secrets) secret_arr.push_back(secret_json(secret));
+
+        nlohmann::json response{
+            {"ok", true},
+            {"agents", agent_arr},
+            {"foreshadowing", foreshadow_arr},
+            {"secrets", secret_arr},
+            {"world_time", {{"day", 1}, {"period", 0}, {"label", "Day 1 Dawn"}}}
+        };
+        if (current_chapter.has_value()) {
+            response["current_chapter"] = chapter_json(*current_chapter);
+            if (current_chapter->arc_id.has_value()) {
+                auto it = std::find_if(arcs.begin(), arcs.end(), [&](const auto& arc) {
+                    return arc.id == *current_chapter->arc_id;
+                });
+                if (it != arcs.end()) response["current_arc"] = arc_json(*it);
+            }
+        }
+        if (current_scene.has_value()) response["current_scene"] = scene_json(*current_scene);
+
+        json_response(res, response);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_list_chapters(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto status = chapter_status_from_query(req.has_param("status") ? req.get_param_value("status") : "");
+        auto chapters = service_->narrative().list_chapters(wid, status);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& chapter : chapters) arr.push_back(chapter_json(chapter));
+        json_response(res, {{"ok", true}, {"chapters", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400, "invalid_request");
+    }
+}
+
+void WorldbuildingHttpHandler::handle_list_scenes(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::optional<std::string> chapter_id;
+        if (req.has_param("chapter_id") && !req.get_param_value("chapter_id").empty()) {
+            chapter_id = req.get_param_value("chapter_id");
+        }
+        auto status = scene_status_from_query(req.has_param("status") ? req.get_param_value("status") : "");
+        auto scenes = service_->narrative().list_scenes(wid, chapter_id, status);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& scene : scenes) arr.push_back(scene_json(scene));
+        json_response(res, {{"ok", true}, {"scenes", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400, "invalid_request");
+    }
+}
+
 void WorldbuildingHttpHandler::handle_scene_new(const httplib::Request& req, httplib::Response& res) {
     try {
         std::string wid = req.matches[1];
@@ -237,6 +507,7 @@ void WorldbuildingHttpHandler::handle_scene_new(const httplib::Request& req, htt
         scene.status = worldbuilding::SceneStatus::Draft;
 
         auto created = service_->create_scene(wid, scene);
+        emit_story_update(runtime_, body.value("session_id", ""), wid, "scene", created.id);
         json_response(res, {
             {"ok", true},
             {"scene_id", created.id}
@@ -254,6 +525,7 @@ void WorldbuildingHttpHandler::handle_scene_end(const httplib::Request& req, htt
         std::string markdown = body.value("final_markdown", "");
 
         auto wrapup = service_->end_scene(wid, sid, markdown);
+        emit_story_update(runtime_, body.value("session_id", ""), wid, "scene", sid);
 
         nlohmann::json diaries = nlohmann::json::array();
         for (const auto& d : wrapup.diaries_written) {
@@ -312,22 +584,81 @@ void WorldbuildingHttpHandler::handle_time_advance(const httplib::Request&, http
 
 // --- Foreshadowing handlers ---
 
-void WorldbuildingHttpHandler::handle_foreshadow_list(const httplib::Request&, httplib::Response& res) {
-    error_response(res, "Not yet implemented", 501);
+void WorldbuildingHttpHandler::handle_foreshadow_list(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto status = foreshadow_status_from_query(req.has_param("status") ? req.get_param_value("status") : "");
+        auto items = service_->foreshadowing().list(wid, status);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& item : items) arr.push_back(foreshadow_json(item));
+        json_response(res, {{"ok", true}, {"items", arr}, {"foreshadowing", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400, "invalid_request");
+    }
 }
 
-void WorldbuildingHttpHandler::handle_foreshadow_plant(const httplib::Request&, httplib::Response& res) {
-    error_response(res, "Not yet implemented", 501);
+void WorldbuildingHttpHandler::handle_foreshadow_plant(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        worldbuilding::Foreshadowing item;
+        item.content = body.value("content", body.value("hint", ""));
+        item.pay_off_idea = body.value("pay_off_idea", "");
+        item.hint_level = body.value("hint_level", "visible") == "subtle"
+            ? worldbuilding::ForeshadowHintLevel::Subtle
+            : body.value("hint_level", "visible") == "obvious"
+                ? worldbuilding::ForeshadowHintLevel::Obvious
+                : worldbuilding::ForeshadowHintLevel::Visible;
+        if (body.contains("tags") && body["tags"].is_array()) {
+            for (const auto& tag : body["tags"]) item.tags.push_back(tag.get<std::string>());
+        }
+        auto created = service_->plant_foreshadowing(wid, item);
+        emit_story_update(runtime_, body.value("session_id", ""), wid, "foreshadowing", created.id);
+        json_response(res, {{"ok", true}, {"item", foreshadow_json(created)}, {"foreshadowing_id", created.id}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
 }
 
 // --- Secret handlers ---
 
-void WorldbuildingHttpHandler::handle_secret_list(const httplib::Request&, httplib::Response& res) {
-    error_response(res, "Not yet implemented", 501);
+void WorldbuildingHttpHandler::handle_secret_list(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto status = secret_status_from_query(req.has_param("status") ? req.get_param_value("status") : "");
+        auto items = service_->secrets().list(wid, status);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& item : items) arr.push_back(secret_json(item));
+        json_response(res, {{"ok", true}, {"items", arr}, {"secrets", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400, "invalid_request");
+    }
 }
 
-void WorldbuildingHttpHandler::handle_secret_create(const httplib::Request&, httplib::Response& res) {
-    error_response(res, "Not yet implemented", 501);
+void WorldbuildingHttpHandler::handle_secret_create(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        worldbuilding::Secret secret;
+        secret.holder_id = body.value("holder_id", body.value("title", ""));
+        secret.truth = body.value("truth", "");
+        secret.public_version = body.value("public_version", "");
+        secret.stakes = body.value("stakes", "");
+        if (body.contains("aware_character_ids") && body["aware_character_ids"].is_array()) {
+            for (const auto& id : body["aware_character_ids"]) secret.aware_character_ids.push_back(id.get<std::string>());
+        }
+        if (body.contains("suspicious_character_ids") && body["suspicious_character_ids"].is_array()) {
+            for (const auto& id : body["suspicious_character_ids"]) secret.suspicious_character_ids.push_back(id.get<std::string>());
+        }
+        if (body.contains("related_foreshadowing_ids") && body["related_foreshadowing_ids"].is_array()) {
+            for (const auto& id : body["related_foreshadowing_ids"]) secret.related_foreshadowing_ids.push_back(id.get<std::string>());
+        }
+        auto created = service_->create_secret(wid, secret);
+        emit_story_update(runtime_, body.value("session_id", ""), wid, "secret", created.id);
+        json_response(res, {{"ok", true}, {"item", secret_json(created)}, {"secret_id", created.id}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
 }
 
 // --- Agent prompt handler ---

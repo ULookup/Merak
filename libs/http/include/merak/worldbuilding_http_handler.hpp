@@ -8,18 +8,23 @@
 
 namespace merak {
 
+class RuntimeService;
+
 class WorldbuildingHttpHandler {
 public:
     explicit WorldbuildingHttpHandler(
-        std::shared_ptr<worldbuilding::WorldbuildingService> service);
+        std::shared_ptr<worldbuilding::WorldbuildingService> service,
+        std::shared_ptr<RuntimeService> runtime = nullptr);
 
     void install_routes(httplib::Server& server);
 
 private:
     std::shared_ptr<worldbuilding::WorldbuildingService> service_;
+    std::shared_ptr<RuntimeService> runtime_;
 
     // World
     void handle_list_worlds(const httplib::Request&, httplib::Response&);
+    void handle_get_world(const httplib::Request&, httplib::Response&);
     void handle_create_world(const httplib::Request&, httplib::Response&);
     void handle_delete_world(const httplib::Request&, httplib::Response&);
     void handle_update_world(const httplib::Request&, httplib::Response&);
@@ -30,6 +35,9 @@ private:
     void handle_get_agent(const httplib::Request&, httplib::Response&);
 
     // Narrative
+    void handle_overview(const httplib::Request&, httplib::Response&);
+    void handle_list_chapters(const httplib::Request&, httplib::Response&);
+    void handle_list_scenes(const httplib::Request&, httplib::Response&);
     void handle_scene_new(const httplib::Request&, httplib::Response&);
     void handle_scene_end(const httplib::Request&, httplib::Response&);
 

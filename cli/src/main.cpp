@@ -218,7 +218,7 @@ static int run_server(int argc,char**argv) {
     // Register Worldbuilding HTTP routes
     std::shared_ptr<WorldbuildingHttpHandler> wb_handler;
     if (wb_service) {
-        wb_handler = std::make_shared<WorldbuildingHttpHandler>(wb_service);
+        wb_handler = std::make_shared<WorldbuildingHttpHandler>(wb_service, runtime);
         wb_handler->install_routes(server.raw_server());
     }
     auto port=parse_port(argc,argv);std::cout<<"merak serve listening on 127.0.0.1:"<<port<<"\n";server.listen(port);return 0;

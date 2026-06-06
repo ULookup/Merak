@@ -40,6 +40,8 @@ public:
     HttpResult handle_create_session(const std::string& title = "");
     HttpResult handle_get_session(const std::string& id) const;
     HttpResult handle_update_session(const std::string& id, const std::string& title);
+    HttpResult handle_archive_session(const std::string& id, bool archived);
+    HttpResult handle_run_detail(const std::string& id) const;
     HttpResult handle_create_delegation(
         const std::string& session_id,
         const DelegationRequest& request);
@@ -53,6 +55,10 @@ private:
     void handle_config_set(const httplib::Request& req, httplib::Response& res);
     void handle_config_test(const httplib::Request& req, httplib::Response& res);
     void handle_workspace_open(const httplib::Request& req, httplib::Response& res);
+    void handle_capabilities(const httplib::Request& req, httplib::Response& res);
+    void handle_workspace_files_list(const httplib::Request& req, httplib::Response& res);
+    void handle_workspace_file_content_get(const httplib::Request& req, httplib::Response& res);
+    void handle_workspace_file_content_put(const httplib::Request& req, httplib::Response& res);
 
     std::shared_ptr<LlmProvider> llm_provider_;
     nlohmann::json cached_config_;

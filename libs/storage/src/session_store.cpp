@@ -171,6 +171,31 @@ void SessionStore::update_session(const std::string& id, const std::string& titl
     }
     sqlite3_finalize(s);
 }
+SessionRecord SessionStore::archive_session(const std::string& id, bool archived) {
+    std::lock_guard lock(mutex_);
+    sqlite3_stmt* s = nullptr;
+    sqlite3_prepare_v2(db_,
+        "UPDATE sessions SET archived_at = ?, updated_at = ? WHERE id = ?",
+        -1, &s, nullptr);
+    auto timestamp = now_iso();
+    bind_text(s, 1, archived ? timestamp : "");
+    bind_text(s, 2, timestamp);
+    bind_text(s, 3, id);
+    expect_done(s, "archive session");
+    sqlite3_finalize(s);
+
+    sqlite3_prepare_v2(db_,
+        "SELECT id,title,last_seq,created_at,updated_at,archived_at FROM sessions WHERE id=?",
+        -1, &s, nullptr);
+    bind_text(s, 1, id);
+    if (sqlite3_step(s) != SQLITE_ROW) {
+        sqlite3_finalize(s);
+        throw std::runtime_error("session not found");
+    }
+    SessionRecord r{col(s,0),col(s,1),sqlite3_column_int64(s,2),col(s,3),col(s,4),col(s,5)};
+    sqlite3_finalize(s);
+    return r;
+}
 std::optional<SessionRecord> SessionStore::get_session(const std::string& id) const {
     std::lock_guard lock(mutex_); sqlite3_stmt* s=nullptr;
     sqlite3_prepare_v2(db_,"SELECT id,title,last_seq,created_at,updated_at,archived_at FROM sessions WHERE id=?",-1,&s,nullptr); bind_text(s,1,id);

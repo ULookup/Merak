@@ -13,7 +13,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 22px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.72);
   box-shadow: var(--shadow-md);
   backdrop-filter: blur(18px);
