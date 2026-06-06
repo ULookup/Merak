@@ -52,6 +52,7 @@ private:
     void handle_config_get(const httplib::Request& req, httplib::Response& res);
     void handle_config_set(const httplib::Request& req, httplib::Response& res);
     void handle_config_test(const httplib::Request& req, httplib::Response& res);
+    void handle_workspace_open(const httplib::Request& req, httplib::Response& res);
 
     std::shared_ptr<LlmProvider> llm_provider_;
     nlohmann::json cached_config_;

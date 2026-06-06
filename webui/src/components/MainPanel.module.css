@@ -41,6 +41,12 @@
   box-shadow: var(--shadow-md);
 }
 
+.iconBtn svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
 .title {
   color: var(--ink);
   font-weight: 900;

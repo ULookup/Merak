@@ -192,6 +192,9 @@
   position: absolute;
   top: 8px;
   right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   background: rgba(255, 255, 255, 0.88);
   border: 1px solid var(--border);
   color: var(--muted);
@@ -205,6 +208,12 @@
     transform 180ms var(--ease),
     color 180ms var(--ease),
     background 180ms var(--ease);
+}
+
+.copyBtn svg {
+  width: 13px;
+  height: 13px;
+  display: block;
 }
 
 .copyBtn:hover {

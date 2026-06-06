@@ -1,4 +1,6 @@
 import { useEffect } from 'react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppStateProvider, useAppState } from '../AppState';
@@ -10,6 +12,96 @@ import ToolCell from '../components/cells/ToolCell';
 import UserCell from '../components/cells/UserCell';
 import ChatTimeline from '../components/ChatTimeline';
 import InspectorPanel from '../components/InspectorPanel';
+import MainPanel from '../components/MainPanel';
+import SessionList from '../components/Sidebar/SessionList';
+import WorldSelector from '../components/Sidebar/WorldSelector';
+import { ToastProvider } from '../components/Toast';
+
+function TimelineHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({
+      type: 'SET_METADATA',
+      metadata: {
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+        models: [
+          { name: 'claude-sonnet-4-6', provider: 'anthropic', max_context_tokens: 200000 },
+        ],
+        permission_mode: 'default',
+        memory: { enabled: true },
+        tools: [],
+        mcp_servers: [],
+        agents: [],
+        delegation_patterns: ['fan_out', 'sequential', 'pipeline'],
+      },
+    });
+    dispatch({ type: 'SET_CURRENT_RUN', runId: 'run_1' });
+    dispatch({ type: 'SET_STATUS', status: 'thinking' });
+    dispatch({ type: 'SET_USAGE', inputTokens: 1200, outputTokens: 80 });
+  }, [dispatch]);
+
+  return <ChatTimeline connectionState="connected" />;
+}
+
+function StreamingMarkdownHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'UPDATE_ASSISTANT', text: '## Plan\n\n' });
+    dispatch({ type: 'UPDATE_ASSISTANT', text: '**First** step\n\n```ts\nconst ok = true;\n```' });
+  }, [dispatch]);
+
+  return <ChatTimeline />;
+}
+
+function SessionIconHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({
+      type: 'SET_SESSION',
+      sessionId: 'session_1',
+    });
+    dispatch({
+      type: 'SET_SESSIONS',
+      sessions: [
+        {
+          id: 'session_1',
+          title: 'Planning scene',
+          last_seq: 2,
+          created_at: '2026-06-06T10:30:00Z',
+          updated_at: '2026-06-06T10:35:00Z',
+          archived_at: null,
+        },
+      ],
+    });
+  }, [dispatch]);
+
+  return <SessionList />;
+}
+
+function WorldIconHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({
+      type: 'SET_WORLDS',
+      worlds: [
+        {
+          id: 'world_1',
+          name: 'Northreach',
+          description: 'Snowbound border city',
+          created_at: '2026-06-06T10:00:00Z',
+        },
+      ],
+    });
+    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
+  }, [dispatch]);
+
+  return <WorldSelector />;
+}
 
 describe('Cell components', () => {
   it('BrandMark renders the Merak logo accessibly', () => {
@@ -27,6 +119,74 @@ describe('Cell components', () => {
 
     expect(screen.getByRole('img', { name: 'Scene ready mark' })).toBeDefined();
     expect(screen.queryByText('M')).toBeNull();
+  });
+
+  it('ChatTimeline shows live agent status outside the message stream', async () => {
+    render(
+      <AppStateProvider>
+        <TimelineHarness />
+      </AppStateProvider>,
+    );
+
+    expect(await screen.findAllByText('Thinking')).toHaveLength(2);
+    expect(screen.getByText('SSE connected')).toBeDefined();
+    expect(screen.getByText('claude-sonnet-4-6')).toBeDefined();
+    expect(screen.getByText('1.3K tokens')).toBeDefined();
+  });
+
+  it('ChatTimeline renders streamed assistant markdown', async () => {
+    render(
+      <AppStateProvider>
+        <StreamingMarkdownHarness />
+      </AppStateProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Plan' })).toBeDefined();
+    expect(screen.getByText('First').tagName.toLowerCase()).toBe('strong');
+    expect(
+      screen.getByText((_, element) => {
+        const normalized = element?.textContent?.replace(/\s+/g, ' ').trim();
+        return element?.tagName.toLowerCase() === 'code' && normalized === 'const ok = true;';
+      }),
+    ).toBeDefined();
+  });
+
+  it('MainPanel uses real SVG icons for navigation controls', () => {
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <MainPanel connectionState="connected" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Open sidebar' }).querySelector('svg')).toBeDefined();
+    expect(
+      screen.getByRole('button', { name: 'Open inspector' }).querySelector('svg'),
+    ).toBeDefined();
+    expect(screen.queryByText('☰')).toBeNull();
+    expect(screen.queryByText('◫')).toBeNull();
+  });
+
+  it('AssistantCell copy action uses real SVG icons', () => {
+    render(<AssistantCell text="Copy me" />);
+    const button = screen.getByRole('button', { name: 'Copy message' });
+    expect(button.querySelector('svg')).toBeDefined();
+    expect(screen.queryByText('⧉ Copy')).toBeNull();
+  });
+
+  it('Sidebar session and world actions use real SVG icons', async () => {
+    render(
+      <AppStateProvider>
+        <SessionIconHarness />
+        <WorldIconHarness />
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'New session' }).querySelector('svg')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Generate title' }).querySelector('svg')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Edit world' }).querySelector('svg')).toBeDefined();
+    expect(screen.queryByText('+')).toBeNull();
   });
 
   it('UserCell renders text', () => {
@@ -59,6 +219,25 @@ describe('Cell components', () => {
     render(<ToolCell toolName="grep" toolOutput="results" />);
     expect(screen.getByText('grep')).toBeDefined();
     expect(screen.getByText('done')).toBeDefined();
+  });
+});
+
+describe('Icon source hygiene', () => {
+  it('does not use emoji or symbol placeholders for functional icons', () => {
+    const files = [
+      'src/components/MainPanel.tsx',
+      'src/components/cells/AssistantCell.tsx',
+      'src/components/Sidebar/SessionList.tsx',
+      'src/components/Sidebar/WorldSelector.tsx',
+      'src/components/Sidebar.tsx',
+    ];
+    const source = files
+      .map((file) => readFileSync(join(process.cwd(), file), 'utf8'))
+      .join('\n');
+
+    expect(source).not.toMatch(/[☰◫✎⧉✓]/);
+    expect(source).not.toContain('鉁?');
+    expect(source).not.toContain('脳');
   });
 });
 

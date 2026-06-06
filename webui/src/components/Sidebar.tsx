@@ -1,3 +1,4 @@
+import { X } from 'lucide-react';
 import BrandMark from './BrandMark';
 import styles from './Sidebar.module.css';
 import ContextMeter from './Sidebar/ContextMeter';
@@ -26,7 +27,7 @@ export default function Sidebar({ open = true, onClose }: SidebarProps) {
         aria-label="Close sidebar"
         data-testid="close-sidebar-btn"
       >
-        &#10005;
+        <X size={17} aria-hidden="true" strokeWidth={2.4} />
       </button>
       <div className={styles.brandSection}>
         <BrandMark />

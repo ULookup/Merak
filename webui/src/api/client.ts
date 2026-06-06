@@ -1,6 +1,27 @@
+import type {
+  AgentListResponse,
+  ApprovalResponse,
+  CancelRunResponse,
+  CreateSessionResponse,
+  ForeshadowingListResponse,
+  GenerateTitleResponse,
+  LlmConfig,
+  OkResponse,
+  OpenWorkspacePathResponse,
+  RuntimeMetadata,
+  SecretListResponse,
+  SessionListResponse,
+  SessionSummary,
+  StartRunResponse,
+  UpdateSessionResponse,
+  UpdateWorldResponse,
+  WorldListResponse,
+  WorldTimeResponse,
+} from './types';
+
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
-async function request(method: string, path: string, body?: unknown) {
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const opts: RequestInit = {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -17,32 +38,42 @@ async function request(method: string, path: string, body?: unknown) {
     throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
   }
   if (res.status >= 400) {
-    throw new Error((json as { error?: { message?: string } })?.error?.message ?? `HTTP ${res.status}`);
+    const error = (json as { error?: { message?: string } | string; message?: string }).error;
+    const message =
+      typeof error === 'string'
+        ? error
+        : (error?.message ?? (json as { message?: string }).message ?? `HTTP ${res.status}`);
+    throw new Error(message);
   }
-  return json;
+  return json as T;
 }
 
 export const api = {
-  metadata: () => request('GET', '/v1/runtime'),
+  metadata: () => request<RuntimeMetadata>('GET', '/v1/runtime'),
 
-  createSession: (title = '') => request('POST', '/v1/sessions', { title }),
+  createSession: (title = '') => request<CreateSessionResponse>('POST', '/v1/sessions', { title }),
 
   updateSession: (id: string, title: string) =>
-    request('PATCH', `/v1/sessions/${id}`, { title }),
+    request<UpdateSessionResponse>('PATCH', `/v1/sessions/${id}`, { title }),
 
   generateTitle: (id: string) =>
-    request('POST', `/v1/sessions/${id}/generate-title`),
+    request<GenerateTitleResponse>('POST', `/v1/sessions/${id}/generate-title`),
 
-  listSessions: () => request('GET', '/v1/sessions'),
+  listSessions: () => request<SessionListResponse>('GET', '/v1/sessions'),
 
-  getSession: (id: string) => request('GET', `/v1/sessions/${id}`),
+  getSession: (id: string) => request<SessionSummary>('GET', `/v1/sessions/${id}`),
 
-  events: (id: string, after = 0) => request('GET', `/v1/sessions/${id}/events?after=${after}`),
+  events: (id: string, after = 0) =>
+    request<{ events: unknown[] }>('GET', `/v1/sessions/${id}/events?after=${after}`),
 
-  memory: (id: string) => request('GET', `/v1/sessions/${id}/memory`),
+  memory: (id: string) =>
+    request<{ session_id: string; items: unknown[] }>('GET', `/v1/sessions/${id}/memory`),
 
   startRun: (id: string, message: string, model = '') =>
-    request('POST', `/v1/sessions/${id}/runs`, { message, ...(model ? { model } : {}) }),
+    request<StartRunResponse>('POST', `/v1/sessions/${id}/runs`, {
+      message,
+      ...(model ? { model } : {}),
+    }),
 
   startDelegation: (
     id: string,
@@ -50,30 +81,43 @@ export const api = {
     agents: string[],
     task: string,
     aggregation = 'all_results',
-  ) => request('POST', `/v1/sessions/${id}/delegations`, { pattern, agents, task, aggregation }),
+  ) =>
+    request<{ delegation_id: string; parent_run_id: string; session_id: string }>(
+      'POST',
+      `/v1/sessions/${id}/delegations`,
+      { pattern, agents, task, aggregation },
+    ),
 
   resolveApproval: (id: string, allow: boolean) =>
-    request('POST', `/v1/approvals/${id}`, { decision: allow ? 'allow' : 'deny' }),
+    request<ApprovalResponse>('POST', `/v1/approvals/${id}`, {
+      decision: allow ? 'allow' : 'deny',
+    }),
 
-  cancelRun: (id: string) => request('POST', `/v1/runs/${id}/cancel`),
+  cancelRun: (id: string) => request<CancelRunResponse>('POST', `/v1/runs/${id}/cancel`),
 
-  listWorlds: () => request('GET', '/api/worldbuilding/worlds'),
+  listWorlds: () => request<WorldListResponse>('GET', '/api/worldbuilding/worlds'),
 
   updateWorld: (id: string, name?: string, description?: string) =>
-    request('PATCH', `/api/worldbuilding/worlds/${id}`, { name, description }),
+    request<UpdateWorldResponse>('PATCH', `/api/worldbuilding/worlds/${id}`, {
+      name,
+      description,
+    }),
 
-  listAgents: (worldId: string) => request('GET', `/api/worldbuilding/${worldId}/agents`),
+  listAgents: (worldId: string) =>
+    request<AgentListResponse>('GET', `/api/worldbuilding/${worldId}/agents`),
 
   listForeshadowing: (worldId: string) =>
-    request('GET', `/api/worldbuilding/${worldId}/foreshadowing`),
+    request<ForeshadowingListResponse>('GET', `/api/worldbuilding/${worldId}/foreshadowing`),
 
-  listSecrets: (worldId: string) => request('GET', `/api/worldbuilding/${worldId}/secrets`),
+  listSecrets: (worldId: string) =>
+    request<SecretListResponse>('GET', `/api/worldbuilding/${worldId}/secrets`),
 
-  getWorldTime: (worldId: string) => request('GET', `/api/worldbuilding/${worldId}/time`),
+  getWorldTime: (worldId: string) =>
+    request<WorldTimeResponse>('GET', `/api/worldbuilding/${worldId}/time`),
 
-  sseUrl: (id: string, after = 0) => `${BASE}/v1/sessions/${id}/events/stream?after=${after}`,
+  sseUrl: (id: string) => `${BASE}/v1/sessions/${id}/events/stream`,
 
-  getConfig: () => request('GET', '/api/config/llm'),
+  getConfig: () => request<LlmConfig>('GET', '/api/config/llm'),
 
   saveConfig: (config: {
     provider?: string;
@@ -81,7 +125,10 @@ export const api = {
     api_base_url?: string;
     default_model?: string;
     max_output_tokens?: number;
-  }) => request('POST', '/api/config/llm', config),
+  }) => request<OkResponse>('POST', '/api/config/llm', config),
 
-  testConfig: () => request('POST', '/api/config/llm/test'),
+  testConfig: () => request<OkResponse>('POST', '/api/config/llm/test'),
+
+  openWorkspacePath: (path: string, reveal = false) =>
+    request<OpenWorkspacePathResponse>('POST', '/api/workspace/open', { path, reveal }),
 };

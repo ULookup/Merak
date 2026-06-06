@@ -280,14 +280,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, status: 'idle' };
 
     case 'SET_STATUS':
-      return {
-        ...state,
-        status: action.status,
-        messages: [
-          ...state.messages,
-          { id: msgId(), kind: 'status_pill', statusLabel: action.status },
-        ],
-      };
+      return { ...state, status: action.status };
 
     case 'SET_USAGE':
       return {
@@ -391,28 +384,33 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       });
 
     case 'run_completed':
-      return reducer(reducer(state, { type: 'COMMIT_ACTIVE' }), {
-        type: 'SET_CURRENT_RUN',
-        runId: null,
-      });
+      return reducer(
+        reducer(reducer(state, { type: 'COMMIT_ACTIVE' }), {
+          type: 'SET_CURRENT_RUN',
+          runId: null,
+        }),
+        { type: 'SET_STATUS', status: 'idle' },
+      );
 
     case 'run_failed':
     case 'run_cancelled':
     case 'run_interrupted':
-      return reducer(
-        reducer(state, { type: 'COMMIT_ACTIVE' }),
-        type === 'run_failed'
-          ? {
-              type: 'APPEND_MESSAGE',
-              message: {
-                id: msgId(),
-                kind: 'system',
-                text: (p.error as string) ?? 'Run failed',
-                error: true,
-              },
-            }
-          : { type: 'SET_CURRENT_RUN', runId: null },
-      );
+      state = reducer(reducer(state, { type: 'COMMIT_ACTIVE' }), {
+        type: 'SET_CURRENT_RUN',
+        runId: null,
+      });
+      state = reducer(state, { type: 'SET_STATUS', status: 'idle' });
+      return type === 'run_failed'
+        ? reducer(state, {
+            type: 'APPEND_MESSAGE',
+            message: {
+              id: msgId(),
+              kind: 'system',
+              text: (p.error as string) ?? 'Run failed',
+              error: true,
+            },
+          })
+        : state;
 
     default:
       return state;

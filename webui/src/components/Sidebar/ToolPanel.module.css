@@ -28,17 +28,10 @@
 }
 
 .icon {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-.iconSafe {
-  background: var(--teal);
-}
-
-.iconAsk {
-  background: var(--amber);
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--teal);
 }
 
 .badge {

@@ -54,6 +54,10 @@
 }
 
 .sendBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   background: linear-gradient(135deg, var(--brand-strong), var(--brand), #b8892c);
   color: #fff;
   border: none;
@@ -81,6 +85,10 @@
 }
 
 .cancelBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   background: var(--ruby-soft);
   color: var(--ruby);
   border: none;
@@ -90,6 +98,13 @@
   font-weight: 850;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.sendBtn svg,
+.cancelBtn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 .cancelBtn:hover {
   transform: translateY(-2px);

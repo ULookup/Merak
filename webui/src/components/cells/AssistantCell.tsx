@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { Check, Copy } from 'lucide-react';
 import rehypeHighlight from 'rehype-highlight';
 import styles from './Cells.module.css';
 
@@ -31,7 +32,17 @@ export default function AssistantCell({ text }: Props) {
         className={`${styles.copyBtn} ${copied ? styles.copyBtnDone : ''}`}
         aria-label={copied ? 'Copied' : 'Copy message'}
       >
-        {copied ? '✓ Copied' : '⧉ Copy'}
+        {copied ? (
+          <>
+            <Check size={13} aria-hidden="true" strokeWidth={2.6} />
+            Copied
+          </>
+        ) : (
+          <>
+            <Copy size={13} aria-hidden="true" strokeWidth={2.3} />
+            Copy
+          </>
+        )}
       </button>
     </div>
   );

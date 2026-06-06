@@ -154,6 +154,12 @@
   color: var(--ink);
 }
 
+.closeBtn svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
 @media (max-width: 767px) {
   .overlay {
     display: block;
