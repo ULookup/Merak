@@ -5,6 +5,8 @@
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
+#include <cctype>
+#include <filesystem>
 #include <sstream>
 #include <thread>
 
@@ -37,6 +39,15 @@ bool valid_pattern(const std::string& pattern) {
 }
 bool valid_aggregation(const std::string& aggregation) {
     return aggregation == "all_results" || aggregation == "first_success";
+}
+std::string run_step_name(TurnState state) {
+    auto name = state_name_json(state);
+    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (name == "thinking" || name == "acting" || name == "observing" || name == "responding")
+        return name;
+    return "";
 }
 std::string join_agent_outputs(const std::vector<AgentResponse>& responses,
                                const std::vector<std::string>& agent_ids,
@@ -77,14 +88,48 @@ public:
         if (normal == "usage_updated") return "sub_run_usage_updated";
         return normal;
     }
-    void emit_state(TurnState from,TurnState to)override{service_.emit(run_.session_id,run_.id,event_name("state_changed"),base_payload({{"from",state_name_json(from)},{"to",state_name_json(to)}}));}
+    void emit_state(TurnState from,TurnState to)override{
+        service_.emit(run_.session_id,run_.id,event_name("state_changed"),base_payload({{"from",state_name_json(from)},{"to",state_name_json(to)}}));
+        auto step = run_step_name(to);
+        if (!step.empty()) {
+            service_.emit(run_.session_id,run_.id,"run_step_changed",base_payload({
+                {"run_id",run_.id},
+                {"step",step},
+                {"label",state_name_json(to)}
+            }));
+        }
+    }
     void emit_text_delta(std::string text)override{service_.emit(run_.session_id,run_.id,event_name("text_delta"),base_payload({{"text",std::move(text)}}));}
     void emit_tool_started(const ToolCall&c)override{service_.emit(run_.session_id,run_.id,event_name("tool_started"),base_payload({{"id",c.id},{"name",c.name},{"arguments",c.arguments}}));}
-    void emit_tool_completed(const ToolCall&c,const ToolResult&r)override{service_.emit(run_.session_id,run_.id,event_name("tool_completed"),base_payload({{"id",c.id},{"name",c.name},{"output",r.output},{"is_error",r.is_error}}));}
+    void emit_tool_completed(const ToolCall&c,const ToolResult&r)override{
+        service_.emit(run_.session_id,run_.id,event_name("tool_completed"),base_payload({{"id",c.id},{"name",c.name},{"output",r.output},{"is_error",r.is_error}}));
+        if (r.is_error || c.name != "write_file") return;
+        try {
+            auto output = nlohmann::json::parse(r.output);
+            auto path_value = output.value("path", "");
+            if (path_value.empty()) return;
+            std::filesystem::path path(path_value);
+            auto event_type = output.value("created", false)
+                ? "workspace_file_created"
+                : "workspace_file_updated";
+            nlohmann::json payload{
+                {"path", path_value},
+                {"name", path.filename().string()},
+                {"ext", path.has_extension() ? path.extension().string().substr(1) : ""},
+                {"run_id", run_.id},
+                {"session_id", run_.session_id}
+            };
+            if (output.contains("bytes_written")) payload["size"] = output["bytes_written"];
+            service_.emit(run_.session_id,run_.id,event_type,base_payload(std::move(payload)));
+        } catch (const std::exception& e) {
+            spdlog::debug("write_file result did not produce workspace file SSE: {}", e.what());
+        }
+    }
     bool await_approval(const ToolCall&c)override{
         ApprovalRecord a; a.run_id=run_.id;a.tool_name=c.name;a.arguments_json=c.arguments;a.tool_call_id=c.id;
         a=service_.store_.create_approval(std::move(a));service_.store_.update_run_status(run_.id,RunStatus::WaitingApproval);
         service_.emit(run_.session_id,run_.id,"approval_requested",base_payload({{"approval_id",a.id},{"tool",c.name},{"arguments",c.arguments},{"tool_call_id",c.id}}));
+        service_.emit(run_.session_id,run_.id,"run_step_changed",base_payload({{"run_id",run_.id},{"step","waiting_approval"},{"label","Waiting approval"},{"detail",c.name}}));
         std::unique_lock lock(mutex_);changed_.wait(lock,[&]{return decision_.has_value()||token_->cancelled();});
         if(token_->cancelled())return false;service_.store_.update_run_status(run_.id,RunStatus::Running);return *decision_;
     }
@@ -210,6 +255,7 @@ void RuntimeService::initialize(){store_.initialize();for(const auto&r:store_.in
 RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const std::string&t,nlohmann::json p){RuntimeEvent e{0,"",s,r,t,std::move(p)};try{e=store_.append_event(e);}catch(const nlohmann::json::exception&ex){spdlog::warn("Failed to serialize event {}: {}",t,ex.what());}catch(const std::exception&){throw;}bus_.publish(e);return e;}
 SessionRecord RuntimeService::create_session(const std::string&title){auto s=store_.create_session(title);emit(s.id,"","session_created",{{"title",title}});return *store_.get_session(s.id);}
 void RuntimeService::update_session(const std::string&id,const std::string&title){store_.update_session(id,title);emit(id,"","session_updated",{{"title",title}});}
+SessionRecord RuntimeService::archive_session(const std::string&id,bool archived){auto s=store_.archive_session(id,archived);emit(id,"","session_updated",{{"archived",archived},{"archived_at",s.archived_at}});return s;}
 std::string RuntimeService::generate_title(const std::string&session_id){
     auto events=store_.events_after(session_id,0);
     std::string context;
@@ -423,6 +469,36 @@ nlohmann::json RuntimeService::resolve_creation(
                         {"decision", decision},
                         {"result", result}
                     });
+                    if (result.value("ok", false) && pending) {
+                        std::string resource_type;
+                        std::string resource_id;
+                        if (result.contains("scene_id")) {
+                            resource_type = "scene";
+                            resource_id = result.value("scene_id", "");
+                        } else if (result.contains("chapter_id")) {
+                            resource_type = "chapter";
+                            resource_id = result.value("chapter_id", "");
+                        } else if (result.contains("arc_id")) {
+                            resource_type = "arc";
+                            resource_id = result.value("arc_id", "");
+                        } else if (result.contains("secret_id")) {
+                            resource_type = "secret";
+                            resource_id = result.value("secret_id", "");
+                        } else if (result.contains("foreshadowing_id")) {
+                            resource_type = "foreshadowing";
+                            resource_id = result.value("foreshadowing_id", "");
+                        } else if (result.contains("agent_id")) {
+                            resource_type = "agent";
+                            resource_id = result.value("agent_id", "");
+                        }
+                        if (!resource_type.empty() && !resource_id.empty()) {
+                            emit(run->session_id, run_id, "story_context_updated", {
+                                {"world_id", pending->world_id},
+                                {"resource_type", resource_type},
+                                {"resource_id", resource_id}
+                            });
+                        }
+                    }
                 }
                 break;
             }
@@ -434,6 +510,7 @@ nlohmann::json RuntimeService::resolve_creation(
 void RuntimeService::cancel_run(const std::string&id){auto r=store_.get_run(id);if(!r)throw RuntimeError("run_not_found","Run does not exist");if(r->status==RunStatus::Completed||r->status==RunStatus::Failed||r->status==RunStatus::Cancelled)return;std::vector<std::string>children;{std::lock_guard lock(mutex_);auto child_it=child_runs_.find(id);if(child_it!=child_runs_.end())children=child_it->second;auto control=controls_.find(id);if(control!=controls_.end())control->second->cancel();else{auto token=tokens_.find(id);if(token!=tokens_.end())token->second->cancel();}for(const auto&child:children){auto child_control=controls_.find(child);if(child_control!=controls_.end())child_control->second->cancel();}}for(const auto&child:children){if(auto sub=store_.get_run(child);sub&&sub->status!=RunStatus::Completed&&sub->status!=RunStatus::Failed&&sub->status!=RunStatus::Cancelled){store_.update_run_status(child,RunStatus::Cancelled);emit(sub->session_id,child,"sub_run_completed",{{"run_id",child},{"parent_run_id",id},{"delegation_id",sub->delegation_id},{"agent_id",sub->agent_id},{"status","cancelled"}});}}store_.update_run_status(id,RunStatus::Cancelled);emit(r->session_id,id,"run_cancelled");}
 std::vector<RuntimeEvent>RuntimeService::events_after(const std::string&id,long long after)const{if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return store_.events_after(id,after);}
 std::shared_ptr<EventSubscription>RuntimeService::subscribe(const std::string&id){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return bus_.subscribe(id);}
+RuntimeEvent RuntimeService::emit_event(const std::string&id,const std::string&run_id,const std::string&type,nlohmann::json payload){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return emit(id,run_id,type,std::move(payload));}
 
 std::vector<Message>RuntimeService::restore_messages(const std::string&id)const{std::vector<Message>out;for(const auto&e:store_.events_after(id,0)){if(e.type=="message_appended")out.push_back(message_from_json(e.payload));else if(e.type=="compaction_applied"&&!out.empty()){auto summary=out.back();out.pop_back();auto count=std::min<size_t>(e.payload.value("replaced_count",0),out.size());out.erase(out.begin(),out.begin()+static_cast<long>(count));out.insert(out.begin(),std::move(summary));}}return out;}
 void RuntimeService::resume_after_restarted_approval(RunRecord run,ApprovalRecord approval,bool allowed){
