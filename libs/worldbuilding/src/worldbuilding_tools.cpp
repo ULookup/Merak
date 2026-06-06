@@ -1123,6 +1123,131 @@ std::future<ToolResult> CreateSecretTool::execute(ToolCall call, ToolExecutionCo
     });
 }
 
+// ========== AddWorldKnowledgeTool ==========
+
+ToolSpec AddWorldKnowledgeTool::spec() const {
+    ToolSpec s;
+    s.name = "add_world_knowledge";
+    s.description = R"(Add a new world knowledge entry. Required: category, content. Optional: tags, related_ids/related_entity_ids. Returns a creation preview for confirmation.)";
+    s.source = "builtin";
+    s.requires_confirmation = true;
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "category": {"type": "string"},
+            "content": {"type": "string"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "related_ids": {"type": "array", "items": {"type": "string"}},
+            "related_entity_ids": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["category", "content"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> AddWorldKnowledgeTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::string category = args.value("category", "");
+            std::string content = args.value("content", "");
+
+            if (category.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "添加世界知识失败。缺少必填字段：category。");
+                return result;
+            }
+            if (content.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "添加世界知识失败。缺少必填字段：content。");
+                return result;
+            }
+
+            auto& svc = *static_cast<AddWorldKnowledgeTool&>(*self).svc_;
+            auto& ctx = static_cast<AddWorldKnowledgeTool&>(*self).ctx_;
+
+            auto preview = svc.build_world_knowledge_preview(ctx.world_id, args);
+            auto creation_id = svc.store_pending_creation(ctx.world_id, "add_world_knowledge", args, preview);
+
+            json output;
+            output["ok"] = true;
+            output["status"] = "pending_creation";
+            output["creation_id"] = creation_id;
+            output["tool"] = "add_world_knowledge";
+            output["preview"] = preview;
+            result.output = output.dump();
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("add_world_knowledge 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
+// ========== CreateLocationTool ==========
+
+ToolSpec CreateLocationTool::spec() const {
+    ToolSpec s;
+    s.name = "create_location";
+    s.description = R"(Create a new location in the current world. Required: name. Optional: description, region, parent_location_id. Returns a creation preview for confirmation.)";
+    s.source = "builtin";
+    s.requires_confirmation = true;
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "description": {"type": "string"},
+            "region": {"type": "string"},
+            "parent_location_id": {"type": "string"}
+        },
+        "required": ["name"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> CreateLocationTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::string name = args.value("name", "");
+
+            if (name.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "创建地点失败。缺少必填字段：name。");
+                return result;
+            }
+
+            auto& svc = *static_cast<CreateLocationTool&>(*self).svc_;
+            auto& ctx = static_cast<CreateLocationTool&>(*self).ctx_;
+
+            auto preview = svc.build_location_preview(ctx.world_id, args);
+            auto creation_id = svc.store_pending_creation(ctx.world_id, "create_location", args, preview);
+
+            json output;
+            output["ok"] = true;
+            output["status"] = "pending_creation";
+            output["creation_id"] = creation_id;
+            output["tool"] = "create_location";
+            output["preview"] = preview;
+            result.output = output.dump();
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("create_location 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
 // ========== PlantForeshadowingTool ==========
 
 ToolSpec PlantForeshadowingTool::spec() const {

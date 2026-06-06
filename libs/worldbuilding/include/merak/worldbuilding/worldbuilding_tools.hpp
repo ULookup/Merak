@@ -342,6 +342,38 @@ private:
     ToolContext ctx_;
 };
 
+class AddWorldKnowledgeTool : public Tool {
+public:
+    AddWorldKnowledgeTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::ask; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<AddWorldKnowledgeTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return false; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
+class CreateLocationTool : public Tool {
+public:
+    CreateLocationTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::ask; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<CreateLocationTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return false; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
 class PlantForeshadowingTool : public Tool {
 public:
     PlantForeshadowingTool(WorldbuildingService& svc, ToolContext ctx)
