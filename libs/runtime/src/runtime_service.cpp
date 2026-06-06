@@ -123,6 +123,32 @@ void RuntimeService::initialize(){store_.initialize();for(const auto&r:store_.in
 RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const std::string&t,nlohmann::json p){RuntimeEvent e{0,"",s,r,t,std::move(p)};try{e=store_.append_event(e);}catch(const nlohmann::json::exception&ex){spdlog::warn("Failed to serialize event {}: {}",t,ex.what());}catch(const std::exception&){throw;}bus_.publish(e);return e;}
 SessionRecord RuntimeService::create_session(const std::string&title){auto s=store_.create_session(title);emit(s.id,"","session_created",{{"title",title}});return *store_.get_session(s.id);}
 void RuntimeService::update_session(const std::string&id,const std::string&title){store_.update_session(id,title);emit(id,"","session_updated",{{"title",title}});}
+std::string RuntimeService::generate_title(const std::string&session_id){
+    auto events=store_.events_after(session_id,0);
+    std::string context;
+    int user_msgs=0;
+    for(auto it=events.rbegin();it!=events.rend()&&user_msgs<3;++it){
+        if(it->type=="message_appended"&&it->payload.value("role","")=="user"){
+            context=it->payload.value("content","")+"\n"+context;
+            user_msgs++;
+        }
+    }
+    if(context.empty())return"";
+    std::string prompt="Based on these user messages, generate a short title (max 20 characters) "
+                       "that summarizes the conversation topic. Reply with ONLY the title, nothing else.\n\n"
+                       +context;
+    if(!loop_factory_)return"";
+    auto loop=loop_factory_("");
+    NullRunControl control;
+    auto response=loop->run(prompt,control).get();
+    std::string result=response.text;
+    size_t start=result.find_first_not_of(" \t\n\r");
+    if(start==std::string::npos)return"";
+    size_t end=result.find_last_not_of(" \t\n\r");
+    result=result.substr(start,end-start+1);
+    if(result.size()>50)result=result.substr(0,50);
+    return result;
+}
 std::vector<SessionRecord>RuntimeService::list_sessions()const{return store_.list_sessions();}
 std::optional<SessionRecord>RuntimeService::get_session(const std::string&id)const{return store_.get_session(id);}
 std::optional<RunRecord>RuntimeService::get_run(const std::string&id)const{return store_.get_run(id);}

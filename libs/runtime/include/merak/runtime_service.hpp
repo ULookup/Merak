@@ -79,6 +79,7 @@ public:
     void initialize();
     SessionRecord create_session(const std::string& title = "");
     void update_session(const std::string& id, const std::string& title);
+    std::string generate_title(const std::string& session_id);
     std::vector<SessionRecord> list_sessions() const;
     std::optional<SessionRecord> get_session(const std::string& id) const;
     std::optional<RunRecord> get_run(const std::string& id) const;
