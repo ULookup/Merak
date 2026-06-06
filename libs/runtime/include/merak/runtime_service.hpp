@@ -14,6 +14,8 @@
 #include <filesystem>
 #include <vector>
 
+namespace merak::worldbuilding { class WorldbuildingService; }
+
 namespace merak {
 
 struct AgentMetadata {
@@ -91,6 +93,10 @@ public:
         const DelegationRequest& request);
     std::vector<AgentMetadata> agents() const;
     ApprovalRecord resolve_approval(const std::string& id, ApprovalStatus status);
+    void set_worldbuilding_service(merak::worldbuilding::WorldbuildingService* wb_service);
+    nlohmann::json resolve_creation(const std::string& creation_id,
+                                    const std::string& decision,
+                                    const nlohmann::json& modifications);
     void cancel_run(const std::string& id);
     std::vector<RuntimeEvent> events_after(const std::string& session_id, long long after) const;
     std::shared_ptr<EventSubscription> subscribe(const std::string& session_id);
@@ -108,6 +114,7 @@ private:
     std::map<std::string, std::vector<std::string>> child_runs_;
     std::map<std::string, std::shared_ptr<AgentLoop>> session_loops_;
     std::mutex session_loops_mutex_;
+    merak::worldbuilding::WorldbuildingService* wb_service_ = nullptr;
     RuntimeEvent emit(const std::string& session_id, const std::string& run_id,
                       const std::string& type, nlohmann::json payload = {});
     void execute_run(RunRecord run, std::string model);

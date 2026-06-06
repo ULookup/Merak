@@ -6,5 +6,6 @@ target_link_libraries(merak-runtime PUBLIC
     merak-core
     merak-storage
     merak-loop
+    merak-worldbuilding
     nlohmann_json::nlohmann_json
 )

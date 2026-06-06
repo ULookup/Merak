@@ -29,6 +29,7 @@ public:
     virtual void emit_tool_started(const ToolCall& call) = 0;
     virtual void emit_tool_completed(const ToolCall& call, const ToolResult& result) = 0;
     virtual bool await_approval(const ToolCall& call) = 0;
+    virtual ToolResult await_creation(const ToolCall& call, const ToolResult& preliminary_result) = 0;
     virtual void emit_usage(int input_tokens, int output_tokens, bool exact) = 0;
     virtual void append_message(const Message& message) = 0;
     virtual void record_compaction(int replaced_count) = 0;
@@ -44,6 +45,12 @@ public:
     void emit_tool_started(const ToolCall&) override {}
     void emit_tool_completed(const ToolCall&, const ToolResult&) override {}
     bool await_approval(const ToolCall&) override { return true; }
+    ToolResult await_creation(const ToolCall& call, const ToolResult&) override {
+        ToolResult r;
+        r.call_id = call.id;
+        r.output = R"({"ok":true,"message":"null creation"})";
+        return r;
+    }
     void emit_usage(int, int, bool) override {}
     void append_message(const Message&) override {}
     void record_compaction(int) override {}

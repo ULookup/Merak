@@ -1,6 +1,7 @@
 #include <merak/runtime_service.hpp>
 #include <merak/turn_state.hpp>
 #include <merak/prompts/compositor.hpp>
+#include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
@@ -87,8 +88,55 @@ public:
         std::unique_lock lock(mutex_);changed_.wait(lock,[&]{return decision_.has_value()||token_->cancelled();});
         if(token_->cancelled())return false;service_.store_.update_run_status(run_.id,RunStatus::Running);return *decision_;
     }
+    ToolResult await_creation(const ToolCall& call, const ToolResult& preliminary_result) override {
+        auto prelim_json = nlohmann::json::parse(preliminary_result.output);
+        std::string creation_id = prelim_json.value("creation_id", "");
+        awaiting_creation_id_ = creation_id;
+
+        auto pending = service_.wb_service_->get_pending_creation(creation_id);
+        if (!pending) {
+            ToolResult error_result;
+            error_result.call_id = call.id;
+            error_result.is_error = true;
+            error_result.output = R"({"ok":false,"error":{"code":"NOT_FOUND","message":"creation not found"}})";
+            return error_result;
+        }
+
+        service_.emit(run_.session_id, run_.id, "creation_requested", base_payload({
+            {"creation_id", creation_id},
+            {"tool", pending->tool_name},
+            {"preview", pending->preview}
+        }));
+
+        {
+            std::unique_lock lock(creation_mutex_);
+            creation_changed_.wait(lock, [&] {
+                return creation_resolved_.has_value() || token_->cancelled();
+            });
+        }
+
+        if (token_->cancelled()) {
+            ToolResult cancelled;
+            cancelled.call_id = call.id;
+            cancelled.is_error = true;
+            cancelled.output = R"({"ok":false,"error":{"code":"CANCELLED","message":"run cancelled"}})";
+            return cancelled;
+        }
+
+        ToolResult final_result;
+        final_result.call_id = call.id;
+        final_result.output = creation_resolved_->dump();
+        creation_resolved_.reset();
+        return final_result;
+    }
+    void resolve_creation_result(nlohmann::json result) {
+        std::lock_guard lock(creation_mutex_);
+        creation_resolved_ = std::move(result);
+        creation_changed_.notify_all();
+    }
+    const std::string& awaiting_creation_id() const { return awaiting_creation_id_; }
     void resolve(bool allowed){std::lock_guard lock(mutex_);decision_=allowed;changed_.notify_all();}
-    void cancel(){token_->cancel();std::lock_guard lock(mutex_);changed_.notify_all();}
+    void cancel(){token_->cancel();std::lock_guard lock(mutex_);changed_.notify_all();creation_changed_.notify_all();}
     void emit_usage(int in,int out,bool exact)override{service_.emit(run_.session_id,run_.id,event_name("usage_updated"),base_payload({{"input_tokens",in},{"output_tokens",out},{"exact",exact}}));}
     void append_message(const Message&m)override{service_.emit(run_.session_id,run_.id,"message_appended",message_json(m));}
     void record_compaction(int count)override{service_.emit(run_.session_id,run_.id,"compaction_applied",{{"replaced_count",count}});}
@@ -96,6 +144,7 @@ public:
     std::shared_ptr<CancellationToken>cancellation_token()const override{return token_;}
 private:
     RuntimeService&service_;RunRecord run_;std::shared_ptr<CancellationToken>token_;std::mutex mutex_;std::condition_variable changed_;std::optional<bool>decision_;
+    std::mutex creation_mutex_;std::condition_variable creation_changed_;std::optional<nlohmann::json>creation_resolved_;std::string awaiting_creation_id_;
 };
 
 std::string RuntimeService::extract_title(const std::string& message, size_t max_len) {
@@ -281,6 +330,44 @@ void RuntimeService::execute_delegation(RunRecord parent,DelegationRequest reque
     std::lock_guard lock(mutex_);tokens_.erase(parent.id);controls_.erase(parent.id);child_runs_.erase(parent.id);
 }
 ApprovalRecord RuntimeService::resolve_approval(const std::string&id,ApprovalStatus status){auto a=store_.resolve_approval(id,status);auto run=store_.get_run(a.run_id);if(!run)throw RuntimeError("run_not_found","Run does not exist");emit(run->session_id,run->id,"approval_resolved",{{"approval_id",id},{"decision",to_string(a.status)}});std::shared_ptr<Control>control;{std::lock_guard lock(mutex_);auto it=controls_.find(run->id);if(it!=controls_.end())control=it->second;}if(control)control->resolve(a.status==ApprovalStatus::Allowed);else if(run->status==RunStatus::WaitingApproval)resume_after_restarted_approval(*run,a,a.status==ApprovalStatus::Allowed);return a;}
+void RuntimeService::set_worldbuilding_service(worldbuilding::WorldbuildingService* wb_service) {
+    wb_service_ = wb_service;
+}
+nlohmann::json RuntimeService::resolve_creation(
+        const std::string& creation_id,
+        const std::string& decision,
+        const nlohmann::json& modifications) {
+    if (!wb_service_) {
+        throw RuntimeError("worldbuilding_not_available", "Worldbuilding service not configured");
+    }
+
+    std::string tool_name;
+    auto pending = wb_service_->get_pending_creation(creation_id);
+    if (pending) tool_name = pending->tool_name;
+
+    auto result = wb_service_->resolve_creation(creation_id, decision, modifications);
+
+    {
+        std::lock_guard lock(mutex_);
+        for (auto& [run_id, control] : controls_) {
+            if (control->awaiting_creation_id() == creation_id) {
+                control->resolve_creation_result(result);
+                auto run = store_.get_run(run_id);
+                if (run) {
+                    emit(run->session_id, run_id, "creation_resolved", {
+                        {"creation_id", creation_id},
+                        {"tool", tool_name},
+                        {"decision", decision},
+                        {"result", result}
+                    });
+                }
+                break;
+            }
+        }
+    }
+
+    return result;
+}
 void RuntimeService::cancel_run(const std::string&id){auto r=store_.get_run(id);if(!r)throw RuntimeError("run_not_found","Run does not exist");if(r->status==RunStatus::Completed||r->status==RunStatus::Failed||r->status==RunStatus::Cancelled)return;std::vector<std::string>children;{std::lock_guard lock(mutex_);auto child_it=child_runs_.find(id);if(child_it!=child_runs_.end())children=child_it->second;auto control=controls_.find(id);if(control!=controls_.end())control->second->cancel();else{auto token=tokens_.find(id);if(token!=tokens_.end())token->second->cancel();}for(const auto&child:children){auto child_control=controls_.find(child);if(child_control!=controls_.end())child_control->second->cancel();}}for(const auto&child:children){if(auto sub=store_.get_run(child);sub&&sub->status!=RunStatus::Completed&&sub->status!=RunStatus::Failed&&sub->status!=RunStatus::Cancelled){store_.update_run_status(child,RunStatus::Cancelled);emit(sub->session_id,child,"sub_run_completed",{{"run_id",child},{"parent_run_id",id},{"delegation_id",sub->delegation_id},{"agent_id",sub->agent_id},{"status","cancelled"}});}}store_.update_run_status(id,RunStatus::Cancelled);emit(r->session_id,id,"run_cancelled");}
 std::vector<RuntimeEvent>RuntimeService::events_after(const std::string&id,long long after)const{if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return store_.events_after(id,after);}
 std::shared_ptr<EventSubscription>RuntimeService::subscribe(const std::string&id){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return bus_.subscribe(id);}
