@@ -194,6 +194,7 @@ bool WorldStore::delete_world(const std::string& world_id) {
     conn.exec("BEGIN");
     try {
         conn.execute("DELETE FROM world_knowledge WHERE world_id = $1", {world_id});
+        conn.execute("DELETE FROM locations WHERE world_id = $1", {world_id});
         conn.execute("DELETE FROM agents WHERE world_id = $1", {world_id});
         int affected = conn.execute("DELETE FROM worlds WHERE id = $1", {world_id});
         conn.exec("COMMIT");
@@ -297,6 +298,65 @@ WorldStore::search_world_knowledge(const std::string& world_id,
         items.push_back(world_knowledge_from_row(fallback, i));
     }
     return items;
+}
+
+Location location_from_row(const PgResult& res, int row) {
+    Location loc;
+    loc.id = res.get(row, 0);
+    loc.name = res.get(row, 1);
+    loc.description = res.get(row, 2);
+    loc.region = res.get(row, 3);
+    if (!res.is_null(row, 4)) {
+        loc.parent_location_id = res.get(row, 4);
+    }
+    loc.created_at = res.get(row, 5);
+    return loc;
+}
+
+Location WorldStore::add_location(const std::string& world_id, Location location) {
+    if (location.id.empty()) location.id = make_id("loc");
+    if (location.created_at.empty()) location.created_at = now_iso_utc();
+
+    PgConn conn(*pool_);
+    conn.execute(
+        "INSERT INTO locations(id, world_id, name, description, region, "
+        "parent_location_id, created_at) "
+        "VALUES($1, $2, $3, $4, $5, NULLIF($6, ''), $7)",
+        {location.id, world_id, location.name, location.description,
+         location.region,
+         location.parent_location_id.has_value()
+             ? location.parent_location_id.value()
+             : "",
+         location.created_at});
+    return location;
+}
+
+std::optional<Location>
+WorldStore::get_location(const std::string& world_id,
+                         const std::string& location_id) const {
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, name, description, region, parent_location_id, created_at "
+        "FROM locations WHERE world_id = $1 AND id = $2",
+        {world_id, location_id});
+    if (res.ntuples() == 0) return std::nullopt;
+    return location_from_row(res, 0);
+}
+
+std::vector<Location>
+WorldStore::list_locations(const std::string& world_id) const {
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, name, description, region, parent_location_id, created_at "
+        "FROM locations WHERE world_id = $1 "
+        "ORDER BY created_at ASC, id ASC",
+        {world_id});
+
+    std::vector<Location> locations;
+    for (int i = 0; i < res.ntuples(); i++) {
+        locations.push_back(location_from_row(res, i));
+    }
+    return locations;
 }
 
 std::vector<AgentRecord>

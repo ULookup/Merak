@@ -62,6 +62,21 @@ CREATE TRIGGER trg_world_knowledge_tsv
     BEFORE INSERT OR UPDATE OF content ON world_knowledge
     FOR EACH ROW EXECUTE FUNCTION world_knowledge_tsv_trigger();
 
+-- ─── Locations ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS locations (
+    id                  TEXT PRIMARY KEY,
+    world_id            TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    name                TEXT NOT NULL,
+    description         TEXT NOT NULL,
+    region              TEXT NOT NULL,
+    parent_location_id  TEXT,
+    created_at          TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_locations_world
+    ON locations(world_id);
+
 -- ─── Agents ────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS agents (

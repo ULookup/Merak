@@ -39,6 +39,11 @@ public:
                            const std::string& category = "",
                            int max_results = 20) const;
 
+    Location add_location(const std::string& world_id, Location location);
+    std::optional<Location> get_location(const std::string& world_id,
+                                         const std::string& location_id) const;
+    std::vector<Location> list_locations(const std::string& world_id) const;
+
     std::vector<AgentRecord> list_agents(const std::string& world_id) const;
     std::filesystem::path world_path(const std::string& world_id) const;
 
