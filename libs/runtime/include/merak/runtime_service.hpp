@@ -78,6 +78,7 @@ public:
         SubRunExecutor sub_run_executor = {});
     void initialize();
     SessionRecord create_session(const std::string& title = "");
+    void update_session(const std::string& id, const std::string& title);
     std::vector<SessionRecord> list_sessions() const;
     std::optional<SessionRecord> get_session(const std::string& id) const;
     std::optional<RunRecord> get_run(const std::string& id) const;
@@ -120,6 +121,7 @@ private:
     void resume_after_restarted_approval(
         RunRecord run, ApprovalRecord approval, bool allowed);
     std::vector<Message> restore_messages(const std::string& session_id) const;
+    static std::string extract_title(const std::string& message, size_t max_len = 50);
 };
 
 } // namespace merak

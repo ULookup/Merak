@@ -98,14 +98,43 @@ private:
     RuntimeService&service_;RunRecord run_;std::shared_ptr<CancellationToken>token_;std::mutex mutex_;std::condition_variable changed_;std::optional<bool>decision_;
 };
 
+std::string RuntimeService::extract_title(const std::string& message, size_t max_len) {
+    size_t start = 0;
+    while (start < message.size() && (message[start] == ' ' || message[start] == '\n' || message[start] == '\r' || message[start] == '\t'))
+        start++;
+    if (start >= message.size()) return "";
+
+    size_t end = message.size();
+    while (end > start && (message[end-1] == ' ' || message[end-1] == '\n' || message[end-1] == '\r' || message[end-1] == '\t'))
+        end--;
+
+    std::string trimmed = message.substr(start, end - start);
+
+    size_t nl = trimmed.find('\n');
+    if (nl != std::string::npos) trimmed = trimmed.substr(0, nl);
+
+    if (trimmed.size() > max_len) trimmed = trimmed.substr(0, max_len);
+
+    return trimmed;
+}
+
 RuntimeService::RuntimeService(std::filesystem::path root,LoopFactory factory,std::map<std::string, SubAgentConfig> agents,SubRunExecutor sub_run_executor):store_(std::move(root)),loop_factory_(std::move(factory)),agents_(std::move(agents)),sub_run_executor_(std::move(sub_run_executor)){}
 void RuntimeService::initialize(){store_.initialize();for(const auto&r:store_.interrupt_running_runs())emit(r.session_id,r.id,"run_interrupted",{{"reason","server restarted"}});}
 RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const std::string&t,nlohmann::json p){RuntimeEvent e{0,"",s,r,t,std::move(p)};try{e=store_.append_event(e);}catch(const nlohmann::json::exception&ex){spdlog::warn("Failed to serialize event {}: {}",t,ex.what());}catch(const std::exception&){throw;}bus_.publish(e);return e;}
 SessionRecord RuntimeService::create_session(const std::string&title){auto s=store_.create_session(title);emit(s.id,"","session_created",{{"title",title}});return *store_.get_session(s.id);}
+void RuntimeService::update_session(const std::string&id,const std::string&title){store_.update_session(id,title);emit(id,"","session_updated",{{"title",title}});}
 std::vector<SessionRecord>RuntimeService::list_sessions()const{return store_.list_sessions();}
 std::optional<SessionRecord>RuntimeService::get_session(const std::string&id)const{return store_.get_session(id);}
 std::optional<RunRecord>RuntimeService::get_run(const std::string&id)const{return store_.get_run(id);}
-RunRecord RuntimeService::create_run_record(const std::string&s,const std::string&m){if(!store_.get_session(s))throw RuntimeError("session_not_found","Session does not exist");if(store_.has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");auto r=store_.create_run(s,m);emit(s,r.id,"run_started",{{"message",m}});return r;}
+RunRecord RuntimeService::create_run_record(const std::string&s,const std::string&m){if(!store_.get_session(s))throw RuntimeError("session_not_found","Session does not exist");if(store_.has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");auto r=store_.create_run(s,m);emit(s,r.id,"run_started",{{"message",m}});
+    auto session = store_.get_session(s);
+    if (session && session->last_seq == 0 && session->title.empty()) {
+        std::string auto_title = extract_title(m);
+        if (!auto_title.empty()) {
+            store_.update_session(s, auto_title);
+        }
+    }
+    return r;}
 RunRecord RuntimeService::start_run(const std::string&s,const std::string&m,const std::string&model){auto r=create_run_record(s,m);if(!loop_factory_)throw RuntimeError("runtime_unconfigured","Agent loop is not configured");std::thread([self=shared_from_this(),r,model]{self->execute_run(r,model);}).detach();return r;}
 std::vector<AgentMetadata> RuntimeService::agents() const {
 	std::vector<AgentMetadata> out;
