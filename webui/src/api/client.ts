@@ -27,6 +27,12 @@ export const api = {
 
   createSession: (title = '') => request('POST', '/v1/sessions', { title }),
 
+  updateSession: (id: string, title: string) =>
+    request('PATCH', `/v1/sessions/${id}`, { title }),
+
+  generateTitle: (id: string) =>
+    request('POST', `/v1/sessions/${id}/generate-title`),
+
   listSessions: () => request('GET', '/v1/sessions'),
 
   getSession: (id: string) => request('GET', `/v1/sessions/${id}`),
@@ -52,6 +58,9 @@ export const api = {
   cancelRun: (id: string) => request('POST', `/v1/runs/${id}/cancel`),
 
   listWorlds: () => request('GET', '/api/worldbuilding/worlds'),
+
+  updateWorld: (id: string, name?: string, description?: string) =>
+    request('PATCH', `/api/worldbuilding/worlds/${id}`, { name, description }),
 
   listAgents: (worldId: string) => request('GET', `/api/worldbuilding/${worldId}/agents`),
 
