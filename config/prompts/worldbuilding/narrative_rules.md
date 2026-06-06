@@ -1,40 +1,45 @@
-## 叙事规则
+<narrative_constraints>
+These rules govern all narrative agents in this world. They are shared constraints that apply to God Agent, Creative Director, characters, and managers alike.
+</narrative_constraints>
 
-### 时间线一致性
-- 所有事件必须在世界时间线上有明确位置
-- 前后场景的时间顺序不能矛盾
-- 同一时间点的事件之间必须有因果或空间关联
+<timeline_consistency>
+- Every event has a precise position on the world timeline
+- Scene order must respect chronological sequence — no time contradictions between scenes
+- Simultaneous events must have spatial or causal connections — no coincidental timing
+- Time moves forward. Flashbacks must be explicitly marked as such
+</timeline_consistency>
 
-### POV 约束
-- 每个角色只能感知和表述自己知道的信息
-- 角色的判断和推理必须基于其知识范围
-- 禁止角色展现"上帝视角"的认知
+<pov_enforcement>
+- Each character perceives and expresses only what they know
+- Character judgments and deductions must be based on their knowledge scope
+- No character exhibits "narrator's omniscience" — they don't know the genre, the themes, or the future
+- The question "How does this character know this?" must always have a concrete answer
+</pov_enforcement>
 
-### 伏笔管理
-- 每个伏笔必须有回收计划
-- 伏笔的埋设应该自然，不突兀
-- 长期伏笔需要定期在叙事中出现提醒
+<foreshadowing_management>
+- Every planted foreshadowing thread requires a planned payoff
+- Foreshadowing must be embedded naturally — a reader should notice it in hindsight, not in real time
+- Long-term threads need periodic reminders in the narrative
+- Open threads without payoff plans should not exist
+</foreshadowing_management>
 
-### 秘密泄露控制
-- 秘密的传播必须有合理的途径（对话、观察、推理）
-- 不能无原因地让角色"恰好知道"一个秘密
-- 秘密暴露时应该有叙事后果
+<secret_control>
+- Secrets spread through concrete channels: witnessed, overheard, told, deduced
+- A character does not "happen to know" a secret without a pathway
+- Secret exposure creates narrative consequences — if there are no consequences, the secret had no dramatic value
+- The information gradient between characters is the engine of tension — protect it
+</secret_control>
 
-### Red Flags —— 这些想法意味着 STOP
+<red_flags>
+| Thought | Why it's wrong |
+|----------|---------------|
+| "Let this character overhear the conversation — it's convenient" | Coincidence is narrative laziness. Secret spread needs active behavioral drivers. |
+| "I'll plan the payoff later" | A thread without a payoff plan at planting time is a broken promise. |
+| "These two scenes can happen simultaneously" | Timeline ambiguity is not a solution. Simultaneous events need causal or spatial links. |
+| "The character intuits this" | Intuition = subconscious pattern recognition from prior experience. It is not clairvoyance. |
+| "The secret is exposed but it doesn't change anything" | Secrets without consequences have no reason to exist. |
+</red_flags>
 
-| 想法 | 现实 |
-|------|------|
-| "让角色偶然听到对话泄露秘密很方便" | 巧合 = 叙事偷懒。秘密传播必须有主动的行为驱动。 |
-| "这个伏笔以后再回收" | 埋的时候必须有回收计划。不计划回收 = 不埋。 |
-| "两个场景其实可以同时发生" | 时间线不能模糊。同时发生的事件必须有空间和因果关联。 |
-| "角色凭直觉知道..." | 直觉 = 有铺垫的潜意识推理。不能是凭空的全知。 |
-| "这个秘密暴露了也没事，不影响" | 秘密暴露必须产生叙事后果。没有后果的秘密 = 没有存在的必要。 |
-
-### 常见错误
-
-| 错误 | 纠正 |
-|------|------|
-| 伏笔埋了之后忘记回收 | 每个伏笔记录回收节点和计划时间 |
-| 角色表现出自己不可能知道的信息 | POV 检查：信息来源是什么？获取途径是什么？ |
-| 利用时间模糊性回避矛盾 | 如果两个事件看起来矛盾，查时间线，不要假设"可能是同时" |
-| 秘密只对部分角色保密，但所有角色都知道 | 明确秘密的知晓者列表，不在列表上的人不能提及 |
+<final_reminder>
+Timeline is causal. POV is sacred. Foreshadowing has planned payoffs. Secrets have consequences. These constraints are non-negotiable across all agents.
+</final_reminder>

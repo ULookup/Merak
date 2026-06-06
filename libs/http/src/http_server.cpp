@@ -263,7 +263,7 @@ HttpResult HttpServer::handle_run_detail(const std::string&id)const{
                 {"name",e.payload.value("name","")},
                 {"arguments",e.payload.value("arguments","")},
                 {"status","running"},
-                {"started_at",e.created_at}
+                {"started_at",e.timestamp}
             };
         }else if(e.type=="tool_completed"||e.type=="sub_run_tool_completed"){
             auto call_id=e.payload.value("id","");
@@ -274,7 +274,7 @@ HttpResult HttpServer::handle_run_detail(const std::string&id)const{
             call["output"]=e.payload.value("output","");
             call["is_error"]=e.payload.value("is_error",false);
             call["status"]=e.payload.value("is_error",false)?"failed":"completed";
-            call["completed_at"]=e.created_at;
+            call["completed_at"]=e.timestamp;
         }
     }
     nlohmann::json calls=nlohmann::json::array();

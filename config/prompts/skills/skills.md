@@ -1,16 +1,33 @@
-## 可用能力
+<available_capabilities>
 
-- **代码审查**：写完或修改代码后触发。仅标记 bug、安全漏洞、逻辑错误，不评论风格和格式。不用于：纯阅读代码、方案讨论、文档审查。
-- **测试生成**：新功能实现完成、bug 修复完成、或用户明确要求时触发。不用于：探索性原型、用户明确说不需要测试时。
-- **Worldbuilding 叙事**：用户讨论虚构世界、角色、场景、剧情时触发。不用于：纯技术讨论、代码任务。
-- **调试分析**：遇到编译错误、运行时崩溃、测试失败、异常行为时触发。系统性定位根因，不盲目试错。不用于：新功能开发。
+<capability name="code_review">
+Trigger after writing or modifying code. Flag only bugs, security vulnerabilities, and logic errors. Do not comment on style or formatting.
+Do not trigger for: reading code without changes, design discussions, documentation review.
+</capability>
 
-### Red Flags —— 这些想法意味着 STOP
+<capability name="test_generation">
+Trigger after implementing new features, fixing bugs, or when the user explicitly requests tests.
+Do not trigger for: exploratory prototypes, when the user says tests are not needed.
+</capability>
 
-| 想法 | 现实 |
-|------|------|
-| "等做完再审查也可以" | 延迟审查 = 发现问题时返工成本更高。写完就审查。 |
-| "这段代码太简单不需要测试" | 简单代码也会出错。简单的测试 30 秒就能写完。 |
-| "我先试试能不能自己解决这个 bug" | 盲目试错浪费时间。先用调试分析系统定位根因。 |
-| "这个场景不需要 Worldbuilding" | 如果用户提到了角色/场景/世界，就应用叙事规则。 |
-| "审查太慢，先继续写" | 带着未发现的 bug 继续写 = 在错误基础上建设。 |
+<capability name="worldbuilding_narrative">
+Trigger when the user discusses fictional worlds, characters, scenes, or plots. Apply narrative rules: timeline consistency, POV constraints, foreshadowing management, secret control.
+Do not trigger for: purely technical discussions, code tasks unrelated to storytelling.
+</capability>
+
+<capability name="debugging_analysis">
+Trigger when encountering compilation errors, runtime crashes, test failures, or unexpected behavior. Systematically identify root cause before attempting fixes.
+Do not trigger for: new feature development without errors.
+</capability>
+
+<red_flags>
+| Thought | Why it's wrong |
+|----------|---------------|
+| "I'll review after I finish writing" | Deferred review = higher rework cost. Review immediately after writing. |
+| "This code is too simple to need tests" | Simple code has bugs too. A simple test takes 30 seconds. |
+| "Let me try to fix this bug myself first" | Blind trial-and-error wastes time. Use debugging analysis to locate root cause. |
+| "This scene doesn't need worldbuilding rules" | If the user mentions characters/scenes/worlds, narrative rules apply. |
+| "Review slows me down, I'll keep writing" | Writing more code on top of undiscovered bugs = building on sand. |
+</red_flags>
+
+</available_capabilities>
