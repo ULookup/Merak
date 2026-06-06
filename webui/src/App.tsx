@@ -149,7 +149,7 @@ function AppInner() {
     return () => {
       cancelled = true;
     };
-  }, [state.worldId, state.sessionId, dispatch]);
+  }, [state.worldId, state.sessionId, state.storyVersion, dispatch]);
 
   const creatingRef = useRef(false);
 

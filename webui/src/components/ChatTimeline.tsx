@@ -35,6 +35,8 @@ function renderMessage(msg: Message) {
           approvalId={msg.approvalId ?? ''}
           approvalName={msg.approvalName ?? ''}
           approvalArgs={msg.approvalArgs}
+          approvalResolved={msg.approvalResolved}
+          approvalDecision={msg.approvalDecision}
         />
       );
     case 'system':
