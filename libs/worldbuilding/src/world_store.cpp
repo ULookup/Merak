@@ -70,6 +70,19 @@ void remove_all_no_throw(const std::filesystem::path& path) noexcept {
     try { std::filesystem::remove_all(path); } catch (...) {}
 }
 
+Location location_from_row(const PgResult& res, int row) {
+    Location loc;
+    loc.id = res.get(row, 0);
+    loc.name = res.get(row, 1);
+    loc.description = res.get(row, 2);
+    loc.region = res.get(row, 3);
+    if (!res.is_null(row, 4)) {
+        loc.parent_location_id = res.get(row, 4);
+    }
+    loc.created_at = res.get(row, 5);
+    return loc;
+}
+
 } // namespace
 
 WorldStore::WorldStore(std::string_view pg_conninfo, std::filesystem::path data_root)
@@ -298,19 +311,6 @@ WorldStore::search_world_knowledge(const std::string& world_id,
         items.push_back(world_knowledge_from_row(fallback, i));
     }
     return items;
-}
-
-Location location_from_row(const PgResult& res, int row) {
-    Location loc;
-    loc.id = res.get(row, 0);
-    loc.name = res.get(row, 1);
-    loc.description = res.get(row, 2);
-    loc.region = res.get(row, 3);
-    if (!res.is_null(row, 4)) {
-        loc.parent_location_id = res.get(row, 4);
-    }
-    loc.created_at = res.get(row, 5);
-    return loc;
 }
 
 Location WorldStore::add_location(const std::string& world_id, Location location) {
