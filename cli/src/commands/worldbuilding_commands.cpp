@@ -86,6 +86,9 @@ parse_worldbuilding_command(const std::string& input,
             } else if (tokens[1] == "delete") {
                 cmd.action = WorldbuildingAction::WorldDelete;
                 if (tokens.size() >= 3) cmd.args = {tokens[2]};
+            } else if (tokens[1] == "rename") {
+                cmd.action = WorldbuildingAction::WorldRename;
+                cmd.args = {tokens.begin() + 2, tokens.end()};
             }
         } else {
             cmd.action = WorldbuildingAction::WorldList;
@@ -312,6 +315,14 @@ std::string execute_worldbuilding_command(const WorldbuildingCommand& cmd,
         }
     };
 
+    auto patch = [&](const std::string& path, const nlohmann::json& body) -> std::string {
+        try {
+            return http("PATCH", path, body).dump(2);
+        } catch (const std::exception& e) {
+            return std::string("Error: ") + e.what();
+        }
+    };
+
     std::string wid = cmd.current_world_id;
     if (requires_world(cmd.action) && wid.empty()) {
         return "Error: select a world first with /world use <id>";
@@ -326,6 +337,21 @@ std::string execute_worldbuilding_command(const WorldbuildingCommand& cmd,
         return "Switched to world: " + (cmd.args.empty() ? "?" : cmd.args[0]);
     case WorldbuildingAction::WorldDelete:
         return del("/api/worldbuilding/worlds/" + (cmd.args.empty() ? "" : cmd.args[0]));
+    case WorldbuildingAction::WorldRename: {
+        std::string world_id = cmd.args.empty() ? "" : cmd.args[0];
+        if (world_id.empty()) {
+            return "Error: Usage: /world rename <world_id> --name <name> --description <desc>";
+        }
+        nlohmann::json body;
+        for (size_t i = 1; i < cmd.args.size(); i++) {
+            if (cmd.args[i] == "--name" && i + 1 < cmd.args.size()) {
+                body["name"] = cmd.args[++i];
+            } else if (cmd.args[i] == "--description" && i + 1 < cmd.args.size()) {
+                body["description"] = cmd.args[++i];
+            }
+        }
+        return patch("/api/worldbuilding/worlds/" + world_id, body);
+    }
     case WorldbuildingAction::AgentList:
         return method("/api/worldbuilding/" + wid + "/agents");
     case WorldbuildingAction::AgentCreate:
@@ -374,7 +400,7 @@ std::string execute_worldbuilding_command(const WorldbuildingCommand& cmd,
 
 std::string worldbuilding_help_text() {
     return R"(Worldbuilding Commands:
-  /world list|create <name>|use <id>|delete <id>
+  /world list|create <name>|use <id>|delete <id>|rename <id> --name <name> --description <desc>
   /agent list|create character|manager|edit|history|delete
   @agent_name <message>     Route message to agent
   @clear                    Clear agent route
