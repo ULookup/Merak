@@ -39,6 +39,7 @@ public:
     HttpResult handle_session_memory(const std::string& id) const;
     HttpResult handle_create_session(const std::string& title = "");
     HttpResult handle_get_session(const std::string& id) const;
+    HttpResult handle_update_session(const std::string& id, const std::string& title);
     HttpResult handle_create_delegation(
         const std::string& session_id,
         const DelegationRequest& request);
