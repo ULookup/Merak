@@ -237,18 +237,17 @@ nlohmann::json WorldbuildingService::resolve_creation(
         scene.chapter_id = final_params.value("chapter_id", "");
         scene.world_time = final_params.value("world_time", "");
         scene.narrative = final_params.value("narrative", "");
-        if (final_params.contains("section_id"))
-            scene.section_id = final_params["section_id"].get<std::string>();
-        if (final_params.contains("location_id"))
-            scene.location_id = final_params["location_id"].get<std::string>();
+        scene.section_id = final_params.value("section_id", "");
+        scene.location_id = final_params.value("location_id", "");
         if (final_params.contains("participant_ids") && final_params["participant_ids"].is_array()) {
             for (auto& pid : final_params["participant_ids"])
-                scene.participant_ids.push_back(pid.get<std::string>());
+                if (pid.is_string())
+                    scene.participant_ids.push_back(pid.get<std::string>());
         }
         scene.status = SceneStatus::Draft;
 
-        pending_creations_.erase(it);
         auto created = narrative().create_scene(pc.world_id, std::move(scene));
+        pending_creations_.erase(it);
         result["scene_id"] = created.id;
 
     } else if (pc.tool_name == "create_chapter") {
@@ -256,13 +255,12 @@ nlohmann::json WorldbuildingService::resolve_creation(
         chapter.title = final_params.value("title", "");
         chapter.pitch = final_params.value("pitch", final_params.value("summary", ""));
         chapter.number = final_params.value("number", final_params.value("order_index", 0));
-        if (final_params.contains("arc_id"))
-            chapter.arc_id = final_params["arc_id"].get<std::string>();
+        chapter.arc_id = final_params.value("arc_id", "");
         chapter.status = ChapterStatus::Outline;
         chapter.emotional_curve = nlohmann::json::array();
 
-        pending_creations_.erase(it);
         auto created = narrative().create_chapter(pc.world_id, std::move(chapter));
+        pending_creations_.erase(it);
         result["chapter_id"] = created.id;
 
     } else if (pc.tool_name == "create_arc") {
@@ -278,11 +276,10 @@ nlohmann::json WorldbuildingService::resolve_creation(
                 if (cn.is_number()) arc.chapter_numbers.push_back(cn.get<int>());
             }
         }
-        if (final_params.contains("climax_scene_id"))
-            arc.climax_scene_id = final_params["climax_scene_id"].get<std::string>();
+        arc.climax_scene_id = final_params.value("climax_scene_id", "");
 
-        pending_creations_.erase(it);
         auto created = narrative().create_arc(pc.world_id, std::move(arc));
+        pending_creations_.erase(it);
         result["arc_id"] = created.id;
 
     } else if (pc.tool_name == "create_secret") {
@@ -293,14 +290,15 @@ nlohmann::json WorldbuildingService::resolve_creation(
         if (!final_params.contains("holder_id") && final_params.contains("holder_agent_ids")
             && final_params["holder_agent_ids"].is_array()
             && !final_params["holder_agent_ids"].empty()) {
-            secret.holder_id = final_params["holder_agent_ids"][0].get<std::string>();
+            if (final_params["holder_agent_ids"][0].is_string())
+                secret.holder_id = final_params["holder_agent_ids"][0].get<std::string>();
         }
         secret.public_version = final_params.value("public_version", "");
         secret.status = SecretStatus::Active;
         secret.believed_truths = nlohmann::json::object();
 
-        pending_creations_.erase(it);
         auto created = secrets().create(pc.world_id, std::move(secret));
+        pending_creations_.erase(it);
         result["secret_id"] = created.id;
 
     } else if (pc.tool_name == "add_world_knowledge") {
@@ -310,19 +308,22 @@ nlohmann::json WorldbuildingService::resolve_creation(
         wk.content = final_params.value("content", "");
         if (final_params.contains("tags") && final_params["tags"].is_array()) {
             for (auto& t : final_params["tags"])
-                wk.tags.push_back(t.get<std::string>());
+                if (t.is_string())
+                    wk.tags.push_back(t.get<std::string>());
         }
         if (final_params.contains("related_ids") && final_params["related_ids"].is_array()) {
             for (auto& rid : final_params["related_ids"])
-                wk.related_ids.push_back(rid.get<std::string>());
+                if (rid.is_string())
+                    wk.related_ids.push_back(rid.get<std::string>());
         } else if (final_params.contains("related_entity_ids")
                    && final_params["related_entity_ids"].is_array()) {
             for (auto& rid : final_params["related_entity_ids"])
-                wk.related_ids.push_back(rid.get<std::string>());
+                if (rid.is_string())
+                    wk.related_ids.push_back(rid.get<std::string>());
         }
 
-        pending_creations_.erase(it);
         worlds().add_world_knowledge(pc.world_id, wk);
+        pending_creations_.erase(it);
         result["knowledge_id"] = wk.id;
 
     } else if (pc.tool_name == "create_location") {
@@ -330,11 +331,10 @@ nlohmann::json WorldbuildingService::resolve_creation(
         loc.name = final_params.value("name", "");
         loc.description = final_params.value("description", "");
         loc.region = final_params.value("region", "");
-        if (final_params.contains("parent_location_id"))
-            loc.parent_location_id = final_params["parent_location_id"].get<std::string>();
+        loc.parent_location_id = final_params.value("parent_location_id", "");
 
-        pending_creations_.erase(it);
         auto created = worlds().add_location(pc.world_id, std::move(loc));
+        pending_creations_.erase(it);
         result["location_id"] = created.id;
 
     } else {
