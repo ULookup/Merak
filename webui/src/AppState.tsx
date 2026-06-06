@@ -72,6 +72,7 @@ export interface AppState {
   editorSaveStatus: 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
   editorError: string | null;
   runTimeline: RunTimelineItem[];
+  storyVersion: number;
 }
 
 export const initialState: AppState = {
@@ -113,6 +114,7 @@ export const initialState: AppState = {
   fileSearch: '',
   fileTypeFilter: 'all',
   activeEditorFileId: null,
+  storyVersion: 0,
   editorBuffers: {},
   editorVersions: {},
   editorSaveStatus: 'idle',
@@ -161,12 +163,13 @@ export type Action =
   | { type: 'SET_TOOL_RUNNING'; toolCallId: string; name: string; args: string }
   | { type: 'SET_TOOL_DONE'; toolCallId: string; output: string; isError: boolean }
   | { type: 'SET_APPROVAL'; approvalId: string; name: string; args: string }
-  | { type: 'CLEAR_APPROVAL' }
+  | { type: 'CLEAR_APPROVAL'; decision?: string }
   | { type: 'SET_STATUS'; status: StatusLabel }
   | { type: 'SET_USAGE'; inputTokens: number; outputTokens: number }
   | { type: 'SET_CURRENT_RUN'; runId: string | null }
   | { type: 'ADD_RUN_TIMELINE_ITEM'; item: RunTimelineItem }
   | { type: 'COMMIT_ACTIVE' }
+  | { type: 'SET_STORY_VERSION' }
   | { type: 'APPLY_SSE'; frame: SseFrame };
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -413,7 +416,18 @@ export function reducer(state: AppState, action: Action): AppState {
       };
 
     case 'CLEAR_APPROVAL':
-      return { ...state, status: 'idle' };
+      return {
+        ...state,
+        status: 'idle',
+        messages: state.messages.map((m) =>
+          m.kind === 'approval' && !m.approvalResolved
+            ? { ...m, approvalResolved: true, approvalDecision: action.decision ?? 'resolved' }
+            : m,
+        ),
+      };
+
+    case 'SET_STORY_VERSION':
+      return { ...state, storyVersion: state.storyVersion + 1 };
 
     case 'SET_STATUS':
       return { ...state, status: action.status };
@@ -487,7 +501,7 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       const to = ((p.to as string) ?? '').toLowerCase();
       // Terminal states have their own events (run_completed/run_failed)
       if (to === 'complete' || to === 'error') return state;
-      const validLabels = new Set(['idle', 'thinking', 'responding', 'acting', 'observing']);
+      const validLabels = new Set(['thinking', 'responding', 'acting', 'observing']);
       const label = validLabels.has(to) ? (to as StatusLabel) : state.status;
       return reducer(reducer(state, { type: 'SET_STATUS', status: label }), {
         type: 'ADD_RUN_TIMELINE_ITEM',
@@ -646,17 +660,20 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
     }
 
     case 'story_context_updated':
-      return reducer(state, {
-        type: 'ADD_RUN_TIMELINE_ITEM',
-        item: {
-          id: `story_${frame.seq}`,
-          type: 'state',
-          label: `Story updated: ${(p.resource_type as string) || 'context'}`,
-          detail: (p.resource_id as string) || '',
-          at: Date.now(),
-          status: 'completed',
+      return reducer(
+        reducer(state, { type: 'SET_STORY_VERSION' }),
+        {
+          type: 'ADD_RUN_TIMELINE_ITEM',
+          item: {
+            id: `story_${frame.seq}`,
+            type: 'state',
+            label: `Story updated: ${(p.resource_type as string) || 'context'}`,
+            detail: (p.resource_id as string) || '',
+            at: Date.now(),
+            status: 'completed',
+          },
         },
-      });
+      );
 
     case 'run_step_changed': {
       const step = ((p.step as string) || 'thinking') as StatusLabel;

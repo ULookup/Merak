@@ -27,6 +27,8 @@ export interface Message {
   approvalId?: string;
   approvalName?: string;
   approvalArgs?: string;
+  approvalResolved?: boolean;
+  approvalDecision?: string;
   statusLabel?: StatusLabel;
   error?: boolean;
 }

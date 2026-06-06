@@ -130,8 +130,8 @@
 .approval {
   align-self: center;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
   padding: 10px 14px;
   background: linear-gradient(135deg, var(--amber-soft), #fff);
   border: 1px solid #f4d58d;
@@ -140,10 +140,71 @@
   color: var(--amber);
   box-shadow: var(--shadow-sm);
   animation: approvalGlow 1.8s ease-in-out infinite alternate;
+  max-width: 640px;
+}
+
+.approvalResolved {
+  animation: none;
+  opacity: 0.65;
+  color: var(--muted);
+  background: linear-gradient(135deg, #f3f4f6, #fff);
+  border-color: var(--border);
+}
+
+.approvalRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .approvalLabel {
   font-weight: 600;
+  white-space: nowrap;
+}
+
+.approvalName {
+  font-family: var(--mono, 'SF Mono', 'Fira Code', monospace);
+  font-size: 11px;
+  color: inherit;
+}
+
+.argsArea {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.argsPre {
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+  font-family: var(--mono, 'SF Mono', 'Fira Code', monospace);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow-y: auto;
+  color: var(--muted);
+}
+
+.argsToggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  color: var(--brand);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.argsToggle:hover {
+  background: rgba(99, 102, 241, 0.08);
 }
 
 .btnAllow,

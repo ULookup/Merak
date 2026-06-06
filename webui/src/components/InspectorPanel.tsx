@@ -18,8 +18,11 @@ const tabs: Array<{ id: InspectorTab; label: string }> = [
   { id: 'run', label: 'Run' },
 ];
 
-function EmptyState() {
-  return <div className={styles.empty}>Select a world to load story context.</div>;
+function EmptyState({ tab }: { tab: InspectorTab }) {
+  if (tab === 'story') return <div className={styles.empty}>Select a world to load story context.</div>;
+  if (tab === 'agents')
+    return <div className={styles.empty}>Select a world to see agent voices.</div>;
+  return null;
 }
 
 function titleForTab(tab: InspectorTab) {
@@ -64,8 +67,8 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
           ))}
         </div>
 
-        {!state.worldId && state.inspectorTab !== 'files' ? (
-          <EmptyState />
+        {!state.worldId && state.inspectorTab !== 'files' && state.inspectorTab !== 'run' ? (
+          <EmptyState tab={state.inspectorTab} />
         ) : (
           <div className={styles.content}>
             {state.inspectorTab === 'story' && <StoryInspector />}
