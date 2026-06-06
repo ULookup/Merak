@@ -1000,6 +1000,129 @@ std::future<ToolResult> CreateChapterTool::execute(ToolCall call, ToolExecutionC
     });
 }
 
+// ========== CreateArcTool ==========
+
+ToolSpec CreateArcTool::spec() const {
+    ToolSpec s;
+    s.name = "create_arc";
+    s.description = R"(Create a new story arc in the current world. Required: title (also accepts name). Optional: purpose/description, chapter_numbers/chapter_ids. Returns a creation preview for confirmation.)";
+    s.source = "builtin";
+    s.requires_confirmation = true;
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "name": {"type": "string"},
+            "purpose": {"type": "string"},
+            "description": {"type": "string"},
+            "chapter_numbers": {"type": "array", "items": {"type": "integer"}},
+            "chapter_ids": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["title"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> CreateArcTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::string title = args.value("title", "");
+            if (title.empty()) title = args.value("name", "");
+
+            if (title.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "创建弧线失败。缺少必填字段：title。");
+                return result;
+            }
+
+            auto& svc = *static_cast<CreateArcTool&>(*self).svc_;
+            auto& ctx = static_cast<CreateArcTool&>(*self).ctx_;
+
+            auto preview = svc.build_arc_preview(ctx.world_id, args);
+            auto creation_id = svc.store_pending_creation(ctx.world_id, "create_arc", args, preview);
+
+            json output;
+            output["ok"] = true;
+            output["status"] = "pending_creation";
+            output["creation_id"] = creation_id;
+            output["tool"] = "create_arc";
+            output["preview"] = preview;
+            result.output = output.dump();
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("create_arc 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
+// ========== CreateSecretTool ==========
+
+ToolSpec CreateSecretTool::spec() const {
+    ToolSpec s;
+    s.name = "create_secret";
+    s.description = R"(Create a new secret in the current world. Required: truth (also accepts content). Optional: holder_id/holder_agent_ids, stakes. Returns a creation preview for confirmation.)";
+    s.source = "builtin";
+    s.requires_confirmation = true;
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "truth": {"type": "string"},
+            "content": {"type": "string"},
+            "holder_id": {"type": "string"},
+            "holder_agent_ids": {"type": "array", "items": {"type": "string"}},
+            "stakes": {"type": "string"}
+        },
+        "required": ["truth"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> CreateSecretTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::string truth = args.value("truth", "");
+            if (truth.empty()) truth = args.value("content", "");
+
+            if (truth.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "创建秘密失败。缺少必填字段：truth。");
+                return result;
+            }
+
+            auto& svc = *static_cast<CreateSecretTool&>(*self).svc_;
+            auto& ctx = static_cast<CreateSecretTool&>(*self).ctx_;
+
+            auto preview = svc.build_secret_preview(ctx.world_id, args);
+            auto creation_id = svc.store_pending_creation(ctx.world_id, "create_secret", args, preview);
+
+            json output;
+            output["ok"] = true;
+            output["status"] = "pending_creation";
+            output["creation_id"] = creation_id;
+            output["tool"] = "create_secret";
+            output["preview"] = preview;
+            result.output = output.dump();
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("create_secret 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
 // ========== PlantForeshadowingTool ==========
 
 ToolSpec PlantForeshadowingTool::spec() const {

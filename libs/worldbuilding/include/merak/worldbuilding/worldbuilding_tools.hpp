@@ -310,6 +310,38 @@ private:
     ToolContext ctx_;
 };
 
+class CreateArcTool : public Tool {
+public:
+    CreateArcTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::ask; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<CreateArcTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return false; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
+class CreateSecretTool : public Tool {
+public:
+    CreateSecretTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::ask; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<CreateSecretTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return false; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
 class PlantForeshadowingTool : public Tool {
 public:
     PlantForeshadowingTool(WorldbuildingService& svc, ToolContext ctx)
