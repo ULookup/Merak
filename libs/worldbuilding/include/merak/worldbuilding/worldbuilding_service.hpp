@@ -8,12 +8,27 @@
 #include <merak/worldbuilding/voice_analyzer.hpp>
 #include <merak/worldbuilding/world_store.hpp>
 
+#include <nlohmann/json.hpp>
+
+#include <chrono>
 #include <filesystem>
+#include <map>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace merak::worldbuilding {
+
+struct PendingCreation {
+    std::string creation_id;
+    std::string tool_name;
+    std::string world_id;
+    nlohmann::json params;
+    nlohmann::json preview;
+    std::chrono::steady_clock::time_point created_at;
+};
 
 class WorldbuildingService {
 public:
@@ -71,6 +86,24 @@ public:
     SecretStore& secrets() noexcept { return secrets_; }
     VoiceAnalyzer& voice() noexcept { return voice_; }
 
+    // Preview builders (no DB write)
+    nlohmann::json build_scene_preview(const std::string& world_id, const nlohmann::json& params);
+    nlohmann::json build_chapter_preview(const std::string& world_id, const nlohmann::json& params);
+    nlohmann::json build_arc_preview(const std::string& world_id, const nlohmann::json& params);
+    nlohmann::json build_secret_preview(const std::string& world_id, const nlohmann::json& params);
+    nlohmann::json build_world_knowledge_preview(const std::string& world_id, const nlohmann::json& params);
+    nlohmann::json build_location_preview(const std::string& world_id, const nlohmann::json& params);
+
+    // Store and retrieve pending creations
+    std::string store_pending_creation(const std::string& world_id, const std::string& tool_name,
+                                        const nlohmann::json& params, const nlohmann::json& preview);
+    std::optional<PendingCreation> get_pending_creation(const std::string& creation_id) const;
+
+    // Resolution (writes to DB on allow/modify)
+    nlohmann::json resolve_creation(const std::string& creation_id,
+                                    const std::string& decision,
+                                    const nlohmann::json& modifications);
+
 private:
     std::filesystem::path root_;
     WorldStore worlds_;
@@ -80,6 +113,13 @@ private:
     SecretStore secrets_;
     VoiceAnalyzer voice_;
     SceneOrchestrator orchestrator_;
+
+    // NOTE: pending_creations_ is in-memory only. On server restart, in-flight
+    // creation confirmations are lost. The tool result in the session history
+    // will still reference the creation_id, but resolution will fail.
+    // TODO: persist pending creations to SessionStore for restart recovery.
+    std::map<std::string, PendingCreation> pending_creations_;
+    mutable std::mutex pending_mutex_;
 };
 
 } // namespace merak::worldbuilding

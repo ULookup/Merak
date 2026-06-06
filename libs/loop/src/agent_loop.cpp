@@ -277,6 +277,18 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
             call, ToolExecutionContext{control.cancellation_token()});
         auto result = result_future.get();
 
+        // Check if this tool requires creation confirmation
+        if (tools_->requires_confirmation(call.name)) {
+            try {
+                auto result_json = nlohmann::json::parse(result.output);
+                if (result_json.contains("creation_id") && result_json.value("status", "") == "pending_creation") {
+                    result = control.await_creation(call, result);
+                }
+            } catch (...) {
+                // Not valid JSON or no creation_id — proceed normally
+            }
+        }
+
         if (result.is_error) {
             tool_failure_streak_[call.name]++;
         } else {

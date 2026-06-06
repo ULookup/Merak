@@ -37,6 +37,15 @@ struct WorldKnowledge {
     std::vector<std::string> related_ids;
 };
 
+struct Location {
+    std::string id;
+    std::string name;
+    std::string description;
+    std::string region;
+    std::optional<std::string> parent_location_id;
+    std::string created_at;
+};
+
 struct WorldTime {
     int day = 1;
     int period = 0; // 0=晨 1=昼 2=午 3=晚 4=夜

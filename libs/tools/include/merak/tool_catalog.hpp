@@ -217,7 +217,7 @@ inline const ToolMeta TOOL_CATALOG[] = {
     },
 
     // ==============================
-    // Worldbuilding (19)
+    // Worldbuilding (25)
     // ==============================
 
     {
@@ -404,6 +404,66 @@ inline const ToolMeta TOOL_CATALOG[] = {
         .name = "update_agent_prompt",
         .description = "Update an agent's system prompt at runtime",
         .triggers = {"更新提示", "update prompt", "修改提示词", "调整角色"},
+        .pinned = false,
+        .intents = {IntentType::DomainWrite},
+        .scope = Scope::Local,
+        .requires_caps = {Capability::Worldbuilding},
+        .schema_tokens = 25,
+    },
+    {
+        .name = "create_scene",
+        .description = "Create a new scene in the current world. Required: title, chapter_id.",
+        .triggers = {"创建场景", "create scene", "新场景", "new scene"},
+        .pinned = false,
+        .intents = {IntentType::DomainWrite},
+        .scope = Scope::Local,
+        .requires_caps = {Capability::Worldbuilding},
+        .schema_tokens = 25,
+    },
+    {
+        .name = "create_chapter",
+        .description = "Create a new chapter/act. Required: title.",
+        .triggers = {"创建章节", "create chapter", "新章节", "new chapter"},
+        .pinned = false,
+        .intents = {IntentType::DomainWrite},
+        .scope = Scope::Local,
+        .requires_caps = {Capability::Worldbuilding},
+        .schema_tokens = 25,
+    },
+    {
+        .name = "create_arc",
+        .description = "Create a new story arc. Required: title.",
+        .triggers = {"创建弧线", "create arc", "新弧线", "new arc", "故事弧"},
+        .pinned = false,
+        .intents = {IntentType::DomainWrite},
+        .scope = Scope::Local,
+        .requires_caps = {Capability::Worldbuilding},
+        .schema_tokens = 25,
+    },
+    {
+        .name = "create_secret",
+        .description = "Create a new secret. Required: truth.",
+        .triggers = {"创建秘密", "create secret", "新秘密", "new secret"},
+        .pinned = false,
+        .intents = {IntentType::DomainWrite},
+        .scope = Scope::Local,
+        .requires_caps = {Capability::Worldbuilding},
+        .schema_tokens = 25,
+    },
+    {
+        .name = "add_world_knowledge",
+        .description = "Add world knowledge (lore, maps, history, magic, factions). Required: category, content.",
+        .triggers = {"添加世界知识", "add world knowledge", "添加设定", "世界知识"},
+        .pinned = false,
+        .intents = {IntentType::DomainWrite},
+        .scope = Scope::Local,
+        .requires_caps = {Capability::Worldbuilding},
+        .schema_tokens = 25,
+    },
+    {
+        .name = "create_location",
+        .description = "Create a new location. Required: name.",
+        .triggers = {"创建地点", "create location", "新地点", "new location", "添加地点"},
         .pinned = false,
         .intents = {IntentType::DomainWrite},
         .scope = Scope::Local,

@@ -193,6 +193,7 @@ static int run_server(int argc,char**argv) {
         return loop->run(task,control).get();
     };
     auto runtime=std::make_shared<RuntimeService>(merak_home(),factory,cfg.agent.sub_agents,sub_executor);runtime->initialize();
+    if (wb_service) runtime->set_worldbuilding_service(wb_service.get());
     RuntimeMetadata metadata;
     metadata.provider = cfg.llm.provider;
     metadata.model = cfg.llm.default_model;
