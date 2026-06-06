@@ -114,6 +114,10 @@ private:
     VoiceAnalyzer voice_;
     SceneOrchestrator orchestrator_;
 
+    // NOTE: pending_creations_ is in-memory only. On server restart, in-flight
+    // creation confirmations are lost. The tool result in the session history
+    // will still reference the creation_id, but resolution will fail.
+    // TODO: persist pending creations to SessionStore for restart recovery.
     std::map<std::string, PendingCreation> pending_creations_;
     mutable std::mutex pending_mutex_;
 };

@@ -117,11 +117,38 @@ public:
             {"preview", pending->preview}
         }));
 
+        bool timed_out = false;
         {
             std::unique_lock lock(creation_mutex_);
-            creation_changed_.wait(lock, [&] {
+            bool woke = creation_changed_.wait_for(lock, std::chrono::minutes(5), [&] {
                 return creation_resolved_.has_value() || token_->cancelled();
             });
+            if (!woke && !token_->cancelled() && !creation_resolved_.has_value()) {
+                timed_out = true;
+            }
+        }
+
+        if (timed_out) {
+            // Auto-resolve as deny on timeout
+            if (service_.wb_service_) {
+                service_.wb_service_->resolve_creation(awaiting_creation_id_, "deny", {});
+            }
+
+            // Emit timeout SSE event
+            service_.emit(run_.session_id, run_.id, "creation_resolved", {
+                {"creation_id", awaiting_creation_id_},
+                {"tool", "unknown"},
+                {"decision", "deny"},
+                {"result", {{"ok", true}, {"decision", "deny"}, {"reason", "timeout"}}}
+            });
+
+            service_.store_.update_run_status(run_.id, RunStatus::Running);
+
+            ToolResult timeout_result;
+            timeout_result.call_id = call.id;
+            timeout_result.is_error = true;
+            timeout_result.output = R"({"ok":false,"error":{"code":"TIMEOUT","message":"Creation confirmation timed out"}})";
+            return timeout_result;
         }
 
         service_.store_.update_run_status(run_.id, RunStatus::Running);
@@ -356,7 +383,32 @@ nlohmann::json RuntimeService::resolve_creation(
     auto pending = wb_service_->get_pending_creation(creation_id);
     if (pending) tool_name = pending->tool_name;
 
-    auto result = wb_service_->resolve_creation(creation_id, decision, modifications);
+    nlohmann::json result;
+    try {
+        result = wb_service_->resolve_creation(creation_id, decision, modifications);
+    } catch (const std::exception& e) {
+        nlohmann::json error_result;
+        error_result["ok"] = false;
+        error_result["error"] = {{"code", "RESOLVE_FAILED"}, {"message", e.what()}};
+
+        std::lock_guard lock(mutex_);
+        for (auto& [run_id, control] : controls_) {
+            if (control->awaiting_creation_id() == creation_id) {
+                control->resolve_creation_result(error_result);
+                auto run = store_.get_run(run_id);
+                if (run) {
+                    emit(run->session_id, run_id, "creation_resolved", {
+                        {"creation_id", creation_id},
+                        {"tool", tool_name},
+                        {"decision", decision},
+                        {"result", error_result}
+                    });
+                }
+                break;
+            }
+        }
+        throw;
+    }
 
     {
         std::lock_guard lock(mutex_);
