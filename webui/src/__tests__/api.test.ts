@@ -19,7 +19,7 @@ describe('api client', () => {
     const result = await api.metadata();
     expect(result.model).toBe('gpt-4o');
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      'http://127.0.0.1:3888/v1/runtime',
+      '/v1/runtime',
       expect.objectContaining({ method: 'GET' }),
     );
   });
@@ -62,22 +62,22 @@ describe('api client', () => {
 
     expect(vi.mocked(fetch)).toHaveBeenNthCalledWith(
       1,
-      'http://127.0.0.1:3888/api/worldbuilding/world_1/agents',
+      '/api/worldbuilding/world_1/agents',
       expect.objectContaining({ method: 'GET' }),
     );
     expect(vi.mocked(fetch)).toHaveBeenNthCalledWith(
       2,
-      'http://127.0.0.1:3888/api/worldbuilding/world_1/foreshadowing',
+      '/api/worldbuilding/world_1/foreshadowing',
       expect.objectContaining({ method: 'GET' }),
     );
     expect(vi.mocked(fetch)).toHaveBeenNthCalledWith(
       3,
-      'http://127.0.0.1:3888/api/worldbuilding/world_1/secrets',
+      '/api/worldbuilding/world_1/secrets',
       expect.objectContaining({ method: 'GET' }),
     );
     expect(vi.mocked(fetch)).toHaveBeenNthCalledWith(
       4,
-      'http://127.0.0.1:3888/api/worldbuilding/world_1/time',
+      '/api/worldbuilding/world_1/time',
       expect.objectContaining({ method: 'GET' }),
     );
   });

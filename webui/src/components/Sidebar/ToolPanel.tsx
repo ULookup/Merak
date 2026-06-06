@@ -1,3 +1,4 @@
+import { Plug, Wrench } from 'lucide-react';
 import { useAppState } from '../../AppState';
 import styles from '../Sidebar.module.css';
 import tpStyles from './ToolPanel.module.css';
@@ -13,9 +14,11 @@ export default function ToolPanel() {
         {tools.map((t) => (
           <div key={t.name} className={tpStyles.row} data-testid="tool-row">
             <div className={tpStyles.rowName}>
-              <span
-                className={`${tpStyles.icon} ${t.source === 'mcp' ? tpStyles.iconAsk : tpStyles.iconSafe}`}
-              />
+              {t.source === 'mcp' ? (
+                <Plug className={tpStyles.icon} size={14} aria-hidden="true" strokeWidth={2.3} />
+              ) : (
+                <Wrench className={tpStyles.icon} size={14} aria-hidden="true" strokeWidth={2.3} />
+              )}
               {t.name}
             </div>
             <span

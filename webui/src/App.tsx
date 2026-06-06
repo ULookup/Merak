@@ -60,9 +60,11 @@ function AppInner() {
           : [];
       const worldTime =
         timeRes.status === 'fulfilled'
-          ? ((timeRes.value.time ?? timeRes.value.world_time ?? timeRes.value.now ?? null) as
-              | string
-              | null)
+          ? ((timeRes.value.label ??
+              timeRes.value.time ??
+              timeRes.value.world_time ??
+              timeRes.value.now ??
+              null) as string | null)
           : null;
 
       const failed = [agentsRes, foreshadowingRes, secretsRes, timeRes].some(
@@ -118,7 +120,7 @@ function AppInner() {
       });
   }, [state.sessionId, dispatch]);
 
-  const sseUrl = state.sessionId ? api.sseUrl(state.sessionId, state.lastSeq) : null;
+  const sseUrl = state.sessionId ? api.sseUrl(state.sessionId) : null;
 
   const connState = useSSE(sseUrl, dispatch, state.lastSeq);
 

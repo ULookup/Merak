@@ -159,12 +159,11 @@ describe('AppState reducer', () => {
     expect(next.status).toBe('idle');
   });
 
-  it('SET_STATUS adds status pill', () => {
+  it('SET_STATUS updates live run status without adding timeline messages', () => {
     const prev = state();
     const next = reducer(prev, { type: 'SET_STATUS', status: 'thinking' });
     expect(next.status).toBe('thinking');
-    expect(next.messages).toHaveLength(1);
-    expect(next.messages[0].kind).toBe('status_pill');
+    expect(next.messages).toHaveLength(0);
   });
 
   it('SET_USAGE accumulates tokens', () => {
@@ -230,11 +229,13 @@ describe('AppState reducer', () => {
     it('commits active and clears run', () => {
       const prev = state({
         currentRun: 'r1',
+        status: 'responding',
         messages: [{ id: 'm1', kind: 'assistant', text: 'Done', toolCallId: 'active' }],
       });
       const frame = { seq: 2, type: 'run_completed', payload: {} };
       const next = reducer(prev, { type: 'APPLY_SSE', frame });
       expect(next.currentRun).toBeNull();
+      expect(next.status).toBe('idle');
       expect(next.messages[0].toolCallId).toBeUndefined();
     });
 
@@ -319,14 +320,16 @@ describe('AppState reducer', () => {
   });
 
   describe('SSE frame: run_failed', () => {
-    it('commits active and adds error message', () => {
-      const prev = state({ currentRun: 'r1' });
+    it('commits active, clears run, returns idle, and adds error message', () => {
+      const prev = state({ currentRun: 'r1', status: 'acting' });
       const frame = {
         seq: 2,
         type: 'run_failed',
         payload: { error: 'Something broke' },
       };
       const next = reducer(prev, { type: 'APPLY_SSE', frame });
+      expect(next.currentRun).toBeNull();
+      expect(next.status).toBe('idle');
       expect(next.messages).toHaveLength(1);
       expect(next.messages[0].kind).toBe('system');
       expect(next.messages[0].text).toBe('Something broke');

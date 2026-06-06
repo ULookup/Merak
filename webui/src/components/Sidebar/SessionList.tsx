@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { useAppState } from '../../AppState';
+import { Plus, Sparkles } from 'lucide-react';
 import { api } from '../../api/client';
+import { useAppState } from '../../AppState';
+import './SessionList.css';
 
 export default function SessionList() {
   const { state, dispatch } = useAppState();
@@ -42,7 +44,7 @@ export default function SessionList() {
       dispatch({
         type: 'SET_SESSIONS',
         sessions: state.sessions.map((s) =>
-          s.id === id ? { ...s, title: updated.title, updated_at: updated.updated_at } : s
+          s.id === id ? { ...s, title: updated.title, updated_at: updated.updated_at } : s,
         ),
       });
     }
@@ -60,7 +62,7 @@ export default function SessionList() {
         dispatch({
           type: 'SET_SESSIONS',
           sessions: state.sessions.map((s) =>
-            s.id === id ? { ...s, title: updated.title, updated_at: updated.updated_at } : s
+            s.id === id ? { ...s, title: updated.title, updated_at: updated.updated_at } : s,
           ),
         });
       }
@@ -70,14 +72,18 @@ export default function SessionList() {
   }
 
   const sessions = [...state.sessions].sort(
-    (a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+    (a, b) =>
+      new Date(b.updated_at || b.created_at).getTime() -
+      new Date(a.updated_at || a.created_at).getTime(),
   );
 
   return (
     <div className="session-list">
       <div className="session-list-header">
         <span>Sessions</span>
-        <button onClick={create} title="New Session">+</button>
+        <button className="session-new-btn" onClick={create} aria-label="New session">
+          <Plus size={15} aria-hidden="true" strokeWidth={2.4} />
+        </button>
       </div>
       <ul>
         {sessions.map((s) => (
@@ -85,7 +91,10 @@ export default function SessionList() {
             key={s.id}
             className={s.id === state.sessionId ? 'active' : ''}
             onClick={() => select(s.id)}
-            onContextMenu={(e) => { e.preventDefault(); startRename(s); }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              startRename(s);
+            }}
           >
             {editingId === s.id ? (
               <input
@@ -104,7 +113,10 @@ export default function SessionList() {
               <>
                 <span
                   className="session-title"
-                  onDoubleClick={(e) => { e.stopPropagation(); startRename(s); }}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    startRename(s);
+                  }}
                   aria-label={s.title || 'New Session'}
                 >
                   {s.title || 'New Session'}
@@ -112,10 +124,13 @@ export default function SessionList() {
                 {s.id === state.sessionId && (
                   <button
                     className="session-generate-btn"
-                    title="Generate title"
-                    onClick={(e) => { e.stopPropagation(); generateTitle(s.id); }}
+                    aria-label="Generate title"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      generateTitle(s.id);
+                    }}
                   >
-                    ✨
+                    <Sparkles size={14} aria-hidden="true" strokeWidth={2.2} />
                   </button>
                 )}
               </>

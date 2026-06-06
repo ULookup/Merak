@@ -11,3 +11,7 @@ target_link_libraries(merak-http PUBLIC
     httplib::httplib
     nlohmann_json::nlohmann_json
 )
+
+if(WIN32)
+    target_link_libraries(merak-http PUBLIC Shell32)
+endif()

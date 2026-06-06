@@ -1,5 +1,19 @@
+import { useState } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  Brain,
+  Clock3,
+  FileText,
+  FolderOpen,
+  Users,
+  Wrench,
+  X,
+} from 'lucide-react';
+import { api } from '../api/client';
 import { useAppState, type InspectorTab } from '../AppState';
 import styles from './InspectorPanel.module.css';
+import { useToast } from './Toast';
 
 interface InspectorPanelProps {
   open?: boolean;
@@ -23,6 +37,8 @@ function statusLabel(value: string | undefined) {
 
 export default function InspectorPanel({ open = true, onClose }: InspectorPanelProps) {
   const { state, dispatch } = useAppState();
+  const { showToast } = useToast();
+  const [openingPath, setOpeningPath] = useState<string | null>(null);
   const selectedWorld = state.worlds.find((world) => world.id === state.worldId);
   const activeFile =
     state.generatedFiles.find((file) => file.id === state.activeEditorFileId) ?? null;
@@ -30,6 +46,19 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
   const model = state.metadata?.models?.find((m) => m.name === state.selectedModel);
   const budget = model?.max_context_tokens ?? 128000;
   const pct = Math.min(100, Math.round((used / budget) * 100));
+
+  async function openWorkspacePath(path: string | null, reveal = false) {
+    if (!path) return;
+    setOpeningPath(path);
+    try {
+      await api.openWorkspacePath(path, reveal);
+      showToast(reveal ? 'File revealed in workspace.' : 'Workspace folder opened.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not open workspace path.', 'error');
+    } finally {
+      setOpeningPath(null);
+    }
+  }
 
   return (
     <aside
@@ -45,7 +74,7 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
             <h2>{state.inspectorTab === 'files' ? 'Output Files' : 'Story Context'}</h2>
           </div>
           <button className={styles.closeBtn} onClick={onClose} aria-label="Close inspector">
-            ×
+            <X size={16} aria-hidden="true" strokeWidth={2.4} />
           </button>
         </header>
 
@@ -85,8 +114,10 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
                     type="button"
                     disabled={!state.outputDirectory}
                     aria-label="Open output folder"
+                    onClick={() => openWorkspacePath(state.outputDirectory)}
                   >
-                    Open folder
+                    <FolderOpen size={14} aria-hidden="true" strokeWidth={2.3} />
+                    {openingPath === state.outputDirectory ? 'Opening...' : 'Open folder'}
                   </button>
                 </section>
 
@@ -112,16 +143,29 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
                             <strong>{file.title}</strong>
                             <code>{file.path}</code>
                           </div>
-                          <button
-                            className={styles.entryButton}
-                            type="button"
-                            aria-label={`Open ${file.title} in editor`}
-                            onClick={() =>
-                              dispatch({ type: 'OPEN_GENERATED_FILE', fileId: file.id })
-                            }
-                          >
-                            Open in editor
-                          </button>
+                          <div className={styles.fileActions}>
+                            <button
+                              className={styles.entryButton}
+                              type="button"
+                              aria-label={`Open ${file.title} in editor`}
+                              onClick={() =>
+                                dispatch({ type: 'OPEN_GENERATED_FILE', fileId: file.id })
+                              }
+                            >
+                              <FileText size={14} aria-hidden="true" strokeWidth={2.3} />
+                              Open in editor
+                            </button>
+                            <button
+                              className={styles.entryButton}
+                              type="button"
+                              aria-label={`Reveal ${file.title} in folder`}
+                              disabled={openingPath === file.path}
+                              onClick={() => openWorkspacePath(file.path, true)}
+                            >
+                              <FolderOpen size={14} aria-hidden="true" strokeWidth={2.3} />
+                              {openingPath === file.path ? 'Opening...' : 'Reveal file'}
+                            </button>
+                          </div>
                         </article>
                       ))}
                     </div>
@@ -229,11 +273,34 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
             {state.inspectorTab === 'run' && (
               <>
                 <section className={styles.runCard}>
-                  <span className={styles.pulse} />
+                  <span className={styles.pulse}>
+                    <Activity size={14} aria-hidden="true" strokeWidth={2.4} />
+                  </span>
                   <div>
                     <div className={styles.sectionTitle}>Current Run</div>
                     <strong>{state.status.replace(/_/g, ' ')}</strong>
                     <p>{state.currentRun ?? 'No active run'}</p>
+                  </div>
+                </section>
+                <section className={styles.section}>
+                  <div className={styles.sectionTitle}>Runtime Signals</div>
+                  <div className={styles.signalGrid}>
+                    <span>
+                      <Brain size={14} aria-hidden="true" />
+                      {state.selectedModel || state.metadata?.model || 'Default model'}
+                    </span>
+                    <span>
+                      <Wrench size={14} aria-hidden="true" />
+                      {(state.metadata?.tools ?? []).length} tools
+                    </span>
+                    <span>
+                      <Users size={14} aria-hidden="true" />
+                      {(state.metadata?.agents ?? []).length} agents
+                    </span>
+                    <span>
+                      <Clock3 size={14} aria-hidden="true" />
+                      {state.metadata?.delegation_patterns?.join(' / ') || 'single run'}
+                    </span>
                   </div>
                 </section>
                 <section className={styles.section}>
@@ -246,7 +313,10 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
                   </p>
                 </section>
                 {state.worldbuildingStatus === 'error' && (
-                  <div className={styles.error}>{state.worldbuildingError}</div>
+                  <div className={styles.error}>
+                    <AlertTriangle size={14} aria-hidden="true" strokeWidth={2.4} />
+                    {state.worldbuildingError}
+                  </div>
                 )}
               </>
             )}

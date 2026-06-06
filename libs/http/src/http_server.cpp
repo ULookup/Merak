@@ -2,6 +2,13 @@
 #include <merak/config_loader.hpp>
 #include <merak/llm_provider.hpp>
 #include <fstream>
+#include <filesystem>
+#include <cstdlib>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
 
 namespace merak {
 namespace {
@@ -14,6 +21,39 @@ DelegationRequest delegation_request_from_json(const nlohmann::json&body){
     request.aggregation=body.value("aggregation","all_results");
     for(const auto&agent:body.value("agents",nlohmann::json::array()))request.agent_ids.push_back(agent.get<std::string>());
     return request;
+}
+
+bool open_path_in_system(const std::filesystem::path& target, bool reveal) {
+#ifdef _WIN32
+    auto path = target.wstring();
+    if (reveal && std::filesystem::is_regular_file(target)) {
+        std::wstring args = L"/select,\"" + path + L"\"";
+        auto result = reinterpret_cast<intptr_t>(
+            ShellExecuteW(nullptr, L"open", L"explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL));
+        return result > 32;
+    }
+    auto result = reinterpret_cast<intptr_t>(
+        ShellExecuteW(nullptr, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    return result > 32;
+#elif __APPLE__
+    auto shell_path = target.string();
+    size_t pos = 0;
+    while ((pos = shell_path.find('\'', pos)) != std::string::npos) {
+        shell_path.replace(pos, 1, "'\\''");
+        pos += 4;
+    }
+    auto command = std::string("open '") + shell_path + "'";
+    return std::system(command.c_str()) == 0;
+#else
+    auto shell_path = target.string();
+    size_t pos = 0;
+    while ((pos = shell_path.find('\'', pos)) != std::string::npos) {
+        shell_path.replace(pos, 1, "'\\''");
+        pos += 4;
+    }
+    auto command = std::string("xdg-open '") + shell_path + "' >/dev/null 2>&1 &";
+    return std::system(command.c_str()) == 0;
+#endif
 }
 }
 HttpServer::HttpServer(std::shared_ptr<RuntimeService>runtime,RuntimeMetadata metadata,
@@ -60,6 +100,7 @@ void HttpServer::install_routes(){
     server_.Get("/api/config/llm", [this](const auto& req, auto& res) { handle_config_get(req, res); });
     server_.Post("/api/config/llm", [this](const auto& req, auto& res) { handle_config_set(req, res); });
     server_.Post("/api/config/llm/test", [this](const auto& req, auto& res) { handle_config_test(req, res); });
+    server_.Post("/api/workspace/open", [this](const auto& req, auto& res) { handle_workspace_open(req, res); });
 }
 void HttpServer::listen(int port){if(!server_.listen("127.0.0.1",port))throw std::runtime_error("Failed to bind to port "+std::to_string(port)+" — already in use?");}
 void HttpServer::stop(){server_.stop();}
@@ -120,6 +161,33 @@ void HttpServer::handle_config_test(const httplib::Request& req, httplib::Respon
         }
     } catch (const std::exception& e) {
         json(res, error("test_failed", e.what(), 502));
+    }
+}
+void HttpServer::handle_workspace_open(const httplib::Request& req, httplib::Response& res) {
+    try {
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        auto raw_path = body.value("path", "");
+        auto reveal = body.value("reveal", false);
+        if (raw_path.empty()) {
+            json(res, error("invalid_path", "path is required", 400));
+            return;
+        }
+
+        std::filesystem::path target = std::filesystem::u8path(raw_path);
+        if (!std::filesystem::exists(target)) {
+            json(res, error("path_not_found", "Path does not exist", 404));
+            return;
+        }
+
+        target = std::filesystem::weakly_canonical(target);
+        if (!open_path_in_system(target, reveal)) {
+            json(res, error("open_failed", "Could not open path", 500));
+            return;
+        }
+
+        res.set_content(nlohmann::json{{"ok", true}, {"path", target.string()}}.dump(), "application/json");
+    } catch (const std::exception& e) {
+        json(res, error("open_failed", e.what(), 500));
     }
 }
 } // namespace merak

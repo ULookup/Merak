@@ -1,3 +1,4 @@
+import { Menu, PanelRight } from 'lucide-react';
 import type { ConnectionState } from '../hooks/useSSE';
 import BrandMark from './BrandMark';
 import ChatTimeline from './ChatTimeline';
@@ -28,7 +29,7 @@ export default function MainPanel({
           aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
           data-testid="menu-btn"
         >
-          <span aria-hidden="true">☰</span>
+          <Menu size={18} aria-hidden="true" strokeWidth={2.2} />
         </button>
         <div className={styles.mobileBrand}>
           <BrandMark compact />
@@ -50,10 +51,10 @@ export default function MainPanel({
           aria-label={inspectorOpen ? 'Close inspector' : 'Open inspector'}
           data-testid="inspector-btn"
         >
-          <span aria-hidden="true">◫</span>
+          <PanelRight size={18} aria-hidden="true" strokeWidth={2.2} />
         </button>
       </header>
-      <ChatTimeline />
+      <ChatTimeline connectionState={connectionState} />
       <Composer />
     </main>
   );

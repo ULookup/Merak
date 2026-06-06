@@ -1,15 +1,27 @@
 import { useState } from 'react';
-import { useAppState } from '../../AppState';
+import { Pencil } from 'lucide-react';
 import { api } from '../../api/client';
+import { useAppState } from '../../AppState';
+import './WorldSelector.css';
 
 export default function WorldSelector() {
   const { state, dispatch } = useAppState();
   const { worlds } = state;
-  const [editWorld, setEditWorld] = useState<{ id: string; name: string; description: string } | null>(null);
+  const [editWorld, setEditWorld] = useState<{
+    id: string;
+    name: string;
+    description: string;
+  } | null>(null);
 
   function openEdit(worldId: string) {
-    const w = worlds.find((w) => w.id === worldId);
-    if (w) setEditWorld({ id: w.id, name: w.name || '', description: w.description || '' });
+    const world = worlds.find((item) => item.id === worldId);
+    if (world) {
+      setEditWorld({
+        id: world.id,
+        name: world.name || '',
+        description: world.description || '',
+      });
+    }
   }
 
   async function saveEdit() {
@@ -17,8 +29,10 @@ export default function WorldSelector() {
     await api.updateWorld(editWorld.id, editWorld.name, editWorld.description);
     dispatch({
       type: 'SET_WORLDS',
-      worlds: worlds.map((w) =>
-        w.id === editWorld.id ? { ...w, name: editWorld.name, description: editWorld.description } : w
+      worlds: worlds.map((world) =>
+        world.id === editWorld.id
+          ? { ...world, name: editWorld.name, description: editWorld.description }
+          : world,
       ),
     });
     setEditWorld(null);
@@ -29,6 +43,7 @@ export default function WorldSelector() {
       <select
         value={state.worldId ?? ''}
         onChange={(e) => dispatch({ type: 'SET_WORLD', worldId: e.target.value || null })}
+        aria-label="Select world"
       >
         <option value="">None</option>
         {worlds.map((world) => (
@@ -38,8 +53,12 @@ export default function WorldSelector() {
         ))}
       </select>
       {state.worldId && (
-        <button className="world-edit-btn" onClick={() => openEdit(state.worldId!)} title="Edit world">
-          ✎
+        <button
+          className="world-edit-btn"
+          onClick={() => openEdit(state.worldId!)}
+          aria-label="Edit world"
+        >
+          <Pencil size={14} aria-hidden="true" strokeWidth={2.3} />
         </button>
       )}
 

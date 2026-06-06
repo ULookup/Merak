@@ -39,6 +39,8 @@
 }
 
 .closeBtn {
+  display: grid;
+  place-items: center;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--muted);
@@ -47,6 +49,12 @@
   border-radius: 8px;
   cursor: pointer;
   font-size: 18px;
+}
+
+.closeBtn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .tabs {
@@ -188,6 +196,10 @@
 }
 
 .entryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, var(--brand-strong), var(--brand), #b8892c);
@@ -201,6 +213,12 @@
     box-shadow 180ms var(--ease),
     opacity 180ms var(--ease);
   box-shadow: 0 10px 22px rgba(122, 79, 19, 0.18);
+}
+
+.entryButton svg {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 .entryButton:hover {
@@ -237,6 +255,14 @@
     border-color 180ms ease,
     box-shadow 180ms ease,
     background 180ms ease;
+}
+
+.fileActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .fileItem:hover {
@@ -336,6 +362,11 @@
     flex-direction: column;
   }
 
+  .fileActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .editorHeader {
     flex-direction: column;
   }
@@ -416,11 +447,51 @@
 .pulse {
   width: 12px;
   height: 12px;
+  display: grid;
+  place-items: center;
   border-radius: 50%;
   background: var(--teal);
   box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.26);
   animation: pulse 1.6s ease-out infinite;
   margin-top: 3px;
+}
+
+.pulse svg {
+  width: 14px;
+  height: 14px;
+  color: var(--teal);
+  transform: translate(-1px, -1px);
+}
+
+.signalGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.signalGrid span {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-strong);
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+  padding: 8px 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signalGrid svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--teal);
 }
 
 .meter {
@@ -439,12 +510,19 @@
 }
 
 .error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 11px 12px;
   border: 1px solid #fecaca;
   background: #fff1f2;
   color: var(--ruby);
   border-radius: 12px;
   font-size: 12px;
+}
+
+.error svg {
+  flex: 0 0 auto;
 }
 
 .mobileScrim {

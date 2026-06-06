@@ -1,11 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
+import { Send, Square } from 'lucide-react';
 import { api } from '../api/client';
 import { useAppState } from '../AppState';
 import styles from './Composer.module.css';
 import { useToast } from './Toast';
 
 export default function Composer() {
-  const { state, dispatch } = useAppState();
+  const { state } = useAppState();
   const { showToast } = useToast();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -37,7 +38,7 @@ export default function Composer() {
     } finally {
       setSending(false);
     }
-  }, [text, sending, state.sessionId, state.selectedModel, dispatch]);
+  }, [text, sending, state.sessionId, state.selectedModel, showToast]);
 
   const isRunning =
     state.currentRun !== null && state.status !== 'idle' && state.status !== 'waiting_approval';
@@ -71,6 +72,7 @@ export default function Composer() {
             data-testid="cancel-btn"
             aria-label="Cancel run"
           >
+            <Square size={14} aria-hidden="true" strokeWidth={2.4} />
             Cancel
           </button>
         ) : (
@@ -81,6 +83,7 @@ export default function Composer() {
             data-testid="send-btn"
             aria-label="Send message"
           >
+            <Send size={14} aria-hidden="true" strokeWidth={2.4} />
             Send
           </button>
         )}
