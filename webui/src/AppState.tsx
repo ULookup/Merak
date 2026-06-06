@@ -6,9 +6,13 @@ import type {
   SecretItem,
   SessionSummary,
   SseFrame,
+  StoryOverview,
   StatusLabel,
+  UiCapabilities,
   WorldAgent,
   WorldSummary,
+  WorkspaceFile,
+  WorkspaceFileContent,
 } from './api/types';
 
 export type InspectorTab = 'story' | 'files' | 'agents' | 'run';
@@ -21,6 +25,15 @@ export interface GeneratedFileEntry {
   updatedAt: number;
 }
 
+export interface RunTimelineItem {
+  id: string;
+  type: 'state' | 'tool' | 'approval' | 'file' | 'error';
+  label: string;
+  detail?: string;
+  at: number;
+  status?: StatusLabel | 'completed' | 'failed';
+}
+
 export interface AppState {
   sessionId: string;
   lastSeq: number;
@@ -29,6 +42,13 @@ export interface AppState {
   status: StatusLabel;
   usage: { inputTokens: number; outputTokens: number };
   metadata: RuntimeMetadata | null;
+  capabilities: UiCapabilities;
+  fallback: {
+    capabilities: boolean;
+    storyOverview: boolean;
+    workspaceFiles: boolean;
+    editorSave: boolean;
+  };
   sessions: SessionSummary[];
   worldId: string | null;
   selectedModel: string;
@@ -38,12 +58,20 @@ export interface AppState {
   foreshadowing: ForeshadowingItem[];
   secrets: SecretItem[];
   worldTime: string | null;
+  storyOverview: StoryOverview | null;
   worldbuildingStatus: WorldbuildingStatus;
   worldbuildingError: string | null;
   outputDirectory: string | null;
   generatedFiles: GeneratedFileEntry[];
+  workspaceFiles: WorkspaceFile[];
+  fileSearch: string;
+  fileTypeFilter: string;
   activeEditorFileId: string | null;
   editorBuffers: Record<string, string>;
+  editorVersions: Record<string, string>;
+  editorSaveStatus: 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
+  editorError: string | null;
+  runTimeline: RunTimelineItem[];
 }
 
 export const initialState: AppState = {
@@ -54,6 +82,19 @@ export const initialState: AppState = {
   status: 'idle',
   usage: { inputTokens: 0, outputTokens: 0 },
   metadata: null,
+  capabilities: {
+    files: false,
+    story_overview: false,
+    session_archive: false,
+    world_create: false,
+    editor_save: false,
+  },
+  fallback: {
+    capabilities: false,
+    storyOverview: false,
+    workspaceFiles: false,
+    editorSave: false,
+  },
   sessions: [],
   worldId: null,
   selectedModel: '',
@@ -63,12 +104,20 @@ export const initialState: AppState = {
   foreshadowing: [],
   secrets: [],
   worldTime: null,
+  storyOverview: null,
   worldbuildingStatus: 'idle',
   worldbuildingError: null,
   outputDirectory: null,
   generatedFiles: [],
+  workspaceFiles: [],
+  fileSearch: '',
+  fileTypeFilter: 'all',
   activeEditorFileId: null,
   editorBuffers: {},
+  editorVersions: {},
+  editorSaveStatus: 'idle',
+  editorError: null,
+  runTimeline: [],
 };
 
 let nextId = 1;
@@ -79,6 +128,7 @@ function msgId(): string {
 export type Action =
   | { type: 'SET_SESSION'; sessionId: string }
   | { type: 'SET_METADATA'; metadata: RuntimeMetadata }
+  | { type: 'SET_CAPABILITIES'; capabilities: UiCapabilities; fallback?: boolean }
   | { type: 'SET_SESSIONS'; sessions: SessionSummary[] }
   | { type: 'SET_WORLD'; worldId: string | null }
   | { type: 'SET_INSPECTOR_TAB'; tab: InspectorTab }
@@ -91,11 +141,19 @@ export type Action =
       foreshadowing: ForeshadowingItem[];
       secrets: SecretItem[];
       worldTime: string | null;
+      storyOverview?: StoryOverview | null;
+      fallback?: boolean;
     }
   | { type: 'SET_OUTPUT_DIRECTORY'; path: string | null }
   | { type: 'REGISTER_GENERATED_FILE'; file: GeneratedFileEntry }
+  | { type: 'SET_WORKSPACE_FILES'; files: WorkspaceFile[]; root?: string; fallback?: boolean }
+  | { type: 'SET_FILE_SEARCH'; value: string }
+  | { type: 'SET_FILE_TYPE_FILTER'; value: string }
   | { type: 'OPEN_GENERATED_FILE'; fileId: string }
+  | { type: 'OPEN_WORKSPACE_FILE'; fileId: string }
+  | { type: 'SET_EDITOR_CONTENT'; fileId: string; content: WorkspaceFileContent }
   | { type: 'UPDATE_EDITOR_BUFFER'; fileId: string; content: string }
+  | { type: 'SET_EDITOR_SAVE_STATUS'; status: AppState['editorSaveStatus']; error?: string | null }
   | { type: 'SET_MODEL'; model: string }
   | { type: 'SET_LAST_SEQ'; seq: number }
   | { type: 'APPEND_MESSAGE'; message: Message }
@@ -107,6 +165,7 @@ export type Action =
   | { type: 'SET_STATUS'; status: StatusLabel }
   | { type: 'SET_USAGE'; inputTokens: number; outputTokens: number }
   | { type: 'SET_CURRENT_RUN'; runId: string | null }
+  | { type: 'ADD_RUN_TIMELINE_ITEM'; item: RunTimelineItem }
   | { type: 'COMMIT_ACTIVE' }
   | { type: 'APPLY_SSE'; frame: SseFrame };
 
@@ -125,6 +184,13 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'SET_METADATA':
       return { ...state, metadata: action.metadata, selectedModel: action.metadata.model };
 
+    case 'SET_CAPABILITIES':
+      return {
+        ...state,
+        capabilities: action.capabilities,
+        fallback: { ...state.fallback, capabilities: action.fallback ?? false },
+      };
+
     case 'SET_SESSIONS':
       return { ...state, sessions: action.sessions };
 
@@ -136,6 +202,7 @@ export function reducer(state: AppState, action: Action): AppState {
         foreshadowing: [],
         secrets: [],
         worldTime: null,
+        storyOverview: null,
         worldbuildingStatus: action.worldId ? 'loading' : 'idle',
         worldbuildingError: null,
       };
@@ -153,10 +220,28 @@ export function reducer(state: AppState, action: Action): AppState {
           action.file,
           ...state.generatedFiles.filter((file) => file.path !== action.file.path),
         ],
+        workspaceFiles: [
+          workspaceFileFromGenerated(action.file),
+          ...state.workspaceFiles.filter((file) => file.path !== action.file.path),
+        ],
         outputDirectory:
           state.outputDirectory ?? directoryFromPath(action.file.path) ?? state.outputDirectory,
         inspectorTab: 'files',
       };
+
+    case 'SET_WORKSPACE_FILES':
+      return {
+        ...state,
+        workspaceFiles: action.files,
+        outputDirectory: action.root ?? state.outputDirectory,
+        fallback: { ...state.fallback, workspaceFiles: action.fallback ?? false },
+      };
+
+    case 'SET_FILE_SEARCH':
+      return { ...state, fileSearch: action.value };
+
+    case 'SET_FILE_TYPE_FILTER':
+      return { ...state, fileTypeFilter: action.value };
 
     case 'OPEN_GENERATED_FILE': {
       const file = state.generatedFiles.find((item) => item.id === action.fileId);
@@ -172,6 +257,37 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case 'OPEN_WORKSPACE_FILE': {
+      const file = state.workspaceFiles.find((item) => item.id === action.fileId);
+      if (!file) return state;
+      return {
+        ...state,
+        activeEditorFileId: file.id,
+        inspectorTab: 'files',
+        editorBuffers: {
+          ...state.editorBuffers,
+          [file.id]: state.editorBuffers[file.id] ?? '',
+        },
+        editorSaveStatus: 'idle',
+        editorError: null,
+      };
+    }
+
+    case 'SET_EDITOR_CONTENT':
+      return {
+        ...state,
+        editorBuffers: {
+          ...state.editorBuffers,
+          [action.fileId]: action.content.content,
+        },
+        editorVersions: {
+          ...state.editorVersions,
+          [action.fileId]: action.content.version,
+        },
+        editorSaveStatus: 'idle',
+        editorError: null,
+      };
+
     case 'UPDATE_EDITOR_BUFFER':
       return {
         ...state,
@@ -179,6 +295,18 @@ export function reducer(state: AppState, action: Action): AppState {
           ...state.editorBuffers,
           [action.fileId]: action.content,
         },
+        workspaceFiles: state.workspaceFiles.map((file) =>
+          file.id === action.fileId ? { ...file, dirty: true } : file,
+        ),
+        editorSaveStatus: 'dirty',
+        editorError: null,
+      };
+
+    case 'SET_EDITOR_SAVE_STATUS':
+      return {
+        ...state,
+        editorSaveStatus: action.status,
+        editorError: action.error ?? null,
       };
 
     case 'SET_TOOL_DONE': {
@@ -194,6 +322,12 @@ export function reducer(state: AppState, action: Action): AppState {
         generatedFiles: [
           ...files,
           ...state.generatedFiles.filter(
+            (file) => !files.some((newFile) => newFile.path === file.path),
+          ),
+        ],
+        workspaceFiles: [
+          ...files.map(workspaceFileFromGenerated),
+          ...state.workspaceFiles.filter(
             (file) => !files.some((newFile) => newFile.path === file.path),
           ),
         ],
@@ -223,8 +357,10 @@ export function reducer(state: AppState, action: Action): AppState {
         foreshadowing: action.foreshadowing,
         secrets: action.secrets,
         worldTime: action.worldTime,
+        storyOverview: action.storyOverview ?? state.storyOverview,
         worldbuildingStatus: 'ready',
         worldbuildingError: null,
+        fallback: { ...state.fallback, storyOverview: action.fallback ?? false },
       };
 
     case 'SET_MODEL':
@@ -294,6 +430,9 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'SET_CURRENT_RUN':
       return { ...state, currentRun: action.runId };
 
+    case 'ADD_RUN_TIMELINE_ITEM':
+      return { ...state, runTimeline: [action.item, ...state.runTimeline].slice(0, 32) };
+
     case 'COMMIT_ACTIVE': {
       const msgs = state.messages.map((m) =>
         m.toolCallId === 'active' ? { ...m, toolCallId: undefined } : m,
@@ -321,7 +460,20 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
   switch (type) {
     case 'run_started':
       return reducer(
-        reducer(state, { type: 'SET_CURRENT_RUN', runId: (p.run_id as string) ?? '' }),
+        reducer(
+          reducer(state, { type: 'SET_CURRENT_RUN', runId: (p.run_id as string) ?? '' }),
+          {
+            type: 'ADD_RUN_TIMELINE_ITEM',
+            item: {
+              id: `run_${p.run_id ?? frame.seq}`,
+              type: 'state',
+              label: 'Run started',
+              detail: (p.message as string) ?? '',
+              at: Date.now(),
+              status: 'thinking',
+            },
+          },
+        ),
         {
           type: 'APPEND_MESSAGE',
           message: { id: msgId(), kind: 'user', text: (p.message as string) ?? '' },
@@ -337,16 +489,38 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       if (to === 'complete' || to === 'error') return state;
       const validLabels = new Set(['idle', 'thinking', 'responding', 'acting', 'observing']);
       const label = validLabels.has(to) ? (to as StatusLabel) : state.status;
-      return reducer(state, { type: 'SET_STATUS', status: label });
+      return reducer(reducer(state, { type: 'SET_STATUS', status: label }), {
+        type: 'ADD_RUN_TIMELINE_ITEM',
+        item: {
+          id: `state_${frame.seq}_${to}`,
+          type: 'state',
+          label: `State: ${label.replace(/_/g, ' ')}`,
+          at: Date.now(),
+          status: label,
+        },
+      });
     }
 
     case 'tool_started':
-      return reducer(state, {
-        type: 'SET_TOOL_RUNNING',
-        toolCallId: (p.id ?? p.tool_call_id ?? '') as string,
-        name: (p.name ?? p.tool ?? '') as string,
-        args: (p.arguments ?? '') as string,
-      });
+      return reducer(
+        reducer(state, {
+          type: 'SET_TOOL_RUNNING',
+          toolCallId: (p.id ?? p.tool_call_id ?? '') as string,
+          name: (p.name ?? p.tool ?? '') as string,
+          args: (p.arguments ?? '') as string,
+        }),
+        {
+          type: 'ADD_RUN_TIMELINE_ITEM',
+          item: {
+            id: `tool_${p.id ?? frame.seq}`,
+            type: 'tool',
+            label: `Tool: ${(p.name ?? p.tool ?? 'unknown') as string}`,
+            detail: (p.arguments ?? '') as string,
+            at: Date.now(),
+            status: 'acting',
+          },
+        },
+      );
 
     case 'tool_completed':
       return reducer(state, {
@@ -357,12 +531,25 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       });
 
     case 'approval_requested':
-      return reducer(state, {
-        type: 'SET_APPROVAL',
-        approvalId: (p.approval_id ?? '') as string,
-        name: (p.name ?? p.tool ?? '') as string,
-        args: (p.arguments ?? '') as string,
-      });
+      return reducer(
+        reducer(state, {
+          type: 'SET_APPROVAL',
+          approvalId: (p.approval_id ?? '') as string,
+          name: (p.name ?? p.tool ?? '') as string,
+          args: (p.arguments ?? '') as string,
+        }),
+        {
+          type: 'ADD_RUN_TIMELINE_ITEM',
+          item: {
+            id: `approval_${p.approval_id ?? frame.seq}`,
+            type: 'approval',
+            label: `Approval: ${(p.name ?? p.tool ?? 'tool') as string}`,
+            detail: (p.arguments ?? '') as string,
+            at: Date.now(),
+            status: 'waiting_approval',
+          },
+        },
+      );
 
     case 'approval_resolved':
       return reducer(state, { type: 'CLEAR_APPROVAL' });
@@ -412,6 +599,80 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
           })
         : state;
 
+    case 'workspace_file_created': {
+      const path = (p.path ?? '') as string;
+      if (!path) return state;
+      const file = workspaceFileFromGenerated({
+        id: `file_${path}`,
+        title: ((p.name as string) || fileTitle(path)),
+        path,
+        updatedAt: Date.now(),
+      });
+      return reducer(
+        {
+          ...state,
+          workspaceFiles: [file, ...state.workspaceFiles.filter((item) => item.path !== path)],
+          inspectorTab: 'files',
+        },
+        {
+          type: 'ADD_RUN_TIMELINE_ITEM',
+          item: {
+            id: `file_${frame.seq}`,
+            type: 'file',
+            label: 'File created',
+            detail: path,
+            at: Date.now(),
+            status: 'completed',
+          },
+        },
+      );
+    }
+
+    case 'workspace_file_updated': {
+      const path = (p.path ?? '') as string;
+      if (!path) return state;
+      return {
+        ...state,
+        workspaceFiles: state.workspaceFiles.map((file) =>
+          file.path === path
+            ? {
+                ...file,
+                dirty: false,
+                updated_at: ((p.updated_at as string) || new Date().toISOString()),
+              }
+            : file,
+        ),
+      };
+    }
+
+    case 'story_context_updated':
+      return reducer(state, {
+        type: 'ADD_RUN_TIMELINE_ITEM',
+        item: {
+          id: `story_${frame.seq}`,
+          type: 'state',
+          label: `Story updated: ${(p.resource_type as string) || 'context'}`,
+          detail: (p.resource_id as string) || '',
+          at: Date.now(),
+          status: 'completed',
+        },
+      });
+
+    case 'run_step_changed': {
+      const step = ((p.step as string) || 'thinking') as StatusLabel;
+      return reducer(reducer(state, { type: 'SET_STATUS', status: step }), {
+        type: 'ADD_RUN_TIMELINE_ITEM',
+        item: {
+          id: `run_step_${frame.seq}`,
+          type: 'state',
+          label: (p.label as string) || `Run step: ${step.replace(/_/g, ' ')}`,
+          detail: (p.detail as string) || '',
+          at: Date.now(),
+          status: step,
+        },
+      });
+    }
+
     default:
       return state;
   }
@@ -450,6 +711,21 @@ function fileTitle(path: string): string {
       ?.replace(/\.(md|markdown|txt|docx|json|ya?ml)$/i, '')
       .replace(/[-_]+/g, ' ') || 'Generated file'
   );
+}
+
+function workspaceFileFromGenerated(file: GeneratedFileEntry): WorkspaceFile {
+  const name = file.path.split('/').filter(Boolean).pop() ?? file.title;
+  const ext = name.includes('.') ? name.split('.').pop()?.toLowerCase() || '' : '';
+  return {
+    id: file.id,
+    path: file.path,
+    name,
+    ext,
+    mime: ext === 'md' || ext === 'markdown' ? 'text/markdown' : 'text/plain',
+    size: 0,
+    updated_at: new Date(file.updatedAt).toISOString(),
+    dirty: false,
+  };
 }
 
 const AppContext = createContext<{

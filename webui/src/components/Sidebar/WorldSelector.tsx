@@ -1,17 +1,21 @@
 import { useState } from 'react';
-import { Pencil } from 'lucide-react';
+import { Pencil, Plus } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
+import { useToast } from '../Toast';
 import './WorldSelector.css';
 
 export default function WorldSelector() {
   const { state, dispatch } = useAppState();
+  const { showToast } = useToast();
   const { worlds } = state;
   const [editWorld, setEditWorld] = useState<{
     id: string;
     name: string;
     description: string;
   } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newWorld, setNewWorld] = useState({ name: '', description: '' });
 
   function openEdit(worldId: string) {
     const world = worlds.find((item) => item.id === worldId);
@@ -38,6 +42,28 @@ export default function WorldSelector() {
     setEditWorld(null);
   }
 
+  async function createWorld() {
+    const name = newWorld.name.trim();
+    if (!name) return;
+    try {
+      const res = await api.createWorld(name, newWorld.description.trim());
+      const world = {
+        id: res.world_id,
+        name: res.name,
+        description: res.description || '',
+        created_at: new Date().toISOString(),
+      };
+      dispatch({ type: 'SET_WORLDS', worlds: [world, ...worlds] });
+      dispatch({ type: 'SET_WORLD', worldId: world.id });
+      showToast('World created in the workbench preview.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not create world.', 'error');
+    } finally {
+      setCreateOpen(false);
+      setNewWorld({ name: '', description: '' });
+    }
+  }
+
   return (
     <div className="world-selector">
       <select
@@ -52,6 +78,14 @@ export default function WorldSelector() {
           </option>
         ))}
       </select>
+      <button
+        className="world-edit-btn"
+        onClick={() => setCreateOpen(true)}
+        aria-label="Create world"
+        title="Create world"
+      >
+        <Plus size={14} aria-hidden="true" strokeWidth={2.3} />
+      </button>
       {state.worldId && (
         <button
           className="world-edit-btn"
@@ -60,6 +94,33 @@ export default function WorldSelector() {
         >
           <Pencil size={14} aria-hidden="true" strokeWidth={2.3} />
         </button>
+      )}
+
+      {createOpen && (
+        <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Create World</h3>
+            <label>
+              Name
+              <input
+                value={newWorld.name}
+                onChange={(e) => setNewWorld({ ...newWorld, name: e.target.value })}
+              />
+            </label>
+            <label>
+              Description
+              <textarea
+                value={newWorld.description}
+                onChange={(e) => setNewWorld({ ...newWorld, description: e.target.value })}
+                rows={3}
+              />
+            </label>
+            <div className="modal-actions">
+              <button onClick={createWorld}>Create</button>
+              <button onClick={() => setCreateOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {editWorld && (

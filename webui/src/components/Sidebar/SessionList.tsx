@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Plus, Sparkles } from 'lucide-react';
+import { Archive, Plus, RotateCcw, Sparkles } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
+import { useToast } from '../Toast';
 import './SessionList.css';
 
 export default function SessionList() {
   const { state, dispatch } = useAppState();
+  const { showToast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
@@ -71,6 +73,19 @@ export default function SessionList() {
     }
   }
 
+  async function archiveSession(session: (typeof state.sessions)[number], archived: boolean) {
+    try {
+      const res = await api.archiveSession(session, archived);
+      dispatch({
+        type: 'SET_SESSIONS',
+        sessions: state.sessions.map((s) => (s.id === session.id ? res.session : s)),
+      });
+      showToast(archived ? 'Session archived.' : 'Session restored.', res.fallback ? 'info' : 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not update session.', 'error');
+    }
+  }
+
   const sessions = [...state.sessions].sort(
     (a, b) =>
       new Date(b.updated_at || b.created_at).getTime() -
@@ -122,17 +137,34 @@ export default function SessionList() {
                   {s.title || 'New Session'}
                 </span>
                 {s.id === state.sessionId && (
-                  <button
-                    className="session-generate-btn"
-                    aria-label="Generate title"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      generateTitle(s.id);
-                    }}
-                  >
-                    <Sparkles size={14} aria-hidden="true" strokeWidth={2.2} />
-                  </button>
+                  <span className="session-actions">
+                    <button
+                      className="session-generate-btn"
+                      aria-label="Generate title"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        generateTitle(s.id);
+                      }}
+                    >
+                      <Sparkles size={14} aria-hidden="true" strokeWidth={2.2} />
+                    </button>
+                    <button
+                      className="session-generate-btn"
+                      aria-label={s.archived_at ? 'Restore session' : 'Archive session'}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        archiveSession(s, !s.archived_at);
+                      }}
+                    >
+                      {s.archived_at ? (
+                        <RotateCcw size={14} aria-hidden="true" strokeWidth={2.2} />
+                      ) : (
+                        <Archive size={14} aria-hidden="true" strokeWidth={2.2} />
+                      )}
+                    </button>
+                  </span>
                 )}
+                {s.archived_at && <span className="session-badge">Archived</span>}
               </>
             )}
           </li>
