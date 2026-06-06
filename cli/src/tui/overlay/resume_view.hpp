@@ -102,8 +102,11 @@ public:
             if (sel) { line_style.fg = theme::active_theme().accent; line_style.bold(true); }
 
             std::string prefix = sel ? "▶ " : "  ";
+            std::string label = f[i].title.empty()
+                ? f[i].sid.substr(0, 12) + "..."
+                : f[i].title;
             std::ostringstream oss;
-            oss << f[i].sid << "  " << f[i].model << "  " << f[i].msg_count << " msgs";
+            oss << label << "  " << f[i].model << "  " << f[i].msg_count << " msgs";
             buf.set_span(0, y, prefix + oss.str(), line_style);
             ++y;
             if (y < buf.h) {
