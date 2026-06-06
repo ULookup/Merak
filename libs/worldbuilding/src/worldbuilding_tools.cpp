@@ -1719,6 +1719,10 @@ WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) const {
         tools.push_back(std::make_unique<PlantForeshadowingTool>(*service_, ctx));
         tools.push_back(std::make_unique<ExposeSecretTool>(*service_, ctx));
         tools.push_back(std::make_unique<EndSceneTool>(*service_, ctx));
+        tools.push_back(std::make_unique<CreateArcTool>(*service_, ctx));
+        tools.push_back(std::make_unique<CreateSecretTool>(*service_, ctx));
+        tools.push_back(std::make_unique<AddWorldKnowledgeTool>(*service_, ctx));
+        tools.push_back(std::make_unique<CreateLocationTool>(*service_, ctx));
         tools.push_back(
             std::make_unique<UpdateAgentPromptTool>(*service_, ctx));
         break;
