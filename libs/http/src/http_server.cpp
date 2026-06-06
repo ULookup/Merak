@@ -55,6 +55,19 @@ void HttpServer::install_routes(){
     server_.Post(R"(/v1/sessions/([^/]+)/runs)",[this](const auto&req,auto&r){try{auto b=nlohmann::json::parse(req.body);auto model=b.value("model",metadata_.model);auto run=runtime_->start_run(req.matches[1],b.value("message",""),model);json(r,{202,{{"run_id",run.id},{"session_id",run.session_id},{"model",model}}});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),e.code()=="session_busy"?409:400,e.retryable()));}catch(const std::exception&e){json(r,error("invalid_request",e.what(),400));}});
     server_.Post(R"(/v1/sessions/([^/]+)/delegations)",[this](const auto&req,auto&r){try{auto b=nlohmann::json::parse(req.body);json(r,handle_create_delegation(req.matches[1],delegation_request_from_json(b)));}catch(const std::exception&e){json(r,error("invalid_request",e.what(),400));}});
     server_.Post(R"(/v1/approvals/([^/]+))",[this](const auto&req,auto&r){try{auto b=nlohmann::json::parse(req.body);auto status=b.value("decision","")=="allow"?ApprovalStatus::Allowed:ApprovalStatus::Denied;auto a=runtime_->resolve_approval(req.matches[1],status);json(r,{200,{{"approval_id",a.id},{"status",to_string(a.status)}}});}catch(const std::exception&e){json(r,error("approval_not_found",e.what(),404));}});
+    server_.Post(R"(/v1/creations/([^/]+)/resolve)", [this](const auto& req, auto& r) {
+        try {
+            auto b = nlohmann::json::parse(req.body);
+            std::string decision = b.value("decision", "deny");
+            nlohmann::json modifications = b.value("modifications", nlohmann::json::object());
+            auto result = runtime_->resolve_creation(req.matches[1], decision, modifications);
+            json(r, {200, result});
+        } catch (const RuntimeError& e) {
+            json(r, error(e.code(), e.what(), 404));
+        } catch (const std::exception& e) {
+            json(r, error("invalid_request", e.what(), 400));
+        }
+    });
     server_.Post(R"(/v1/runs/([^/]+)/cancel)",[this](const auto&req,auto&r){try{runtime_->cancel_run(req.matches[1]);json(r,{202,{{"run_id",req.matches[1]},{"status","cancelled"}}});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),404));}});
     server_.Get(R"(/v1/sessions/([^/]+)/events/stream)",[this](const auto&req,auto&r){auto id=req.matches[1].str();auto cursor=after(req);try{auto subscription=runtime_->subscribe(id);auto backlog=runtime_->events_after(id,cursor);r.set_chunked_content_provider("text/event-stream",[subscription,backlog=std::move(backlog),cursor](size_t,httplib::DataSink&sink)mutable{auto send=[&](const RuntimeEvent&e){if(e.seq<=cursor||e.type=="message_appended"||e.type=="compaction_applied")return true;auto payload=nlohmann::json(e).dump();auto frame="id: "+std::to_string(e.seq)+"\nevent: "+e.type+"\ndata: "+payload+"\n\n";if(!sink.write(frame.data(),frame.size()))return false;cursor=e.seq;return true;};while(!backlog.empty()){auto e=backlog.front();backlog.erase(backlog.begin());if(!send(e))return false;}RuntimeEvent live;if(subscription->wait_next(live,std::chrono::milliseconds(1000)))return send(live);auto ping=std::string(": keepalive\n\n");return sink.write(ping.data(),ping.size());});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),404));}});
     server_.Get("/api/config/llm", [this](const auto& req, auto& res) { handle_config_get(req, res); });
