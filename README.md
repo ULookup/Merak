@@ -1,223 +1,638 @@
 <p align="center">
-  <img src="webui/src/assets/merak-logo-lockup.svg" alt="Merak - type your world" width="420" />
+  <img src="webui/src/assets/merak-logo-lockup.svg" alt="Merak - Type Your World" width="420" />
 </p>
 
-# Merak
+<h1 align="center">Merak</h1>
 
-> type your world
+<p align="center">
+  <strong>Type Your World</strong><br />
+  面向长篇小说、角色构建与世界观创作的 AI Agent 工作台。
+</p>
 
-Merak 是面向长篇小说与世界观创作的 AI Agent 运行时。它把聊天、角色、伏笔、叙事结构和本地文件产出放进同一个工作流里，让 AI 不只是回答问题，而是陪你稳定地搭建一个世界。
+<p align="center">
+  <a href="#快速开始">快速开始</a>
+  · <a href="#部署启动">部署启动</a>
+  · <a href="#webui-工作台-windows">WebUI</a>
+  · <a href="#tui-终端工作台">TUI</a>
+  · <a href="#项目结构">项目结构</a>
+</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+<p align="center">
+  <img alt="C++23" src="https://img.shields.io/badge/C%2B%2B-23-00599C?style=flat-square" />
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?style=flat-square" />
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-TUI%20%2B%20WebUI-0078D4?style=flat-square" />
+  <img alt="Linux" src="https://img.shields.io/badge/Linux-TUI%20only-FCC624?style=flat-square" />
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square" /></a>
+</p>
 
-## 为什么是 Merak
+---
 
-通用 AI 聊天工具很适合灵感闪现，却很难长期记住一个复杂故事。Merak 的目标是把“写作上下文”变成一等公民：
+## 这是什么
 
-| 创作问题 | 常见表现 | Merak 的处理方式 |
-|----------|----------|------------------|
-| 角色遗忘 | 写到后面，角色动机、经历和关系被稀释 | 角色卡、日记、关系网和记忆摘要随故事推进持续演化 |
-| 语言同质化 | 将军、公主、旁白都像同一个人在说话 | 角色声音指纹锚定句式、修饰词和签名表达 |
-| 世界观漂移 | 前文规则被后续生成破坏 | World 系统集中维护地图、历史、规则和势力关系 |
-| 伏笔丢失 | 埋下的线索没有回收 | Open / Paid / Abandoned 生命周期追踪 |
-| 情节跃进 | AI 为了收束，跳过必要铺垫 | Arc → Chapter → Section → Scene 叙事骨架约束推进 |
-| 角色全知 | 角色知道了自己不该知道的信息 | Public / Secret / Unknown 信息边界与泄密检测 |
-| 上下文稀释 | 长篇后半段理解越来越模糊 | Token 预算、前缀缓存和历史压缩保留关键叙事信息 |
+Merak 不是一个“聊天壳”。它是一套给创作者使用的 AI 运行时：把对话、工具调用、角色卡、世界规则、伏笔、秘密、章节结构、生成文件与本地工作区放进同一个连续的创作流程里。
 
-## 核心体验
+你可以把它理解为：
 
-- **创作者工作台**：现代可视化界面，左侧管理 World / Sessions / Model / Tools / Context，中间承载聊天与工具时间线，右侧检查 Story / Files / Agents / Run。
-- **本地文件产出**：Agent 在用户指定目录生成章节、设定或草稿文件；Web UI 的 Files 面板提供入口。
-- **双击即编辑**：在 Files 面板双击生成文件，打开内置文本编辑器进行本地草稿编辑。
-- **分层 Agent 协作**：God 负责全局叙事，Manager 负责领域设定，Character 在自身知识边界内行动。
-- **数据主权**：数据落在本机 PostgreSQL + JSONL，并由 `~/.merak/` 管理。你的故事永远属于你。
+- 一个会写作、会查设定、会使用工具来辅助创作的 Agent
+- 一个围绕长篇叙事搭建的 worldbuilding engine
+- 一个能实时展示你构建的世界（包括人物、地图、场景等）的创作者工作台
+- 一个把数据放在本地的小说工程系统
 
-## 和 SillyTavern 的区别
+Merak 的核心目标很简单：让 AI 不只是回答问题，而是稳定地陪你从一个个角色和背景设定开始，搭建一个属于你的世界。
 
-SillyTavern 是优秀的 AI 角色扮演前端。Merak 可以和角色聊天，但聊天不是终点，而是创作流程的一部分。
+## 平台支持
 
-| 维度 | SillyTavern | Merak |
-|------|-------------|-------|
-| 核心体验 | 和 AI 角色聊天互动 | 在世界观框架下推进小说创作 |
-| 角色记忆 | 依赖上下文窗口 | 角色卡版本、日记、关系网、记忆摘要 |
-| 世界观一致性 | Lorebook 手动维护 | World 系统自动注入锚定上下文 |
-| 角色协作 | 群聊式同台对话 | God / Manager / Character 分层协作 |
-| 信息不对称 | 通常无结构化约束 | Public / Secret / Unknown 知识边界 |
-| 叙事管理 | 通常无 | Arc / Chapter / Section / Scene 与伏笔生命周期 |
-| 输出产物 | 聊天记录 | 聊天记录、世界观文档、角色档案、章节文件 |
+| 平台 | TUI | WebUI | 说明 |
+|---|---:|---:|---|
+| Windows | Yes | Yes | 当前推荐平台。支持终端工作台和浏览器工作台。 |
+| Linux | Yes | No | 当前仅支持 TUI。WebUI 暂不作为 Linux 支持目标。 |
+| macOS | No | No | 当前未声明支持。 |
+
+## 核心能力
+
+| 能力 | 说明 |
+|---|---|
+| Agent Loop | 多轮思考、工具调用、审批、状态流转和 SSE 事件。 |
+| WebUI 工作台 | 三栏创作者界面：左侧导航、中间 Run 时间线、右侧 Inspector。 |
+| TUI 工作台 | 终端里的沉浸式对话与 worldbuilding 命令入口。 |
+| Worldbuilding | World、Agent、Arc、Chapter、Scene、Foreshadowing、Secret、Voice。 |
+| 文件产出 | Agent 可生成本地 Markdown/JSON/YAML/TXT 文件，WebUI 可浏览、预览和编辑。 |
+| 本地数据 | Session、Run、世界观数据和输出文件优先落在本机。 |
+| Provider 配置 | 支持 OpenAI-compatible 和 Anthropic-style provider 配置。 |
+| MCP 与内置工具 | 文件、搜索、任务、世界观、会话等工具统一注册与权限控制。 |
+
+## 为什么 Merak 不只是聊天
+
+通用 AI 聊天工具适合灵感闪现，但很难稳定维护一个长篇故事。在我的观察中，很多朋友在创作时总是抱怨 AI 幻觉的问题。所以 Merak 把“创作上下文”当成核心来处理：
+
+| 长篇创作问题 | 常见表现 | Merak 的处理方式 |
+|---|---|---|
+| 角色遗忘 | 写到后面动机、关系和经历漂移 | 角色卡、日记、关系、记忆摘要持续演化 |
+| 声音同质化 | 所有人说话像同一个人 | 角色声音指纹与表达风格约束 |
+| 世界规则漂移 | 魔法、历史、地理规则前后矛盾 | World/Manager Agent 维护领域设定 |
+| 伏笔丢失 | 埋下线索却没有回收 | Open/Paid/Abandoned 生命周期追踪 |
+| 信息越界 | 角色知道自己不该知道的秘密 | Public/Secret/Unknown 知识边界 |
+| 情节断层 | AI 快速跳到结局，缺少过程 | Arc/Chapter/Section/Scene 叙事骨架 |
+| 文件散落 | 草稿、设定、章节输出难管理 | Workspace Files 面板统一浏览和编辑 |
 
 ## 架构一览
 
-Merak 采用服务端-客户端分离架构。服务端负责 Agent Loop、工具、上下文、持久化与 HTTP/SSE；客户端负责输入、渲染和创作者工作台体验。
+```mermaid
+flowchart TB
+  subgraph Clients["Clients"]
+    TUI["TUI<br/>Windows + Linux"]
+    WebUI["WebUI<br/>Windows only"]
+  end
 
-```text
-┌─────────────────────────────────────────┐
-│                Clients                  │
-│  ┌──────────┐          ┌──────────────┐ │
-│  │   TUI    │          │    Web UI    │ │
-│  │  FTXUI   │          │ React + Vite │ │
-│  └────┬─────┘          └──────┬───────┘ │
-│       │        HTTP + SSE      │         │
-└───────┼────────────────────────┼─────────┘
-        │                        │
-        ▼                        ▼
-┌──────────────────────────────────────────┐
-│                merak serve               │
-│  HTTP Layer  · REST routes · SSE events  │
-│  Runtime     · Session · Run · Approval  │
-│  AgentLoop   · State machine · Tools     │
-│  Context     · Token budget · Compression│
-│  Tools       · Built-in tools · MCP      │
-│  Worldbuilding · World · Agent · Story   │
-│  Storage     · PostgreSQL · JSONL        │
-└──────────────────────────────────────────┘
+  subgraph Server["merak serve"]
+    HTTP["HTTP API<br/>/v1 + /api"]
+    SSE["SSE Event Stream"]
+    Runtime["RuntimeService<br/>Session / Run / Approval"]
+    Loop["AgentLoop<br/>Thinking / Acting / Observing / Responding"]
+    Tools["ToolRegistry<br/>Builtin tools + MCP tools"]
+    World["WorldbuildingService<br/>World / Agent / Narrative / Secret"]
+    Storage["Local Storage<br/>SQLite runtime + PostgreSQL/world files"]
+  end
+
+  TUI --> HTTP
+  WebUI --> HTTP
+  HTTP --> Runtime
+  Runtime --> SSE
+  Runtime --> Loop
+  Loop --> Tools
+  Tools --> World
+  Runtime --> Storage
+  World --> Storage
 ```
-
-## Worldbuilding 引擎
-
-### 分层 Agent
-
-| Agent | 职责 | 例子 |
-|-------|------|------|
-| God | 全知叙事者，把控整体剧情、节奏和基调 | “第三章高潮偏弱，需要再铺垫一场冲突。” |
-| Manager | 专业领域顾问，维护地图、历史、魔法体系、势力关系 | “这个世界没有传送魔法，跨大陆至少需要两周。” |
-| Character | 角色模拟，在自身知识边界内行动 | 作为角色回应事件、写日记、更新关系态度 |
-
-### 叙事骨架
-
-```text
-Arc
-└── Chapter
-    └── Section
-        └── Scene
-```
-
-每个节点都可以附加独立设定和上下文，让 AI 永远知道当前正在推进故事的哪一层。
-
-### 伏笔与信息边界
-
-- 伏笔状态：`Open`、`Paid`、`Abandoned`
-- 角色知识：`Public`、`Secret`、`Unknown`
-- 角色声音：句式偏好、修饰词风格、签名词
-- 角色记忆：角色卡版本、日记、关系网、记忆摘要
 
 ## 快速开始
 
-### 环境要求
+如果你已经装好 CMake、Conan 和编译器，可以按下面的最短路径启动。
 
-| 依赖 | 版本 |
-|------|------|
-| GCC 或 Clang | GCC >= 13 / Clang >= 17 |
-| CMake | >= 3.22 |
-| Conan | >= 2.0 |
-| PostgreSQL | >= 14 |
-| Node.js | 建议 LTS |
+Windows PowerShell, TUI + WebUI:
 
-### 构建服务端
-
-```bash
+```powershell
 conan install . --build=missing -s build_type=Debug
-
-cmake -B build \
-  -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake \
+cmake -B build `
+  -DCMAKE_TOOLCHAIN_FILE=build/Debug/generators/conan_toolchain.cmake `
   -DCMAKE_BUILD_TYPE=Debug
-
-cmake --build build -j
-./build/cli/merak --init
+cmake --build build --config Debug
+.\build\cli\Debug\merak.exe --init
+notepad "$env:USERPROFILE\.merak\settings.local.json"
+.\build\cli\Debug\merak.exe serve
 ```
 
-编辑 `~/.merak/settings.local.json`，填入 LLM API Key。
+另开一个 PowerShell:
 
-### 启动
-
-```bash
-# terminal 1
-./build/cli/merak serve
-
-# terminal 2: TUI
-./build/cli/merak tui
-
-# or Web UI
+```powershell
 cd webui
+copy .env.example .env
 npm install
 npm run dev
 ```
 
-Web UI 默认连接 `http://localhost:3888`，本地开发地址通常是 `http://localhost:5173`。
+然后打开:
 
-恢复已有 Session：
+```text
+http://127.0.0.1:5173
+```
+
+Linux, TUI only:
+
+```bash
+conan install . --build=missing -s build_type=Debug
+cmake -B build \
+  -DCMAKE_TOOLCHAIN_FILE=build/Debug/generators/conan_toolchain.cmake \
+  -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+./build/cli/merak --init
+nano "$HOME/.merak/settings.local.json"
+./build/cli/merak tui
+```
+
+## 部署启动
+
+### 环境要求
+
+| 依赖 | Windows | Linux |
+|---|---|---|
+| C++ compiler | MSVC 2022 或 Clang/LLVM | GCC 13+ 或 Clang 17+ |
+| CMake | 3.22+ | 3.22+ |
+| Conan | 2.x | 2.x |
+| PostgreSQL | 14+ 或随包 portable pg | 14+ |
+| Node.js | LTS, 仅 WebUI 需要 | 不需要, Linux 仅 TUI |
+
+> 如果你只想跑 Linux TUI，不需要安装 Node.js，也不需要启动 WebUI。
+
+### 1. 获取源码
+
+```bash
+git clone https://github.com/ULookup/Merak.git
+cd Merak
+```
+
+### 2. 初始化 Conan profile
+
+Windows PowerShell:
+
+```powershell
+conan profile detect --force
+```
+
+Linux:
+
+```bash
+conan profile detect --force
+```
+
+### 3. 安装 C++ 依赖
+
+Windows PowerShell:
+
+```powershell
+conan install . --build=missing -s build_type=Debug
+```
+
+Linux:
+
+```bash
+conan install . --build=missing -s build_type=Debug
+```
+
+Conan 默认会把 toolchain 放到类似下面的位置：
+
+```text
+build/Debug/generators/conan_toolchain.cmake
+```
+
+如果你的 Conan layout 不同，请在 `build` 目录下搜索 `conan_toolchain.cmake`，然后把实际路径传给 CMake。
+
+### 4. 配置 CMake
+
+Windows PowerShell:
+
+```powershell
+cmake -B build `
+  -DCMAKE_TOOLCHAIN_FILE=build/Debug/generators/conan_toolchain.cmake `
+  -DCMAKE_BUILD_TYPE=Debug
+```
+
+Linux:
+
+```bash
+cmake -B build \
+  -DCMAKE_TOOLCHAIN_FILE=build/Debug/generators/conan_toolchain.cmake \
+  -DCMAKE_BUILD_TYPE=Debug
+```
+
+### 5. 构建 Merak
+
+Windows PowerShell:
+
+```powershell
+cmake --build build --config Debug
+```
+
+Linux:
+
+```bash
+cmake --build build -j
+```
+
+### 6. 初始化本地目录
+
+Merak 使用 `~/.merak` 作为用户级配置和数据目录。
+
+Windows PowerShell:
+
+```powershell
+.\build\cli\Debug\merak.exe --init
+```
+
+如果你的生成器不是 Visual Studio，二进制可能在：
+
+```powershell
+.\build\cli\merak.exe --init
+```
+
+Linux:
+
+```bash
+./build/cli/merak --init
+```
+
+### 7. 配置 LLM
+
+创建或编辑 `settings.local.json`。
+
+Windows PowerShell:
+
+```powershell
+notepad "$env:USERPROFILE\.merak\settings.local.json"
+```
+
+Linux:
+
+```bash
+nano "$HOME/.merak/settings.local.json"
+```
+
+最小配置示例：
+
+```json
+{
+  "llm": {
+    "provider": "openai",
+    "api_key": "sk-your-api-key",
+    "api_base_url": "https://api.openai.com/v1",
+    "default_model": "gpt-4o",
+    "max_output_tokens": 4096
+  },
+  "agent": {
+    "permission_mode": "ask",
+    "max_tool_turns": 25
+  },
+  "memory": {
+    "enabled": true
+  }
+}
+```
+
+也可以用环境变量覆盖配置：
+
+| 环境变量 | 作用 |
+|---|---|
+| `MERAK_PROVIDER` | Provider 名称 |
+| `MERAK_API_KEY` | API Key |
+| `MERAK_API_BASE_URL` | API Base URL |
+| `MERAK_MODEL` | 默认模型 |
+| `MERAK_DB_CONNECTION` | PostgreSQL 连接串 |
+| `MERAK_PERMISSION_MODE` | 工具权限模式: `ask` / `auto` / `deny` |
+| `MERAK_TUI_THEME` | TUI 主题 |
+
+### 8. 启动服务端
+
+Windows PowerShell:
+
+```powershell
+.\build\cli\Debug\merak.exe serve
+```
+
+Linux:
+
+```bash
+./build/cli/merak serve
+```
+
+默认服务地址：
+
+```text
+http://127.0.0.1:3888
+```
+
+## Windows: 启动 WebUI
+
+> WebUI 当前只声明支持 Windows。
+
+打开一个新的 PowerShell：
+
+```powershell
+cd webui
+copy .env.example .env
+npm install
+npm run dev
+```
+
+默认访问：
+
+```text
+http://127.0.0.1:5173
+```
+
+Vite 会把 `/v1/*` 和 `/api/*` 代理到：
+
+```text
+http://127.0.0.1:3888
+```
+
+如果你的服务端不是默认地址，可以设置：
+
+```powershell
+$env:VITE_PROXY_TARGET="http://127.0.0.1:3888"
+npm run dev
+```
+
+或者在 `webui/.env` 中填写：
+
+```dotenv
+VITE_API_BASE=http://127.0.0.1:3888
+```
+
+## TUI 终端工作台
+
+Windows PowerShell:
+
+```powershell
+.\build\cli\Debug\merak.exe tui
+```
+
+Linux:
+
+```bash
+./build/cli/merak tui
+```
+
+恢复已有会话：
+
+Windows PowerShell:
+
+```powershell
+.\build\cli\Debug\merak.exe tui --session <session_id>
+```
+
+Linux:
 
 ```bash
 ./build/cli/merak tui --session <session_id>
 ```
 
-## Web UI
+常用 worldbuilding 命令：
 
-Web UI 是 Merak 的亮色创作者工作台：
+```text
+/world list
+/world create 北境
+/world use <world_id>
+/agent list
+/agent create character 林霜
+/story overview
+/chapter new 雪夜来客
+/scene new 旅店试探
+/scene end
+/foreshadow list
+/secret list
+/voice check
+```
 
-- 左侧：World、Sessions、Model、Tools、Context
-- 中间：对话时间线、工具运行状态、审批与 composer
-- 右侧：Story 上下文、生成文件入口、Agent 列表、Run/Context 检查器
-- Files：展示输出目录和已生成文件，双击文件即可打开文本编辑器
-- Motion：streaming shimmer、live pulse、panel reveal、message/tool enter，并支持 `prefers-reduced-motion`
+## WebUI 工作台 Windows
+
+WebUI 是 Merak 的图形化创作者工作台。
+
+| 区域 | 功能 |
+|---|---|
+| Sidebar | 世界、会话、模型、工具、上下文状态 |
+| Run Timeline | 对话、工具调用、审批、流式输出 |
+| Composer | Scene、Character、World Rule、Outline、Rewrite 快捷创作模式 |
+| Story Inspector | 世界摘要、当前章节、场景、伏笔、秘密、角色知识边界 |
+| Files Inspector | 本地输出文件列表、搜索、筛选、预览、编辑和保存 |
+| Agents Inspector | God、Manager、Character 分组和角色卡摘要 |
+| Run Inspector | Run 阶段、token、工具调用、SSE 状态和错误恢复提示 |
+
+WebUI 依赖 `merak serve`。请先启动服务端，再启动 `npm run dev`。
+
+## 数据目录
+
+Merak 默认使用用户目录下的 `.merak`：
+
+Windows:
+
+```text
+%USERPROFILE%\.merak
+```
+
+Linux:
+
+```text
+$HOME/.merak
+```
+
+常见内容：
+
+| 路径 | 说明 |
+|---|---|
+| `settings.json` | 用户级通用配置 |
+| `settings.local.json` | 本机私密配置, API Key 建议放这里 |
+| `outputs/` | 默认输出文件目录 |
+| `worlds/` | 世界观数据和世界输出 |
+| runtime/session storage | 会话、Run、事件与审批记录 |
+
+## PostgreSQL
+
+Merak 的世界观和记忆能力依赖 PostgreSQL。你可以使用外部 PostgreSQL，也可以使用发行包中可能携带的 portable PostgreSQL。
+
+外部 PostgreSQL 示例：
+
+```json
+{
+  "memory": {
+    "enabled": true,
+    "db_connection": "postgresql://postgres:postgres@127.0.0.1:5432/merak"
+  }
+}
+```
+
+也可以使用环境变量：
+
+Windows PowerShell:
+
+```powershell
+$env:MERAK_DB_CONNECTION="postgresql://postgres:postgres@127.0.0.1:5432/merak"
+```
+
+Linux:
 
 ```bash
-cd webui
-cp .env.example .env
-npm install
-npm run dev
+export MERAK_DB_CONNECTION="postgresql://postgres:postgres@127.0.0.1:5432/merak"
 ```
+
+## API 与事件
+
+服务端 API 分为两组：
+
+| 前缀 | 用途 |
+|---|---|
+| `/v1/*` | Runtime、Session、Run、Approval、SSE |
+| `/api/*` | WebUI、配置、workspace files、worldbuilding |
+
+常用入口：
+
+| 接口 | 说明 |
+|---|---|
+| `GET /v1/runtime` | 获取模型、工具、MCP、worldbuilding 状态 |
+| `POST /v1/sessions` | 创建会话 |
+| `POST /v1/sessions/{id}/runs` | 启动一次 Run |
+| `GET /v1/sessions/{id}/events/stream` | SSE 事件流 |
+| `GET /api/webui/capabilities` | WebUI 后端能力声明 |
+| `GET /api/workspace/files` | 工作区文件列表 |
+| `GET /api/worldbuilding/worlds` | 世界列表 |
+| `GET /api/worldbuilding/{world_id}/overview` | Story 总览 |
+
+更多接口见：
+
+- [docs/api-reference.md](docs/api-reference.md)
+- [docs/webui-backend-requirements.md](docs/webui-backend-requirements.md)
 
 ## 项目结构
 
 ```text
 Merak/
-├── libs/
-│   ├── core/             共享类型 · 执行端口
-│   ├── config/           分层配置加载
-│   ├── llm/              OpenAI / Anthropic Provider
-│   ├── memory/           工作记忆 · 长期记忆接口
-│   ├── mcp/              MCP stdio 客户端 · 远端工具发现
-│   ├── tools/            内置工具 · ToolRegistry · 权限检查
-│   ├── context/          Token 预算 · 前缀缓存 · 历史压缩
-│   ├── loop/             Agent 状态机 · SubAgentRunner
-│   ├── storage/          PostgreSQL 索引 · JSONL 日志
-│   ├── runtime/          Session · Run · EventBus · Approval
-│   ├── http/             REST API + SSE 流
-│   ├── prompts/          System Prompt 模板
-│   └── worldbuilding/    World · Agent · Narrative · Foreshadowing · Secret · Voice
 ├── cli/                  serve / tui 入口
-├── webui/                React Web UI
-├── config/prompts/       业务 Prompt 配置
-├── scripts/              辅助脚本
-└── docs/                 设计与领域文档
+├── config/prompts/       Prompt 与 worldbuilding 角色设定
+├── docs/                 API、设计、后端需求文档
+├── libs/
+│   ├── config/           配置加载与环境变量覆盖
+│   ├── context/          Token budget、上下文压缩
+│   ├── core/             共享类型和执行接口
+│   ├── http/             REST API + SSE
+│   ├── llm/              OpenAI / Anthropic provider
+│   ├── loop/             Agent 状态机
+│   ├── mcp/              MCP stdio client
+│   ├── memory/           记忆接口
+│   ├── portable_pg/      随包 PostgreSQL 生命周期管理
+│   ├── prompts/          Prompt compositor
+│   ├── runtime/          Session / Run / EventBus / Approval
+│   ├── storage/          Session store 与运行时持久化
+│   ├── tools/            内置工具、权限、工具注册
+│   └── worldbuilding/    World / Agent / Narrative / Secret / Voice
+├── scripts/              安装与辅助脚本
+├── tests/                C++ 测试入口
+└── webui/                React 19 WebUI, Windows 支持
 ```
 
-## 运行测试
+## 开发命令
+
+C++:
 
 ```bash
-cd build && ctest --output-on-failure
+conan install . --build=missing -s build_type=Debug
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/Debug/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug
+cmake --build build -j
+```
 
+WebUI, Windows:
+
+```powershell
 cd webui
-npm run test
+npm install
+npm run dev
 npm run lint
 npm run build
 ```
 
+测试:
+
+```bash
+cd build
+ctest --output-on-failure
+```
+
+## 常见问题
+
+### WebUI 显示无法连接服务端
+
+确认 `merak serve` 已经启动，并监听：
+
+```text
+http://127.0.0.1:3888
+```
+
+如果服务端端口不同，设置 `VITE_PROXY_TARGET` 或 `VITE_API_BASE`。
+
+### CMake 找不到 Conan toolchain
+
+先确认文件存在：
+
+Windows PowerShell:
+
+```powershell
+Get-ChildItem -Recurse build -Filter conan_toolchain.cmake
+```
+
+Linux:
+
+```bash
+find build -name conan_toolchain.cmake
+```
+
+把找到的路径传给：
+
+```bash
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=<path-to-conan_toolchain.cmake>
+```
+
+### Linux 为什么没有 WebUI
+
+当前支持的是：
+
+- Windows: TUI + WebUI
+- Linux: TUI only
+
+Linux WebUI 暂不作为当前版本的支持目标，因为很少有人用Linux图形化界面（当然，如果你用的是图形化 Linux 系统，你也可以正常启动 WebUI）。
+
+### 配置改了但没有生效
+
+配置优先级从低到高：
+
+1. 内置默认值
+2. `~/.merak/settings.json`
+3. `~/.merak/settings.local.json`
+4. 项目 `.merak/settings.json`
+5. 项目 `.merak/settings.local.json`
+6. 环境变量
+
+如果不确定当前加载了哪个配置，启动时查看终端输出中的 `Config: loaded ...`。
+
 ## 技术栈
 
 | 层级 | 技术 |
-|------|------|
-| 语言 | C++23 / TypeScript |
-| 构建 | CMake + Conan 2 / Vite |
-| HTTP Server | cpp-httplib |
-| HTTP Client | libcurl |
-| 存储 | PostgreSQL + JSONL |
+|---|---|
+| Language | C++23, TypeScript |
+| Build | CMake, Conan 2, Vite |
+| UI | FTXUI, React 19, CSS Modules |
+| HTTP | cpp-httplib, libcurl |
 | JSON | nlohmann/json |
-| 日志 | spdlog |
-| TUI | FTXUI |
-| Web UI | React 19 + CSS Modules |
-| 测试 | GTest / Vitest |
+| Storage | SQLite, PostgreSQL, local files |
+| Logging | spdlog |
+| Testing | GTest, Vitest |
 
 ## License
 
