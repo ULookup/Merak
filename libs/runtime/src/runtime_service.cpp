@@ -93,6 +93,14 @@ public:
         std::string creation_id = prelim_json.value("creation_id", "");
         awaiting_creation_id_ = creation_id;
 
+        if (!service_.wb_service_) {
+            ToolResult error_result;
+            error_result.call_id = call.id;
+            error_result.is_error = true;
+            error_result.output = R"({"ok":false,"error":{"code":"NOT_CONFIGURED","message":"worldbuilding service not configured"}})";
+            return error_result;
+        }
+
         auto pending = service_.wb_service_->get_pending_creation(creation_id);
         if (!pending) {
             ToolResult error_result;
@@ -102,6 +110,7 @@ public:
             return error_result;
         }
 
+        service_.store_.update_run_status(run_.id, RunStatus::WaitingApproval);
         service_.emit(run_.session_id, run_.id, "creation_requested", base_payload({
             {"creation_id", creation_id},
             {"tool", pending->tool_name},
@@ -114,6 +123,8 @@ public:
                 return creation_resolved_.has_value() || token_->cancelled();
             });
         }
+
+        service_.store_.update_run_status(run_.id, RunStatus::Running);
 
         if (token_->cancelled()) {
             ToolResult cancelled;
@@ -136,7 +147,7 @@ public:
     }
     const std::string& awaiting_creation_id() const { return awaiting_creation_id_; }
     void resolve(bool allowed){std::lock_guard lock(mutex_);decision_=allowed;changed_.notify_all();}
-    void cancel(){token_->cancel();std::lock_guard lock(mutex_);changed_.notify_all();creation_changed_.notify_all();}
+    void cancel(){token_->cancel();std::lock_guard lock(mutex_);changed_.notify_all();{std::lock_guard lock2(creation_mutex_);creation_changed_.notify_all();}}
     void emit_usage(int in,int out,bool exact)override{service_.emit(run_.session_id,run_.id,event_name("usage_updated"),base_payload({{"input_tokens",in},{"output_tokens",out},{"exact",exact}}));}
     void append_message(const Message&m)override{service_.emit(run_.session_id,run_.id,"message_appended",message_json(m));}
     void record_compaction(int count)override{service_.emit(run_.session_id,run_.id,"compaction_applied",{{"replaced_count",count}});}
