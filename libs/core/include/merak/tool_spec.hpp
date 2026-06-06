@@ -11,6 +11,7 @@ struct ToolSpec {
     std::string parameters_json; // JSON Schema 格式的参数定义
     std::string source;          // "builtin" | "mcp://server_name"
     Category category = Category::ReadOnly;
+    bool requires_confirmation = false;
 };
 
 } // namespace merak

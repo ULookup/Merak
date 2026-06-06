@@ -182,6 +182,12 @@ bool ToolRegistry::check_permission(
     return false;
 }
 
+bool ToolRegistry::requires_confirmation(const std::string& tool_name) const {
+    auto it = tools_.find(tool_name);
+    if (it == tools_.end()) return false;
+    return it->second->spec().requires_confirmation;
+}
+
 bool ToolRegistry::requires_approval(const std::string& tool_name) const {
     auto it = tools_.find(tool_name);
     if (it == tools_.end()) return false;

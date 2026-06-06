@@ -57,6 +57,7 @@ public:
     bool check_permission(const std::string& tool_name,
         const std::string& permission_mode) const;
     bool requires_approval(const std::string& tool_name) const;
+    bool requires_confirmation(const std::string& tool_name) const;
     void set_permission_mode(const std::string& mode) {
         permission_mode_ = mode;
     }
