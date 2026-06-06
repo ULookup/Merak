@@ -16,6 +16,7 @@ enum class WorldbuildingAction {
     WorldCreate,
     WorldUse,
     WorldDelete,
+    WorldRename,
 
     // Agent
     AgentList,

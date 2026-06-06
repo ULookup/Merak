@@ -14,6 +14,7 @@ namespace merak::tui {
 
 struct SessionEntry {
     std::string sid;
+    std::string title;
     uint64_t ts = 0;
     std::string model;
     int msg_count = 0;
@@ -35,6 +36,7 @@ class ResumeView {
         for (const auto& e : index) {
             entries_.push_back({
                 e.value("sid", ""),
+                e.value("title", ""),
                 e.value("ts", 0ULL),
                 e.value("model", ""),
                 e.value("msg_count", 0),
@@ -100,8 +102,11 @@ public:
             if (sel) { line_style.fg = theme::active_theme().accent; line_style.bold(true); }
 
             std::string prefix = sel ? "▶ " : "  ";
+            std::string label = f[i].title.empty()
+                ? f[i].sid.substr(0, 12) + "..."
+                : f[i].title;
             std::ostringstream oss;
-            oss << f[i].sid << "  " << f[i].model << "  " << f[i].msg_count << " msgs";
+            oss << label << "  " << f[i].model << "  " << f[i].msg_count << " msgs";
             buf.set_span(0, y, prefix + oss.str(), line_style);
             ++y;
             if (y < buf.h) {

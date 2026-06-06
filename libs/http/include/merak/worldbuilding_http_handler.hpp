@@ -22,6 +22,7 @@ private:
     void handle_list_worlds(const httplib::Request&, httplib::Response&);
     void handle_create_world(const httplib::Request&, httplib::Response&);
     void handle_delete_world(const httplib::Request&, httplib::Response&);
+    void handle_update_world(const httplib::Request&, httplib::Response&);
 
     // Agent
     void handle_list_agents(const httplib::Request&, httplib::Response&);

@@ -28,6 +28,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_create_world(req, res); });
     server.Delete(R"(/api/worldbuilding/worlds/([^/]+))",
         [this](const auto& req, auto& res) { handle_delete_world(req, res); });
+    server.Patch(R"(/api/worldbuilding/worlds/([^/]+))",
+        [this](const auto& req, auto& res) { handle_update_world(req, res); });
 
     // Agents
     server.Get(R"(/api/worldbuilding/([^/]+)/agents)",
@@ -102,6 +104,22 @@ void WorldbuildingHttpHandler::handle_create_world(const httplib::Request& req, 
 
 void WorldbuildingHttpHandler::handle_delete_world(const httplib::Request&, httplib::Response& res) {
     error_response(res, "Not yet implemented", 501);
+}
+
+void WorldbuildingHttpHandler::handle_update_world(const httplib::Request& req, httplib::Response& res) {
+    auto world_id = req.matches[1];
+    auto body = nlohmann::json::parse(req.body);
+    std::optional<std::string> name;
+    std::optional<std::string> description;
+    if (body.contains("name")) name = body["name"].get<std::string>();
+    if (body.contains("description")) description = body["description"].get<std::string>();
+
+    try {
+        auto world = service_->update_world(world_id, name, description);
+        json_response(res, {{"ok", true}, {"world_id", world.id}, {"name", world.name}, {"description", world.description}});
+    } catch (const std::exception& e) {
+        json_response(res, {{"error", e.what()}}, 404);
+    }
 }
 
 // --- Agent handlers ---

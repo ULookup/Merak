@@ -1,74 +1,128 @@
-import { api } from '../../api/client';
+import { useState } from 'react';
 import { useAppState } from '../../AppState';
-import styles from '../Sidebar.module.css';
+import { api } from '../../api/client';
 
 export default function SessionList() {
   const { state, dispatch } = useAppState();
-
-  async function select(id: string) {
-    if (state.currentRun && !window.confirm('A run is in progress. Switch session anyway?')) {
-      return;
-    }
-    dispatch({ type: 'SET_SESSION', sessionId: id });
-    try {
-      const data = await api.events(id, 0);
-      for (const ev of data.events ?? []) {
-        dispatch({ type: 'APPLY_SSE', frame: ev });
-      }
-    } catch {
-      /* ignore */
-    }
-  }
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
 
   async function create() {
-    try {
-      const data = await api.createSession();
-      const id = data.session_id;
+    const data = await api.createSession();
+    const id = data.session_id;
+    dispatch({
+      type: 'SET_SESSIONS',
+      sessions: [
+        ...state.sessions,
+        { id, title: '', last_seq: 0, created_at: '', updated_at: '', archived_at: null },
+      ],
+    });
+    select(id);
+  }
+
+  function select(id: string) {
+    dispatch({ type: 'SET_SESSION', sessionId: id });
+  }
+
+  function startRename(session: { id: string; title: string }) {
+    setEditingId(session.id);
+    setEditValue(session.title || '');
+  }
+
+  function cancelRename() {
+    setEditingId(null);
+    setEditValue('');
+  }
+
+  async function confirmRename(id: string) {
+    const newTitle = editValue.trim();
+    if (newTitle) {
+      const data = await api.updateSession(id, newTitle);
+      const updated = data.session;
       dispatch({
         type: 'SET_SESSIONS',
-        sessions: [
-          ...state.sessions,
-          { id, title: '', last_seq: 0, created_at: '', updated_at: '', archived_at: null },
-        ],
+        sessions: state.sessions.map((s) =>
+          s.id === id ? { ...s, title: updated.title, updated_at: updated.updated_at } : s
+        ),
       });
-      select(id);
+    }
+    setEditingId(null);
+    setEditValue('');
+  }
+
+  async function generateTitle(id: string) {
+    try {
+      const res = await api.generateTitle(id);
+      const title = res.title;
+      if (title) {
+        const data = await api.updateSession(id, title);
+        const updated = data.session;
+        dispatch({
+          type: 'SET_SESSIONS',
+          sessions: state.sessions.map((s) =>
+            s.id === id ? { ...s, title: updated.title, updated_at: updated.updated_at } : s
+          ),
+        });
+      }
     } catch {
-      /* ignore */
+      startRename(state.sessions.find((s) => s.id === id) || { id, title: '' });
     }
   }
 
+  const sessions = [...state.sessions].sort(
+    (a, b) => new Date(b.updated_at || b.created_at).getTime() - new Date(a.updated_at || a.created_at).getTime()
+  );
+
   return (
-    <div className={`${styles.section} ${styles.sessions}`}>
-      <div className={styles.label}>Sessions</div>
-      <div className={styles.sessionList}>
-        {state.sessions.length === 0 ? (
-          <div className={styles.emptyState} data-testid="session-list-empty">
-            No sessions yet.
-            <br />
-            Create one to get started.
-          </div>
-        ) : (
-          state.sessions.map((s) => (
-            <div
-              key={s.id}
-              data-testid="session-item"
-              className={`${styles.sessionItem} ${s.id === state.sessionId ? styles.sessionItemActive : ''}`}
-              onClick={() => select(s.id)}
-              aria-label={s.title || s.id.slice(0, 12)}
-            >
-              {s.title || s.id.slice(0, 12)}
-            </div>
-          ))
-        )}
+    <div className="session-list">
+      <div className="session-list-header">
+        <span>Sessions</span>
+        <button onClick={create} title="New Session">+</button>
       </div>
-      <button
-        className={styles.newBtn}
-        onClick={create}
-        data-testid="new-session-btn"
-        aria-label="New session"
-      >
-        New Session
-      </button>
+      <ul>
+        {sessions.map((s) => (
+          <li
+            key={s.id}
+            className={s.id === state.sessionId ? 'active' : ''}
+            onClick={() => select(s.id)}
+            onContextMenu={(e) => { e.preventDefault(); startRename(s); }}
+          >
+            {editingId === s.id ? (
+              <input
+                className="session-rename-input"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={() => confirmRename(s.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') confirmRename(s.id);
+                  if (e.key === 'Escape') cancelRename();
+                }}
+                onClick={(e) => e.stopPropagation()}
+                autoFocus
+              />
+            ) : (
+              <>
+                <span
+                  className="session-title"
+                  onDoubleClick={(e) => { e.stopPropagation(); startRename(s); }}
+                  aria-label={s.title || 'New Session'}
+                >
+                  {s.title || 'New Session'}
+                </span>
+                {s.id === state.sessionId && (
+                  <button
+                    className="session-generate-btn"
+                    title="Generate title"
+                    onClick={(e) => { e.stopPropagation(); generateTitle(s.id); }}
+                  >
+                    ✨
+                  </button>
+                )}
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
