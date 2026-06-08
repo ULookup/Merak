@@ -1,6 +1,7 @@
 #include <merak/worldbuilding_http_handler.hpp>
 #include <merak/runtime_service.hpp>
 #include <merak/worldbuilding/world_models.hpp>
+#include <merak/worldbuilding/card_access.hpp>
 
 #include <algorithm>
 #include <optional>
@@ -182,6 +183,14 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_create_agent(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+))",
         [this](const auto& req, auto& res) { handle_get_agent(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/agents/([^/]+))",
+        [this](const auto& req, auto& res) { handle_patch_agent(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries)",
+        [this](const auto& req, auto& res) { handle_agent_diary_list(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries)",
+        [this](const auto& req, auto& res) { handle_agent_diary_add(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/relations)",
+        [this](const auto& req, auto& res) { handle_agent_relations(req, res); });
     server.Get(R"(/api/worldbuilding/agents/([^/]+)/prompt)",
         [this](const auto& req, auto& res) { handle_load_agent_prompt(req, res); });
 
@@ -190,10 +199,14 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_overview(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/chapters)",
         [this](const auto& req, auto& res) { handle_list_chapters(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+))",
+        [this](const auto& req, auto& res) { handle_patch_chapter(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/scenes)",
         [this](const auto& req, auto& res) { handle_list_scenes(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes)",
         [this](const auto& req, auto& res) { handle_scene_new(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+))",
+        [this](const auto& req, auto& res) { handle_patch_scene(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/end)",
         [this](const auto& req, auto& res) { handle_scene_end(req, res); });
 
@@ -208,12 +221,16 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_foreshadow_list(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/foreshadowing)",
         [this](const auto& req, auto& res) { handle_foreshadow_plant(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/foreshadowing/([^/]+))",
+        [this](const auto& req, auto& res) { handle_patch_foreshadow(req, res); });
 
     // Secret
     server.Get(R"(/api/worldbuilding/([^/]+)/secrets)",
         [this](const auto& req, auto& res) { handle_secret_list(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/secrets)",
         [this](const auto& req, auto& res) { handle_secret_create(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/secrets/([^/]+))",
+        [this](const auto& req, auto& res) { handle_patch_secret(req, res); });
 }
 
 // --- World handlers ---
@@ -369,18 +386,26 @@ void WorldbuildingHttpHandler::handle_get_agent(const httplib::Request& req, htt
             error_response(res, "Agent not found", 404);
             return;
         }
-        json_response(res, {
-            {"ok", true},
-            {"agent", {
-                {"id", agent->id},
-                {"world_id", agent->world_id},
-                {"name", agent->name},
-                {"display_name", agent->display_name},
-                {"kind", worldbuilding::to_string(agent->kind)},
-                {"created_at", agent->created_at},
-                {"updated_at", agent->updated_at}
-            }}
-        });
+        auto card = service_->agents().load_character_card(agent_id);
+        auto j = agent_json(*agent);
+        j["character_card"] = {
+            {"version", card.version},
+            {"age", card.age},
+            {"gender", card.gender},
+            {"race", card.race},
+            {"identity", card.identity},
+            {"core_traits", card.core_traits},
+            {"emotional_tendency", card.emotional_tendency},
+            {"speaking_style", card.speaking_style},
+            {"core_desire", card.core_desire},
+            {"deep_fear", card.deep_fear},
+            {"daily_goal", card.daily_goal},
+            {"background", card.background},
+            {"knowledge_scope", card.knowledge_scope},
+            {"appearance", card.appearance},
+            {"taboo_topics", card.taboo_topics}
+        };
+        json_response(res, {{"ok", true}, {"agent", j}});
     } catch (const std::exception& e) {
         error_response(res, e.what());
     }
@@ -674,6 +699,153 @@ void WorldbuildingHttpHandler::handle_load_agent_prompt(const httplib::Request& 
         });
     } catch (const std::exception& e) {
         error_response(res, e.what());
+    }
+}
+
+// --- Agent card PATCH ---
+
+void WorldbuildingHttpHandler::handle_patch_agent(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string aid = req.matches[2];
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        auto fields = body.at("fields");
+        int version = body.value("version", 0);
+        auto card = service_->agents().patch_character_card(aid, fields, version);
+        json_response(res, {{"ok", true}, {"version", card.version}});
+    } catch (const worldbuilding::VersionConflictError& e) {
+        nlohmann::json j = {
+            {"ok", false},
+            {"error", {
+                {"code", "version_conflict"},
+                {"message", "卡片已被其他来源修改，请刷新后重试"},
+                {"current_version", e.current_version},
+                {"retryable", true}
+            }}
+        };
+        res.status = 409;
+        res.set_content(j.dump(), "application/json");
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent diary handlers ---
+
+void WorldbuildingHttpHandler::handle_agent_diary_list(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string aid = req.matches[2];
+        auto diaries = service_->agents().recent_diary(aid, 50);
+        nlohmann::json arr = nlohmann::json::array();
+        for (auto& d : diaries) {
+            arr.push_back({
+                {"id", d.id},
+                {"agent_id", d.agent_id},
+                {"scene_id", d.scene_id},
+                {"content", d.content},
+                {"world_time", d.world_time},
+                {"created_at", d.created_at}
+            });
+        }
+        json_response(res, {{"ok", true}, {"diaries", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_agent_diary_add(const httplib::Request& req, httplib::Response& res) {
+    std::string aid = req.matches[2];
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        worldbuilding::DiaryEntry entry;
+        entry.agent_id = aid;
+        entry.scene_id = body.value("scene_id", "");
+        entry.content = body.at("content").get<std::string>();
+        entry.world_time = body.value("world_time", "");
+        service_->agents().append_diary_entry(std::move(entry));
+        json_response(res, {{"ok", true}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent relations ---
+
+void WorldbuildingHttpHandler::handle_agent_relations(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string aid = req.matches[2];
+        auto relations = service_->agents().relations_for(aid);
+        nlohmann::json arr = nlohmann::json::array();
+        for (auto& rel : relations) {
+            arr.push_back({
+                {"agent_id", rel.agent_id},
+                {"target_id", rel.target_id},
+                {"relation_type", rel.relation_type},
+                {"description", rel.description},
+                {"intimacy", rel.intimacy},
+                {"key_events", rel.key_events},
+                {"updated_at", rel.updated_at}
+            });
+        }
+        json_response(res, {{"ok", true}, {"relations", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- PATCH scene / chapter ---
+
+void WorldbuildingHttpHandler::handle_patch_scene(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string sid = req.matches[2];
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        auto fields = body.at("fields");
+        service_->narrative().patch_scene(wid, sid, fields);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_patch_chapter(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string cid = req.matches[2];
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        auto fields = body.at("fields");
+        service_->narrative().patch_chapter(wid, cid, fields);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- PATCH foreshadow / secret ---
+
+void WorldbuildingHttpHandler::handle_patch_foreshadow(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string fid = req.matches[2];
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        auto fields = body.at("fields");
+        service_->foreshadowing().patch(wid, fid, fields);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_patch_secret(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string sid = req.matches[2];
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        auto fields = body.at("fields");
+        service_->secrets().patch(wid, sid, fields);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
     }
 }
 

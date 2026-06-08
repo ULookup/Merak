@@ -55,6 +55,20 @@ private:
 
     // Agent prompt
     void handle_load_agent_prompt(const httplib::Request&, httplib::Response&);
+
+    // Agent card & diaries
+    void handle_patch_agent(const httplib::Request&, httplib::Response&);
+    void handle_agent_diary_list(const httplib::Request&, httplib::Response&);
+    void handle_agent_diary_add(const httplib::Request&, httplib::Response&);
+    void handle_agent_relations(const httplib::Request&, httplib::Response&);
+
+    // PATCH routes for narrative entities
+    void handle_patch_scene(const httplib::Request&, httplib::Response&);
+    void handle_patch_chapter(const httplib::Request&, httplib::Response&);
+
+    // PATCH routes for world entities
+    void handle_patch_foreshadow(const httplib::Request&, httplib::Response&);
+    void handle_patch_secret(const httplib::Request&, httplib::Response&);
 };
 
 } // namespace merak
