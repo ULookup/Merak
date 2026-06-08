@@ -1,0 +1,279 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border, #333);
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted, #888);
+  cursor: pointer;
+  font-size: 12px;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.tab:hover {
+  color: var(--text-primary, #ddd);
+}
+
+.active {
+  color: var(--teal, #4fc3f7);
+  border-bottom-color: var(--teal, #4fc3f7);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Kanban */
+.kanban {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  min-height: 0;
+}
+
+.column {
+  flex: 1;
+  min-width: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.column.open {
+  background: rgba(79, 195, 247, 0.05);
+  border: 1px solid rgba(79, 195, 247, 0.2);
+}
+
+.column.paid {
+  background: rgba(76, 175, 80, 0.05);
+  border: 1px solid rgba(76, 175, 80, 0.2);
+}
+
+.column.abandoned {
+  background: rgba(158, 158, 158, 0.05);
+  border: 1px solid rgba(158, 158, 158, 0.15);
+}
+
+.columnHeader {
+  padding: 8px 8px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--muted, #999);
+}
+
+.count {
+  font-size: 10px;
+  opacity: 0.6;
+  margin-left: 4px;
+}
+
+.columnBody {
+  padding: 0 4px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card {
+  padding: 8px;
+  background: var(--card-bg, #1a1a2e);
+  border-radius: 4px;
+  border: 1px solid var(--border, #2a2a3a);
+}
+
+.cardContent {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-primary, #ddd);
+}
+
+.cardIdea {
+  margin: 0 0 4px 0;
+  font-size: 11px;
+  color: var(--amber, #ffb74d);
+  font-style: italic;
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.hint {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+}
+
+.tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(255, 183, 77, 0.12);
+  color: #ffb74d;
+}
+
+.colEmpty {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted, #555);
+  padding: 12px;
+  margin: 0;
+}
+
+/* Secrets */
+.secretList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.secretCard {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #2a2a3a);
+  background: var(--card-bg, #1a1a2e);
+}
+
+.secretCard.secret_active {
+  border-left: 3px solid #ce93d8;
+}
+
+.secretCard.secret_exposed {
+  border-left: 3px solid #ffb74d;
+}
+
+.secretCard.secret_abandoned {
+  border-left: 3px solid #666;
+  opacity: 0.6;
+}
+
+.secretHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.secretHeader strong {
+  font-size: 13px;
+}
+
+.secretStatus {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(206, 147, 216, 0.15);
+  color: #ce93d8;
+}
+
+.secretTruth {
+  margin: 0 0 3px 0;
+  font-size: 12px;
+  color: var(--text-primary, #ddd);
+  line-height: 1.4;
+}
+
+.secretPublic {
+  margin: 0 0 2px 0;
+  font-size: 11px;
+  color: var(--muted, #999);
+  font-style: italic;
+}
+
+.secretStakes {
+  margin: 0 0 2px 0;
+  font-size: 11px;
+  color: var(--amber, #ffb74d);
+}
+
+.secretAware,
+.secretSuspicious {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted, #888);
+}
+
+.secretSuspicious {
+  color: #e57373;
+}
+
+/* Relations */
+.relationView {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 12px;
+}
+
+.graph {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  background: var(--card-bg, #12121f);
+}
+
+.relationList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.relationAgent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.relationAgent:hover {
+  background: var(--hover, rgba(255,255,255,0.04));
+}
+
+.relAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #4fc3f7, #7c4dff);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.relKind {
+  display: block;
+  font-size: 11px;
+  color: var(--muted, #888);
+}
+
+.empty {
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted, #666);
+  padding: 24px;
+  margin: 0;
+}
