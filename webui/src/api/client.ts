@@ -1,4 +1,5 @@
 import type {
+  AgentDetailResponse,
   AgentListResponse,
   ArchiveSessionResponse,
   ApprovalResponse,
@@ -6,11 +7,15 @@ import type {
   CapabilitiesResponse,
   ChapterListResponse,
   CreateSessionResponse,
+  DiaryListResponse,
   ForeshadowingListResponse,
   GenerateTitleResponse,
   LlmConfig,
   OkResponse,
   OpenWorkspacePathResponse,
+  PatchAgentCardResponse,
+  RelationListResponse,
+  RunAuditResponse,
   RunDetailResponse,
   RuntimeMetadata,
   SaveWorkspaceFileResponse,
@@ -390,4 +395,43 @@ export const api = {
 
   openWorkspacePath: (path: string, reveal = false) =>
     request<OpenWorkspacePathResponse>('POST', '/api/workspace/open', { path, reveal }),
+
+  // Agent detail + card
+  fetchAgentDetail: (worldId: string, agentId: string) =>
+    request<AgentDetailResponse>('GET', `/api/worldbuilding/${worldId}/agents/${agentId}`),
+
+  patchAgentCard: (worldId: string, agentId: string, fields: Record<string, unknown>, version: number) =>
+    request<PatchAgentCardResponse>('PATCH', `/api/worldbuilding/${worldId}/agents/${agentId}`, { fields, version }),
+
+  // Diaries
+  fetchDiaries: (worldId: string, agentId: string) =>
+    request<DiaryListResponse>('GET', `/api/worldbuilding/${worldId}/agents/${agentId}/diaries`),
+
+  addDiary: (worldId: string, agentId: string, sceneId: string | undefined, content: string, worldTime?: string) =>
+    request<OkResponse>('POST', `/api/worldbuilding/${worldId}/agents/${agentId}/diaries`, {
+      scene_id: sceneId,
+      content,
+      world_time: worldTime,
+    }),
+
+  // Relations
+  fetchRelations: (worldId: string, agentId: string) =>
+    request<RelationListResponse>('GET', `/api/worldbuilding/${worldId}/agents/${agentId}/relations`),
+
+  // Patch other cards
+  patchForeshadow: (worldId: string, id: string, fields: Record<string, unknown>) =>
+    request<OkResponse>('PATCH', `/api/worldbuilding/${worldId}/foreshadowing/${id}`, { fields }),
+
+  patchScene: (worldId: string, id: string, fields: Record<string, unknown>) =>
+    request<OkResponse>('PATCH', `/api/worldbuilding/${worldId}/scenes/${id}`, { fields }),
+
+  patchChapter: (worldId: string, id: string, fields: Record<string, unknown>) =>
+    request<OkResponse>('PATCH', `/api/worldbuilding/${worldId}/chapters/${id}`, { fields }),
+
+  patchSecret: (worldId: string, id: string, fields: Record<string, unknown>) =>
+    request<OkResponse>('PATCH', `/api/worldbuilding/${worldId}/secrets/${id}`, { fields }),
+
+  // Run audit
+  fetchRunAudit: (runId: string) =>
+    request<RunAuditResponse>('GET', `/v1/runs/${runId}/audit`),
 };

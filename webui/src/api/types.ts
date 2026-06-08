@@ -360,3 +360,124 @@ export interface RunDetailResponse {
   run: RunDetail;
   fallback?: boolean;
 }
+
+// === Card API ===
+export interface CharacterCardDetail {
+  version: number;
+  age?: number;
+  gender?: string;
+  race?: string;
+  identity?: string;
+  core_traits: string[];
+  emotional_tendency?: string;
+  speaking_style?: string;
+  core_desire?: string;
+  deep_fear?: string;
+  daily_goal?: string;
+  background?: string;
+  knowledge_scope?: string;
+  appearance?: string;
+  taboo_topics?: string[];
+}
+
+export interface AgentDetail {
+  id: string;
+  world_id: string;
+  name: string;
+  display_name: string;
+  kind: string;
+  created_at: string;
+  updated_at: string;
+  character_card: CharacterCardDetail;
+}
+
+export interface AgentDetailResponse {
+  ok: boolean;
+  agent: AgentDetail;
+}
+
+export interface PatchAgentCardResponse {
+  ok: boolean;
+  version: number;
+}
+
+export interface DiaryEntry {
+  id: string;
+  agent_id: string;
+  scene_id?: string;
+  content: string;
+  world_time?: string;
+  created_at: string;
+}
+
+export interface DiaryListResponse {
+  ok: boolean;
+  diaries: DiaryEntry[];
+}
+
+export interface RelationEntry {
+  agent_id: string;
+  target_id: string;
+  relation_type: string;
+  description?: string;
+  intimacy?: number;
+  key_events?: string[];
+  updated_at: string;
+}
+
+export interface RelationListResponse {
+  ok: boolean;
+  relations: RelationEntry[];
+}
+
+// === Pipeline ===
+export type CreativePhase =
+  | 'worldbuilding'
+  | 'character_creation'
+  | 'plot_architecture'
+  | 'scene_writing'
+  | 'reflection';
+
+export interface PipelineState {
+  world_id: string;
+  current_phase: CreativePhase;
+  active_arc_id?: string;
+  active_chapter_id?: string;
+  active_scene_id?: string;
+  scene_count_in_chapter: number;
+  total_scenes_target: number;
+  needs_diary_update: boolean;
+  needs_character_update: boolean;
+}
+
+// === Review ===
+export interface ReviewIssue {
+  severity: 'error' | 'warning' | 'info';
+  category: 'consistency' | 'pacing' | 'foreshadow' | 'character' | 'style';
+  location: string;
+  description: string;
+  suggestion: string;
+}
+
+export interface ReviewSummary {
+  pass: boolean;
+  issue_count: number;
+  suggestion: string;
+}
+
+// === Audit ===
+export interface RunAudit {
+  run_id: string;
+  status: string;
+  duration_seconds: number;
+  turn_count: number;
+  tool_call_stats: Record<string, number>;
+  token_usage: { input: number; output: number };
+  approval_count: number;
+  checkpoint_count: number;
+}
+
+export interface RunAuditResponse {
+  ok: boolean;
+  audit: RunAudit;
+}
