@@ -1,6 +1,7 @@
 /build/
 /Debug/
-/config/
+/config/*
+!/config/skills/
 /config.json
 CMakeUserPresets.json
 .merak/
