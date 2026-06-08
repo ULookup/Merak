@@ -4,6 +4,10 @@
 #include <merak/prompts/skill_prompt.hpp>
 #include <merak/prompts/team_prompt.hpp>
 #include <merak/prompts/scene_prompt.hpp>
+#include <merak/dsl/parser.hpp>
+#include <merak/dsl/resolver.hpp>
+#include <merak/dsl/renderer.hpp>
+#include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <algorithm>
 #include <sstream>
 
@@ -109,6 +113,38 @@ std::string PromptCompositor::assemble(const PromptProfile& profile) {
     }
 
     return oss.str();
+}
+
+std::string PromptCompositor::resolve_dsl_references(
+    const std::string& assembled_text,
+    worldbuilding::WorldbuildingService& svc,
+    const std::string& world_id,
+    const std::string& agent_id) {
+
+    if (world_id.empty()) return assembled_text;
+
+    // Parse DSL references
+    auto refs = dsl::Parser::parse(assembled_text);
+    if (refs.empty()) return assembled_text;
+
+    // Resolve each reference
+    dsl::Resolver resolver(svc, world_id);
+    if (!agent_id.empty()) {
+        resolver.set_context("", "", "", agent_id);
+    }
+
+    std::vector<dsl::ResolvedContent> resolved;
+    for (const auto& ref : refs) {
+        try {
+            resolved.push_back(resolver.resolve(ref));
+        } catch (...) {
+            // If resolution fails, leave the reference as-is
+            resolved.push_back({ref.raw, ref.raw});
+        }
+    }
+
+    // Render: replace references with resolved content
+    return dsl::Renderer::render(assembled_text, resolved);
 }
 
 } // namespace merak::prompts

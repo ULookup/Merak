@@ -88,6 +88,10 @@ struct PromptProfile {
     std::optional<TeamContext> team_ctx;
     std::optional<SceneContext> scene_ctx;
     std::optional<ResourceBudget> budget;
+
+    // DSL 上下文注入所需
+    std::optional<std::string> active_world_id;
+    std::optional<std::string> active_agent_id;
 };
 
 // ─── PromptSection（对标 astra PromptSection）───
