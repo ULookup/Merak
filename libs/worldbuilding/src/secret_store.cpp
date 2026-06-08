@@ -261,6 +261,70 @@ Secret SecretStore::reverse_truth(const std::string& world_id,
     return create(world_id, deeper);
 }
 
+bool SecretStore::patch(const std::string& world_id,
+                         const std::string& id,
+                         const nlohmann::json& fields) {
+    ensure_world_exists(worlds_, world_id);
+
+    const auto path =
+        worlds_.world_path(world_id) / "secrets" / (id + ".json");
+    if (!std::filesystem::exists(path)) return false;
+    auto json = read_json(path);
+
+    // Update JSON fields
+    if (fields.contains("status")) json["status"] = fields["status"];
+    if (fields.contains("aware_character_ids"))
+        json["aware_character_ids"] = fields["aware_character_ids"];
+    if (fields.contains("suspicious_character_ids"))
+        json["suspicious_character_ids"] = fields["suspicious_character_ids"];
+    if (fields.contains("public_version")) {
+        json["public_version"] = fields["public_version"];
+    }
+    if (fields.contains("stakes")) json["stakes"] = fields["stakes"];
+    if (fields.contains("truth")) json["truth"] = fields["truth"];
+
+    write_json(path, json);
+
+    // Build dynamic SET clause for DB update
+    std::vector<std::string> set_parts;
+    std::vector<std::string> params;
+    int param_idx = 1;
+
+    if (fields.contains("status")) {
+        set_parts.push_back("status = $" + std::to_string(param_idx++));
+        params.push_back(fields["status"].get<std::string>());
+    }
+    if (fields.contains("stakes")) {
+        set_parts.push_back("stakes = $" + std::to_string(param_idx++));
+        params.push_back(fields["stakes"].get<std::string>());
+    }
+    if (fields.contains("truth")) {
+        set_parts.push_back("content = $" + std::to_string(param_idx++));
+        params.push_back(fields["truth"].get<std::string>());
+    }
+    if (fields.contains("aware_character_ids")) {
+        set_parts.push_back("known_by_ids = $" + std::to_string(param_idx++));
+        params.push_back(fields["aware_character_ids"].dump());
+    }
+
+    if (set_parts.empty()) return true;
+
+    std::string sql = "UPDATE secrets SET ";
+    for (size_t i = 0; i < set_parts.size(); i++) {
+        if (i > 0) sql += ", ";
+        sql += set_parts[i];
+    }
+    sql += ", updated_at = NOW() WHERE id = $" + std::to_string(param_idx++) +
+           " AND world_id = $" + std::to_string(param_idx++);
+    params.push_back(id);
+    params.push_back(world_id);
+
+    PgConn conn(*pool_);
+    conn.query(sql, params);
+
+    return true;
+}
+
 std::vector<Secret> SecretStore::list(const std::string& world_id,
                                        std::optional<SecretStatus> status) const {
     ensure_world_exists(worlds_, world_id);

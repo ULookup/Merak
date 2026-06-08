@@ -44,6 +44,11 @@ public:
                           const std::string& secret_id,
                           std::string deeper_truth,
                           std::string new_stakes);
+
+    // 部分更新秘密字段 (status, aware_character_ids, suspicious_character_ids, public_version, stakes)
+    bool patch(const std::string& world_id, const std::string& id,
+               const nlohmann::json& fields);
+
     std::vector<Secret> list(const std::string& world_id,
                               std::optional<SecretStatus> status) const;
     std::vector<KnowledgeView>

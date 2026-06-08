@@ -551,6 +551,134 @@ NarrativeStore::insert_flashback_scene(const std::string& world_id,
     return warnings;
 }
 
+bool NarrativeStore::patch_scene(const std::string& world_id,
+                                  const std::string& scene_id,
+                                  const nlohmann::json& fields) {
+    ensure_world_exists(worlds_, world_id);
+
+    const auto path =
+        worlds_.world_path(world_id) / "scenes" / (scene_id + ".json");
+    if (!std::filesystem::exists(path)) return false;
+    auto json = read_json(path);
+
+    // Update JSON fields
+    if (fields.contains("title")) json["title"] = fields["title"];
+    if (fields.contains("world_time")) json["world_time"] = fields["world_time"];
+    if (fields.contains("status")) json["status"] = fields["status"];
+    if (fields.contains("narrative")) json["narrative"] = fields["narrative"];
+    if (fields.contains("location_id")) json["location_id"] = fields["location_id"];
+    if (fields.contains("pitch")) json["narrative"] = fields["pitch"];
+
+    write_json(path, json);
+
+    // Build dynamic SET clause for DB update
+    std::vector<std::string> set_parts;
+    std::vector<std::string> params;
+    int param_idx = 1;
+
+    if (fields.contains("title")) {
+        set_parts.push_back("name = $" + std::to_string(param_idx++));
+        params.push_back(fields["title"].get<std::string>());
+    }
+    if (fields.contains("world_time")) {
+        set_parts.push_back("world_time = $" + std::to_string(param_idx++));
+        params.push_back(fields["world_time"].get<std::string>());
+    }
+    if (fields.contains("status")) {
+        set_parts.push_back("status = $" + std::to_string(param_idx++));
+        params.push_back(fields["status"].get<std::string>());
+    }
+    if (fields.contains("narrative") || fields.contains("pitch")) {
+        set_parts.push_back("pitch = $" + std::to_string(param_idx++));
+        const auto& src = fields.contains("narrative") ? fields["narrative"] : fields["pitch"];
+        params.push_back(src.get<std::string>());
+    }
+    if (fields.contains("location_id")) {
+        set_parts.push_back("location = $" + std::to_string(param_idx++));
+        params.push_back(fields["location_id"].get<std::string>());
+    }
+
+    if (set_parts.empty()) return true;
+
+    std::string sql = "UPDATE scenes SET ";
+    for (size_t i = 0; i < set_parts.size(); i++) {
+        if (i > 0) sql += ", ";
+        sql += set_parts[i];
+    }
+    sql += ", updated_at = NOW() WHERE id = $" + std::to_string(param_idx++) +
+           " AND world_id = $" + std::to_string(param_idx++);
+    params.push_back(scene_id);
+    params.push_back(world_id);
+
+    PgConn conn(*pool_);
+    conn.query(sql, params);
+
+    return true;
+}
+
+bool NarrativeStore::patch_chapter(const std::string& world_id,
+                                    const std::string& chapter_id,
+                                    const nlohmann::json& fields) {
+    ensure_world_exists(worlds_, world_id);
+
+    const auto path =
+        worlds_.world_path(world_id) / "chapters" / (chapter_id + ".json");
+    if (!std::filesystem::exists(path)) return false;
+    auto json = read_json(path);
+
+    // Update JSON fields
+    if (fields.contains("title")) json["title"] = fields["title"];
+    if (fields.contains("pitch")) json["pitch"] = fields["pitch"];
+    if (fields.contains("notes")) json["notes"] = fields["notes"];
+    if (fields.contains("number")) json["number"] = fields["number"];
+    if (fields.contains("status")) json["status"] = fields["status"];
+
+    write_json(path, json);
+
+    // Build dynamic SET clause for DB update
+    std::vector<std::string> set_parts;
+    std::vector<std::string> params;
+    int param_idx = 1;
+
+    if (fields.contains("title")) {
+        set_parts.push_back("name = $" + std::to_string(param_idx++));
+        params.push_back(fields["title"].get<std::string>());
+    }
+    if (fields.contains("pitch")) {
+        set_parts.push_back("pitch = $" + std::to_string(param_idx++));
+        params.push_back(fields["pitch"].get<std::string>());
+    }
+    if (fields.contains("status")) {
+        set_parts.push_back("status = $" + std::to_string(param_idx++));
+        params.push_back(fields["status"].get<std::string>());
+    }
+    if (fields.contains("number")) {
+        set_parts.push_back("position = $" + std::to_string(param_idx++));
+        if (fields["number"].is_number()) {
+            params.push_back(std::to_string(fields["number"].get<int>()));
+        } else {
+            params.push_back(fields["number"].get<std::string>());
+        }
+    }
+
+    if (set_parts.empty()) return true;
+
+    std::string sql = "UPDATE chapters SET ";
+    for (size_t i = 0; i < set_parts.size(); i++) {
+        if (i > 0) sql += ", ";
+        sql += set_parts[i];
+    }
+    sql += ", updated_at = NOW() WHERE id = $" + std::to_string(param_idx++) +
+           " AND world_id = $" + std::to_string(param_idx++);
+    params.push_back(chapter_id);
+    params.push_back(world_id);
+
+    PgConn conn(*pool_);
+    conn.query(sql, params);
+
+    return true;
+}
+
 ChapterContext
 NarrativeStore::chapter_context(const std::string& world_id,
                                 const std::string& chapter_id) const {

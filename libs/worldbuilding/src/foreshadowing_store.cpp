@@ -223,6 +223,65 @@ Foreshadowing ForeshadowingStore::abandon(const std::string& world_id,
     return item;
 }
 
+bool ForeshadowingStore::patch(const std::string& world_id,
+                                const std::string& id,
+                                const nlohmann::json& fields) {
+    ensure_world_exists(worlds_, world_id);
+
+    const auto path =
+        worlds_.world_path(world_id) / "foreshadows" / (id + ".json");
+    if (!std::filesystem::exists(path)) return false;
+    auto json = read_json(path);
+
+    // Update JSON fields
+    if (fields.contains("pay_off_idea")) json["pay_off_idea"] = fields["pay_off_idea"];
+    if (fields.contains("status")) json["status"] = fields["status"];
+    if (fields.contains("hint_level")) json["hint_level"] = fields["hint_level"];
+    if (fields.contains("tags")) json["tags"] = fields["tags"];
+    if (fields.contains("content")) json["content"] = fields["content"];
+
+    write_json(path, json);
+
+    // Build dynamic SET clause for DB update
+    std::vector<std::string> set_parts;
+    std::vector<std::string> params;
+    int param_idx = 1;
+
+    if (fields.contains("pay_off_idea")) {
+        set_parts.push_back("pay_off = $" + std::to_string(param_idx++));
+        params.push_back(fields["pay_off_idea"].get<std::string>());
+    }
+    if (fields.contains("status")) {
+        set_parts.push_back("status = $" + std::to_string(param_idx++));
+        params.push_back(fields["status"].get<std::string>());
+    }
+    if (fields.contains("hint_level")) {
+        set_parts.push_back("hint_level = $" + std::to_string(param_idx++));
+        params.push_back(fields["hint_level"].get<std::string>());
+    }
+    if (fields.contains("content")) {
+        set_parts.push_back("hint = $" + std::to_string(param_idx++));
+        params.push_back(fields["content"].get<std::string>());
+    }
+
+    if (set_parts.empty()) return true;
+
+    std::string sql = "UPDATE foreshadowings SET ";
+    for (size_t i = 0; i < set_parts.size(); i++) {
+        if (i > 0) sql += ", ";
+        sql += set_parts[i];
+    }
+    sql += ", updated_at = NOW() WHERE id = $" + std::to_string(param_idx++) +
+           " AND world_id = $" + std::to_string(param_idx++);
+    params.push_back(id);
+    params.push_back(world_id);
+
+    PgConn conn(*pool_);
+    conn.query(sql, params);
+
+    return true;
+}
+
 std::vector<Foreshadowing>
 ForeshadowingStore::list(const std::string& world_id,
                           std::optional<ForeshadowStatus> status) const {
