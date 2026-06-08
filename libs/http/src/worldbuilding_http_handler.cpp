@@ -318,6 +318,11 @@ void WorldbuildingHttpHandler::handle_update_world(const httplib::Request& req, 
 void WorldbuildingHttpHandler::handle_list_agents(const httplib::Request& req, httplib::Response& res) {
     try {
         std::string wid = req.matches[1];
+        auto world = service_->worlds().get_world(wid);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
         auto agents = service_->agents().list_agents(wid);
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& a : agents) {
@@ -843,10 +848,34 @@ void WorldbuildingHttpHandler::handle_patch_scene(const httplib::Request& req, h
     std::string wid = req.matches[1];
     std::string sid = req.matches[2];
     try {
+        auto scene = service_->narrative().get_scene(wid, sid);
+        if (!scene) {
+            error_response(res, "Scene not found", 404, "scene_not_found");
+            return;
+        }
         auto body = nlohmann::json::parse(req.body);
         auto fields = body.at("fields");
+        if (fields.contains("status")) {
+            std::string s = fields["status"].get<std::string>();
+            if (s != "drafting" && s != "writing" && s != "completed" && s != "archived") {
+                error_response(res, "Invalid scene status: " + s, 400);
+                return;
+            }
+        }
         service_->narrative().patch_scene(wid, sid, fields);
         json_response(res, {{"ok", true}});
+    } catch (const worldbuilding::VersionConflictError& e) {
+        nlohmann::json j = {
+            {"ok", false},
+            {"error", {
+                {"code", "version_conflict"},
+                {"message", "资源已被其他来源修改，请刷新后重试"},
+                {"current_version", e.current_version},
+                {"retryable", true}
+            }}
+        };
+        res.status = 409;
+        res.set_content(j.dump(), "application/json");
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
@@ -858,8 +887,27 @@ void WorldbuildingHttpHandler::handle_patch_chapter(const httplib::Request& req,
     try {
         auto body = nlohmann::json::parse(req.body);
         auto fields = body.at("fields");
+        if (fields.contains("status")) {
+            std::string s = fields["status"].get<std::string>();
+            if (s != "drafting" && s != "writing" && s != "completed" && s != "archived") {
+                error_response(res, "Invalid chapter status: " + s, 400);
+                return;
+            }
+        }
         service_->narrative().patch_chapter(wid, cid, fields);
         json_response(res, {{"ok", true}});
+    } catch (const worldbuilding::VersionConflictError& e) {
+        nlohmann::json j = {
+            {"ok", false},
+            {"error", {
+                {"code", "version_conflict"},
+                {"message", "资源已被其他来源修改，请刷新后重试"},
+                {"current_version", e.current_version},
+                {"retryable", true}
+            }}
+        };
+        res.status = 409;
+        res.set_content(j.dump(), "application/json");
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
@@ -873,8 +921,31 @@ void WorldbuildingHttpHandler::handle_patch_foreshadow(const httplib::Request& r
     try {
         auto body = nlohmann::json::parse(req.body);
         auto fields = body.at("fields");
-        service_->foreshadowing().patch(wid, fid, fields);
+        if (fields.contains("status")) {
+            std::string s = fields["status"].get<std::string>();
+            if (s != "open" && s != "paid" && s != "abandoned") {
+                error_response(res, "Invalid foreshadow status: " + s, 400);
+                return;
+            }
+        }
+        bool ok = service_->foreshadowing().patch(wid, fid, fields);
+        if (!ok) {
+            error_response(res, "Foreshadow not found", 404, "foreshadow_not_found");
+            return;
+        }
         json_response(res, {{"ok", true}});
+    } catch (const worldbuilding::VersionConflictError& e) {
+        nlohmann::json j = {
+            {"ok", false},
+            {"error", {
+                {"code", "version_conflict"},
+                {"message", "资源已被其他来源修改，请刷新后重试"},
+                {"current_version", e.current_version},
+                {"retryable", true}
+            }}
+        };
+        res.status = 409;
+        res.set_content(j.dump(), "application/json");
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
@@ -886,8 +957,31 @@ void WorldbuildingHttpHandler::handle_patch_secret(const httplib::Request& req, 
     try {
         auto body = nlohmann::json::parse(req.body);
         auto fields = body.at("fields");
-        service_->secrets().patch(wid, sid, fields);
+        if (fields.contains("status")) {
+            std::string s = fields["status"].get<std::string>();
+            if (s != "active" && s != "revealed" && s != "abandoned") {
+                error_response(res, "Invalid secret status: " + s, 400);
+                return;
+            }
+        }
+        bool ok = service_->secrets().patch(wid, sid, fields);
+        if (!ok) {
+            error_response(res, "Secret not found", 404, "secret_not_found");
+            return;
+        }
         json_response(res, {{"ok", true}});
+    } catch (const worldbuilding::VersionConflictError& e) {
+        nlohmann::json j = {
+            {"ok", false},
+            {"error", {
+                {"code", "version_conflict"},
+                {"message", "资源已被其他来源修改，请刷新后重试"},
+                {"current_version", e.current_version},
+                {"retryable", true}
+            }}
+        };
+        res.status = 409;
+        res.set_content(j.dump(), "application/json");
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }

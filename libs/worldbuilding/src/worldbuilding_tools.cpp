@@ -628,12 +628,6 @@ std::future<ToolResult> ReadForeshadowingTool::execute(ToolCall call, ToolExecut
                 return result;
             }
 
-            if (f_opt->status == ForeshadowStatus::Paid) {
-                result.output = error_response(ToolErrorCode::CONFLICT,
-                    "伏笔 '" + foreshadowing_id + "' 已偿还（paid），不可再次偿还。");
-                return result;
-            }
-
             json data{
                 {"foreshadowing_id", f_opt->id},
                 {"content", f_opt->content},
@@ -1822,6 +1816,12 @@ std::future<ToolResult> AddCharacterDiaryTool::execute(ToolCall call, ToolExecut
                 return result;
             }
 
+            if (agent_opt->world_id != ctx.world_id) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "角色 '" + agent_id + "' 不在当前世界中。");
+                return result;
+            }
+
             std::string scene_id = args.value("scene_id", ctx.scene_id);
 
             // Get world_time from scene if available
@@ -1911,6 +1911,7 @@ std::future<ToolResult> AddRelationTool::execute(ToolCall call, ToolExecutionCon
             }
 
             auto& svc = *static_cast<AddRelationTool&>(*self).svc_;
+            auto& ctx = static_cast<AddRelationTool&>(*self).ctx_;
 
             auto src_opt = svc.agents().get_agent(source_id);
             if (!src_opt) {
@@ -1922,6 +1923,16 @@ std::future<ToolResult> AddRelationTool::execute(ToolCall call, ToolExecutionCon
             if (!tgt_opt) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "角色 '" + target_id + "' 不存在。");
+                return result;
+            }
+            if (src_opt->world_id != ctx.world_id) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "角色 '" + source_id + "' 不在当前世界中。");
+                return result;
+            }
+            if (tgt_opt->world_id != ctx.world_id) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "角色 '" + target_id + "' 不在当前世界中。");
                 return result;
             }
 

@@ -5,10 +5,10 @@
 
 namespace merak::skills {
 
-std::optional<SkillDef> SkillLoader::load(const std::filesystem::path& path) {
+std::expected<SkillDef, std::string> SkillLoader::load(const std::filesystem::path& path) {
     std::ifstream file(path);
     if (!file.is_open()) {
-        return std::nullopt;
+        return std::unexpected("skill_loader: failed to open file: " + path.string());
     }
 
     SkillDef skill;
@@ -73,7 +73,7 @@ std::optional<SkillDef> SkillLoader::load(const std::filesystem::path& path) {
             // Otherwise, parse key: value pair
             auto colon_pos = line.find(':');
             if (colon_pos == std::string::npos) {
-                return std::nullopt; // malformed line
+                return std::unexpected("skill_loader: malformed frontmatter line in " + path.string());
             }
 
             std::string key = line.substr(0, colon_pos);
@@ -115,11 +115,11 @@ std::optional<SkillDef> SkillLoader::load(const std::filesystem::path& path) {
     }
 
     if (!frontmatter_done) {
-        return std::nullopt;
+        return std::unexpected("skill_loader: missing frontmatter closing delimiter in " + path.string());
     }
 
     if (skill.name.empty()) {
-        return std::nullopt;
+        return std::unexpected("skill_loader: missing 'name' field in frontmatter of " + path.string());
     }
 
     skill.body = body_stream.str();
