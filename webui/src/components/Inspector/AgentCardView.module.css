@@ -1,0 +1,81 @@
+.container {
+  padding: 16px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.header h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+}
+
+.backBtn,
+.editBtn {
+  padding: 4px 12px;
+  border: 1px solid var(--border-color, #444);
+  background: transparent;
+  color: var(--text-primary, #ddd);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.backBtn:hover,
+.editBtn:hover {
+  background: var(--hover-bg, rgba(255,255,255,0.08));
+}
+
+.section {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.section h4 {
+  margin: 0 0 6px 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary, #888);
+}
+
+.section p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.fieldRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 14px;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.tag {
+  background: var(--tag-bg, #2a2a4a);
+  color: var(--tag-fg, #aac);
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.longText {
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
