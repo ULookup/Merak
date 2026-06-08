@@ -73,6 +73,7 @@ export interface AppState {
   editorError: string | null;
   runTimeline: RunTimelineItem[];
   storyVersion: number;
+  pipelinePhase: string | null;
 }
 
 export const initialState: AppState = {
@@ -120,6 +121,7 @@ export const initialState: AppState = {
   editorSaveStatus: 'idle',
   editorError: null,
   runTimeline: [],
+  pipelinePhase: null,
 };
 
 let nextId = 1;
