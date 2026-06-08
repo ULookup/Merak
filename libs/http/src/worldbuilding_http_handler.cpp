@@ -380,10 +380,15 @@ void WorldbuildingHttpHandler::handle_create_agent(const httplib::Request& req, 
 
 void WorldbuildingHttpHandler::handle_get_agent(const httplib::Request& req, httplib::Response& res) {
     try {
+        std::string wid = req.matches[1];
         std::string agent_id = req.matches[2];
         auto agent = service_->agents().get_agent(agent_id);
         if (!agent) {
-            error_response(res, "Agent not found", 404);
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
             return;
         }
         auto card = service_->agents().load_character_card(agent_id);
@@ -708,6 +713,15 @@ void WorldbuildingHttpHandler::handle_patch_agent(const httplib::Request& req, h
     std::string wid = req.matches[1];
     std::string aid = req.matches[2];
     try {
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
         auto body = nlohmann::json::parse(req.body);
         auto fields = body.at("fields");
         int version = body.value("version", 0);
@@ -734,7 +748,17 @@ void WorldbuildingHttpHandler::handle_patch_agent(const httplib::Request& req, h
 
 void WorldbuildingHttpHandler::handle_agent_diary_list(const httplib::Request& req, httplib::Response& res) {
     try {
+        std::string wid = req.matches[1];
         std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
         auto diaries = service_->agents().recent_diary(aid, 50);
         nlohmann::json arr = nlohmann::json::array();
         for (auto& d : diaries) {
@@ -754,8 +778,18 @@ void WorldbuildingHttpHandler::handle_agent_diary_list(const httplib::Request& r
 }
 
 void WorldbuildingHttpHandler::handle_agent_diary_add(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
     std::string aid = req.matches[2];
     try {
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
         auto body = nlohmann::json::parse(req.body);
         worldbuilding::DiaryEntry entry;
         entry.agent_id = aid;
@@ -773,7 +807,17 @@ void WorldbuildingHttpHandler::handle_agent_diary_add(const httplib::Request& re
 
 void WorldbuildingHttpHandler::handle_agent_relations(const httplib::Request& req, httplib::Response& res) {
     try {
+        std::string wid = req.matches[1];
         std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
         auto relations = service_->agents().relations_for(aid);
         nlohmann::json arr = nlohmann::json::array();
         for (auto& rel : relations) {
