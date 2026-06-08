@@ -36,15 +36,13 @@ export default function CreationDashboard() {
       label: (a.display_name || a.name).slice(0, 6),
     }));
     const links: RelationLink[] = [];
-    // Derive links from scene participants (proxy for relations)
     const linkSet = new Set<string>();
     state.foreshadowing.forEach(f => {
       if (f.tags) {
         f.tags.forEach(tag => {
           const agent = state.agents.find(a => a.name === tag || a.display_name === tag);
-          if (agent && !linkSet.has(`${agent.id}-tag`)) {
-            links.push({ source: tag, target: 'foreshadow', kind: 'tagged' });
-            linkSet.add(`${agent.id}-tag`);
+          if (agent && !linkSet.has(`${agent.id}-${tag}`)) {
+            linkSet.add(`${agent.id}-${tag}`);
           }
         });
       }

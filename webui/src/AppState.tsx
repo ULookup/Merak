@@ -693,7 +693,11 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
     }
 
     case 'card_updated':
-      return reducer(state, { type: 'SET_STORY_VERSION' });
+      return {
+        ...state,
+        storyVersion: state.storyVersion + 1,
+        worldbuildingStatus: 'loading',
+      };
 
     case 'pipeline_phase_changed':
       return {

@@ -43,7 +43,7 @@ export default function AgentCardEdit({ worldId, agentId, detail, onSave, onCanc
           const traits = v.split(/[,，、\s]+/).filter(Boolean);
           if (traits.length > 0) payload[k] = traits;
         } else if (v !== '' && v !== String(cc[k as keyof typeof cc] ?? '')) {
-          payload[k] = v;
+          payload[k] = k === 'age' ? Number(v) : v;
         }
       }
       if (Object.keys(payload).length === 0) {
