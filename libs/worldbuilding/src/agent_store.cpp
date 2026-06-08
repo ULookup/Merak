@@ -1,5 +1,6 @@
 #include <merak/worldbuilding/agent_store.hpp>
 
+#include <merak/worldbuilding/card_access.hpp>  // for VersionConflictError
 #include <merak/worldbuilding/ids.hpp>
 #include <merak/worldbuilding/pg_helpers.hpp>
 
@@ -536,6 +537,44 @@ AgentStore::update_character_card(const std::string& agent_id,
          next_card.background, next_card.knowledge_scope, next_card.appearance,
          std::to_string(next_card.version), next_card.updated_at, agent_id});
     return next_card;
+}
+
+CharacterCard
+AgentStore::patch_character_card(const std::string& agent_id,
+                                  const nlohmann::json& fields,
+                                  int expected_version) {
+    auto current = load_character_card(agent_id);
+    if (current.version != expected_version) {
+        throw VersionConflictError(current.version);
+    }
+
+    // 仅更新传入的字段
+    if (fields.contains("core_traits")) {
+        current.core_traits.clear();
+        for (const auto& t : fields["core_traits"]) {
+            current.core_traits.push_back(t.get<std::string>());
+        }
+    }
+    if (fields.contains("background")) current.background = fields["background"].get<std::string>();
+    if (fields.contains("emotional_tendency")) current.emotional_tendency = fields["emotional_tendency"].get<std::string>();
+    if (fields.contains("speaking_style")) current.speaking_style = fields["speaking_style"].get<std::string>();
+    if (fields.contains("core_desire")) current.core_desire = fields["core_desire"].get<std::string>();
+    if (fields.contains("deep_fear")) current.deep_fear = fields["deep_fear"].get<std::string>();
+    if (fields.contains("daily_goal")) current.daily_goal = fields["daily_goal"].get<std::string>();
+    if (fields.contains("knowledge_scope")) current.knowledge_scope = fields["knowledge_scope"].get<std::string>();
+    if (fields.contains("appearance")) current.appearance = fields["appearance"].get<std::string>();
+    if (fields.contains("age")) current.age = fields["age"].get<int>();
+    if (fields.contains("gender")) current.gender = fields["gender"].get<std::string>();
+    if (fields.contains("race")) current.race = fields["race"].get<std::string>();
+    if (fields.contains("identity")) current.identity = fields["identity"].get<std::string>();
+    if (fields.contains("taboo_topics")) {
+        current.taboo_topics.clear();
+        for (const auto& t : fields["taboo_topics"]) {
+            current.taboo_topics.push_back(t.get<std::string>());
+        }
+    }
+
+    return update_character_card(agent_id, std::move(current), "patch_user");
 }
 
 void AgentStore::append_diary_entry(DiaryEntry entry) {

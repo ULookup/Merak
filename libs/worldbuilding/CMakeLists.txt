@@ -4,6 +4,7 @@ find_path(LIBPQ_INCLUDE_DIR libpq-fe.h REQUIRED)
 add_library(merak-worldbuilding STATIC
     src/ids.cpp
     src/agent_store.cpp
+    src/card_access.cpp
     src/foreshadowing_store.cpp
     src/narrative_store.cpp
     src/secret_store.cpp
