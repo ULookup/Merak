@@ -7,7 +7,6 @@
 #include <merak/worldbuilding/world_models.hpp>
 #include <merak/worldbuilding/world_store.hpp>
 
-#include <algorithm>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -18,17 +17,6 @@ namespace merak::dsl {
 using namespace worldbuilding;
 
 namespace {
-
-// Trim whitespace from both ends of a string
-std::string trim(const std::string& s) {
-    auto start = std::find_if(s.begin(), s.end(), [](unsigned char ch) {
-        return !std::isspace(ch);
-    });
-    auto end = std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
-        return !std::isspace(ch);
-    }).base();
-    return (start < end) ? std::string(start, end) : std::string{};
-}
 
 // Helper: find an agent by name in a list of AgentRecords
 std::optional<AgentRecord> find_agent_by_name(const std::vector<AgentRecord>& agents,
