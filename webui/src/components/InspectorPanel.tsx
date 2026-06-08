@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useAppState, type InspectorTab } from '../AppState';
 import AgentsInspector from './Inspector/AgentsInspector';
+import CreationDashboard from './Inspector/CreationDashboard';
 import FilesInspector from './Inspector/FilesInspector';
 import RunInspector from './Inspector/RunInspector';
 import StoryInspector from './Inspector/StoryInspector';
@@ -15,6 +16,7 @@ const tabs: Array<{ id: InspectorTab; label: string }> = [
   { id: 'story', label: 'Story' },
   { id: 'files', label: 'Files' },
   { id: 'agents', label: 'Agents' },
+  { id: 'creation', label: 'Create' },
   { id: 'run', label: 'Run' },
 ];
 
@@ -28,6 +30,7 @@ function EmptyState({ tab }: { tab: InspectorTab }) {
 function titleForTab(tab: InspectorTab) {
   if (tab === 'files') return 'Output Files';
   if (tab === 'agents') return 'Agent Voices';
+  if (tab === 'creation') return 'Creation Dashboard';
   if (tab === 'run') return 'Run Monitor';
   return 'Story Context';
 }
@@ -67,13 +70,14 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
           ))}
         </div>
 
-        {!state.worldId && state.inspectorTab !== 'files' && state.inspectorTab !== 'run' ? (
+        {!state.worldId && state.inspectorTab !== 'files' && state.inspectorTab !== 'run' && state.inspectorTab !== 'creation' ? (
           <EmptyState tab={state.inspectorTab} />
         ) : (
           <div className={styles.content}>
             {state.inspectorTab === 'story' && <StoryInspector />}
             {state.inspectorTab === 'files' && <FilesInspector />}
             {state.inspectorTab === 'agents' && <AgentsInspector />}
+            {state.inspectorTab === 'creation' && <CreationDashboard />}
             {state.inspectorTab === 'run' && <RunInspector />}
           </div>
         )}
