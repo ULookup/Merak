@@ -1,0 +1,141 @@
+.container {
+  padding: 12px;
+}
+
+.header {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted, #888);
+  margin-bottom: 12px;
+}
+
+.section {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border, #2a2a3a);
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--teal, #4fc3f7);
+  margin-bottom: 8px;
+}
+
+/* Stats Grid */
+.statsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--card-bg, #1a1a2e);
+}
+
+.statValue {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary, #ddd);
+}
+
+.statLabel {
+  font-size: 11px;
+  color: var(--muted, #888);
+  margin-top: 2px;
+}
+
+/* Token Bar */
+.tokenBar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border, #333);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.tokenFill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #4fc3f7, #7c4dff);
+  transition: width 300ms ease;
+}
+
+.tokenRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted, #888);
+}
+
+/* Tool Distribution */
+.toolRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.toolName {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-primary, #ccc);
+  min-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolBar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border, #333);
+  overflow: hidden;
+}
+
+.toolBarFill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: #ffb74d;
+}
+
+.toolCount {
+  font-size: 11px;
+  color: var(--muted, #888);
+  min-width: 20px;
+  text-align: right;
+}
+
+/* Status */
+.statusRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 2px 0;
+}
+
+.statusRow > span:first-child {
+  color: var(--muted, #888);
+}
+
+.statusValue {
+  color: var(--text-primary, #ddd);
+  font-weight: 500;
+}
+
+.empty {
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted, #666);
+  padding: 24px;
+  margin: 0;
+}
