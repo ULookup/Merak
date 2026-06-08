@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../api/client';
 import type { AgentDetail } from '../../api/types';
 import { useAppState } from '../../AppState';
@@ -16,26 +16,43 @@ export default function AgentCardView({ agentId, onClose }: Props) {
   const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | undefined>(undefined);
 
-  const load = () => {
+  const load = useCallback(async () => {
     if (!state.worldId) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
-    api.fetchAgentDetail(state.worldId, agentId)
-      .then(res => { setDetail(res.agent); setLoading(false); })
-      .catch(e => { setError(e.message); setLoading(false); });
-  };
+    try {
+      const res = await api.fetchAgentDetail(state.worldId, agentId);
+      if (!controller.signal.aborted) {
+        setDetail(res.agent);
+        setLoading(false);
+      }
+    } catch (e) {
+      if (!controller.signal.aborted) {
+        setError((e as Error).message);
+        setLoading(false);
+      }
+    }
+  }, [agentId, state.worldId]);
 
-  useEffect(() => { load(); }, [agentId, state.worldId]);
+  useEffect(() => {
+    load();
+    return () => abortRef.current?.abort();
+  }, [load]);
 
   if (loading) return <div className={styles.container}>Loading...</div>;
   if (error) return <div className={styles.container}>Error: {error}</div>;
   if (!detail) return <div className={styles.container}>Agent not found</div>;
 
   if (editMode) {
+    if (!state.worldId) return <div className={styles.container}>No world selected</div>;
     return (
       <AgentCardEdit
-        worldId={state.worldId!}
+        worldId={state.worldId}
         agentId={agentId}
         detail={detail}
         onSave={(updated) => { setDetail(updated); setEditMode(false); }}

@@ -35,6 +35,17 @@ import type {
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
 
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const opts: RequestInit = {
     method,
@@ -52,12 +63,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
   }
   if (res.status >= 400) {
-    const error = (json as { error?: { message?: string } | string; message?: string }).error;
+    const error = (json as { error?: { message?: string; code?: string } | string; message?: string }).error;
     const message =
       typeof error === 'string'
         ? error
         : (error?.message ?? (json as { message?: string }).message ?? `HTTP ${res.status}`);
-    throw new Error(message);
+    const code = (typeof error === 'object' && error !== null) ? error.code : undefined;
+    throw new ApiError(message, res.status, code);
   }
   return json as T;
 }
@@ -325,6 +337,9 @@ export const api = {
       { ok: true, fallback: true, chapters: chapter ? [chapter] : [] },
     );
   },
+
+  fetchChapterContent: (worldId: string, chapterId: string) =>
+    request<{ ok: boolean; content?: string }>('GET', `/api/worldbuilding/${worldId}/chapters/${chapterId}`),
 
   listScenes: (worldId: string, chapterId = '', status = '') => {
     const params = new URLSearchParams();

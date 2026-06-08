@@ -1,11 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useAppState } from '../../AppState';
-import type { ForeshadowingItem, SecretItem } from '../../api/types';
+import { api } from '../../api/client';
+import type { ForeshadowingItem, SecretItem, RelationEntry } from '../../api/types';
 import styles from './CreationDashboard.module.css';
 
 type DashTab = 'foreshadow' | 'secrets' | 'relations';
 
-interface RelationLink {
+interface GraphLink {
   source: string;
   target: string;
   kind: string;
@@ -14,6 +15,8 @@ interface RelationLink {
 export default function CreationDashboard() {
   const { state } = useAppState();
   const [tab, setTab] = useState<DashTab>('foreshadow');
+  const [relations, setRelations] = useState<RelationEntry[]>([]);
+  const [relationsLoading, setRelationsLoading] = useState(false);
 
   // Group foreshadowing by status
   const foreshadowGroups = useMemo(() => {
@@ -29,26 +32,40 @@ export default function CreationDashboard() {
     return { open, paid, abandoned };
   }, [state.foreshadowing]);
 
-  // Build relation graph data
-  const relationData = useMemo(() => {
+  // Fetch relations from API
+  useEffect(() => {
+    if (!state.worldId || !state.agents.length) {
+      setRelations([]);
+      return;
+    }
+    setRelationsLoading(true);
+    Promise.all(state.agents.map(a =>
+      api.fetchRelations(state.worldId!, a.id)
+        .then(r => r.relations)
+        .catch(() => [] as RelationEntry[])
+    )).then(results => {
+      setRelations(results.flat());
+      setRelationsLoading(false);
+    });
+  }, [state.worldId, state.agents]);
+
+  // Build relation graph data from real relations
+  const graphData = useMemo(() => {
     const nodes = state.agents.map(a => ({
       id: a.id,
       label: (a.display_name || a.name).slice(0, 6),
     }));
-    const links: RelationLink[] = [];
-    const linkSet = new Set<string>();
-    state.foreshadowing.forEach(f => {
-      if (f.tags) {
-        f.tags.forEach(tag => {
-          const agent = state.agents.find(a => a.name === tag || a.display_name === tag);
-          if (agent && !linkSet.has(`${agent.id}-${tag}`)) {
-            linkSet.add(`${agent.id}-${tag}`);
-          }
-        });
+    const seen = new Set<string>();
+    const links: GraphLink[] = [];
+    relations.forEach(r => {
+      const key = [r.agent_id, r.target_id].sort().join('--');
+      if (!seen.has(key)) {
+        seen.add(key);
+        links.push({ source: r.agent_id, target: r.target_id, kind: r.relation_type });
       }
     });
     return { nodes, links };
-  }, [state.agents, state.foreshadowing]);
+  }, [state.agents, relations]);
 
   return (
     <div className={styles.container}>
@@ -95,9 +112,7 @@ export default function CreationDashboard() {
 
         {tab === 'relations' && (
           <div className={styles.relationView}>
-            <RelationGraph
-              agents={state.agents}
-            />
+            <RelationGraph agents={state.agents} links={graphData.links} />
             <div className={styles.relationList}>
               {state.agents.map(a => (
                 <div key={a.id} className={styles.relationAgent}>
@@ -118,7 +133,7 @@ export default function CreationDashboard() {
   );
 }
 
-function Column({ title, items, color }: { title: string; items: ForeshadowingItem[]; color: string }) {
+function Column({ title, items, color }: { title: string; items: ForeshadowingItem[]; color: 'open' | 'paid' | 'abandoned' }) {
   return (
     <div className={`${styles.column} ${styles[color]}`}>
       <div className={styles.columnHeader}>
@@ -168,38 +183,36 @@ function SecretCard({ secret, agents }: { secret: SecretItem; agents: { id: stri
   );
 }
 
-function RelationGraph({ agents }: { agents: { id: string; display_name: string; name: string }[] }) {
+function RelationGraph({ agents, links }: {
+  agents: { id: string; display_name: string; name: string }[];
+  links: { source: string; target: string; kind: string }[];
+}) {
   const n = agents.length;
   if (n === 0) return <p className={styles.empty}>暂无角色关系数据</p>;
 
   const cx = 140, cy = 120, r = 90;
+  const nodeMap = new Map<string, { x: number; y: number }>();
   const nodes = agents.map((a, i) => {
     const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-    return {
-      id: a.id,
-      label: (a.display_name || a.name).slice(0, 6),
-      x: cx + r * Math.cos(angle),
-      y: cy + r * Math.sin(angle),
-    };
+    const pos = { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+    nodeMap.set(a.id, pos);
+    return { id: a.id, label: (a.display_name || a.name).slice(0, 6), ...pos };
   });
+
+  const edgeLines = links
+    .filter(l => nodeMap.has(l.source) && nodeMap.has(l.target))
+    .map(l => {
+      const s = nodeMap.get(l.source)!;
+      const t = nodeMap.get(l.target)!;
+      return { key: `${l.source}-${l.target}`, x1: s.x, y1: s.y, x2: t.x, y2: t.y };
+    });
 
   return (
     <svg viewBox="0 0 280 240" className={styles.graph}>
-      {/* Edges: connect all nodes in a ring */}
-      {nodes.map((node, i) => {
-        const next = nodes[(i + 1) % n];
-        return (
-          <line
-            key={`${node.id}-${next.id}`}
-            x1={node.x} y1={node.y}
-            x2={next.x} y2={next.y}
-            stroke="#444"
-            strokeWidth={1}
-            strokeDasharray="4 2"
-          />
-        );
-      })}
-      {/* Center hub */}
+      {edgeLines.map(e => (
+        <line key={e.key} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+              stroke="#4fc3f7" strokeWidth={1} strokeDasharray="4 2" />
+      ))}
       {n > 2 && (
         <circle cx={cx} cy={cy} r={3} fill="#666" />
       )}

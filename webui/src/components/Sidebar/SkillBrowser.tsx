@@ -42,14 +42,16 @@ export default function SkillBrowser() {
   const { state } = useAppState();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sending, setSending] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleInvoke = async (skillName: string) => {
     if (!state.sessionId || !state.worldId) return;
     setSending(skillName);
     try {
       await api.startRun(state.sessionId, `/skill ${skillName}`, state.selectedModel);
-    } catch {
-      // ignore
+    } catch (e: unknown) {
+      setError((e as Error).message || '调用失败');
+      setTimeout(() => setError(null), 5000);
     } finally {
       setSending(null);
     }
@@ -89,6 +91,9 @@ export default function SkillBrowser() {
           );
         })}
       </div>
+      {error && (
+        <p className={styles.error}>{error}</p>
+      )}
       {!state.sessionId && (
         <p className={styles.hint}>创建会话后可使用技能</p>
       )}
