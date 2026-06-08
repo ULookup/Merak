@@ -1,5 +1,6 @@
 #pragma once
 #include <merak/runtime_event.hpp>
+#include <cstdint>
 #include <filesystem>
 #include <mutex>
 #include <optional>
@@ -80,6 +81,17 @@ public:
     std::vector<RuntimeEvent> events_after(const std::string& session_id, long long after) const;
     std::vector<RunRecord> interrupt_running_runs();
     std::filesystem::path journal_path(const std::string& session_id) const;
+
+    // Checkpoint operations
+    void save_checkpoint(const std::string& id, const std::string& run_id,
+                         int turn_index, const std::string& turn_state,
+                         int64_t input_tokens, int64_t output_tokens,
+                         const std::string& pending_calls_json,
+                         const std::string& compacted_summary,
+                         const std::string& pipeline_snapshot_json);
+    std::optional<std::string> load_latest_checkpoint_json(const std::string& run_id);
+    std::vector<std::string> list_checkpoints_json(const std::string& run_id);
+    void prune_checkpoints(const std::string& run_id, int keep_latest_n);
 
 private:
     std::filesystem::path root_;
