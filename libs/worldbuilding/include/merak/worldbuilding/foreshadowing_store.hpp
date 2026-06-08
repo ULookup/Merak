@@ -31,6 +31,11 @@ public:
                       const std::string& id,
                       const std::string& scene_id);
     Foreshadowing abandon(const std::string& world_id, const std::string& id);
+
+    // 部分更新伏笔字段 (pay_off_idea, status, paid_at, hint_level, tags)
+    bool patch(const std::string& world_id, const std::string& id,
+               const nlohmann::json& fields);
+
     std::vector<Foreshadowing>
     list(const std::string& world_id,
          std::optional<ForeshadowStatus> status) const;

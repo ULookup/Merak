@@ -1690,6 +1690,333 @@ std::future<ToolResult> UpdateAgentPromptTool::execute(
     });
 }
 
+// ========== UpdateCharacterCardTool ==========
+
+ToolSpec UpdateCharacterCardTool::spec() const {
+    ToolSpec s;
+    s.name = "update_character_card";
+    s.description = R"(更新角色卡片的指定字段。可修改性格特征、背景故事、情感倾向、说话风格等。"
+                    "示例: update_character_card(agent_id=\"agent_xxx\", fields={\"core_traits\":[\"勇敢\",\"多疑\"]}))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "agent_id": {"type": "string", "description": "要更新的角色agent_id"},
+            "fields": {"type": "object", "description": "要更新的字段，支持 core_traits, background, emotional_tendency, speaking_style, core_desire, deep_fear 等"}
+        },
+        "required": ["agent_id", "fields"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> UpdateCharacterCardTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::string agent_id = args.value("agent_id", "");
+
+            if (agent_id.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "更新角色卡失败。缺少必填字段：agent_id。");
+                return result;
+            }
+            if (!args.contains("fields") || !args["fields"].is_object()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "更新角色卡失败。缺少必填字段：fields，且必须为对象。");
+                return result;
+            }
+
+            auto& svc = *static_cast<UpdateCharacterCardTool&>(*self).svc_;
+
+            auto agent_opt = svc.agents().get_agent(agent_id);
+            if (!agent_opt) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "角色 '" + agent_id + "' 不存在。");
+                return result;
+            }
+
+            // version=0 means no version check
+            auto updated = svc.agents().patch_character_card(agent_id, args["fields"], 0);
+
+            result.output = ok_response({
+                {"agent_id", updated.agent_id},
+                {"version", updated.version}
+            });
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("update_character_card 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
+// ========== AddCharacterDiaryTool ==========
+
+ToolSpec AddCharacterDiaryTool::spec() const {
+    ToolSpec s;
+    s.name = "add_character_diary";
+    s.description = R"(为角色添加一条日记条目。场景结束后记录角色内心变化。"
+                    "示例: add_character_diary(agent_id=\"agent_xxx\", content=\"今天遇到了一位神秘的老者...\", mood=\"喜悦\"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "agent_id": {"type": "string", "description": "角色的agent_id"},
+            "scene_id": {"type": "string", "description": "关联的场景ID，默认为当前场景"},
+            "content": {"type": "string", "description": "日记正文内容"},
+            "mood": {"type": "string", "description": "心情标签：喜悦/悲伤/愤怒/恐惧/期待/困惑/决心/平静"}
+        },
+        "required": ["agent_id", "content"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> AddCharacterDiaryTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::string agent_id = args.value("agent_id", "");
+            std::string content = args.value("content", "");
+
+            if (agent_id.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "添加日记失败。缺少必填字段：agent_id。");
+                return result;
+            }
+            if (content.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "添加日记失败。缺少必填字段：content。");
+                return result;
+            }
+
+            auto& svc = *static_cast<AddCharacterDiaryTool&>(*self).svc_;
+            auto& ctx = static_cast<AddCharacterDiaryTool&>(*self).ctx_;
+
+            auto agent_opt = svc.agents().get_agent(agent_id);
+            if (!agent_opt) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "角色 '" + agent_id + "' 不存在。");
+                return result;
+            }
+
+            std::string scene_id = args.value("scene_id", ctx.scene_id);
+
+            // Get world_time from scene if available
+            std::string world_time;
+            auto scene_opt = svc.narrative().get_scene(ctx.world_id, scene_id);
+            if (scene_opt) {
+                world_time = scene_opt->world_time;
+            }
+
+            DiaryEntry entry;
+            entry.agent_id = agent_id;
+            entry.scene_id = scene_id;
+            entry.world_time = world_time;
+
+            // Embed mood into content if provided
+            std::string mood = args.value("mood", "");
+            if (!mood.empty()) {
+                entry.content = "【" + mood + "】" + content;
+            } else {
+                entry.content = content;
+            }
+
+            svc.agents().append_diary_entry(std::move(entry));
+
+            json data{
+                {"agent_id", agent_id},
+                {"scene_id", scene_id},
+                {"mood", mood.empty() ? nullptr : json(mood)}
+            };
+            result.output = ok_response(data);
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("add_character_diary 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
+// ========== AddRelationTool ==========
+
+ToolSpec AddRelationTool::spec() const {
+    ToolSpec s;
+    s.name = "add_relation";
+    s.description = R"(为两个角色之间添加关系。"
+                    "示例: add_relation(source_id=\"agent_xxx\", target_id=\"agent_yyy\", kind=\"同盟\", evidence=\"曾在战场上并肩作战\"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "source_id": {"type": "string", "description": "关系发起方角色agent_id"},
+            "target_id": {"type": "string", "description": "关系目标方角色agent_id"},
+            "kind": {"type": "string", "description": "关系类型：同盟/敌对/亲属/师徒/隶属/拥有/使用/修炼/控制/位于/关于/其他"},
+            "evidence": {"type": "string", "description": "关系成立的事实质证"}
+        },
+        "required": ["source_id", "target_id", "kind"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> AddRelationTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::string source_id = args.value("source_id", "");
+            std::string target_id = args.value("target_id", "");
+            std::string kind = args.value("kind", "");
+
+            if (source_id.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "添加关系失败。缺少必填字段：source_id。");
+                return result;
+            }
+            if (target_id.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "添加关系失败。缺少必填字段：target_id。");
+                return result;
+            }
+            if (kind.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "添加关系失败。缺少必填字段：kind。可选值：同盟/敌对/亲属/师徒/隶属/拥有/使用/修炼/控制/位于/关于/其他。");
+                return result;
+            }
+
+            auto& svc = *static_cast<AddRelationTool&>(*self).svc_;
+
+            auto src_opt = svc.agents().get_agent(source_id);
+            if (!src_opt) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "角色 '" + source_id + "' 不存在。");
+                return result;
+            }
+            auto tgt_opt = svc.agents().get_agent(target_id);
+            if (!tgt_opt) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "角色 '" + target_id + "' 不存在。");
+                return result;
+            }
+
+            RelationEntry rel;
+            rel.agent_id = source_id;
+            rel.target_id = target_id;
+            rel.relation_type = kind;
+            rel.description = args.value("evidence", "");
+
+            svc.agents().upsert_relation(std::move(rel));
+
+            json data{
+                {"source_id", source_id},
+                {"target_id", target_id},
+                {"kind", kind}
+            };
+            result.output = ok_response(data);
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("add_relation 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
+// ========== UpdateForeshadowTool ==========
+
+ToolSpec UpdateForeshadowTool::spec() const {
+    ToolSpec s;
+    s.name = "update_foreshadow";
+    s.description = R"(更新伏笔的状态或回收方案。"
+                    "示例: update_foreshadow(id=\"foreshadow_xxx\", status=\"paid\", pay_off_idea=\"铁匠在决战中断指的往事被揭开\"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "id": {"type": "string", "description": "伏笔ID"},
+            "status": {"type": "string", "enum": ["open", "paid", "abandoned"], "description": "新状态"},
+            "pay_off_idea": {"type": "string", "description": "更新的回收方案描述"},
+            "paid_at": {"type": "string", "description": "偿还时关联的场景ID"}
+        },
+        "required": ["id"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> UpdateForeshadowTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::string id = args.value("id", "");
+
+            if (id.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "更新伏笔失败。缺少必填字段：id。");
+                return result;
+            }
+
+            auto& svc = *static_cast<UpdateForeshadowTool&>(*self).svc_;
+            auto& ctx = static_cast<UpdateForeshadowTool&>(*self).ctx_;
+
+            json fields;
+            if (args.contains("status")) {
+                std::string status = args["status"].get<std::string>();
+                if (status != "open" && status != "paid" && status != "abandoned") {
+                    result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                        "'" + status + "' 不是有效的伏笔状态。可选值：open / paid / abandoned。");
+                    return result;
+                }
+                fields["status"] = status;
+            }
+            if (args.contains("pay_off_idea")) {
+                fields["pay_off_idea"] = args["pay_off_idea"];
+            }
+            if (args.contains("paid_at")) {
+                fields["paid_at"] = args["paid_at"];
+            }
+
+            if (fields.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "更新伏笔失败。至少需要提供一个要修改的字段（status / pay_off_idea / paid_at）。");
+                return result;
+            }
+
+            bool ok = svc.foreshadowing().patch(ctx.world_id, id, fields);
+            if (!ok) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "伏笔 '" + id + "' 不存在或更新失败。");
+                return result;
+            }
+
+            result.output = ok_response({
+                {"foreshadowing_id", id},
+                {"updated_fields", fields}
+            });
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("update_foreshadow 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
 // ========== WorldbuildingTools Factory ==========
 
 std::vector<ToolSpec> WorldbuildingTools::specs_for(AgentKind kind) const {
@@ -1725,6 +2052,14 @@ WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) const {
         tools.push_back(std::make_unique<CreateLocationTool>(*service_, ctx));
         tools.push_back(
             std::make_unique<UpdateAgentPromptTool>(*service_, ctx));
+        tools.push_back(
+            std::make_unique<UpdateCharacterCardTool>(*service_, ctx));
+        tools.push_back(
+            std::make_unique<AddCharacterDiaryTool>(*service_, ctx));
+        tools.push_back(
+            std::make_unique<AddRelationTool>(*service_, ctx));
+        tools.push_back(
+            std::make_unique<UpdateForeshadowTool>(*service_, ctx));
         break;
     case AgentKind::Individual:
         tools.push_back(std::make_unique<DescribeCharacterTool>(*service_, ctx));

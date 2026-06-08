@@ -89,6 +89,32 @@
   transform: translateY(-1px);
 }
 
+.subTabs {
+  display: flex;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.subTab {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.subTab:hover {
+  color: var(--ink);
+}
+
+.subTabActive {
+  background: var(--accent, #36f);
+  color: #fff;
+  border-color: var(--accent, #36f);
+}
+
 .content {
   overflow-y: auto;
   display: flex;
@@ -560,6 +586,7 @@
   border-radius: 14px;
   padding: 11px;
   margin-top: 8px;
+  cursor: pointer;
   transition:
     transform 180ms ease,
     box-shadow 180ms ease;

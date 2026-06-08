@@ -9,6 +9,7 @@ add_library(merak-prompts STATIC
 target_include_directories(merak-prompts PUBLIC include)
 target_link_libraries(merak-prompts PUBLIC
     merak-core
+    merak-context-dsl
     nlohmann_json::nlohmann_json
     spdlog::spdlog
 )

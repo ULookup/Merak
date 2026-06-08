@@ -59,6 +59,15 @@ public:
                                TimelineEvent event);
     std::vector<std::string> insert_flashback_scene(const std::string& world_id,
                                                     Scene scene);
+
+    // 部分更新场景字段
+    bool patch_scene(const std::string& world_id, const std::string& scene_id,
+                     const nlohmann::json& fields);
+
+    // 部分更新章节字段
+    bool patch_chapter(const std::string& world_id, const std::string& chapter_id,
+                       const nlohmann::json& fields);
+
     ChapterContext chapter_context(const std::string& world_id,
                                    const std::string& chapter_id) const;
     std::optional<Scene> get_scene(const std::string& world_id,

@@ -1,0 +1,27 @@
+#pragma once
+#include <merak/skills/skill_types.hpp>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+#include <filesystem>
+
+namespace merak::skills {
+
+class SkillRegistry {
+    std::unordered_map<std::string, SkillDef> skills_;
+public:
+    // Recursively scan directory for SKILL.md files and load them
+    void discover_from(const std::filesystem::path& dir);
+
+    // Get a skill by name
+    std::optional<SkillDef> get(const std::string& name) const;
+
+    // List all registered skills
+    std::vector<SkillDef> list() const;
+
+    // Add a skill directly (higher priority wins on name collision)
+    void add(SkillDef skill);
+};
+
+} // namespace merak::skills

@@ -7,6 +7,8 @@ import SessionList from './Sidebar/SessionList';
 import SettingsPanel from './Sidebar/SettingsPanel';
 import ToolPanel from './Sidebar/ToolPanel';
 import WorldSelector from './Sidebar/WorldSelector';
+import PipelineNavigator from './Sidebar/PipelineNavigator';
+import SkillBrowser from './Sidebar/SkillBrowser';
 
 interface SidebarProps {
   open?: boolean;
@@ -33,8 +35,10 @@ export default function Sidebar({ open = true, onClose }: SidebarProps) {
         <BrandMark />
       </div>
       <WorldSelector />
+      <PipelineNavigator />
       <SessionList />
       <ModelSelector />
+      <SkillBrowser />
       <ToolPanel />
       <ContextMeter />
       <SettingsPanel />

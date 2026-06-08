@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { Brain, Fingerprint, Shield, Users } from 'lucide-react';
 import { useAppState } from '../../AppState';
+import AgentCardView from './AgentCardView';
 import styles from '../InspectorPanel.module.css';
 
 const kindLabels: Record<string, string> = {
@@ -21,11 +23,16 @@ function groupKey(kind: string) {
 
 export default function AgentsInspector() {
   const { state } = useAppState();
-  const groups = state.agents.reduce<Record<string, typeof state.agents>>((acc, agent) => {
-    const key = groupKey(agent.kind);
-    acc[key] = [...(acc[key] ?? []), agent];
-    return acc;
-  }, {});
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+
+  if (selectedAgentId) {
+    return (
+      <AgentCardView
+        agentId={selectedAgentId}
+        onClose={() => setSelectedAgentId(null)}
+      />
+    );
+  }
 
   if (state.agents.length === 0) {
     return (
@@ -35,6 +42,12 @@ export default function AgentsInspector() {
       </section>
     );
   }
+
+  const groups = state.agents.reduce<Record<string, typeof state.agents>>((acc, agent) => {
+    const key = groupKey(agent.kind);
+    acc[key] = [...(acc[key] ?? []), agent];
+    return acc;
+  }, {});
 
   return (
     <>
@@ -53,7 +66,14 @@ export default function AgentsInspector() {
         <section className={styles.section} key={group}>
           <div className={styles.sectionTitle}>{group}</div>
           {agents.map((agent) => (
-            <div className={styles.agent} key={agent.id}>
+            <div
+              className={styles.agent}
+              key={agent.id}
+              onClick={() => setSelectedAgentId(agent.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter') setSelectedAgentId(agent.id); }}
+            >
               <div className={styles.avatar}>{(agent.display_name || agent.name).slice(0, 1)}</div>
               <div>
                 <strong>{agent.display_name || agent.name}</strong>

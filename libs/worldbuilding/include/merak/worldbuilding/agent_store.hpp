@@ -36,6 +36,12 @@ public:
                                         CharacterCard next_card,
                                         std::string reason);
 
+    // 部分更新角色卡，非整体替换，带 version 校验
+    // 抛出 VersionConflictError 如果版本不匹配
+    CharacterCard patch_character_card(const std::string& agent_id,
+                                       const nlohmann::json& fields,
+                                       int expected_version);
+
     void append_diary_entry(DiaryEntry entry);
     std::vector<DiaryEntry> recent_diary(const std::string& agent_id,
                                          int max_entries) const;

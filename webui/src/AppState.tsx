@@ -15,7 +15,7 @@ import type {
   WorkspaceFileContent,
 } from './api/types';
 
-export type InspectorTab = 'story' | 'files' | 'agents' | 'run';
+export type InspectorTab = 'story' | 'files' | 'agents' | 'run' | 'creation';
 export type WorldbuildingStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface GeneratedFileEntry {
@@ -73,6 +73,7 @@ export interface AppState {
   editorError: string | null;
   runTimeline: RunTimelineItem[];
   storyVersion: number;
+  pipelinePhase: string | null;
 }
 
 export const initialState: AppState = {
@@ -120,6 +121,7 @@ export const initialState: AppState = {
   editorSaveStatus: 'idle',
   editorError: null,
   runTimeline: [],
+  pipelinePhase: null,
 };
 
 let nextId = 1;
@@ -689,6 +691,25 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         },
       });
     }
+
+    case 'card_updated':
+      return {
+        ...state,
+        storyVersion: state.storyVersion + 1,
+        worldbuildingStatus: 'loading',
+      };
+
+    case 'pipeline_phase_changed':
+      return {
+        ...state,
+        pipelinePhase: (p.phase as string) ?? state.pipelinePhase,
+      };
+
+    case 'pipeline_stats_updated':
+      return state;
+
+    case 'world_switched':
+      return reducer(state, { type: 'SET_WORLD', worldId: (p.world_id as string) ?? null });
 
     default:
       return state;
