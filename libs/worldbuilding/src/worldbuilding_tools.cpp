@@ -1,4 +1,5 @@
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
+#include <merak/worldbuilding/card_access.hpp>
 #include <nlohmann/json.hpp>
 #include <future>
 #include <algorithm>
@@ -1669,6 +1670,7 @@ std::future<ToolResult> UpdateAgentPromptTool::execute(
 
             if (agent_id.empty() || prompt.empty()) {
                 ToolResult r;
+                r.call_id = call.id;
                 r.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
                     "agent_id 和 prompt 都不能为空");
                 return r;
@@ -1677,6 +1679,7 @@ std::future<ToolResult> UpdateAgentPromptTool::execute(
             svc.update_agent_prompt(agent_id, prompt);
 
             ToolResult r;
+            r.call_id = call.id;
             r.output = ok_response({
                 {"agent_id", agent_id},
                 {"message", "系统提示词已更新"}
@@ -1684,6 +1687,7 @@ std::future<ToolResult> UpdateAgentPromptTool::execute(
             return r;
         } catch (const std::exception& e) {
             ToolResult r;
+            r.call_id = call.id;
             r.output = error_response(ToolErrorCode::INTERNAL, e.what());
             return r;
         }
@@ -1738,6 +1742,13 @@ std::future<ToolResult> UpdateCharacterCardTool::execute(ToolCall call, ToolExec
                 return result;
             }
 
+            auto& ctx = static_cast<UpdateCharacterCardTool&>(*self).ctx_;
+            if (agent_opt->world_id != ctx.world_id) {
+                result.output = error_response(ToolErrorCode::NO_PERMISSION,
+                    "角色不属于当前世界，无法修改。");
+                return result;
+            }
+
             // version=0 means no version check
             auto updated = svc.agents().patch_character_card(agent_id, args["fields"], 0);
 
@@ -1746,6 +1757,10 @@ std::future<ToolResult> UpdateCharacterCardTool::execute(ToolCall call, ToolExec
                 {"version", updated.version}
             });
 
+        } catch (const VersionConflictError& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::CONFLICT,
+                "卡片已被其他来源修改（当前版本：" + std::to_string(e.current_version) + "），请刷新后重试");
         } catch (const std::exception& e) {
             result.is_error = true;
             result.output = error_response(ToolErrorCode::INTERNAL,
