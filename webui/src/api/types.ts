@@ -220,17 +220,24 @@ export interface CapabilitiesResponse {
   fallback?: boolean;
 }
 
+export interface WorldDetail {
+  id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at?: string;
+  stats: {
+    agents: number;
+    chapters: number;
+    scenes: number;
+    open_foreshadowing: number;
+    active_secrets: number;
+  };
+}
+
 export interface WorldDetailResponse {
   ok: boolean;
-  world: WorldSummary & {
-    stats?: {
-      chapters?: number;
-      scenes?: number;
-      agents?: number;
-      foreshadowing_open?: number;
-      secrets_active?: number;
-    };
-  };
+  world: WorldDetail;
   fallback?: boolean;
 }
 
@@ -480,4 +487,48 @@ export interface RunAudit {
 export interface RunAuditResponse {
   ok: boolean;
   audit: RunAudit;
+}
+
+// === Creation mutations ===
+export interface CreateSceneResponse {
+  ok: boolean;
+  scene_id: string;
+}
+
+export interface EndSceneResponse {
+  ok: boolean;
+  diaries_written: { id: string; agent_id: string; scene_id?: string }[];
+  diary_count: number;
+  relations_updated: number;
+  proposed_foreshadowing: { id: string; content: string }[];
+  leak_risks: number;
+}
+
+export interface CreateForeshadowingResponse {
+  ok: boolean;
+  item: ForeshadowingItem;
+  foreshadowing_id: string;
+}
+
+export interface CreateSecretResponse {
+  ok: boolean;
+  item: SecretItem;
+  secret_id: string;
+}
+
+export interface CreateAgentResponse {
+  ok: boolean;
+  agent_id: string;
+  name: string;
+}
+
+export interface AgentPromptResponse {
+  ok: boolean;
+  agent_id: string;
+  prompt: string;
+}
+
+export interface ResolveCreationResponse {
+  ok: boolean;
+  status: string;
 }

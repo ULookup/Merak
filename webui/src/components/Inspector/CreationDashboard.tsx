@@ -1,7 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useAppState } from '../../AppState';
 import { api } from '../../api/client';
 import type { ForeshadowingItem, SecretItem, RelationEntry } from '../../api/types';
+import CreateAgentModal from './CreateAgentModal';
+import CreateForeshadowingModal from './CreateForeshadowingModal';
+import CreateSecretModal from './CreateSecretModal';
 import styles from './CreationDashboard.module.css';
 
 type DashTab = 'foreshadow' | 'secrets' | 'relations';
@@ -13,10 +16,18 @@ interface GraphLink {
 }
 
 export default function CreationDashboard() {
-  const { state } = useAppState();
+  const { state, dispatch } = useAppState();
   const [tab, setTab] = useState<DashTab>('foreshadow');
   const [relations, setRelations] = useState<RelationEntry[]>([]);
   const [relationsLoading, setRelationsLoading] = useState(false);
+
+  const [showCreateForeshadowing, setShowCreateForeshadowing] = useState(false);
+  const [showCreateSecret, setShowCreateSecret] = useState(false);
+  const [showCreateAgent, setShowCreateAgent] = useState(false);
+
+  function handleCreated() {
+    dispatch({ type: 'SET_STORY_VERSION' });
+  }
 
   // Group foreshadowing by status
   const foreshadowGroups = useMemo(() => {
@@ -32,19 +43,26 @@ export default function CreationDashboard() {
     return { open, paid, abandoned };
   }, [state.foreshadowing]);
 
-  // Fetch relations from API
+  // Fetch relations from API (cached by agent ids)
+  const relationsCacheRef = useRef<{ key: string; relations: RelationEntry[] }>({ key: '', relations: [] });
+
   useEffect(() => {
     if (!state.worldId || !state.agents.length) {
       setRelations([]);
       return;
     }
+    const key = `${state.worldId}:${state.agents.map(a => a.id).sort().join(',')}`;
+    if (relationsCacheRef.current.key === key) return;
+
     setRelationsLoading(true);
     Promise.all(state.agents.map(a =>
       api.fetchRelations(state.worldId!, a.id)
         .then(r => r.relations)
         .catch(() => [] as RelationEntry[])
     )).then(results => {
-      setRelations(results.flat());
+      const flat = results.flat();
+      relationsCacheRef.current = { key, relations: flat };
+      setRelations(flat);
       setRelationsLoading(false);
     });
   }, [state.worldId, state.agents]);
@@ -90,6 +108,24 @@ export default function CreationDashboard() {
         </button>
       </div>
 
+      <div className={styles.toolbar}>
+        {tab === 'foreshadow' && state.worldId && (
+          <button className={styles.createBtn} onClick={() => setShowCreateForeshadowing(true)}>
+            + 埋下伏笔
+          </button>
+        )}
+        {tab === 'secrets' && state.worldId && (
+          <button className={styles.createBtn} onClick={() => setShowCreateSecret(true)}>
+            + 创建秘密
+          </button>
+        )}
+        {tab === 'relations' && state.worldId && (
+          <button className={styles.createBtn} onClick={() => setShowCreateAgent(true)}>
+            + 创建角色
+          </button>
+        )}
+      </div>
+
       <div className={styles.content}>
         {tab === 'foreshadow' && (
           <div className={styles.kanban}>
@@ -129,6 +165,16 @@ export default function CreationDashboard() {
           </div>
         )}
       </div>
+
+      {showCreateForeshadowing && state.worldId && (
+        <CreateForeshadowingModal worldId={state.worldId} onClose={() => setShowCreateForeshadowing(false)} onCreated={handleCreated} />
+      )}
+      {showCreateSecret && state.worldId && (
+        <CreateSecretModal worldId={state.worldId} onClose={() => setShowCreateSecret(false)} onCreated={handleCreated} />
+      )}
+      {showCreateAgent && state.worldId && (
+        <CreateAgentModal worldId={state.worldId} onClose={() => setShowCreateAgent(false)} onCreated={handleCreated} />
+      )}
     </div>
   );
 }
@@ -211,19 +257,18 @@ function RelationGraph({ agents, links }: {
     <svg viewBox="0 0 280 240" className={styles.graph}>
       {edgeLines.map(e => (
         <line key={e.key} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
-              stroke="#4fc3f7" strokeWidth={1} strokeDasharray="4 2" />
+              strokeWidth={1} strokeDasharray="4 2" />
       ))}
       {n > 2 && (
-        <circle cx={cx} cy={cy} r={3} fill="#666" />
+        <circle cx={cx} cy={cy} r={3} fill="var(--muted)" />
       )}
       {nodes.map(node => (
         <g key={node.id}>
-          <circle cx={node.x} cy={node.y} r={16} fill="#2a2a4a" stroke="#4fc3f7" strokeWidth={1.5} />
+          <circle cx={node.x} cy={node.y} r={16} strokeWidth={1.5} />
           <text
             x={node.x}
             y={node.y + 4}
             textAnchor="middle"
-            fill="#ddd"
             fontSize={9}
           >
             {node.label}

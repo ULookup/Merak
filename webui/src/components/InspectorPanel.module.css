@@ -110,9 +110,9 @@
 }
 
 .subTabActive {
-  background: var(--accent, #36f);
+  background: var(--brand);
   color: #fff;
-  border-color: var(--accent, #36f);
+  border-color: var(--brand);
 }
 
 .content {
@@ -367,10 +367,8 @@
 
 .fileItemActive {
   border-color: rgba(122, 79, 19, 0.28);
-  background: linear-gradient(135deg, var(--brand-wash), #fff);
-  box-shadow:
-    inset 3px 0 0 var(--brand),
-    var(--shadow-sm);
+  background: linear-gradient(135deg, var(--brand-wash), var(--surface));
+  box-shadow: var(--shadow-sm);
 }
 
 .fileItem strong,
@@ -590,6 +588,14 @@
   transition:
     transform 180ms ease,
     box-shadow 180ms ease;
+  flex: 1;
+  min-width: 0;
+}
+
+.agentRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .avatar {
@@ -737,6 +743,60 @@
   display: none;
 }
 
+/* Scene actions */
+.sceneActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ghostButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: var(--muted-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  transition: transform 180ms var(--ease), border-color 180ms var(--ease), color 180ms var(--ease);
+}
+
+.ghostButton:hover {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+  transform: translateY(-1px);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.addBtn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  transition: transform 180ms var(--ease), color 180ms var(--ease), border-color 180ms var(--ease);
+}
+
+.addBtn:hover {
+  color: var(--teal);
+  border-color: rgba(15, 118, 110, 0.28);
+  transform: scale(1.08);
+}
+
 @keyframes panelRise {
   from {
     opacity: 0;
@@ -751,6 +811,12 @@
 @keyframes pulse {
   to {
     box-shadow: 0 0 0 12px rgba(15, 118, 110, 0);
+  }
+}
+
+@media (max-width: 400px) {
+  .tabs {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 

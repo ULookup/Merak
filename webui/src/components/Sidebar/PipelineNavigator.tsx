@@ -1,3 +1,4 @@
+import { BookOpen, FileText, PenLine } from 'lucide-react';
 import { useAppState } from '../../AppState';
 import type { CreativePhase } from '../../api/types';
 import styles from './PipelineNavigator.module.css';
@@ -46,20 +47,20 @@ export default function PipelineNavigator() {
         <div className={styles.tree}>
           {state.storyOverview.current_arc && (
             <div className={styles.treeItem}>
-              <span className={styles.treeIcon}>📖</span>
+              <BookOpen size={12} aria-hidden="true" className={styles.treeIcon} />
               <span>{state.storyOverview.current_arc.title}</span>
             </div>
           )}
           {state.storyOverview.current_chapter && (
             <div className={styles.treeItem}>
-              <span className={styles.treeIcon}>📄</span>
+              <FileText size={12} aria-hidden="true" className={styles.treeIcon} />
               <span>第{state.storyOverview.current_chapter.number}章 {state.storyOverview.current_chapter.title}</span>
               <span className={styles.badge}>{state.storyOverview.current_chapter.scene_count} 场景</span>
             </div>
           )}
           {state.storyOverview.current_scene && (
             <div className={`${styles.treeItem} ${styles.treeScene}`}>
-              <span className={styles.treeIcon}>✎</span>
+              <PenLine size={12} aria-hidden="true" className={styles.treeIcon} />
               <span>{state.storyOverview.current_scene.title}</span>
               <span className={styles.badge}>{state.storyOverview.current_scene.status}</span>
             </div>
