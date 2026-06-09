@@ -5,14 +5,19 @@ import { useAppState } from '../../AppState';
 import { useToast } from '../Toast';
 import styles from './SessionList.module.css';
 
-export default function SessionList() {
+interface SessionListProps {
+  worldId?: string;
+  agentId?: string;
+}
+
+export default function SessionList({ worldId, agentId }: SessionListProps) {
   const { state, dispatch } = useAppState();
   const { showToast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
   async function create() {
-    const data = await api.createSession();
+    const data = await api.createSession('', worldId, agentId);
     const id = data.session_id;
     dispatch({
       type: 'SET_SESSIONS',
@@ -86,7 +91,11 @@ export default function SessionList() {
     }
   }
 
-  const sessions = [...state.sessions].sort(
+  const sessions = state.sessions.filter((s) => {
+    if (worldId && s.world_id !== worldId) return false;
+    if (agentId && s.agent_id !== agentId) return false;
+    return true;
+  }).sort(
     (a, b) =>
       new Date(b.updated_at || b.created_at).getTime() -
       new Date(a.updated_at || a.created_at).getTime(),
