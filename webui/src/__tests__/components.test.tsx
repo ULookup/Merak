@@ -70,6 +70,8 @@ function SessionIconHarness() {
         {
           id: 'session_1',
           title: 'Planning scene',
+          world_id: null,
+          agent_id: null,
           last_seq: 2,
           created_at: '2026-06-06T10:30:00Z',
           updated_at: '2026-06-06T10:35:00Z',

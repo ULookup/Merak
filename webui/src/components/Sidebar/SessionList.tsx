@@ -18,7 +18,7 @@ export default function SessionList() {
       type: 'SET_SESSIONS',
       sessions: [
         ...state.sessions,
-        { id, title: '', last_seq: 0, created_at: '', updated_at: '', archived_at: null },
+        { id, title: '', world_id: null, agent_id: null, last_seq: 0, created_at: '', updated_at: '', archived_at: null },
       ],
     });
     select(id);
