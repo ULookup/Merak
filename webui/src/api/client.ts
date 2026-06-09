@@ -227,7 +227,12 @@ export const api = {
   capabilities: () =>
     fallbackRequest<CapabilitiesResponse>('/api/webui/capabilities', fallbackCapabilities),
 
-  createSession: (title = '') => request<CreateSessionResponse>('POST', '/v1/sessions', { title }),
+  createSession: (title = '', worldId?: string, agentId?: string) => {
+    const body: Record<string, string> = { title };
+    if (worldId) body.world_id = worldId;
+    if (agentId) body.agent_id = agentId;
+    return request<CreateSessionResponse>('POST', '/v1/sessions', body);
+  },
 
   archiveSession: (session: SessionSummary, archived: boolean) =>
     fallbackMutation<ArchiveSessionResponse>(
@@ -247,7 +252,16 @@ export const api = {
   generateTitle: (id: string) =>
     request<GenerateTitleResponse>('POST', `/v1/sessions/${id}/generate-title`),
 
-  listSessions: () => request<SessionListResponse>('GET', '/v1/sessions'),
+  listSessions: (worldId?: string) => {
+    const query = worldId ? `?world_id=${encodeURIComponent(worldId)}` : '';
+    return request<SessionListResponse>('GET', `/v1/sessions${query}`);
+  },
+
+  getOrCreateAgentSession: (worldId: string, agentId: string) =>
+    request<{ session: SessionSummary; created: boolean }>(
+      'GET',
+      `/v1/worlds/${encodeURIComponent(worldId)}/agents/${encodeURIComponent(agentId)}/session`
+    ),
 
   getSession: (id: string) => request<SessionSummary>('GET', `/v1/sessions/${id}`),
 
