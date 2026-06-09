@@ -35,6 +35,8 @@ export interface RunTimelineItem {
 }
 
 export interface AppState {
+  appPhase: 'loading' | 'no_world' | 'no_agent' | 'ready';
+  agentId: string | null;
   sessionId: string;
   lastSeq: number;
   currentRun: string | null;
@@ -77,6 +79,8 @@ export interface AppState {
 }
 
 export const initialState: AppState = {
+  appPhase: 'loading',
+  agentId: null,
   sessionId: '',
   lastSeq: 0,
   currentRun: null,
@@ -130,7 +134,9 @@ function msgId(): string {
 }
 
 export type Action =
-  | { type: 'SET_SESSION'; sessionId: string }
+  | { type: 'SET_SESSION'; sessionId: string; agentId?: string }
+  | { type: 'SET_APP_PHASE'; phase: AppState['appPhase'] }
+  | { type: 'SET_AGENT_SESSION'; sessionId: string; agentId: string }
   | { type: 'SET_METADATA'; metadata: RuntimeMetadata }
   | { type: 'SET_CAPABILITIES'; capabilities: UiCapabilities; fallback?: boolean }
   | { type: 'SET_SESSIONS'; sessions: SessionSummary[] }
@@ -176,10 +182,26 @@ export type Action =
 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
+    case 'SET_APP_PHASE':
+      return { ...state, appPhase: action.phase };
+
+    case 'SET_AGENT_SESSION':
+      return {
+        ...state,
+        sessionId: action.sessionId,
+        agentId: action.agentId,
+        appPhase: 'ready',
+        messages: [],
+        lastSeq: 0,
+        currentRun: null,
+        status: 'idle',
+      };
+
     case 'SET_SESSION':
       return {
         ...state,
         sessionId: action.sessionId,
+        agentId: action.agentId ?? state.agentId,
         messages: [],
         lastSeq: 0,
         currentRun: null,
@@ -210,6 +232,7 @@ export function reducer(state: AppState, action: Action): AppState {
         storyOverview: null,
         worldbuildingStatus: action.worldId ? 'loading' : 'idle',
         worldbuildingError: null,
+        appPhase: action.worldId ? 'no_agent' : state.appPhase,
       };
 
     case 'SET_INSPECTOR_TAB':
