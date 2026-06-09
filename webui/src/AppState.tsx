@@ -692,6 +692,12 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       });
     }
 
+    case 'scene_changed':
+      return {
+        ...state,
+        storyVersion: state.storyVersion + 1,
+      };
+
     case 'card_updated':
       return {
         ...state,

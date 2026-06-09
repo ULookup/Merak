@@ -551,6 +551,12 @@ nlohmann::json RuntimeService::resolve_creation(
                                 {"resource_id", resource_id}
                             });
                         }
+                        if (resource_type == "scene") {
+                            emit(run->session_id, run_id, "scene_changed", {
+                                {"scene_id", resource_id},
+                                {"world_id", pending->world_id}
+                            });
+                        }
                     }
                 }
                 break;
