@@ -1,6 +1,7 @@
 #pragma once
 #include <merak/message.hpp>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -19,6 +20,17 @@ private:
 
 struct ToolExecutionContext {
     std::shared_ptr<CancellationToken> cancellation;
+};
+
+enum class LlmErrorClass : uint8_t {
+  None,
+  ContextWindow,   // token limit exceeded — escalate compaction
+  RateLimit,       // 429 — exponential backoff
+  StreamIdle,      // SSE stream went silent — retry
+  StreamTransport, // SSE connection dropped — retry
+  Auth,            // 401/403 — stop, no retry
+  Cancelled,       // user cancelled — stop
+  Unknown,         // unclassified — retry once
 };
 
 class RunControl {

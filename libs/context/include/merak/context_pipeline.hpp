@@ -1,0 +1,37 @@
+#pragma once
+#include <merak/context_planner.hpp>
+#include <merak/context_binder.hpp>
+#include <merak/context_optimizer.hpp>
+#include <merak/context_serializer.hpp>
+#include <merak/pipeline_stats.hpp>
+#include <memory>
+
+namespace merak {
+
+class ContextPipeline {
+public:
+  ContextPipeline();
+
+  SerializedPayload planned_assemble(const std::string& system_prompt,
+                                      const std::string& model,
+                                      int model_max_tokens,
+                                      const std::vector<Message>& history,
+                                      const BindSources& sources);
+
+  PipelineStats& stats() { return stats_; }
+  const PipelineStats& stats() const { return stats_; }
+  void escalate_for_recovery();
+
+  ContextPlanner& planner() { return planner_; }
+  ContextOptimizer& optimizer() { return optimizer_; }
+
+private:
+  ContextPlanner planner_;
+  ContextBinder binder_;
+  ContextOptimizer optimizer_;
+  ContextSerializer serializer_;
+  PipelineStats stats_;
+  int current_tokens_ = 0;
+};
+
+} // namespace merak

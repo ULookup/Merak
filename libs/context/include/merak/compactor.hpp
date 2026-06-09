@@ -27,6 +27,10 @@ public:
         int keep_recent
     );
 
+    std::future<std::string> compact_one_round(
+        const std::vector<Message>& round_messages
+    );
+
 private:
     std::shared_ptr<LlmProvider> summary_llm_;
     std::shared_ptr<TokenCounter> counter_;

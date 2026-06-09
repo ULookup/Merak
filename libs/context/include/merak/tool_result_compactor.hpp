@@ -1,5 +1,6 @@
 #pragma once
 #include <merak/message.hpp>
+#include <merak/context_optimizer.hpp>
 #include <string>
 #include <vector>
 
@@ -7,8 +8,7 @@ namespace merak {
 
 // Compresses tool result content in-place, replacing large results with
 // placeholder text. Never deletes messages — only replaces content.
-// Modeled after Astra's microcompact: preserves message identity and
-// tool_call_id pairing while freeing token budget.
+// Now delegates to ContextOptimizer::microcompact for the actual logic.
 struct ToolResultCompactorConfig {
     int keep_recent = 6;
     int max_result_chars = 8000;
@@ -23,13 +23,20 @@ public:
     explicit ToolResultCompactor(Config config) : config_(config) {}
 
     // Compress tool result messages in-place. Returns number compacted.
-    int compact(std::vector<Message>& history, double context_pressure);
+    // Delegates to ContextOptimizer::microcompact.
+    int compact(std::vector<Message>& history, double context_pressure) {
+        if (context_pressure <= config_.pressure_threshold) return 0;
+        OptimizeLimits lim;
+        lim.allow_tool_result_clearing = true;
+        lim.keep_recent_tool_results = config_.keep_recent;
+        lim.max_result_chars = config_.max_result_chars;
+        ContextOptimizer opt;
+        opt.microcompact(history, lim);
+        return 1;
+    }
 
 private:
     Config config_;
-
-    static bool is_compactable(const std::string& tool_name);
-    static std::string make_placeholder(const Message& msg);
 };
 
 } // namespace merak

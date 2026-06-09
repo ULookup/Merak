@@ -109,10 +109,9 @@ std::unique_ptr<AgentLoop> SubAgentRunner::create_sub_agent(
     TokenBudget budget;
     budget.model_max_tokens = 128000;
 
-    auto ctx = std::make_shared<ContextAssembler>(budget, counter);
     auto comp = std::make_shared<Compactor>(llm_, counter);
 
-    return std::make_unique<AgentLoop>(cfg, llm_, sub_tools, memory_, ctx, comp);
+    return std::make_unique<AgentLoop>(cfg, llm_, sub_tools, memory_, comp);
 }
 
 } // namespace merak

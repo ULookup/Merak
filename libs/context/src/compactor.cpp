@@ -111,4 +111,15 @@ std::string Compactor::messages_to_text(
     return oss.str();
 }
 
+std::future<std::string> Compactor::compact_one_round(
+    const std::vector<Message>& round_messages) {
+  return std::async(std::launch::async, [this, round_messages]() -> std::string {
+    if (round_messages.empty()) return "";
+    auto text = messages_to_text(round_messages);
+    // Compact to a concise single-round summary (200 tokens target)
+    auto result = compact({Message{"user", text}}, 200);
+    return result.get().summary;
+  });
+}
+
 } // namespace merak
