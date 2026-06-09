@@ -22,6 +22,8 @@ ApprovalStatus approval_status_from_string(const std::string& value);
 struct SessionRecord {
     std::string id;
     std::string title;
+    std::string world_id;
+    std::string agent_id;
     long long last_seq = 0;
     std::string created_at;
     std::string updated_at;
@@ -59,11 +61,13 @@ public:
     ~SessionStore();
     void initialize();
 
-    SessionRecord create_session(const std::string& title = "");
+    SessionRecord create_session(const std::string& title = "",
+                              const std::string& world_id = "",
+                              const std::string& agent_id = "");
     void update_session(const std::string& id, const std::string& title);
     SessionRecord archive_session(const std::string& id, bool archived);
     std::optional<SessionRecord> get_session(const std::string& id) const;
-    std::vector<SessionRecord> list_sessions() const;
+    std::vector<SessionRecord> list_sessions(const std::string& world_id = "") const;
     RunRecord create_run(
         const std::string& session_id,
         const std::string& message,
