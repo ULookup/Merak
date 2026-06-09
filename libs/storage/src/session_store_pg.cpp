@@ -217,7 +217,11 @@ SessionRecord SessionStorePG::archive_session(const std::string& id, bool archiv
     }
     txn.commit();
 
-    return *get_session(id);
+    auto session = get_session(id);
+    if (!session) {
+        throw std::runtime_error("session not found");
+    }
+    return *session;
 }
 
 std::optional<SessionRecord> SessionStorePG::get_session(const std::string& id) const {
@@ -240,7 +244,7 @@ std::vector<SessionRecord> SessionStorePG::list_sessions(const std::string& worl
     pqxx::work txn(*conn_);
     pqxx::result r;
     if (world_id.empty()) {
-        r = txn.exec(
+        r = txn.exec_params(
             "SELECT id, title, world_id, agent_id, last_seq, created_at, updated_at, archived_at "
             "FROM sessions ORDER BY updated_at DESC");
     } else {
@@ -309,9 +313,11 @@ bool SessionStorePG::has_unfinished_run(const std::string& session_id) const {
 
     for (const auto& row : r) {
         if (unfinished(row["status"].as<std::string>())) {
+            txn.commit();
             return true;
         }
     }
+    txn.commit();
     return false;
 }
 
@@ -326,10 +332,14 @@ void SessionStorePG::update_run_status(const std::string& id, RunStatus status,
     }
 
     pqxx::work txn(*conn_);
-    txn.exec_params(
+    auto r = txn.exec_params(
         "UPDATE runs SET status = $1, finished_at = $2, error = $3 WHERE id = $4",
         status_str, finished_at_val, error, id);
     txn.commit();
+
+    if (r.affected_rows() == 0) {
+        throw std::runtime_error("run not found: " + id);
+    }
 }
 
 // --- Approval CRUD ---
@@ -455,24 +465,26 @@ std::vector<RunRecord> SessionStorePG::interrupt_running_runs() {
     std::lock_guard lock(mutex_);
 
     pqxx::work txn(*conn_);
-    auto r = txn.exec(
+    auto ts = now_iso();
+
+    // Update first so returned rows reflect the new status.
+    txn.exec_params(
+        "UPDATE runs SET status = 'interrupted', finished_at = $1 WHERE status = 'running'",
+        ts);
+
+    // Re-query to get the updated rows.
+    auto r = txn.exec_params(
         "SELECT id, session_id, status, user_message, started_at, finished_at, error, "
         "parent_run_id, delegation_id, agent_id, run_kind "
-        "FROM runs WHERE status = 'running'");
+        "FROM runs WHERE status = 'interrupted' AND finished_at = $1",
+        ts);
+
+    txn.commit();
 
     std::vector<RunRecord> out;
     for (const auto& row : r) {
         out.push_back(run_from_row(row));
     }
-
-    auto ts = now_iso();
-    for (auto& rec : out) {
-        txn.exec_params(
-            "UPDATE runs SET status = 'interrupted', finished_at = $1 WHERE id = $2",
-            ts, rec.id);
-    }
-
-    txn.commit();
     return out;
 }
 
