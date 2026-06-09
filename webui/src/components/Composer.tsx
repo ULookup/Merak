@@ -42,6 +42,19 @@ const promptModes: Array<{ label: string; Icon: LucideIcon; template: string }> 
 export default function Composer() {
   const { state } = useAppState();
   const { showToast } = useToast();
+
+  const currentAgent = state.agents.find((a) => a.id === state.agentId);
+
+  const placeholder = (() => {
+    if (!currentAgent) return 'Send a message...';
+    const kind = currentAgent.kind;
+    if (kind === 'god' || kind === '0') return 'Send instructions as God...';
+    if (kind === 'individual' || kind === 'group' || kind === '5' || kind === '6')
+      return `Speak as ${currentAgent.display_name || currentAgent.name}...`;
+    if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4')))
+      return `Query as ${currentAgent.display_name || currentAgent.name}...`;
+    return 'Send a message...';
+  })();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -115,7 +128,7 @@ export default function Composer() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Type a message... Enter to send, Shift+Enter for newline"
+          placeholder={placeholder}
           rows={2}
           disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
         />
