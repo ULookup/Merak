@@ -7,6 +7,7 @@
 #include <chrono>
 #include <map>
 #include <mutex>
+#include <atomic>
 #include <optional>
 #include <thread>
 
@@ -43,7 +44,7 @@ private:
   std::shared_ptr<SessionJournal> journal_;
 
   TurnIndex last_extraction_turn_ = -1;
-  int pending_extractions_ = 0;
+  std::atomic<int> pending_extractions_{0};
   std::map<std::string, SessionMemorySnapshot> latest_snapshots_;
   mutable std::mutex mutex_;
 };

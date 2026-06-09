@@ -28,17 +28,18 @@ double PercentileEstimate::percentile(double p) const {
 }
 
 void PipelineStats::record(const ContextFeedback& feedback, const OptimizeStats& opt_stats) {
-  response_tokens_.record(static_cast<double>(feedback.output_tokens));
+  if (feedback.output_tokens > 0) {
+    response_tokens_.record(static_cast<double>(feedback.output_tokens));
+  }
   if (feedback.thinking_tokens > 0) {
     thinking_tokens_.record(static_cast<double>(feedback.thinking_tokens));
   }
-  double hit = feedback.input_tokens > 0
-    ? static_cast<double>(feedback.cache_read_tokens) / static_cast<double>(feedback.input_tokens)
-    : 0.0;
-  cache_hit_ratio_.update(hit);
-
-  if (feedback.input_tokens > 0 && feedback.schema_count > 0) {
-    avg_schema_tokens_.update(static_cast<double>(feedback.schema_count) / static_cast<double>(feedback.input_tokens) * 100.0);
+  if (feedback.input_tokens > 0) {
+    double hit = static_cast<double>(feedback.cache_read_tokens) / static_cast<double>(feedback.input_tokens);
+    cache_hit_ratio_.update(hit);
+    if (feedback.schema_count > 0) {
+      avg_schema_tokens_.update(static_cast<double>(feedback.schema_count) / static_cast<double>(feedback.input_tokens) * 100.0);
+    }
   }
   schema_count_ = feedback.schema_count;
   last_context_window_error_ = feedback.context_window_error;
@@ -46,7 +47,10 @@ void PipelineStats::record(const ContextFeedback& feedback, const OptimizeStats&
 
   // Track per-section usage from optimize stats
   for (auto& action : opt_stats.actions) {
-    // Accumulate section usage data from optimizer actions
+    if (action.affected_section) {
+      section_usage_[*action.affected_section].update(
+          static_cast<double>(action.tokens_saved));
+    }
   }
 }
 

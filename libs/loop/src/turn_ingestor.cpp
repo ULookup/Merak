@@ -38,4 +38,8 @@ LlmErrorClass TurnIngestor::classify_error(int http_status,
   return LlmErrorClass::Unknown;
 }
 
+void TurnIngestor::set_tool_output_chars(IngestedTurn& turn, int total_chars) {
+  turn.total_tool_output_chars = total_chars;
+}
+
 } // namespace merak

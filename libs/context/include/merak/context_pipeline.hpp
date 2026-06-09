@@ -4,13 +4,16 @@
 #include <merak/context_optimizer.hpp>
 #include <merak/context_serializer.hpp>
 #include <merak/pipeline_stats.hpp>
+#include <merak/spill_store.hpp>
 #include <memory>
+#include <filesystem>
 
 namespace merak {
 
 class ContextPipeline {
 public:
   ContextPipeline();
+  explicit ContextPipeline(const std::filesystem::path& spill_dir);
 
   SerializedPayload planned_assemble(const std::string& system_prompt,
                                       const std::string& model,
@@ -31,7 +34,9 @@ private:
   ContextOptimizer optimizer_;
   ContextSerializer serializer_;
   PipelineStats stats_;
+  SpillStore spill_store_;
   int current_tokens_ = 0;
+  int turn_index_ = 0;
 };
 
 } // namespace merak

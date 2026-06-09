@@ -1,6 +1,7 @@
 #include <merak/context_binder.hpp>
 #include <merak/memory_store.hpp>
 #include <spdlog/spdlog.h>
+#include <sstream>
 
 namespace merak {
 
@@ -35,7 +36,22 @@ BoundSection ContextBinder::bind_section(const PlannedSection& planned,
       break;
     case SectionKind::Memory: {
       if (sources.memory_store && !sources.search_query.empty()) {
-        // Fire-and-forget sync stub; in production use co_await
+        try {
+          auto future = sources.memory_store->search(sources.search_query, 5);
+          auto result = future.get();
+          if (result.has_value()) {
+            std::ostringstream oss;
+            for (auto& snippet : result.value()) {
+              oss << "- [" << snippet.type << "] " << snippet.content << "\n";
+            }
+            text = oss.str();
+          } else {
+            spdlog::warn("Memory search failed for query '{}'",
+                         sources.search_query.substr(0, 80));
+          }
+        } catch (const std::exception& e) {
+          spdlog::warn("Memory search exception: {}", e.what());
+        }
       }
       break;
     }
