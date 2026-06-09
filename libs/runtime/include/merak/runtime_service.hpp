@@ -2,6 +2,7 @@
 #include <merak/agent_loop.hpp>
 #include <merak/runtime_event.hpp>
 #include <merak/session_store.hpp>
+#include <merak/prompts/types.hpp>
 #include <condition_variable>
 #include <chrono>
 #include <deque>
@@ -123,6 +124,8 @@ private:
     RuntimeEvent emit(const std::string& session_id, const std::string& run_id,
                       const std::string& type, nlohmann::json payload = {});
     void execute_run(RunRecord run, std::string model);
+    prompts::PromptProfile build_prompt_profile(
+        const std::string& world_id, const std::string& agent_id);
     void execute_delegation(RunRecord parent, DelegationRequest request,
                             std::string delegation_id);
     AgentResponse execute_sub_run(
