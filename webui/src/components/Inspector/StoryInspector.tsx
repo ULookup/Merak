@@ -33,6 +33,18 @@ export default function StoryInspector() {
       .catch(() => setWorldDetail(null));
   }, [state.worldId, state.storyVersion]);
 
+  // Find the first writing/draft scene
+  const activeScene = (() => {
+    if (overview?.current_scene?.status === 'writing' || overview?.current_scene?.status === 'draft') {
+      return overview.current_scene;
+    }
+    return null;
+  })();
+
+  const participantAgents = state.agents.filter((a) =>
+    activeScene?.participant_ids?.includes(a.id)
+  );
+
   function handleCreated() {
     dispatch({ type: 'SET_STORY_VERSION' });
   }
@@ -116,6 +128,27 @@ export default function StoryInspector() {
           </div>
         )}
       </section>
+
+      {activeScene && (
+        <section className={styles.section}>
+          <div className={styles.sectionTitle}>Scene Narrative</div>
+          <div className={styles.narrativeBox}>
+            {(activeScene as any).narrative || (activeScene as any).text || (activeScene as any).content || 'No narrative content yet.'}
+          </div>
+          {participantAgents.length > 0 && (
+            <>
+              <div className={styles.sectionTitle} style={{ marginTop: '0.75rem' }}>Participants</div>
+              <div className={styles.voiceStrip}>
+                {participantAgents.map((agent) => (
+                  <span key={agent.id}>
+                    {agent.display_name || agent.name}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
