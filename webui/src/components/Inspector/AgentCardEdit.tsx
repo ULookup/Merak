@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api } from '../../api/client';
+import { api, ApiError } from '../../api/client';
 import type { AgentDetail } from '../../api/types';
 import styles from './AgentCardEdit.module.css';
 
@@ -27,6 +27,7 @@ export default function AgentCardEdit({ worldId, agentId, detail, onSave, onCanc
     background: cc.background ?? '',
     knowledge_scope: cc.knowledge_scope ?? '',
     appearance: cc.appearance ?? '',
+    taboo_topics: cc.taboo_topics?.join('、') ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
@@ -53,7 +54,7 @@ export default function AgentCardEdit({ worldId, agentId, detail, onSave, onCanc
       const res = await api.patchAgentCard(worldId, agentId, payload, cc.version);
       onSave({ ...detail, character_card: { ...cc, ...payload, version: res.version } });
     } catch (e: unknown) {
-      if ((e as Error).message?.includes('version')) {
+      if (e instanceof ApiError && e.code === 'version_conflict') {
         setConflict(true);
       }
     } finally {
@@ -96,6 +97,7 @@ export default function AgentCardEdit({ worldId, agentId, detail, onSave, onCanc
         {field('知识范围', 'knowledge_scope')}
         {field('背景故事', 'background', true)}
         {field('外观', 'appearance', true)}
+        {field('禁忌话题（逗号或空格分隔）', 'taboo_topics')}
       </div>
       <div className={styles.actions}>
         <button onClick={onCancel} disabled={saving}>取消</button>

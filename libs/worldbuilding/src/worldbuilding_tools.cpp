@@ -1,4 +1,5 @@
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
+#include <merak/worldbuilding/card_access.hpp>
 #include <nlohmann/json.hpp>
 #include <future>
 #include <algorithm>
@@ -624,12 +625,6 @@ std::future<ToolResult> ReadForeshadowingTool::execute(ToolCall call, ToolExecut
             if (!f_opt) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "伏笔 '" + foreshadowing_id + "' 不存在。");
-                return result;
-            }
-
-            if (f_opt->status == ForeshadowStatus::Paid) {
-                result.output = error_response(ToolErrorCode::CONFLICT,
-                    "伏笔 '" + foreshadowing_id + "' 已偿还（paid），不可再次偿还。");
                 return result;
             }
 
@@ -1669,6 +1664,7 @@ std::future<ToolResult> UpdateAgentPromptTool::execute(
 
             if (agent_id.empty() || prompt.empty()) {
                 ToolResult r;
+                r.call_id = call.id;
                 r.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
                     "agent_id 和 prompt 都不能为空");
                 return r;
@@ -1677,6 +1673,7 @@ std::future<ToolResult> UpdateAgentPromptTool::execute(
             svc.update_agent_prompt(agent_id, prompt);
 
             ToolResult r;
+            r.call_id = call.id;
             r.output = ok_response({
                 {"agent_id", agent_id},
                 {"message", "系统提示词已更新"}
@@ -1684,6 +1681,7 @@ std::future<ToolResult> UpdateAgentPromptTool::execute(
             return r;
         } catch (const std::exception& e) {
             ToolResult r;
+            r.call_id = call.id;
             r.output = error_response(ToolErrorCode::INTERNAL, e.what());
             return r;
         }
@@ -1738,6 +1736,13 @@ std::future<ToolResult> UpdateCharacterCardTool::execute(ToolCall call, ToolExec
                 return result;
             }
 
+            auto& ctx = static_cast<UpdateCharacterCardTool&>(*self).ctx_;
+            if (agent_opt->world_id != ctx.world_id) {
+                result.output = error_response(ToolErrorCode::NO_PERMISSION,
+                    "角色不属于当前世界，无法修改。");
+                return result;
+            }
+
             // version=0 means no version check
             auto updated = svc.agents().patch_character_card(agent_id, args["fields"], 0);
 
@@ -1746,6 +1751,10 @@ std::future<ToolResult> UpdateCharacterCardTool::execute(ToolCall call, ToolExec
                 {"version", updated.version}
             });
 
+        } catch (const VersionConflictError& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::CONFLICT,
+                "卡片已被其他来源修改（当前版本：" + std::to_string(e.current_version) + "），请刷新后重试");
         } catch (const std::exception& e) {
             result.is_error = true;
             result.output = error_response(ToolErrorCode::INTERNAL,
@@ -1804,6 +1813,12 @@ std::future<ToolResult> AddCharacterDiaryTool::execute(ToolCall call, ToolExecut
             if (!agent_opt) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "角色 '" + agent_id + "' 不存在。");
+                return result;
+            }
+
+            if (agent_opt->world_id != ctx.world_id) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "角色 '" + agent_id + "' 不在当前世界中。");
                 return result;
             }
 
@@ -1896,6 +1911,7 @@ std::future<ToolResult> AddRelationTool::execute(ToolCall call, ToolExecutionCon
             }
 
             auto& svc = *static_cast<AddRelationTool&>(*self).svc_;
+            auto& ctx = static_cast<AddRelationTool&>(*self).ctx_;
 
             auto src_opt = svc.agents().get_agent(source_id);
             if (!src_opt) {
@@ -1907,6 +1923,16 @@ std::future<ToolResult> AddRelationTool::execute(ToolCall call, ToolExecutionCon
             if (!tgt_opt) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "角色 '" + target_id + "' 不存在。");
+                return result;
+            }
+            if (src_opt->world_id != ctx.world_id) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "角色 '" + source_id + "' 不在当前世界中。");
+                return result;
+            }
+            if (tgt_opt->world_id != ctx.world_id) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "角色 '" + target_id + "' 不在当前世界中。");
                 return result;
             }
 

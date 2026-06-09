@@ -10,11 +10,11 @@ void SkillRegistry::discover_from(const std::filesystem::path& dir) {
 
     for (auto const& entry : std::filesystem::recursive_directory_iterator(dir)) {
         if (entry.is_regular_file() && entry.path().filename() == "SKILL.md") {
-            auto skill_opt = SkillLoader::load(entry.path());
-            if (skill_opt.has_value()) {
+            auto result = SkillLoader::load(entry.path());
+            if (result) {
                 // First discover wins: only add if not already present
-                if (skills_.find(skill_opt->name) == skills_.end()) {
-                    skills_[skill_opt->name] = std::move(skill_opt.value());
+                if (skills_.find(result->name) == skills_.end()) {
+                    skills_[result->name] = std::move(*result);
                 }
             }
         }

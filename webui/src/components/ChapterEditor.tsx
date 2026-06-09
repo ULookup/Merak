@@ -42,7 +42,28 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
     setEntities(items);
   }, [state.agents, state.foreshadowing, state.secrets]);
 
-  const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
+  // Reset title/content on chapterId change; load content from API
+  useEffect(() => {
+    setTitle(chapter?.title ?? '');
+    setContent('');
+    if (!chapterId || !worldId) return;
+    let cancelled = false;
+    api.fetchChapterContent(worldId, chapterId)
+      .then(data => {
+        if (!cancelled) setContent(data.content ?? '');
+      })
+      .catch(() => {
+        // Content not yet saved or fetch failed — start with empty editor
+      });
+    return () => { cancelled = true; };
+  }, [chapterId, worldId]);
+
+  const trimmed = content.trim();
+  const cjkChars = (trimmed.match(/[一-鿿㐀-䶿　-〿＀-￯]/g) || []).length;
+  const isCJK = trimmed.length > 0 && cjkChars / trimmed.length > 0.3;
+  const wordCount = trimmed
+    ? (isCJK ? cjkChars : trimmed.split(/\s+/).length)
+    : 0;
   const charCount = content.length;
 
   const insertTag = useCallback((entity: ContextEntity) => {
@@ -88,7 +109,7 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
         />
         <div className={styles.toolbarRight}>
           <span className={styles.stats}>
-            {wordCount} 词 | {charCount} 字
+            {isCJK ? `${wordCount} 字` : `${wordCount} words`} | {charCount} 字符
           </span>
           <button
             className={styles.contextBtn}

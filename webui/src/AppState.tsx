@@ -696,16 +696,16 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       return {
         ...state,
         storyVersion: state.storyVersion + 1,
-        worldbuildingStatus: 'loading',
       };
 
     case 'pipeline_phase_changed':
       return {
         ...state,
-        pipelinePhase: (p.phase as string) ?? state.pipelinePhase,
+        pipelinePhase: typeof p.phase === 'string' ? p.phase : state.pipelinePhase,
       };
 
     case 'pipeline_stats_updated':
+      // TODO: wire pipeline stats (e.g., word_count, scene_count) into AppState
       return state;
 
     case 'world_switched':

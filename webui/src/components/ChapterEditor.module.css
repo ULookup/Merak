@@ -166,3 +166,8 @@
   border-color: #ce93d8;
   color: #ce93d8;
 }
+
+.location {
+  background: rgba(129, 199, 132, 0.15);
+  border-color: #81c784;
+}

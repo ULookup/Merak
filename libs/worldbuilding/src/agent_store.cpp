@@ -549,7 +549,7 @@ AgentStore::patch_character_card(const std::string& agent_id,
     }
 
     auto current = load_character_card(agent_id);
-    if (current.version != expected_version) {
+    if (expected_version > 0 && current.version != expected_version) {
         throw VersionConflictError(current.version);
     }
 
@@ -582,36 +582,46 @@ AgentStore::patch_character_card(const std::string& agent_id,
     // 直接在 patch 内部完成写入，避免 TOCTOU：update_character_card 会重新加载
     // 卡片并覆盖 we 的版本检查，导致并发 patch 可能互相覆盖。
     current.agent_id = agent_id;
-    current.version = expected_version + 1;
+    current.version = (expected_version > 0) ? expected_version + 1 : current.version + 1;
     current.updated_at = now_iso_utc();
     const auto markdown = character_card_markdown(current);
-
     const auto root = agent_path(agent_id);
-    write_text(root / "character_card.md", markdown);
-    write_text(root / "character_card_history" /
-                   history_filename(current.updated_at, current.version),
-               markdown + "\n更新原因：patch_user\n");
 
+    // Write DB FIRST with version guard. Only write files after DB confirms success.
+    // This prevents the TOCTOU window where file is written but DB update fails.
     PgConn conn(*pool_);
+
     conn.execute(
         "UPDATE agents SET name = $1, display_name = $2, updated_at = $3 "
         "WHERE id = $4",
         {current.name, current.name, current.updated_at, agent_id});
 
-    conn.execute(
+    int affected = conn.execute(
         "UPDATE character_cards SET name = $1, age = $2, gender = $3, race = $4, "
         "identity = $5, core_traits = $6, emotional_tendency = $7, "
         "speaking_style = $8, taboo_topics = $9, core_desire = $10, "
         "deep_fear = $11, daily_goal = $12, background = $13, "
         "knowledge_scope = $14, appearance = $15, version = $16, updated_at = $17 "
-        "WHERE agent_id = $18",
+        "WHERE agent_id = $18 AND version = $19",
         {current.name, std::to_string(current.age),
          current.gender, current.race, current.identity,
          to_pg_array(current.core_traits), current.emotional_tendency,
          current.speaking_style, to_pg_array(current.taboo_topics),
          current.core_desire, current.deep_fear, current.daily_goal,
          current.background, current.knowledge_scope, current.appearance,
-         std::to_string(current.version), current.updated_at, agent_id});
+         std::to_string(current.version), current.updated_at, agent_id,
+         std::to_string(expected_version > 0 ? expected_version : current.version - 1)});
+
+    if (affected == 0) {
+        throw VersionConflictError(expected_version > 0 ? expected_version : current.version - 1);
+    }
+
+    // DB confirmed — now write files
+    write_text(root / "character_card.md", markdown);
+    write_text(root / "character_card_history" /
+                   history_filename(current.updated_at, current.version),
+               markdown + "\n更新原因：patch_user\n");
+
     return current;
 }
 

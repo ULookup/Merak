@@ -12,7 +12,11 @@ const PHASES: { key: CreativePhase; label: string; desc: string }[] = [
 
 export default function PipelineNavigator() {
   const { state } = useAppState();
-  const currentPhase: CreativePhase = (state.pipelinePhase ?? 'worldbuilding') as CreativePhase;
+  const VALID_PHASES = new Set<string>(['worldbuilding', 'character_creation', 'plot_architecture', 'scene_writing', 'reflection']);
+  const rawPhase = state.pipelinePhase ?? 'worldbuilding';
+  const currentPhase: CreativePhase = VALID_PHASES.has(rawPhase)
+    ? (rawPhase as CreativePhase)
+    : 'worldbuilding';
   const currentIdx = PHASES.findIndex(p => p.key === currentPhase);
 
   return (

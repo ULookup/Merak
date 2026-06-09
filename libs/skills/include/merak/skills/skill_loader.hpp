@@ -1,6 +1,6 @@
 #pragma once
 #include <merak/skills/skill_types.hpp>
-#include <optional>
+#include <expected>
 #include <filesystem>
 
 namespace merak::skills {
@@ -18,7 +18,7 @@ public:
     // context: inline
     // ---
     // Body starts here (Markdown)
-    static std::optional<SkillDef> load(const std::filesystem::path& path);
+    static std::expected<SkillDef, std::string> load(const std::filesystem::path& path);
 };
 
 } // namespace merak::skills
