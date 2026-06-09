@@ -345,10 +345,9 @@ prompts::PromptProfile RuntimeService::build_prompt_profile(
     profile.active_world_id = world_id;
     profile.active_agent_id = agent_id;
 
-    // Find first active scene (writing or draft status)
-    auto chapters = wb_service_->narrative().list_chapters(world_id);
-    for (const auto& ch : chapters) {
-        auto scenes = wb_service_->narrative().list_scenes(world_id, ch.id);
+    try {
+        // Find first active scene (writing or draft status) — single query, scan in-memory
+        auto scenes = wb_service_->narrative().list_scenes(world_id);
         for (const auto& sc : scenes) {
             if (sc.status == "writing" || sc.status == "draft") {
                 prompts::SceneContext ctx;
@@ -359,7 +358,9 @@ prompts::PromptProfile RuntimeService::build_prompt_profile(
                 break;
             }
         }
-        if (profile.scene_ctx.has_value()) break;
+    } catch (const std::exception& e) {
+        spdlog::warn("build_prompt_profile: failed to load scene context for world={} agent={}: {}",
+                     world_id, agent_id, e.what());
     }
 
     return profile;
