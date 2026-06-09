@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { api } from '../api/client';
 import { useAppState } from '../AppState';
 import AgentCard from './AgentCard';
 import styles from './WorldDashboard.module.css';
@@ -18,45 +16,11 @@ export default function WorldDashboard() {
   const currentWorld = state.worlds.find((w) => w.id === state.worldId);
   const storyOverview = state.storyOverview;
 
-  // Chapter and scene counts loaded via listChapters API
-  const [chapterCount, setChapterCount] = useState(0);
-  const [sceneCount, setSceneCount] = useState(0);
-
-  // Load dashboard data when worldId is set
-  useEffect(() => {
-    if (!state.worldId) return;
-
-    dispatch({ type: 'SET_WORLDBUILDING_STATUS', status: 'loading' });
-
-    Promise.allSettled([
-      api.getStoryOverview(state.worldId, state.sessionId),
-      api.listAgents(state.worldId),
-      api.listWorlds(),
-      api.listChapters(state.worldId),
-    ]).then(([overviewRes, agentsRes, worldsRes, chaptersRes]) => {
-      const overview = overviewRes.status === 'fulfilled' ? overviewRes.value.overview : null;
-      const agents = agentsRes.status === 'fulfilled' ? (agentsRes.value.agents ?? []) : [];
-      const worlds =
-        worldsRes.status === 'fulfilled' ? (worldsRes.value.worlds ?? state.worlds) : state.worlds;
-
-      dispatch({
-        type: 'SET_WORLDBUILDING_DATA',
-        worlds,
-        agents,
-        foreshadowing: overview?.foreshadowing ?? [],
-        secrets: overview?.secrets ?? [],
-        worldTime: overview?.world_time ?? null,
-        storyOverview: overview,
-      });
-
-      // Compute chapter and scene counts from chapters list
-      if (chaptersRes.status === 'fulfilled') {
-        const chapters = chaptersRes.value.chapters ?? [];
-        setChapterCount(chapters.length);
-        setSceneCount(chapters.reduce((sum, ch) => sum + (ch.scene_count ?? 0), 0));
-      }
-    });
-  }, [state.worldId]);
+  // Compute chapter and scene counts from storyOverview (loaded by App.tsx)
+  const chapterCount = storyOverview?.current_chapter
+    ? storyOverview.current_chapter.number
+    : 0;
+  const sceneCount = storyOverview?.current_scene ? 1 : 0;
 
   function handleBack() {
     dispatch({ type: 'SET_APP_PHASE', phase: 'no_world' });

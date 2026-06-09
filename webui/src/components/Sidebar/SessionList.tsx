@@ -17,16 +17,20 @@ export default function SessionList({ worldId, agentId }: SessionListProps) {
   const [editValue, setEditValue] = useState('');
 
   async function create() {
-    const data = await api.createSession('', worldId, agentId);
-    const id = data.session_id;
-    dispatch({
-      type: 'SET_SESSIONS',
-      sessions: [
-        ...state.sessions,
-        { id, title: '', world_id: null, agent_id: null, last_seq: 0, created_at: '', updated_at: '', archived_at: null },
-      ],
-    });
-    select(id);
+    try {
+      const data = await api.createSession('', worldId, agentId);
+      const id = data.session_id;
+      dispatch({
+        type: 'SET_SESSIONS',
+        sessions: [
+          ...state.sessions,
+          { id, title: '', world_id: worldId ?? null, agent_id: agentId ?? null, last_seq: 0, created_at: '', updated_at: '', archived_at: null },
+        ],
+      });
+      select(id);
+    } catch {
+      showToast('Failed to create session', 'error');
+    }
   }
 
   function select(id: string) {
@@ -46,14 +50,18 @@ export default function SessionList({ worldId, agentId }: SessionListProps) {
   async function confirmRename(id: string) {
     const newTitle = editValue.trim();
     if (newTitle) {
-      const data = await api.updateSession(id, newTitle);
-      const updated = data.session;
-      dispatch({
-        type: 'SET_SESSIONS',
-        sessions: state.sessions.map((s) =>
-          s.id === id ? { ...s, title: updated.title, updated_at: updated.updated_at } : s,
-        ),
-      });
+      try {
+        const data = await api.updateSession(id, newTitle);
+        const updated = data.session;
+        dispatch({
+          type: 'SET_SESSIONS',
+          sessions: state.sessions.map((s) =>
+            s.id === id ? { ...s, title: updated.title, updated_at: updated.updated_at } : s,
+          ),
+        });
+      } catch {
+        showToast('Failed to rename session', 'error');
+      }
     }
     setEditingId(null);
     setEditValue('');

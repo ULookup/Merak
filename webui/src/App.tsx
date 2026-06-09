@@ -62,12 +62,12 @@ function AppInner() {
       );
 
       if (activeSession) {
+        dispatch({ type: 'SET_WORLD', worldId: activeSession.world_id });
         dispatch({
           type: 'SET_AGENT_SESSION',
           sessionId: activeSession.id,
           agentId: activeSession.agent_id ?? '',
         });
-        dispatch({ type: 'SET_WORLD', worldId: activeSession.world_id });
       } else {
         dispatch({ type: 'SET_WORLD', worldId: worlds[0].id });
       }
