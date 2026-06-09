@@ -1,5 +1,6 @@
 import { CircleHelp, Menu, PanelRight } from 'lucide-react';
 import type { ConnectionState } from '../hooks/useSSE';
+import { useAppState } from '../AppState';
 import BrandMark from './BrandMark';
 import ChatTimeline from './ChatTimeline';
 import Composer from './Composer';
@@ -22,6 +23,35 @@ export default function MainPanel({
   inspectorOpen,
   connectionState = 'connecting',
 }: MainPanelProps) {
+  const { state } = useAppState();
+
+  const currentAgent = state.agents.find((a) => a.id === state.agentId);
+  const currentWorld = state.worlds.find((w) => w.id === state.worldId);
+
+  // Adapt agent kind to actual type (string, not number)
+  const AGENT_ICONS: Record<string, string> = {
+    'god': '\u{1F451}', 'map_manager': '\u{1F5FA}', 'history_manager': '\u{1F4DC}',
+    'magic_system_manager': '\u{1F52E}', 'faction_manager': '\u{2694}', 'individual': '\u{1F9D1}', 'group': '\u{1F465}',
+    '0': '\u{1F451}', '1': '\u{1F5FA}', '2': '\u{1F4DC}',
+    '3': '\u{1F52E}', '4': '\u{2694}', '5': '\u{1F9D1}', '6': '\u{1F465}',
+  };
+
+  const headerTitle = currentAgent
+    ? `${AGENT_ICONS[currentAgent.kind] ?? ''} ${currentAgent.display_name || currentAgent.name} · ${currentWorld?.name ?? ''}`
+    : 'Merak Workbench';
+
+  const headerSubtitle = currentAgent
+    ? (() => {
+        const kind = currentAgent.kind;
+        if (kind === 'god' || kind === '0') return 'Omniscient · 20 tools';
+        if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4'))) return 'Manager · 1 tool';
+        return `Character · 3 tools`;
+      })()
+    : 'Worldbuilding agent runtime';
+
+  // Find active scene
+  const activeScene = state.storyOverview?.current_scene ?? null;
+
   return (
     <main className={styles.main} role="main" aria-label="Chat">
       <header className={styles.header}>
@@ -37,8 +67,15 @@ export default function MainPanel({
           <BrandMark compact />
         </div>
         <div>
-          <div className={styles.title}>Merak Workbench</div>
-          <div className={styles.subtitle}>Worldbuilding agent runtime</div>
+          <div className={styles.title}>{headerTitle}</div>
+          <div className={styles.subtitle}>
+            {headerSubtitle}
+            {activeScene && (
+              <span className={styles.activeSceneBadge}>
+                · Scene: {activeScene.title ?? activeScene.id}
+              </span>
+            )}
+          </div>
         </div>
         <div className={styles.headerSpacer} />
         <div

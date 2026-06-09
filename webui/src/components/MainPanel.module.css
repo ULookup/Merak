@@ -101,6 +101,16 @@
   }
 }
 
+.activeSceneBadge {
+  margin-left: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-accent);
+}
+
 @media (max-width: 767px) {
   .header {
     height: auto;
