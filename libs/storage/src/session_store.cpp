@@ -115,7 +115,9 @@ void SessionStore::initialize() {
 	if (sqlite3_open((root_ / "runtime.sqlite3").string().c_str(), &db_) != SQLITE_OK)
 		throw std::runtime_error("Cannot open runtime.sqlite3");
 	exec("PRAGMA journal_mode=WAL;");
-	exec("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,title TEXT,last_seq INTEGER NOT NULL DEFAULT 0,created_at TEXT,updated_at TEXT,archived_at TEXT);");
+	exec("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY,title TEXT,world_id TEXT NOT NULL DEFAULT '',agent_id TEXT NOT NULL DEFAULT '',last_seq INTEGER NOT NULL DEFAULT 0,created_at TEXT,updated_at TEXT,archived_at TEXT);");
+	add_column_if_missing(db_, "sessions", "world_id", "TEXT NOT NULL DEFAULT ''");
+	add_column_if_missing(db_, "sessions", "agent_id", "TEXT NOT NULL DEFAULT ''");
 	exec("CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,session_id TEXT,status TEXT,user_message TEXT,started_at TEXT,finished_at TEXT,error TEXT,parent_run_id TEXT NOT NULL DEFAULT '',delegation_id TEXT NOT NULL DEFAULT '',agent_id TEXT NOT NULL DEFAULT '',run_kind TEXT NOT NULL DEFAULT 'user');");
 	add_column_if_missing(db_, "runs", "parent_run_id", "TEXT NOT NULL DEFAULT ''");
 	add_column_if_missing(db_, "runs", "delegation_id", "TEXT NOT NULL DEFAULT ''");
@@ -148,13 +150,14 @@ void SessionStore::initialize() {
 		sqlite3_finalize(stmt);
 	}
 }
-SessionRecord SessionStore::create_session(const std::string& title) {
+SessionRecord SessionStore::create_session(const std::string& title, const std::string& world_id, const std::string& agent_id) {
 	std::lock_guard lock(mutex_);
-	SessionRecord r{make_id("session"), title, 0, now_iso(), now_iso(), ""};
+	SessionRecord r{make_id("session"), title, world_id, agent_id, 0, now_iso(), now_iso(), ""};
 	sqlite3_stmt* s = nullptr;
-	sqlite3_prepare_v2(db_, "INSERT INTO sessions VALUES(?,?,?,?,?,?)", -1, &s, nullptr);
-	bind_text(s,1,r.id); bind_text(s,2,r.title); sqlite3_bind_int64(s,3,0);
-	bind_text(s,4,r.created_at); bind_text(s,5,r.updated_at); bind_text(s,6,"");
+	sqlite3_prepare_v2(db_, "INSERT INTO sessions(id,title,world_id,agent_id,last_seq,created_at,updated_at,archived_at) VALUES(?,?,?,?,?,?,?,?)", -1, &s, nullptr);
+	bind_text(s,1,r.id); bind_text(s,2,r.title); bind_text(s,3,r.world_id); bind_text(s,4,r.agent_id);
+	sqlite3_bind_int64(s,5,0);
+	bind_text(s,6,r.created_at); bind_text(s,7,r.updated_at); bind_text(s,8,"");
 	if (sqlite3_step(s) != SQLITE_DONE) { sqlite3_finalize(s); throw std::runtime_error("create session failed"); }
 	sqlite3_finalize(s); return r;
 }
@@ -187,27 +190,32 @@ SessionRecord SessionStore::archive_session(const std::string& id, bool archived
 	sqlite3_finalize(s);
 
 	sqlite3_prepare_v2(db_,
-		"SELECT id,title,last_seq,created_at,updated_at,archived_at FROM sessions WHERE id=?",
+		"SELECT id,title,world_id,agent_id,last_seq,created_at,updated_at,archived_at FROM sessions WHERE id=?",
 		-1, &s, nullptr);
 	bind_text(s, 1, id);
 	if (sqlite3_step(s) != SQLITE_ROW) {
 		sqlite3_finalize(s);
 		throw std::runtime_error("session not found");
 	}
-	SessionRecord r{col(s,0),col(s,1),sqlite3_column_int64(s,2),col(s,3),col(s,4),col(s,5)};
+	SessionRecord r{col(s,0),col(s,1),col(s,2),col(s,3),sqlite3_column_int64(s,4),col(s,5),col(s,6),col(s,7)};
 	sqlite3_finalize(s);
 	return r;
 }
 std::optional<SessionRecord> SessionStore::get_session(const std::string& id) const {
 	std::lock_guard lock(mutex_); sqlite3_stmt* s=nullptr;
-	sqlite3_prepare_v2(db_,"SELECT id,title,last_seq,created_at,updated_at,archived_at FROM sessions WHERE id=?",-1,&s,nullptr); bind_text(s,1,id);
+	sqlite3_prepare_v2(db_,"SELECT id,title,world_id,agent_id,last_seq,created_at,updated_at,archived_at FROM sessions WHERE id=?",-1,&s,nullptr); bind_text(s,1,id);
 	if(sqlite3_step(s)!=SQLITE_ROW){sqlite3_finalize(s);return std::nullopt;}
-	SessionRecord r{col(s,0),col(s,1),sqlite3_column_int64(s,2),col(s,3),col(s,4),col(s,5)}; sqlite3_finalize(s); return r;
+	SessionRecord r{col(s,0),col(s,1),col(s,2),col(s,3),sqlite3_column_int64(s,4),col(s,5),col(s,6),col(s,7)}; sqlite3_finalize(s); return r;
 }
-std::vector<SessionRecord> SessionStore::list_sessions() const {
+std::vector<SessionRecord> SessionStore::list_sessions(const std::string& world_id) const {
 	std::lock_guard lock(mutex_); std::vector<SessionRecord> out; sqlite3_stmt* s=nullptr;
-	sqlite3_prepare_v2(db_,"SELECT id,title,last_seq,created_at,updated_at,archived_at FROM sessions ORDER BY updated_at DESC",-1,&s,nullptr);
-	while(sqlite3_step(s)==SQLITE_ROW) out.push_back({col(s,0),col(s,1),sqlite3_column_int64(s,2),col(s,3),col(s,4),col(s,5)});
+	if (world_id.empty()) {
+		sqlite3_prepare_v2(db_,"SELECT id,title,world_id,agent_id,last_seq,created_at,updated_at,archived_at FROM sessions ORDER BY updated_at DESC",-1,&s,nullptr);
+	} else {
+		sqlite3_prepare_v2(db_,"SELECT id,title,world_id,agent_id,last_seq,created_at,updated_at,archived_at FROM sessions WHERE world_id=? ORDER BY updated_at DESC",-1,&s,nullptr);
+		bind_text(s,1,world_id);
+	}
+	while(sqlite3_step(s)==SQLITE_ROW) out.push_back({col(s,0),col(s,1),col(s,2),col(s,3),sqlite3_column_int64(s,4),col(s,5),col(s,6),col(s,7)});
 	sqlite3_finalize(s); return out;
 }
 RunRecord SessionStore::create_run(const std::string& session_id,const std::string& message,const std::string& parent_run_id,const std::string& delegation_id,const std::string& agent_id,const std::string& run_kind) {
