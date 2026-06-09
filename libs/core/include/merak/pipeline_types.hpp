@@ -67,6 +67,7 @@ struct SectionTrace {
 struct OptimizerAction {
   std::string description;
   int tokens_saved;
+  std::optional<SectionKind> affected_section;
 };
 
 struct ContextFeedback {

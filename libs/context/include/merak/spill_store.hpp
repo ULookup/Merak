@@ -24,7 +24,10 @@ public:
 private:
   std::filesystem::path base_dir_;
   size_t max_total_bytes_;
+  size_t current_total_bytes_ = 0;
   std::mutex mutex_;
+
+  void recompute_total();
 };
 
 } // namespace merak

@@ -1,9 +1,16 @@
 #include <merak/context_pipeline.hpp>
 #include <merak/token_counter.hpp>
+#include <spdlog/spdlog.h>
 
 namespace merak {
 
-ContextPipeline::ContextPipeline() = default;
+ContextPipeline::ContextPipeline()
+  : spill_store_(std::filesystem::temp_directory_path() / "merak_spill") {
+}
+
+ContextPipeline::ContextPipeline(const std::filesystem::path& spill_dir)
+  : spill_store_(spill_dir) {
+}
 
 SerializedPayload ContextPipeline::planned_assemble(
     const std::string& system_prompt,
@@ -24,14 +31,49 @@ SerializedPayload ContextPipeline::planned_assemble(
 
   auto bound = binder_.bind(plan.manifest, sources);
 
+  OptimizeStats opt_stats;
+  opt_stats.tokens_before = current_tokens_;
+
   if (plan.limits.allow_schema_pruning) {
-    bound.tool_schemas = optimizer_.prune_schemas(bound.tool_schemas, plan.tier);
+    bound.tool_schemas = optimizer_.prune_schemas(bound.tool_schemas, plan.tier, opt_stats);
   }
   if (plan.limits.allow_reorder) {
-    bound = optimizer_.reorder(bound, plan.limits);
+    bound = optimizer_.reorder(bound, plan.limits, opt_stats);
+  }
+
+  // Drop oldest rounds from the messages that will be serialized
+  if (plan.limits.allow_round_dropping) {
+    optimizer_.drop_rounds(bound.provider_messages, plan.limits, opt_stats);
+  }
+
+  // Microcompact tool results in the messages that will be serialized
+  if (plan.limits.allow_tool_result_clearing) {
+    optimizer_.microcompact(bound.provider_messages, plan.limits, opt_stats);
+  }
+
+  // Spill oversized sections to disk
+  if (plan.limits.allow_spill) {
+    optimizer_.spill_sections(bound, spill_store_, turn_index_, plan.limits, opt_stats);
   }
 
   auto payload = serializer_.serialize(bound, model, system_prompt);
+
+  // Compute tokens_after from final state (post-drop/microcompact/spill)
+  opt_stats.tokens_after = 0;
+  for (auto& sec : bound.sections) {
+    opt_stats.tokens_after += sec.token_count;
+  }
+  for (auto& msg : bound.provider_messages) {
+    opt_stats.tokens_after += static_cast<int>(msg.content.size() / 3.5);
+  }
+  opt_stats.tokens_after += static_cast<int>(system_prompt.size() / 3.5);
+
+  // Record feedback for next-turn planning
+  ContextFeedback fb{};
+  fb.schema_count = schema_count;
+  stats_.record(fb, opt_stats);
+
+  turn_index_++;
 
   return payload;
 }

@@ -22,7 +22,8 @@ public:
 
   SerializedPayload serialize(const BoundContext& optimized,
                                const std::string& model,
-                               const std::string& system_prompt_full) const;
+                               const std::string& system_prompt_full,
+                               int max_output_tokens = 4096) const;
 };
 
 } // namespace merak

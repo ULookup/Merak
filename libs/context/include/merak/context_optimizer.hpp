@@ -14,11 +14,28 @@ public:
   ContextOptimizer() = default;
 
   std::vector<ToolSpec> prune_schemas(const std::vector<ToolSpec>& specs,
-                                       CompactionTier tier) const;
+                                       CompactionTier tier,
+                                       OptimizeStats& stats) const;
 
-  BoundContext reorder(const BoundContext& ctx, const OptimizeLimits& limits) const;
+  BoundContext reorder(const BoundContext& ctx,
+                       const OptimizeLimits& limits,
+                       OptimizeStats& stats) const;
 
-  void microcompact(std::vector<Message>& history, const OptimizeLimits& limits) const;
+  void microcompact(std::vector<Message>& history,
+                    const OptimizeLimits& limits,
+                    OptimizeStats& stats) const;
+
+  // Drop oldest rounds to stay under budget. Only when allow_round_dropping is set.
+  void drop_rounds(std::vector<Message>& history,
+                   const OptimizeLimits& limits,
+                   OptimizeStats& stats) const;
+
+  // Spill oversized sections to disk store. Only when allow_spill is set.
+  void spill_sections(BoundContext& ctx,
+                      class SpillStore& store,
+                      int turn_index,
+                      const OptimizeLimits& limits,
+                      OptimizeStats& stats) const;
 
   static bool is_non_compactable(const std::string& tool_name);
   static std::string truncate_to_first_sentence(const std::string& text);

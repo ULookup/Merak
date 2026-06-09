@@ -38,6 +38,7 @@ public:
                        int turn_index);
 
   static LlmErrorClass classify_error(int http_status, const std::string& body_hint);
+  static void set_tool_output_chars(IngestedTurn& turn, int total_chars);
 };
 
 } // namespace merak

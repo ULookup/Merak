@@ -198,6 +198,18 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         transition_to(TurnState::Observing, control);
 
+        // Set total tool output chars after knowing actual results
+        {
+          int total_chars = 0;
+          for (auto& tr : tool_results) {
+            total_chars += static_cast<int>(tr.output.size());
+          }
+          TurnIngestor::set_tool_output_chars(ingested, total_chars);
+          spdlog::debug("Loop: turn {} — {} tool calls, {} output chars, {} input/{} output tokens",
+                        turn_count, ingested.tool_count, total_chars,
+                        ingested.tokens.input, ingested.tokens.output);
+        }
+
         // TurnGuard evaluation
         TurnGuard::RoundInput guard_in;
         guard_in.turn_index = turn_count;
