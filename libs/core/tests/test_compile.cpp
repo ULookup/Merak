@@ -2,6 +2,8 @@
 #include <merak/tool_spec.hpp>
 #include <merak/error.hpp>
 #include <merak/result.hpp>
+#include <merak/section_kind.hpp>
+#include <merak/pipeline_types.hpp>
 #include <cassert>
 #include <iostream>
 

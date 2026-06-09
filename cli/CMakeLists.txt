@@ -64,7 +64,7 @@ set(TS_LANGUAGES cpp python go javascript typescript rust bash json yaml markdow
 foreach(lang IN LISTS TS_LANGUAGES)
     if(lang STREQUAL "typescript")
         set(TS_REPO_URL "https://github.com/tree-sitter/tree-sitter-typescript")
-        set(TS_GIT_TAG "master")
+        set(TS_GIT_TAG "main")
         set(TS_SRC_SUBDIR "typescript/src")
     elseif(lang STREQUAL "csharp")
         set(TS_REPO_URL "https://github.com/tree-sitter/tree-sitter-c-sharp")

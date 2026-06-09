@@ -9,16 +9,13 @@ AgentLoop::AgentLoop(
     std::shared_ptr<LlmProvider> llm,
     std::shared_ptr<ToolRegistry> tools,
     std::shared_ptr<MemoryStore> memory,
-    std::shared_ptr<ContextAssembler> context,
     std::shared_ptr<Compactor> compactor)
     : config_(std::move(config))
     , llm_(std::move(llm))
     , tools_(std::move(tools))
     , memory_(std::move(memory))
-    , context_(std::move(context))
     , compactor_(std::move(compactor))
-    , counter_(std::make_shared<TokenCounter>())
-    , tool_result_compactor_(std::make_shared<ToolResultCompactor>())
+    , pipeline_(std::make_unique<ContextPipeline>())
 {
 }
 
@@ -47,6 +44,8 @@ std::future<AgentResponse> AgentLoop::run(
             control.append_message(user_msg);
 
             tool_failure_streak_.clear();
+            turn_guard_.reset();
+            stall_detector_.reset();
 
             return run_loop(control);
         });
@@ -56,6 +55,8 @@ std::future<AgentResponse> AgentLoop::resume(RunControl& control) {
     return std::async(std::launch::async,
         [this, &control]() -> AgentResponse {
             tool_failure_streak_.clear();
+            turn_guard_.reset();
+            stall_detector_.reset();
             return run_loop(control);
         });
 }
@@ -74,9 +75,11 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         auto context_messages = build_context();
 
-        auto split = CacheAwareContext::split(context_messages);
-        spdlog::debug("Loop: turn {} — {}", turn_count,
-            CacheAwareContext::info(split));
+        if (config_.enable_cache) {
+            auto split = CacheAwareContext::split(context_messages);
+            spdlog::debug("Loop: turn {} — {}", turn_count,
+                CacheAwareContext::info(split));
+        }
 
         transition_to(TurnState::Thinking, control);
         turn_count++;
@@ -112,6 +115,15 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         accumulated_tool_calls = llm_response.tool_calls;
 
+        // Ingest turn for observability
+        auto ingested = turn_ingestor_.ingest(
+            accumulated_tool_calls.data(), accumulated_tool_calls.size(),
+            {llm_response.total_input_tokens, llm_response.total_output_tokens, 0, 0},
+            llm_response.text,
+            std::chrono::milliseconds{0},
+            turn_count
+        );
+
         if (accumulated_tool_calls.empty()) {
             transition_to(TurnState::Responding, control);
 
@@ -129,6 +141,35 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
             return response;
         }
 
+        // Stall detection
+        auto stall = stall_detector_.check(accumulated_tool_calls);
+        if (stall.level == StallLevel::ForceStop) {
+            spdlog::warn("Loop: force_stop triggered after 5 consecutive identical rounds");
+            // Force text-only final call
+            ChatRequest final_req;
+            final_req.model = config_.default_model;
+            final_req.max_output_tokens = config_.max_output_tokens;
+            final_req.messages = build_context();
+            final_req.tools = {};
+            final_req.enable_cache = false;
+
+            auto final_future = llm_->chat(final_req,
+                [&](StreamChunk chunk) {
+                    if (!chunk.is_final) control.emit_text_delta(chunk.text);
+                    response.text += chunk.text;
+                }, control.cancellation_token());
+            auto final_resp = final_future.get();
+            response.text = final_resp.text;
+            response.total_input_tokens += final_resp.total_input_tokens;
+            response.total_output_tokens += final_resp.total_output_tokens;
+            response.has_usage = response.has_usage || final_resp.has_usage;
+            response.usage_missing = response.usage_missing || !final_resp.has_usage;
+
+            transition_to(TurnState::Complete, control);
+            return response;
+        }
+
+        // Execute tools
         transition_to(TurnState::Acting, control);
 
         Message assistant_msg;
@@ -156,6 +197,67 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         }
 
         transition_to(TurnState::Observing, control);
+
+        // TurnGuard evaluation
+        TurnGuard::RoundInput guard_in;
+        guard_in.turn_index = turn_count;
+        guard_in.tool_count = static_cast<int>(accumulated_tool_calls.size());
+        guard_in.stall = stall;
+        guard_in.consecutive_read_only_rounds = consecutive_read_only_rounds_;
+        guard_in.consecutive_world_query_rounds = consecutive_world_query_rounds_;
+        guard_in.consecutive_content_avoidance = consecutive_content_avoidance_;
+
+        bool had_write = false;
+        bool had_world_query_only = true;
+        for (auto& tc : accumulated_tool_calls) {
+            if (tc.name == "write_file" || tc.name == "str_replace" ||
+                tc.name == "create_character" || tc.name == "create_scene" ||
+                tc.name == "create_chapter" || tc.name == "add_world_knowledge" ||
+                tc.name == "create_location" || tc.name == "plant_foreshadowing" ||
+                tc.name == "expose_secret") {
+                had_write = true;
+                had_world_query_only = false;
+            }
+            if (tc.name != "query_map" && tc.name != "query_world" &&
+                tc.name != "query_history" && tc.name != "query_magic" &&
+                tc.name != "query_faction" && tc.name != "search_agent" &&
+                tc.name != "look_around" && tc.name != "read_character_card" &&
+                tc.name != "read_secret" && tc.name != "read_foreshadowing" &&
+                tc.name != "search_my_diary" && tc.name != "read_file") {
+                had_world_query_only = false;
+            }
+        }
+        guard_in.had_write_operation = had_write;
+
+        if (had_write) {
+            consecutive_read_only_rounds_ = 0;
+        } else {
+            consecutive_read_only_rounds_++;
+        }
+
+        if (had_world_query_only) {
+            consecutive_world_query_rounds_++;
+        } else {
+            consecutive_world_query_rounds_ = 0;
+        }
+
+        auto verdict = turn_guard_.evaluate(guard_in);
+
+        if (verdict.turn_penalty) {
+            config_.max_turns = std::max(1, config_.max_turns + *verdict.turn_penalty);
+        }
+        if (verdict.severity == Severity::Critical && turn_guard_.warning_count() >= 4) {
+            spdlog::warn("Loop: TurnGuard critical after 4+ warnings, stopping");
+            break;
+        }
+        if (verdict.nudge) {
+            Message nudge_msg;
+            nudge_msg.role = "system";
+            nudge_msg.content = "[校正] " + *verdict.nudge;
+            session_history_.push_back(nudge_msg);
+            control.append_message(nudge_msg);
+        }
+
         transition_to(TurnState::ContextReady, control);
     }
 
@@ -189,44 +291,35 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 }
 
 std::vector<Message> AgentLoop::build_context() {
-    // Use the latest user message content for memory search.
-    std::string query;
+    BindSources sources;
+    sources.identity_text = [this]() {
+        return config_.system_prompt.substr(0, std::min<size_t>(500, config_.system_prompt.size()));
+    };
+    sources.constraints_text = [this]() {
+        if (config_.system_prompt.size() > 500) {
+            return config_.system_prompt.substr(500);
+        }
+        return std::string("");
+    };
+    sources.world_context_text = []() { return ""; };
+    sources.skills_text = []() { return ""; };
+    sources.tool_specs = tools_->pinned_schemas();
+    sources.working_memory_text = []() { return ""; };
+    sources.memory_store = memory_;
+
     for (int i = (int)session_history_.size() - 1; i >= 0; i--) {
         if (session_history_[i].role == "user") {
-            query = session_history_[i].content;
+            sources.search_query = session_history_[i].content;
             break;
         }
     }
+    sources.conversation_messages = memory_->recent_history(config_.max_turns);
 
-    auto mem_future = memory_->search(query, 5);
-    std::vector<MemorySnippet> mem_snippets;
-    if (mem_future.valid()) {
-        auto mem_result = mem_future.get();
-        if (mem_result.has_value()) {
-            mem_snippets = mem_result.value();
-        }
-    }
+    auto payload = pipeline_->planned_assemble(
+        config_.system_prompt, config_.default_model,
+        config_.model_max_tokens, session_history_, sources);
 
-    return context_->assemble(
-        config_.system_prompt,
-        [&]() -> nlohmann::json {
-            nlohmann::json arr = nlohmann::json::array();
-            for (const auto& spec : tools_->pinned_schemas()) {
-                nlohmann::json item;
-                item["type"] = "function";
-                item["function"]["name"] = spec.name;
-                item["function"]["description"] = spec.description;
-                if (!spec.parameters_json.empty()) {
-                    item["function"]["parameters"] =
-                        nlohmann::json::parse(spec.parameters_json);
-                }
-                arr.push_back(item);
-            }
-            return arr;
-        }(),
-        session_history_,
-        mem_snippets
-    );
+    return payload.messages;
 }
 
 std::vector<ToolResult> AgentLoop::handle_tool_calls(
@@ -277,7 +370,6 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
             call, ToolExecutionContext{control.cancellation_token()});
         auto result = result_future.get();
 
-        // Check if this tool requires creation confirmation
         if (tools_->requires_confirmation(call.name)) {
             try {
                 auto result_json = nlohmann::json::parse(result.output);
@@ -285,7 +377,6 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
                     result = control.await_creation(call, result);
                 }
             } catch (...) {
-                // Not valid JSON or no creation_id — proceed normally
             }
         }
 
@@ -304,56 +395,26 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
 }
 
 void AgentLoop::maybe_compact(RunControl& control) {
-    // Microcompact: compress old tool results first (cheap, no LLM call)
-    int total_tokens = counter_->count(session_history_);
-    int budget = context_->effective_budget();
-    if (budget <= 0) return;
-    double pressure = (double)total_tokens / budget;
-    int compacted = tool_result_compactor_->compact(session_history_, pressure);
-    if (compacted > 0) {
-        spdlog::info("Loop: microcompact compressed {} tool results (pressure={:.1f}%)",
-            compacted, pressure * 100);
+    if (!config_.enable_compaction) return;
+
+    int total_tokens = 0;
+    for (auto& msg : session_history_) {
+        total_tokens += static_cast<int>(msg.content.size() / 3.5);
     }
 
-    auto compaction_info = context_->analyze_compaction(session_history_);
-
-    if (!compaction_info.needed) return;
-
-    spdlog::info("Loop: triggering compaction, saving {} tokens",
-        compaction_info.tokens_to_save);
-
-    auto comp_future = compactor_->compact_history(
-        session_history_,
-        config_.max_turns * 2
-    );
-
-    auto comp_result = comp_future.get();
-
-    if (!comp_result.summary.empty()) {
-        Message summary_msg;
-        summary_msg.role = "system";
-        summary_msg.content = "[历史摘要] " + comp_result.summary;
-
-        session_history_.insert(session_history_.begin(), summary_msg);
-        control.append_message(summary_msg);
-        control.record_compaction(static_cast<int>(comp_result.replaced.size()));
-
-        if (!comp_result.replaced.empty()) {
-            int erase_start = 1;
-            int erase_count = (int)comp_result.replaced.size();
-            if (erase_start + erase_count <= (int)session_history_.size()) {
-                session_history_.erase(
-                    session_history_.begin() + erase_start,
-                    session_history_.begin() + erase_start + erase_count
-                );
-            }
+    // Microcompact is handled by ContextOptimizer during pipeline assembly.
+    // Here we trigger LLM-based compaction when token pressure is high.
+    if (total_tokens > config_.model_max_tokens * 0.75 && compactor_) {
+        spdlog::info("Loop: triggering LLM compaction at {} tokens", total_tokens);
+        int keep_recent = config_.max_turns * 2;
+        auto result = compactor_->compact_history(session_history_, keep_recent).get();
+        if (!result.summary.empty()) {
+            Message summary_msg;
+            summary_msg.role = "system";
+            summary_msg.content = "[Previous conversation summary]\n" + result.summary;
+            session_history_.insert(session_history_.begin(), summary_msg);
+            control.record_compaction(static_cast<int>(result.replaced.size()));
         }
-
-        std::ostringstream oss;
-        for (auto& m : comp_result.replaced) {
-            oss << "[" << m.role << "] " << m.content.substr(0, 200) << "\n";
-        }
-        memory_->store(oss.str(), "episodic");
     }
 }
 
