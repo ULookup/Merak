@@ -1,9 +1,9 @@
-.session-list {
+.list {
   padding: 14px 16px;
   border-bottom: 1px solid var(--border);
 }
 
-.session-list-header {
+.header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -14,7 +14,7 @@
   margin-bottom: 8px;
 }
 
-.session-list ul {
+.list ul {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -23,7 +23,7 @@
   overflow-y: auto;
 }
 
-.session-list li {
+.item {
   min-width: 0;
   display: flex;
   align-items: center;
@@ -35,13 +35,13 @@
   padding: 7px 8px;
 }
 
-.session-list li.active {
-  border-color: rgba(122, 79, 19, 0.2);
-  background: var(--brand-wash);
+.itemActive {
+  border-color: rgba(122, 79, 19, 0.22);
+  background: linear-gradient(90deg, var(--brand-soft), var(--surface));
   color: var(--brand);
 }
 
-.session-title {
+.title {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -49,26 +49,26 @@
   white-space: nowrap;
 }
 
-.session-rename-input {
+.renameInput {
   width: 100%;
   padding: 2px 4px;
-  border: 1px solid var(--border-color, #555);
+  border: 1px solid var(--border);
   border-radius: 3px;
-  background: var(--bg-input, #1a1a1a);
-  color: var(--text-color, #eee);
+  background: var(--surface-strong);
+  color: var(--ink);
   font-size: inherit;
 }
 
-.session-new-btn,
-.session-generate-btn {
+.newBtn,
+.generateBtn {
   display: inline-grid;
   place-items: center;
   width: 26px;
   height: 26px;
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #555);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  color: var(--brand, #7a4f13);
+  color: var(--brand);
   cursor: pointer;
   opacity: 0.6;
   padding: 0;
@@ -77,29 +77,29 @@
     transform 160ms ease,
     border-color 160ms ease;
 }
-.session-new-btn:hover,
-.session-generate-btn:hover {
+.newBtn:hover,
+.generateBtn:hover {
   opacity: 1;
   transform: translateY(-1px);
-  border-color: var(--border-strong, #777);
+  border-color: var(--border-strong);
 }
 
-.session-new-btn svg,
-.session-generate-btn svg {
+.newBtn svg,
+.generateBtn svg {
   display: block;
 }
 
-.session-actions {
+.actions {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   margin-left: auto;
 }
 
-.session-badge {
-  border: 1px solid var(--border, #555);
+.badge {
+  border: 1px solid var(--border);
   border-radius: 999px;
-  color: var(--muted, #888);
+  color: var(--muted);
   font-size: 9px;
   font-weight: 850;
   margin-left: 6px;

@@ -29,10 +29,10 @@ export default class ErrorBoundary extends Component<Props, State> {
             style={{
               padding: 24,
               margin: 16,
-              background: '#1a0f0f',
-              border: '1px solid #4a2020',
+              background: 'var(--ruby-soft)',
+              border: '1px solid rgba(190, 18, 60, 0.22)',
               borderRadius: 8,
-              color: '#fca5a5',
+              color: 'var(--ruby)',
               fontSize: 13,
             }}
             data-testid="error-fallback"
@@ -42,7 +42,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               style={{
                 marginTop: 8,
                 fontSize: 11,
-                color: '#c8c9d4',
+                color: 'var(--muted-strong)',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-all',
               }}
@@ -53,8 +53,8 @@ export default class ErrorBoundary extends Component<Props, State> {
               onClick={() => this.setState({ error: null })}
               style={{
                 marginTop: 10,
-                background: '#7f1d1d',
-                color: '#fca5a5',
+                background: 'var(--ruby)',
+                color: '#fff',
                 border: 'none',
                 borderRadius: 4,
                 padding: '4px 14px',

@@ -1,13 +1,19 @@
 import type {
   AgentDetailResponse,
   AgentListResponse,
+  AgentPromptResponse,
   ArchiveSessionResponse,
   ApprovalResponse,
   CancelRunResponse,
   CapabilitiesResponse,
   ChapterListResponse,
+  CreateAgentResponse,
+  CreateForeshadowingResponse,
+  CreateSceneResponse,
+  CreateSecretResponse,
   CreateSessionResponse,
   DiaryListResponse,
+  EndSceneResponse,
   ForeshadowingListResponse,
   GenerateTitleResponse,
   LlmConfig,
@@ -15,6 +21,7 @@ import type {
   OpenWorkspacePathResponse,
   PatchAgentCardResponse,
   RelationListResponse,
+  ResolveCreationResponse,
   RunAuditResponse,
   RunDetailResponse,
   RuntimeMetadata,
@@ -27,6 +34,7 @@ import type {
   StartRunResponse,
   UpdateSessionResponse,
   UpdateWorldResponse,
+  WorldDetailResponse,
   WorkspaceFileContentResponse,
   WorkspaceFileListResponse,
   WorldListResponse,
@@ -449,4 +457,81 @@ export const api = {
   // Run audit
   fetchRunAudit: (runId: string) =>
     request<RunAuditResponse>('GET', `/v1/runs/${runId}/audit`),
+
+  // Create mutations
+  createAgent: (worldId: string, data: {
+    name: string;
+    gender?: string;
+    age?: number;
+    race?: string;
+    identity?: string;
+    emotional_tendency?: string;
+    speaking_style?: string;
+    core_desire?: string;
+    deep_fear?: string;
+    daily_goal?: string;
+    background?: string;
+    knowledge_scope?: string;
+    appearance?: string;
+    core_traits?: string[];
+    taboo_topics?: string[];
+    version?: number;
+    session_id?: string;
+  }) =>
+    request<CreateAgentResponse>('POST', `/api/worldbuilding/${worldId}/agents`, data),
+
+  createScene: (worldId: string, data: {
+    title?: string;
+    name?: string;
+    chapter_id: string;
+    world_time?: string;
+    narrative?: string;
+    section_id?: string;
+    location_id?: string;
+    participant_ids?: string[];
+    session_id?: string;
+  }) =>
+    request<CreateSceneResponse>('POST', `/api/worldbuilding/${worldId}/scenes`, data),
+
+  endScene: (worldId: string, sceneId: string, data: {
+    final_markdown?: string;
+    session_id?: string;
+  }) =>
+    request<EndSceneResponse>('POST', `/api/worldbuilding/${worldId}/scenes/${sceneId}/end`, data),
+
+  createForeshadowing: (worldId: string, data: {
+    content: string;
+    hint?: string;
+    pay_off_idea?: string;
+    hint_level?: string;
+    tags?: string[];
+    session_id?: string;
+  }) =>
+    request<CreateForeshadowingResponse>('POST', `/api/worldbuilding/${worldId}/foreshadowing`, data),
+
+  createSecret: (worldId: string, data: {
+    title?: string;
+    holder_id?: string;
+    truth?: string;
+    public_version?: string;
+    stakes?: string;
+    aware_character_ids?: string[];
+    suspicious_character_ids?: string[];
+    related_foreshadowing_ids?: string[];
+    session_id?: string;
+  }) =>
+    request<CreateSecretResponse>('POST', `/api/worldbuilding/${worldId}/secrets`, data),
+
+  // Prompt
+  getAgentPrompt: (agentId: string) =>
+    request<AgentPromptResponse>('GET', `/api/worldbuilding/agents/${agentId}/prompt`),
+
+  // World detail
+  getWorldDetail: (worldId: string) =>
+    request<WorldDetailResponse>('GET', `/api/worldbuilding/worlds/${worldId}`),
+
+  // Creation resolution — wired for future SSE-driven creation approval flow
+  // The backend emits creation requests via SSE; the UI will call this to allow/deny with optional modifications.
+  resolveCreation: (id: string, decision: string, modifications?: Record<string, unknown>) =>
+    request<ResolveCreationResponse>('POST', `/v1/creations/${id}/resolve`, { decision, modifications }),
 };

@@ -30,6 +30,11 @@
   --ruby-soft: #ffe4e6;
   --indigo: #4f46e5;
   --indigo-soft: #e8e7ff;
+  --purple: #7c3aed;
+  --purple-soft: #ede9fe;
+  --green: #16a34a;
+  --green-soft: #dcfce7;
+  --hover: rgba(122, 79, 19, 0.04);
   --shadow-sm: 0 8px 24px rgba(25, 43, 38, 0.08);
   --shadow-md: 0 18px 54px rgba(25, 43, 38, 0.13);
   --ring: 0 0 0 3px rgba(122, 79, 19, 0.18);

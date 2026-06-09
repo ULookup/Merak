@@ -1,0 +1,17 @@
+/* Composition over ModalBase — only overrides and unique additions */
+
+.scrim { composes: scrim from './ModalBase.module.css'; }
+.modal { composes: modal from './ModalBase.module.css'; }
+.closeBtn { composes: closeBtn from './ModalBase.module.css'; }
+.iconWrap { composes: iconWrap from './ModalBase.module.css'; }
+.kicker { composes: kicker from './ModalBase.module.css'; }
+.field { composes: field from './ModalBase.module.css'; }
+.error { composes: error from './ModalBase.module.css'; }
+.actions { composes: actions from './ModalBase.module.css'; }
+.primary { composes: primary from './ModalBase.module.css'; }
+.secondary { composes: secondary from './ModalBase.module.css'; }
+.spin { composes: spin from './ModalBase.module.css'; }
+.input { composes: input from './ModalBase.module.css'; }
+.select { composes: select from './ModalBase.module.css'; }
+.row { composes: row from './ModalBase.module.css'; }
+.textarea { composes: textarea from './ModalBase.module.css'; min-height: 90px; }

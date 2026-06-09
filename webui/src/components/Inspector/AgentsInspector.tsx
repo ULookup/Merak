@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Brain, Fingerprint, Shield, Users } from 'lucide-react';
+import { Brain, Fingerprint, Plus, Shield, UserPlus, Users } from 'lucide-react';
 import { useAppState } from '../../AppState';
 import AgentCardView from './AgentCardView';
+import AgentPromptViewer from './AgentPromptViewer';
+import CreateAgentModal from './CreateAgentModal';
 import styles from '../InspectorPanel.module.css';
 
 const kindLabels: Record<string, string> = {
@@ -22,24 +24,47 @@ function groupKey(kind: string) {
 }
 
 export default function AgentsInspector() {
-  const { state } = useAppState();
+  const { state, dispatch } = useAppState();
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [showCreateAgent, setShowCreateAgent] = useState(false);
+  const [promptAgentId, setPromptAgentId] = useState<string | null>(null);
 
   if (selectedAgentId) {
+    const agent = state.agents.find(a => a.id === selectedAgentId);
     return (
       <AgentCardView
         agentId={selectedAgentId}
         onClose={() => setSelectedAgentId(null)}
+        onViewPrompt={() => setPromptAgentId(selectedAgentId)}
       />
     );
   }
 
   if (state.agents.length === 0) {
     return (
-      <section className={styles.section}>
-        <div className={styles.sectionTitle}>Character Voices</div>
-        <p className={styles.muted}>No agents loaded for this world.</p>
-      </section>
+      <>
+        <section className={styles.section}>
+          <div className={styles.sectionTitle}>Character Voices</div>
+          <p className={styles.muted}>No agents loaded for this world.</p>
+          {state.worldId && (
+            <button
+              className={styles.entryButton}
+              style={{ marginTop: 12 }}
+              onClick={() => setShowCreateAgent(true)}
+            >
+              <UserPlus size={14} aria-hidden="true" />
+              Create First Character
+            </button>
+          )}
+        </section>
+        {showCreateAgent && state.worldId && (
+          <CreateAgentModal
+            worldId={state.worldId}
+            onClose={() => setShowCreateAgent(false)}
+            onCreated={() => dispatch({ type: 'SET_STORY_VERSION' })}
+          />
+        )}
+      </>
     );
   }
 
@@ -48,6 +73,8 @@ export default function AgentsInspector() {
     acc[key] = [...(acc[key] ?? []), agent];
     return acc;
   }, {});
+
+  const promptAgent = promptAgentId ? state.agents.find(a => a.id === promptAgentId) : null;
 
   return (
     <>
@@ -62,23 +89,44 @@ export default function AgentsInspector() {
         </div>
       </section>
 
+      <div style={{ display: 'flex', gap: 8 }}>
+        {state.worldId && (
+          <button
+            className={styles.ghostButton}
+            onClick={() => setShowCreateAgent(true)}
+          >
+            <Plus size={14} aria-hidden="true" />
+            New Character
+          </button>
+        )}
+      </div>
+
       {Object.entries(groups).map(([group, agents]) => (
         <section className={styles.section} key={group}>
           <div className={styles.sectionTitle}>{group}</div>
           {agents.map((agent) => (
-            <div
-              className={styles.agent}
-              key={agent.id}
-              onClick={() => setSelectedAgentId(agent.id)}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === 'Enter') setSelectedAgentId(agent.id); }}
-            >
-              <div className={styles.avatar}>{(agent.display_name || agent.name).slice(0, 1)}</div>
-              <div>
-                <strong>{agent.display_name || agent.name}</strong>
-                <span>{kindLabels[agent.kind] ?? agent.kind}</span>
+            <div className={styles.agentRow} key={agent.id}>
+              <div
+                className={styles.agent}
+                onClick={() => setSelectedAgentId(agent.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter') setSelectedAgentId(agent.id); }}
+              >
+                <div className={styles.avatar}>{(agent.display_name || agent.name).slice(0, 1)}</div>
+                <div>
+                  <strong>{agent.display_name || agent.name}</strong>
+                  <span>{kindLabels[agent.kind] ?? agent.kind}</span>
+                </div>
               </div>
+              <button
+                className={styles.addBtn}
+                onClick={(e) => { e.stopPropagation(); setPromptAgentId(agent.id); }}
+                aria-label={`View prompt for ${agent.display_name || agent.name}`}
+                title="View system prompt"
+              >
+                <Brain size={12} aria-hidden="true" />
+              </button>
             </div>
           ))}
         </section>
@@ -101,6 +149,21 @@ export default function AgentsInspector() {
           </span>
         </div>
       </section>
+
+      {showCreateAgent && state.worldId && (
+        <CreateAgentModal
+          worldId={state.worldId}
+          onClose={() => setShowCreateAgent(false)}
+          onCreated={() => dispatch({ type: 'SET_STORY_VERSION' })}
+        />
+      )}
+      {promptAgent && (
+        <AgentPromptViewer
+          agentId={promptAgent.id}
+          agentName={promptAgent.display_name || promptAgent.name}
+          onClose={() => setPromptAgentId(null)}
+        />
+      )}
     </>
   );
 }

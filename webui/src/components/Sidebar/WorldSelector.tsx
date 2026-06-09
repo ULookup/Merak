@@ -3,7 +3,7 @@ import { Pencil, Plus } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
 import { useToast } from '../Toast';
-import './WorldSelector.css';
+import styles from './WorldSelector.module.css';
 
 export default function WorldSelector() {
   const { state, dispatch } = useAppState();
@@ -65,7 +65,7 @@ export default function WorldSelector() {
   }
 
   return (
-    <div className="world-selector">
+    <div className={styles.selector}>
       <select
         value={state.worldId ?? ''}
         onChange={(e) => dispatch({ type: 'SET_WORLD', worldId: e.target.value || null })}
@@ -79,7 +79,7 @@ export default function WorldSelector() {
         ))}
       </select>
       <button
-        className="world-edit-btn"
+        className={styles.editBtn}
         onClick={() => setCreateOpen(true)}
         aria-label="Create world"
         title="Create world"
@@ -88,7 +88,7 @@ export default function WorldSelector() {
       </button>
       {state.worldId && (
         <button
-          className="world-edit-btn"
+          className={styles.editBtn}
           onClick={() => openEdit(state.worldId!)}
           aria-label="Edit world"
         >
@@ -97,8 +97,8 @@ export default function WorldSelector() {
       )}
 
       {createOpen && (
-        <div className="modal-overlay" onClick={() => setCreateOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className={styles.overlay} onClick={() => setCreateOpen(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h3>Create World</h3>
             <label>
               Name
@@ -115,7 +115,7 @@ export default function WorldSelector() {
                 rows={3}
               />
             </label>
-            <div className="modal-actions">
+            <div className={styles.actions}>
               <button onClick={createWorld}>Create</button>
               <button onClick={() => setCreateOpen(false)}>Cancel</button>
             </div>
@@ -124,8 +124,8 @@ export default function WorldSelector() {
       )}
 
       {editWorld && (
-        <div className="modal-overlay" onClick={() => setEditWorld(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className={styles.overlay} onClick={() => setEditWorld(null)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h3>Edit World</h3>
             <label>
               Name
@@ -142,7 +142,7 @@ export default function WorldSelector() {
                 rows={3}
               />
             </label>
-            <div className="modal-actions">
+            <div className={styles.actions}>
               <button onClick={saveEdit}>Save</button>
               <button onClick={() => setEditWorld(null)}>Cancel</button>
             </div>

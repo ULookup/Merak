@@ -20,9 +20,9 @@
 .backBtn,
 .editBtn {
   padding: 4px 12px;
-  border: 1px solid var(--border-color, #444);
+  border: 1px solid var(--border);
   background: transparent;
-  color: var(--text-primary, #ddd);
+  color: var(--ink);
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
@@ -30,13 +30,13 @@
 
 .backBtn:hover,
 .editBtn:hover {
-  background: var(--hover-bg, rgba(255,255,255,0.08));
+  background: var(--hover);
 }
 
 .section {
   margin-bottom: 14px;
   padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-color, #333);
+  border-bottom: 1px solid var(--border);
 }
 
 .section h4 {
@@ -44,7 +44,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text-secondary, #888);
+  color: var(--muted);
 }
 
 .section p {
@@ -67,8 +67,8 @@
 }
 
 .tag {
-  background: var(--tag-bg, #2a2a4a);
-  color: var(--tag-fg, #aac);
+  background: var(--surface-muted);
+  color: var(--muted-strong);
   padding: 2px 10px;
   border-radius: 12px;
   font-size: 13px;
@@ -78,4 +78,53 @@
   font-size: 14px;
   line-height: 1.6;
   white-space: pre-wrap;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.promptBtn {
+  padding: 4px 10px;
+  border: 1px solid rgba(79, 70, 229, 0.24);
+  background: var(--indigo-soft);
+  color: var(--indigo);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: transform 180ms var(--ease);
+}
+
+.promptBtn:hover {
+  transform: translateY(-1px);
+}
+
+/* Skeleton */
+.skeletonHeader {
+  height: 24px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  margin-bottom: 16px;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+.skeletonLine {
+  height: 14px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  margin-bottom: 10px;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+.skeletonLine:nth-child(2) { animation-delay: 0.1s; }
+.skeletonLine:nth-child(3) { animation-delay: 0.2s; }
+.skeletonLine:nth-child(4) { animation-delay: 0.3s; }
+.skeletonLine:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes shimmer {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
 }

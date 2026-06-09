@@ -8,9 +8,10 @@ import styles from './AgentCardView.module.css';
 interface Props {
   agentId: string;
   onClose: () => void;
+  onViewPrompt?: () => void;
 }
 
-export default function AgentCardView({ agentId, onClose }: Props) {
+export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props) {
   const { state } = useAppState();
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -44,7 +45,15 @@ export default function AgentCardView({ agentId, onClose }: Props) {
     return () => abortRef.current?.abort();
   }, [load]);
 
-  if (loading) return <div className={styles.container}>Loading...</div>;
+  if (loading) return (
+    <div className={styles.container}>
+      <div className={styles.skeletonHeader} />
+      <div className={styles.skeletonLine} />
+      <div className={styles.skeletonLine} style={{ width: '70%' }} />
+      <div className={styles.skeletonLine} style={{ width: '50%' }} />
+      <div className={styles.skeletonLine} style={{ width: '80%' }} />
+    </div>
+  );
   if (error) return <div className={styles.container}>Error: {error}</div>;
   if (!detail) return <div className={styles.container}>Agent not found</div>;
 
@@ -67,7 +76,12 @@ export default function AgentCardView({ agentId, onClose }: Props) {
       <div className={styles.header}>
         <button onClick={onClose} className={styles.backBtn}>← 返回</button>
         <h3>{detail.display_name || detail.name}</h3>
-        <button onClick={() => setEditMode(true)} className={styles.editBtn}>编辑</button>
+        <div className={styles.headerActions}>
+          {onViewPrompt && (
+            <button onClick={onViewPrompt} className={styles.promptBtn}>Prompt</button>
+          )}
+          <button onClick={() => setEditMode(true)} className={styles.editBtn}>编辑</button>
+        </div>
       </div>
 
       <section className={styles.section}>

@@ -1,4 +1,4 @@
-.world-selector {
+.selector {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 34px 34px;
   gap: 8px;
@@ -6,7 +6,7 @@
   border-bottom: 1px solid var(--border);
 }
 
-.world-selector select {
+.selector select {
   min-width: 0;
   width: 100%;
   border: 1px solid var(--border);
@@ -17,7 +17,7 @@
   font: inherit;
 }
 
-.world-edit-btn {
+.editBtn {
   width: 34px;
   height: 34px;
   display: grid;
@@ -33,17 +33,17 @@
     box-shadow 160ms var(--ease);
 }
 
-.world-edit-btn:hover {
+.editBtn:hover {
   transform: translateY(-1px);
   border-color: var(--border-strong);
   box-shadow: var(--shadow-sm);
 }
 
-.world-edit-btn svg {
+.editBtn svg {
   display: block;
 }
 
-.modal-overlay {
+.overlay {
   position: fixed;
   inset: 0;
   z-index: 1100;
@@ -90,13 +90,13 @@
   font: inherit;
 }
 
-.modal-actions {
+.actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
 
-.modal-actions button {
+.actions button {
   border: 1px solid var(--border);
   border-radius: 11px;
   background: var(--surface);
@@ -106,7 +106,7 @@
   padding: 8px 12px;
 }
 
-.modal-actions button:first-child {
+.actions button:first-child {
   border-color: rgba(122, 79, 19, 0.24);
   background: var(--brand-soft);
   color: var(--brand);

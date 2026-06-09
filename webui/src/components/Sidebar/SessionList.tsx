@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Archive, Plus, RotateCcw, Sparkles } from 'lucide-react';
+import { Archive, Pencil, Plus, RotateCcw, Sparkles } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
 import { useToast } from '../Toast';
-import './SessionList.css';
+import styles from './SessionList.module.css';
 
 export default function SessionList() {
   const { state, dispatch } = useAppState();
@@ -93,10 +93,10 @@ export default function SessionList() {
   );
 
   return (
-    <div className="session-list">
-      <div className="session-list-header">
+    <div className={styles.list}>
+      <div className={styles.header}>
         <span>Sessions</span>
-        <button className="session-new-btn" onClick={create} aria-label="New session">
+        <button className={styles.newBtn} onClick={create} aria-label="New session">
           <Plus size={15} aria-hidden="true" strokeWidth={2.4} />
         </button>
       </div>
@@ -104,7 +104,7 @@ export default function SessionList() {
         {sessions.map((s) => (
           <li
             key={s.id}
-            className={s.id === state.sessionId ? 'active' : ''}
+            className={`${styles.item} ${s.id === state.sessionId ? styles.itemActive : ''}`}
             onClick={() => select(s.id)}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -113,7 +113,7 @@ export default function SessionList() {
           >
             {editingId === s.id ? (
               <input
-                className="session-rename-input"
+                className={styles.renameInput}
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 onBlur={() => confirmRename(s.id)}
@@ -127,7 +127,7 @@ export default function SessionList() {
             ) : (
               <>
                 <span
-                  className="session-title"
+                  className={styles.title}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     startRename(s);
@@ -137,9 +137,19 @@ export default function SessionList() {
                   {s.title || 'New Session'}
                 </span>
                 {s.id === state.sessionId && (
-                  <span className="session-actions">
+                  <span className={styles.actions}>
                     <button
-                      className="session-generate-btn"
+                      className={styles.generateBtn}
+                      aria-label="Rename session"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startRename(s);
+                      }}
+                    >
+                      <Pencil size={14} aria-hidden="true" strokeWidth={2.2} />
+                    </button>
+                    <button
+                      className={styles.generateBtn}
                       aria-label="Generate title"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -149,7 +159,7 @@ export default function SessionList() {
                       <Sparkles size={14} aria-hidden="true" strokeWidth={2.2} />
                     </button>
                     <button
-                      className="session-generate-btn"
+                      className={styles.generateBtn}
                       aria-label={s.archived_at ? 'Restore session' : 'Archive session'}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -164,7 +174,7 @@ export default function SessionList() {
                     </button>
                   </span>
                 )}
-                {s.archived_at && <span className="session-badge">Archived</span>}
+                {s.archived_at && <span className={styles.badge}>Archived</span>}
               </>
             )}
           </li>

@@ -1,0 +1,135 @@
+/* Composition over ModalBase — only overrides and result-display styles */
+
+.scrim { composes: scrim from './ModalBase.module.css'; }
+.modal { composes: modal from './ModalBase.module.css'; }
+.closeBtn { composes: closeBtn from './ModalBase.module.css'; }
+.iconWrap { composes: iconWrap from './ModalBase.module.css'; }
+.kicker { composes: kicker from './ModalBase.module.css'; }
+.field { composes: field from './ModalBase.module.css'; margin-bottom: 16px; }
+.error { composes: error from './ModalBase.module.css'; }
+.actions { composes: actions from './ModalBase.module.css'; }
+.primary { composes: primary from './ModalBase.module.css'; }
+.secondary { composes: secondary from './ModalBase.module.css'; }
+.spin { composes: spin from './ModalBase.module.css'; }
+.textarea { composes: textarea from './ModalBase.module.css'; min-height: 140px; }
+
+/* Result display */
+.resultIcon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(15, 118, 110, 0.22);
+  border-radius: 10px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  margin-bottom: 16px;
+}
+
+.resultSub {
+  margin-bottom: 18px;
+}
+
+.resultGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.resultCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  padding: 14px 8px;
+  text-align: center;
+}
+
+.resultCard svg {
+  color: var(--teal);
+  margin-bottom: 4px;
+}
+
+.resultCard strong {
+  font-size: 20px;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.resultCard span {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.foreshadowList {
+  margin-bottom: 18px;
+}
+
+.listTitle {
+  font-size: 11px;
+  font-weight: 850;
+  color: var(--muted-strong);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.foreshadowItem {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--brand-wash), #fff);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  margin-bottom: 6px;
+  color: var(--ink);
+}
+
+.leakNotice {
+  padding: 10px 12px;
+  border: 1px solid rgba(183, 121, 31, 0.26);
+  background: var(--amber-soft);
+  color: var(--brand-strong);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+  margin-bottom: 16px;
+}
+
+.doneBtn {
+  width: 100%;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--brand-strong), var(--brand), #b8892c);
+  color: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 9px 13px;
+  box-shadow: 0 10px 22px rgba(122, 79, 19, 0.18);
+  transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
+}
+
+.doneBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 26px rgba(122, 79, 19, 0.24);
+}
+
+@media (max-width: 520px) {
+  .resultGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .doneBtn {
+    width: 100%;
+  }
+}

@@ -1,17 +1,41 @@
-import { BookOpen, Clock3, GitBranch, KeyRound, Users } from 'lucide-react';
+import { BookOpen, Clock3, Flag, GitBranch, KeyRound, Plus, Users } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { api } from '../../api/client';
+import type { WorldDetail } from '../../api/types';
 import { useAppState } from '../../AppState';
 import styles from '../InspectorPanel.module.css';
+import CreateForeshadowingModal from './CreateForeshadowingModal';
+import CreateSceneModal from './CreateSceneModal';
+import CreateSecretModal from './CreateSecretModal';
+import EndSceneModal from './EndSceneModal';
 
 function statusLabel(value: string | undefined) {
   return value ? value.replace(/_/g, ' ') : 'open';
 }
 
 export default function StoryInspector() {
-  const { state } = useAppState();
+  const { state, dispatch } = useAppState();
   const selectedWorld = state.worlds.find((world) => world.id === state.worldId);
   const overview = state.storyOverview;
   const chapter = overview?.current_chapter;
   const scene = overview?.current_scene;
+
+  const [showEndScene, setShowEndScene] = useState(false);
+  const [showCreateForeshadowing, setShowCreateForeshadowing] = useState(false);
+  const [showCreateSecret, setShowCreateSecret] = useState(false);
+  const [showCreateScene, setShowCreateScene] = useState(false);
+  const [worldDetail, setWorldDetail] = useState<WorldDetail | null>(null);
+
+  useEffect(() => {
+    if (!state.worldId) { setWorldDetail(null); return; }
+    api.getWorldDetail(state.worldId)
+      .then(res => setWorldDetail(res.world))
+      .catch(() => setWorldDetail(null));
+  }, [state.worldId, state.storyVersion]);
+
+  function handleCreated() {
+    dispatch({ type: 'SET_STORY_VERSION' });
+  }
 
   return (
     <>
@@ -29,13 +53,29 @@ export default function StoryInspector() {
           </span>
           <span>
             <Users size={14} aria-hidden="true" />
-            {state.agents.length} voices
+            {worldDetail ? worldDetail.stats.agents : state.agents.length} voices
           </span>
           <span>
             <GitBranch size={14} aria-hidden="true" />
-            {state.foreshadowing.length} threads
+            {worldDetail ? worldDetail.stats.open_foreshadowing : state.foreshadowing.length} threads
           </span>
         </div>
+        {worldDetail && (
+          <div className={styles.storyStats} style={{ marginTop: 8 }}>
+            <span>
+              <BookOpen size={14} aria-hidden="true" />
+              {worldDetail.stats.chapters} chapters
+            </span>
+            <span>
+              <GitBranch size={14} aria-hidden="true" />
+              {worldDetail.stats.scenes} scenes
+            </span>
+            <span>
+              <KeyRound size={14} aria-hidden="true" />
+              {worldDetail.stats.active_secrets} secrets
+            </span>
+          </div>
+        )}
       </section>
 
       <section className={styles.section}>
@@ -57,10 +97,30 @@ export default function StoryInspector() {
             <small>{scene?.status ?? 'draft'}</small>
           </div>
         </div>
+        {scene && state.worldId && chapter && (
+          <div className={styles.sceneActions}>
+            <button
+              className={styles.entryButton}
+              onClick={() => setShowEndScene(true)}
+            >
+              <Flag size={14} aria-hidden="true" />
+              End Scene
+            </button>
+            <button
+              className={styles.ghostButton}
+              onClick={() => setShowCreateScene(true)}
+            >
+              <Plus size={14} aria-hidden="true" />
+              New Scene
+            </button>
+          </div>
+        )}
       </section>
 
       <section className={styles.section}>
-        <div className={styles.sectionTitle}>Active Voices</div>
+        <div className={styles.sectionHeader}>
+          <div className={styles.sectionTitle}>Active Voices</div>
+        </div>
         {state.agents.length === 0 ? (
           <p className={styles.muted}>No character voices loaded.</p>
         ) : (
@@ -73,9 +133,19 @@ export default function StoryInspector() {
       </section>
 
       <section className={styles.section}>
-        <div className={styles.sectionTitle}>
-          <BookOpen size={14} aria-hidden="true" />
-          Open Foreshadowing
+        <div className={styles.sectionHeader}>
+          <div className={styles.sectionTitle}>
+            <BookOpen size={14} aria-hidden="true" />
+            Open Foreshadowing
+          </div>
+          <button
+            className={styles.addBtn}
+            onClick={() => setShowCreateForeshadowing(true)}
+            aria-label="Plant foreshadowing"
+            title="Plant new thread"
+          >
+            <Plus size={14} aria-hidden="true" />
+          </button>
         </div>
         {state.foreshadowing.length === 0 ? (
           <p className={styles.muted}>No open threads loaded.</p>
@@ -91,9 +161,19 @@ export default function StoryInspector() {
       </section>
 
       <section className={styles.section}>
-        <div className={styles.sectionTitle}>
-          <KeyRound size={14} aria-hidden="true" />
-          Knowledge Boundaries
+        <div className={styles.sectionHeader}>
+          <div className={styles.sectionTitle}>
+            <KeyRound size={14} aria-hidden="true" />
+            Knowledge Boundaries
+          </div>
+          <button
+            className={styles.addBtn}
+            onClick={() => setShowCreateSecret(true)}
+            aria-label="Create secret"
+            title="New secret"
+          >
+            <Plus size={14} aria-hidden="true" />
+          </button>
         </div>
         {state.secrets.length === 0 ? (
           <p className={styles.muted}>No secret boundaries loaded.</p>
@@ -106,6 +186,25 @@ export default function StoryInspector() {
           ))
         )}
       </section>
+
+      {showEndScene && scene && state.worldId && chapter && (
+        <EndSceneModal
+          worldId={state.worldId}
+          sceneId={scene.id}
+          sceneTitle={scene.title}
+          chapterId={chapter.id}
+          onClose={() => setShowEndScene(false)}
+        />
+      )}
+      {showCreateForeshadowing && state.worldId && (
+        <CreateForeshadowingModal worldId={state.worldId} onClose={() => setShowCreateForeshadowing(false)} onCreated={handleCreated} />
+      )}
+      {showCreateSecret && state.worldId && (
+        <CreateSecretModal worldId={state.worldId} onClose={() => setShowCreateSecret(false)} onCreated={handleCreated} />
+      )}
+      {showCreateScene && state.worldId && (
+        <CreateSceneModal worldId={state.worldId} onClose={() => setShowCreateScene(false)} onCreated={handleCreated} />
+      )}
     </>
   );
 }

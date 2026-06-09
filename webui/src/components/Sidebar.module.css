@@ -99,12 +99,10 @@
 }
 
 .sessionItemActive {
-  background: linear-gradient(90deg, var(--brand-soft), #fff);
-  border-color: rgba(122, 79, 19, 0.18);
+  background: linear-gradient(90deg, var(--brand-soft), var(--surface));
+  border-color: rgba(122, 79, 19, 0.22);
   color: var(--brand);
-  box-shadow:
-    inset 3px 0 0 var(--brand),
-    var(--shadow-sm);
+  box-shadow: var(--shadow-sm);
 }
 
 .newBtn {
