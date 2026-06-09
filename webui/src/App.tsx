@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from './api/client';
 import styles from './App.module.css';
 import { AppStateProvider, useAppState } from './AppState';
@@ -6,9 +6,10 @@ import ConnectionBanner from './components/ConnectionBanner';
 import ErrorBoundary from './components/ErrorBoundary';
 import InspectorPanel from './components/InspectorPanel';
 import MainPanel from './components/MainPanel';
-import OnboardingModal from './components/OnboardingModal';
-import Sidebar from './components/Sidebar';
 import Skeleton from './components/Skeleton';
+import WorldOnboarding from './components/WorldOnboarding';
+import WorldDashboard from './components/WorldDashboard';
+import WorldSidebar from './components/WorldSidebar';
 import { ToastProvider } from './components/Toast';
 import { useSSE } from './hooks/useSSE';
 
@@ -17,65 +18,67 @@ function AppInner() {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [inspectorOpen, setInspectorOpen] = useState(window.innerWidth >= 1180);
   const [bootstrapped, setBootstrapped] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
 
+  // Bootstrap: load metadata, worlds, sessions, capabilities once
   useEffect(() => {
-    try {
-      if (window.localStorage.getItem('merak.webui.onboarding.seen') !== 'true') {
-        setGuideOpen(true);
+    async function bootstrap() {
+      const [metadataRes, worldsRes, sessionsRes, capabilitiesRes] =
+        await Promise.allSettled([
+          api.metadata(),
+          api.listWorlds(),
+          api.listSessions(),
+          api.capabilities(),
+        ]);
+
+      if (metadataRes.status === 'fulfilled') {
+        dispatch({ type: 'SET_METADATA', metadata: metadataRes.value });
       }
-    } catch {
-      setGuideOpen(true);
-    }
-  }, []);
+      if (worldsRes.status === 'fulfilled') {
+        dispatch({ type: 'SET_WORLDS', worlds: worldsRes.value.worlds ?? [] });
+      }
+      if (sessionsRes.status === 'fulfilled') {
+        dispatch({ type: 'SET_SESSIONS', sessions: sessionsRes.value.sessions ?? [] });
+      }
+      if (capabilitiesRes.status === 'fulfilled') {
+        dispatch({
+          type: 'SET_CAPABILITIES',
+          capabilities: capabilitiesRes.value.capabilities,
+          fallback: capabilitiesRes.value.fallback,
+        });
+      }
 
-  function closeGuide() {
-    setGuideOpen(false);
-    try {
-      window.localStorage.setItem('merak.webui.onboarding.seen', 'true');
-    } catch {
-      /* ignore storage failures */
-    }
-  }
+      const worlds = worldsRes.status === 'fulfilled' ? (worldsRes.value.worlds ?? []) : [];
+      const sessions = sessionsRes.status === 'fulfilled' ? (sessionsRes.value.sessions ?? []) : [];
 
-  useEffect(() => {
-    Promise.allSettled([
-      api.metadata(),
-      api.listSessions(),
-      api.listWorlds(),
-      api.capabilities(),
-      api.listWorkspaceFiles({ session_id: state.sessionId, world_id: state.worldId ?? undefined }),
-    ]).then(
-      ([metadataRes, sessionsRes, worldsRes, capabilitiesRes, filesRes]) => {
-        if (metadataRes.status === 'fulfilled') {
-          dispatch({ type: 'SET_METADATA', metadata: metadataRes.value });
-        }
-        if (sessionsRes.status === 'fulfilled') {
-          dispatch({ type: 'SET_SESSIONS', sessions: sessionsRes.value.sessions ?? [] });
-        }
-        if (worldsRes.status === 'fulfilled') {
-          dispatch({ type: 'SET_WORLDS', worlds: worldsRes.value.worlds ?? [] });
-        }
-        if (capabilitiesRes.status === 'fulfilled') {
-          dispatch({
-            type: 'SET_CAPABILITIES',
-            capabilities: capabilitiesRes.value.capabilities,
-            fallback: capabilitiesRes.value.fallback,
-          });
-        }
-        if (filesRes.status === 'fulfilled') {
-          dispatch({
-            type: 'SET_WORKSPACE_FILES',
-            files: filesRes.value.files,
-            root: filesRes.value.root,
-            fallback: filesRes.value.fallback,
-          });
-        }
+      if (worlds.length === 0) {
+        dispatch({ type: 'SET_APP_PHASE', phase: 'no_world' });
         setBootstrapped(true);
-      },
-    );
+        return;
+      }
+
+      // Try to restore last active session with a world binding
+      const activeSession = sessions.find(
+        (s) => !s.archived_at && s.world_id
+      );
+
+      if (activeSession) {
+        dispatch({
+          type: 'SET_AGENT_SESSION',
+          sessionId: activeSession.id,
+          agentId: activeSession.agent_id ?? '',
+        });
+        dispatch({ type: 'SET_WORLD', worldId: activeSession.world_id });
+      } else {
+        dispatch({ type: 'SET_WORLD', worldId: worlds[0].id });
+      }
+
+      setBootstrapped(true);
+    }
+
+    bootstrap();
   }, [dispatch]);
 
+  // Worldbuilding data loading when worldId changes
   useEffect(() => {
     if (!state.worldId) return;
     let cancelled = false;
@@ -88,8 +91,7 @@ function AppInner() {
       api.listForeshadowing(state.worldId),
       api.listSecrets(state.worldId),
       api.getWorldTime(state.worldId),
-      api.listWorkspaceFiles({ session_id: state.sessionId, world_id: state.worldId }),
-    ]).then(([overviewRes, worldsRes, agentsRes, foreshadowingRes, secretsRes, timeRes, filesRes]) => {
+    ]).then(([overviewRes, worldsRes, agentsRes, foreshadowingRes, secretsRes, timeRes]) => {
       if (cancelled) return;
       const worlds =
         worldsRes.status === 'fulfilled' ? (worldsRes.value.worlds ?? state.worlds) : state.worlds;
@@ -114,15 +116,6 @@ function AppInner() {
               timeRes.value.now ??
               null) as string | null)
           : null);
-
-      if (filesRes.status === 'fulfilled') {
-        dispatch({
-          type: 'SET_WORKSPACE_FILES',
-          files: filesRes.value.files,
-          root: filesRes.value.root,
-          fallback: filesRes.value.fallback,
-        });
-      }
 
       const failed = [agentsRes, foreshadowingRes, secretsRes, timeRes].some(
         (r) => r.status === 'rejected',
@@ -151,49 +144,40 @@ function AppInner() {
     };
   }, [state.worldId, state.sessionId, state.storyVersion, dispatch]);
 
-  const creatingRef = useRef(false);
-
-  useEffect(() => {
-    if (!state.sessionId) {
-      if (creatingRef.current) return;
-      creatingRef.current = true;
-      api
-        .createSession()
-        .then((data) => {
-          const id = data.session_id as string;
-          dispatch({ type: 'SET_SESSION', sessionId: id });
-        })
-        .catch((e) => {
-          creatingRef.current = false;
-          console.error('Failed to create session:', e);
-        });
-      return;
-    }
-    api
-      .listSessions()
-      .then((data) => {
-        dispatch({ type: 'SET_SESSIONS', sessions: data.sessions ?? [] });
-      })
-      .catch((e) => {
-        console.error('Failed to list sessions:', e);
-      });
-  }, [state.sessionId, dispatch]);
-
-  const sseUrl = state.sessionId ? api.sseUrl(state.sessionId) : null;
+  // SSE connection: only in 'ready' phase
+  const sseUrl = state.appPhase === 'ready' && state.sessionId
+    ? api.sseUrl(state.sessionId)
+    : null;
 
   const connState = useSSE(sseUrl, dispatch, state.lastSeq);
 
-  const isLoading = !bootstrapped;
-
-  if (isLoading) {
+  // Phase-based rendering
+  if (!bootstrapped || state.appPhase === 'loading') {
     return <Skeleton />;
   }
 
+  if (state.appPhase === 'no_world') {
+    return (
+      <ToastProvider>
+        <WorldOnboarding />
+      </ToastProvider>
+    );
+  }
+
+  if (state.appPhase === 'no_agent') {
+    return (
+      <ToastProvider>
+        <WorldDashboard />
+      </ToastProvider>
+    );
+  }
+
+  // appPhase === 'ready': three-column Workbench
   return (
     <ToastProvider>
       <div className={styles.layout}>
         <ErrorBoundary>
-          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          <WorldSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
         </ErrorBoundary>
         <ErrorBoundary>
           <div className={styles.workspace}>
@@ -201,7 +185,6 @@ function AppInner() {
             <MainPanel
               onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
               onToggleInspector={() => setInspectorOpen((prev) => !prev)}
-              onOpenGuide={() => setGuideOpen(true)}
               sidebarOpen={sidebarOpen}
               inspectorOpen={inspectorOpen}
               connectionState={connState}
@@ -211,7 +194,6 @@ function AppInner() {
         <ErrorBoundary>
           <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
         </ErrorBoundary>
-        {guideOpen && <OnboardingModal onClose={closeGuide} />}
       </div>
     </ToastProvider>
   );
