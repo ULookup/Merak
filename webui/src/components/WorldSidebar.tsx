@@ -136,8 +136,6 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
         </div>
       )}
 
-      {/* SessionList filtered by current world + agent — worldId/agentId props pending Task 17 */}
-      {/* @ts-expect-error worldId/agentId props not yet on SessionList (Task 17) */}
       <SessionList worldId={state.worldId ?? undefined} agentId={state.agentId ?? undefined} />
 
       <ModelSelector />
