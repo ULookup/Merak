@@ -253,7 +253,11 @@ std::string RuntimeService::extract_title(const std::string& message, size_t max
 RuntimeService::RuntimeService(std::filesystem::path root,LoopFactory factory,std::map<std::string, SubAgentConfig> agents,SubRunExecutor sub_run_executor):store_(std::move(root)),loop_factory_(std::move(factory)),agents_(std::move(agents)),sub_run_executor_(std::move(sub_run_executor)){}
 void RuntimeService::initialize(){store_.initialize();for(const auto&r:store_.interrupt_running_runs())emit(r.session_id,r.id,"run_interrupted",{{"reason","server restarted"}});}
 RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const std::string&t,nlohmann::json p){RuntimeEvent e{0,"",s,r,t,std::move(p)};try{e=store_.append_event(e);}catch(const nlohmann::json::exception&ex){spdlog::warn("Failed to serialize event {}: {}",t,ex.what());}catch(const std::exception&){throw;}bus_.publish(e);return e;}
-SessionRecord RuntimeService::create_session(const std::string&title){auto s=store_.create_session(title);emit(s.id,"","session_created",{{"title",title}});return *store_.get_session(s.id);}
+SessionRecord RuntimeService::create_session(const std::string& title, const std::string& world_id, const std::string& agent_id) {
+    auto s = store_.create_session(title, world_id, agent_id);
+    emit(s.id, "", "session_created", {{"title", title}});
+    return *store_.get_session(s.id);
+}
 void RuntimeService::update_session(const std::string&id,const std::string&title){store_.update_session(id,title);emit(id,"","session_updated",{{"title",title}});}
 SessionRecord RuntimeService::archive_session(const std::string&id,bool archived){auto s=store_.archive_session(id,archived);emit(id,"","session_updated",{{"archived",archived},{"archived_at",s.archived_at}});return s;}
 std::string RuntimeService::generate_title(const std::string&session_id){
@@ -282,7 +286,9 @@ std::string RuntimeService::generate_title(const std::string&session_id){
     if(result.size()>50)result=result.substr(0,50);
     return result;
 }
-std::vector<SessionRecord>RuntimeService::list_sessions()const{return store_.list_sessions();}
+std::vector<SessionRecord> RuntimeService::list_sessions(const std::string& world_id) const {
+    return store_.list_sessions(world_id);
+}
 std::optional<SessionRecord>RuntimeService::get_session(const std::string&id)const{return store_.get_session(id);}
 std::optional<RunRecord>RuntimeService::get_run(const std::string&id)const{return store_.get_run(id);}
 RunRecord RuntimeService::create_run_record(const std::string&s,const std::string&m){if(!store_.get_session(s))throw RuntimeError("session_not_found","Session does not exist");if(store_.has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");auto r=store_.create_run(s,m);emit(s,r.id,"run_started",{{"message",m}});

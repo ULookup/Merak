@@ -79,11 +79,13 @@ public:
         std::map<std::string, SubAgentConfig> agents = {},
         SubRunExecutor sub_run_executor = {});
     void initialize();
-    SessionRecord create_session(const std::string& title = "");
+    SessionRecord create_session(const std::string& title = "",
+                                  const std::string& world_id = "",
+                                  const std::string& agent_id = "");
     void update_session(const std::string& id, const std::string& title);
     SessionRecord archive_session(const std::string& id, bool archived);
     std::string generate_title(const std::string& session_id);
-    std::vector<SessionRecord> list_sessions() const;
+    std::vector<SessionRecord> list_sessions(const std::string& world_id = "") const;
     std::optional<SessionRecord> get_session(const std::string& id) const;
     std::optional<RunRecord> get_run(const std::string& id) const;
     RunRecord create_run_record(const std::string& session_id, const std::string& message);
