@@ -51,12 +51,18 @@ export default function PipelineNavigator() {
         force: isRetreat,
       });
     } catch (err) {
-      console.error('Pipeline advance failed:', err);
+      alert(`Pipeline advance failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
   return (
     <div className={styles.container}>
+      {state.pipelineAdvanceError && (
+        <div className={styles.errorBanner}>
+          <span>Advance failed: {state.pipelineAdvanceError}</span>
+          <button onClick={() => dispatch({ type: 'PIPELINE_ERROR_CLEARED' })}>Dismiss</button>
+        </div>
+      )}
       <div className={styles.titleRow}>
         <span className={styles.title}>创作管线</span>
         {state.pipelineAutoAdvance !== undefined && (

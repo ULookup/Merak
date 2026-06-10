@@ -39,6 +39,7 @@ import type {
   WorkspaceFileListResponse,
   WorldListResponse,
   WorldTimeResponse,
+  PipelineHistoryRecord,
   PipelineViewData,
   WorkflowSummary,
 } from './types';
@@ -590,4 +591,14 @@ export async function activatePipelineWorkflow(
     body: JSON.stringify({ workflow_name: workflowName }),
   });
   if (!res.ok) throw new Error(`Failed to activate workflow: ${res.status}`);
+}
+
+export async function getPipelineHistory(
+  worldId: string,
+  limit = 10
+): Promise<PipelineHistoryRecord[]> {
+  const params = new URLSearchParams({ world_id: worldId, limit: String(limit) });
+  const res = await fetch(`/api/worldbuilding/pipeline/history?${params}`);
+  if (!res.ok) throw new Error(`Failed to fetch pipeline history: ${res.statusText}`);
+  return res.json();
 }

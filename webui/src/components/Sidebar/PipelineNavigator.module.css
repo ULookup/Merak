@@ -150,3 +150,25 @@
 .condPending {
   background: var(--border, #444);
 }
+
+.errorBanner {
+  background: #fff0f0;
+  border: 1px solid #e00;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #c00;
+}
+
+.errorBanner button {
+  background: none;
+  border: none;
+  color: #c00;
+  cursor: pointer;
+  font-size: 12px;
+  text-decoration: underline;
+}

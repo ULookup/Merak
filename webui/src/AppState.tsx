@@ -14,7 +14,7 @@ import type {
   WorkspaceFile,
   WorkspaceFileContent,
 } from './api/types';
-import type { ConditionState, PhaseTransition, PipelineViewData } from './api/types';
+import type { ConditionState, PhaseTransition, PipelineHistoryRecord, PipelineViewData, WorkflowSummary } from './api/types';
 
 export type InspectorTab = 'story' | 'files' | 'agents' | 'run' | 'creation';
 export type WorldbuildingStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -80,6 +80,8 @@ export interface AppState {
   // ═══ Pipeline (extended) ═══
   pipelineConditions: ConditionState[];
   pipelineActiveWorkflow: string;
+  pipelineAdvanceError?: string;
+  pipelineAvailableWorkflows?: WorkflowSummary[];
   pipelineHistory: PhaseTransition[];
   pipelineNextAllowed: string[];
   pipelineAllowedRetreat: string[];
@@ -203,7 +205,12 @@ export type Action =
   | { type: 'APPLY_SSE'; frame: SseFrame }
   | { type: 'SET_PIPELINE_CONDITIONS'; conditions: ConditionState[] }
   | { type: 'SET_PIPELINE_VIEW'; view: Partial<PipelineViewData> }
-  | { type: 'DISMISS_PHASE_PROMPT' };
+  | { type: 'DISMISS_PHASE_PROMPT' }
+  | { type: 'PIPELINE_ADVANCE_FAILED'; reason: string }
+  | { type: 'PIPELINE_WORKFLOWS_LOADED'; workflows: WorkflowSummary[] }
+  | { type: 'PIPELINE_WORKFLOW_ACTIVATED'; name: string }
+  | { type: 'PIPELINE_HISTORY_LOADED'; history: PipelineHistoryRecord[] }
+  | { type: 'PIPELINE_ERROR_CLEARED' };
 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -529,6 +536,21 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'DISMISS_PHASE_PROMPT':
       return { ...state, showPhaseAdvancePrompt: null };
 
+    case 'PIPELINE_ADVANCE_FAILED':
+      return { ...state, pipelineAdvanceError: action.reason };
+
+    case 'PIPELINE_WORKFLOWS_LOADED':
+      return { ...state, pipelineAvailableWorkflows: action.workflows };
+
+    case 'PIPELINE_WORKFLOW_ACTIVATED':
+      return { ...state, pipelineActiveWorkflow: action.name };
+
+    case 'PIPELINE_HISTORY_LOADED':
+      return { ...state };
+
+    case 'PIPELINE_ERROR_CLEARED':
+      return { ...state, pipelineAdvanceError: undefined };
+
     default:
       return state;
   }
@@ -784,8 +806,12 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         pipelineAllowedRetreat: Array.isArray(p.allowed_retreat)
           ? (p.allowed_retreat as string[]) : state.pipelineAllowedRetreat,
         showPhaseAdvancePrompt: null,
+        pipelineAdvanceError: undefined,
       };
     }
+
+    case 'pipeline_advance_failed':
+      return { ...state, pipelineAdvanceError: (p.reason || p.result || 'Unknown error') as string };
 
     case 'pipeline_condition_progress': {
       const conditions = Array.isArray(p.conditions)
