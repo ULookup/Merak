@@ -10,6 +10,7 @@
 #include <atomic>
 #include <iomanip>
 #include <set>
+#include <stdexcept>
 
 namespace merak::worldbuilding {
 
@@ -58,6 +59,12 @@ const std::set<std::string> PipelineManager::RELEVANT_EVENTS = {
 };
 
 PipelineManager::PipelineManager(Dependencies deps) : deps_(std::move(deps)) {
+    if (!deps_.condition_evaluator) {
+        throw std::invalid_argument("PipelineManager: condition_evaluator is required");
+    }
+    if (!deps_.pg_connection_factory) {
+        throw std::invalid_argument("PipelineManager: pg_connection_factory is required");
+    }
     start_time_ = std::chrono::steady_clock::now();
 }
 PipelineManager::~PipelineManager() = default;
@@ -88,10 +95,10 @@ void PipelineManager::initialize() {
             auto world_id = row["world_id"].as<std::string>();
             auto state = nlohmann::json::parse(row["state_json"].as<std::string>())
                              .get<PipelineState>();
-            std::unique_lock lock(state_mutex_);
-            state_cache_[world_id] = std::move(state);
+            std::unique_lock lock(world_mutex_);
+            worlds_[world_id].state = std::move(state);
         }
-        spdlog::info("PipelineManager: restored {} active pipeline states", state_cache_.size());
+        spdlog::info("PipelineManager: restored {} active pipeline states", worlds_.size());
     } catch (const std::exception& e) {
         spdlog::warn("PipelineManager: failed to restore states: {}", e.what());
     }
@@ -152,22 +159,34 @@ void PipelineManager::activate_workflow(const std::string& world_id,
         spdlog::warn("PipelineManager: workflow '{}' not found", workflow_name);
         return;
     }
-    active_workflows_[world_id] = workflow_name;
+    {
+        std::unique_lock lock(world_mutex_);
+        worlds_[world_id].workflow_name = workflow_name;
+    }
     init_state_for_world(world_id);
 }
 
 // ─── PipelineState CRUD ───
 std::optional<PipelineState> PipelineManager::get_state(const std::string& world_id) const {
-    std::shared_lock lock(state_mutex_);
-    auto it = state_cache_.find(world_id);
-    if (it != state_cache_.end()) return it->second;
+    std::shared_lock lock(world_mutex_);
+    auto it = worlds_.find(world_id);
+    if (it != worlds_.end()) return it->second.state;
     return std::nullopt;
 }
 
 void PipelineManager::init_state_for_world(const std::string& world_id) {
-    const auto* wf = get_workflow("default_creative_pipeline");
+    std::string workflow_name;
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        workflow_name = (it != worlds_.end() && !it->second.workflow_name.empty())
+                            ? it->second.workflow_name
+                            : "default_creative_pipeline";
+    }
+
+    const auto* wf = get_workflow(workflow_name);
     if (!wf) {
-        spdlog::warn("PipelineManager: default_creative_pipeline not found");
+        spdlog::warn("PipelineManager: workflow '{}' not found", workflow_name);
         return;
     }
 
@@ -182,14 +201,12 @@ void PipelineManager::init_state_for_world(const std::string& world_id) {
     state.active_workflow = wf->name;
 
     {
-        std::unique_lock lock(state_mutex_);
-        state_cache_[world_id] = state;
+        std::unique_lock lock(world_mutex_);
+        worlds_[world_id] = WorldEntry{state, wf->name};
     }
 
     persist_state(state);
-    active_workflows_[world_id] = wf->name;
 
-    // Emit initial pipeline_phase_changed SSE
     if (deps_.event_emitter) {
         AdvanceRequest dummy_req{world_id, state.current_phase, "init", "system", false, false};
         emit_phase_changed(state, initial, dummy_req);
@@ -201,8 +218,8 @@ void PipelineManager::init_state_for_world(const std::string& world_id) {
 
 void PipelineManager::save_state(const PipelineState& state) {
     {
-        std::unique_lock lock(state_mutex_);
-        state_cache_[state.world_id] = state;
+        std::unique_lock lock(world_mutex_);
+        worlds_[state.world_id].state = state;
     }
     persist_state(state);
 }
@@ -236,8 +253,8 @@ void PipelineManager::load_state_from_db(const std::string& world_id) {
             "SELECT state_json FROM pipeline_states WHERE world_id = $1", world_id);
         auto state = nlohmann::json::parse(row["state_json"].as<std::string>())
                          .get<PipelineState>();
-        std::unique_lock lock(state_mutex_);
-        state_cache_[world_id] = std::move(state);
+        std::unique_lock lock(world_mutex_);
+        worlds_[world_id] = std::move(state);
     } catch (const pqxx::unexpected_rows&) {
         // No state for this world — that's fine
     }
@@ -323,14 +340,16 @@ PipelineManager::AdvanceResult PipelineManager::advance_phase(const AdvanceReque
     struct DepthGuard { std::atomic<int>& d; ~DepthGuard() { d.fetch_sub(1); } };
     DepthGuard guard{advance_depth_};
 
-    auto state_opt = get_state(req.world_id);
-    if (!state_opt) return AdvanceResult::NO_ACTIVE_STATE;
-
-    auto state = *state_opt;
-
-    auto workflow_it = active_workflows_.find(req.world_id);
-    if (workflow_it == active_workflows_.end()) return AdvanceResult::NO_ACTIVE_STATE;
-    const auto* wf = get_workflow(workflow_it->second);
+    PipelineState state;
+    std::string wf_name;
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(req.world_id);
+        if (it == worlds_.end()) return AdvanceResult::NO_ACTIVE_STATE;
+        state = it->second.state;
+        wf_name = it->second.workflow_name;
+    }
+    const auto* wf = get_workflow(wf_name);
     if (!wf) return AdvanceResult::NO_ACTIVE_STATE;
 
     // Determine target phase
@@ -381,8 +400,8 @@ PipelineManager::AdvanceResult PipelineManager::advance_phase(const AdvanceReque
 
     // Persist
     {
-        std::unique_lock lock(state_mutex_);
-        state_cache_[req.world_id] = state;
+        std::unique_lock lock(world_mutex_);
+        worlds_[req.world_id].state = state;
     }
     persist_state(state);
 
@@ -448,10 +467,14 @@ void PipelineManager::on_world_event(const std::string& world_id,
     auto state_opt = get_state(world_id);
     if (!state_opt) return;
 
-    auto workflow_it = active_workflows_.find(world_id);
-    if (workflow_it == active_workflows_.end()) return;
-
-    const auto* wf = get_workflow(workflow_it->second);
+    std::string wf_name;
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        if (it == worlds_.end()) return;
+        wf_name = it->second.workflow_name;
+    }
+    const auto* wf = get_workflow(wf_name);
     if (!wf || !wf->auto_advance) return; // Non-auto-advance mode, skip
 
     // 4. Evaluate conditions for current phase
@@ -551,10 +574,14 @@ std::vector<PhaseTransitionRecord> PipelineManager::load_recent_history(
 // ─── Condition Evaluation ───
 ConditionEvalSummary PipelineManager::evaluate_phase_conditions(
     const PipelineState& state) const {
-    auto workflow_it = active_workflows_.find(state.world_id);
-    if (workflow_it == active_workflows_.end()) return {};
-
-    const auto* wf = get_workflow(workflow_it->second);
+    std::string wf_name;
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(state.world_id);
+        if (it == worlds_.end()) return {};
+        wf_name = it->second.workflow_name;
+    }
+    const auto* wf = get_workflow(wf_name);
     if (!wf) return {};
 
     const auto* phase_def = wf->get_phase(state.current_phase);
@@ -583,10 +610,14 @@ std::vector<std::string> PipelineManager::get_allowed_tools(const std::string& w
     auto state_opt = get_state(world_id);
     if (!state_opt) return {};
 
-    auto workflow_it = active_workflows_.find(world_id);
-    if (workflow_it == active_workflows_.end()) return {};
-
-    const auto* wf = get_workflow(workflow_it->second);
+    std::string wf_name;
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        if (it == worlds_.end()) return {};
+        wf_name = it->second.workflow_name;
+    }
+    const auto* wf = get_workflow(wf_name);
     if (!wf) return {};
 
     const auto* phase_def = wf->get_phase(state_opt->current_phase);
@@ -599,10 +630,14 @@ nlohmann::json PipelineManager::get_phase_injection_config(const std::string& wo
     auto state_opt = get_state(world_id);
     if (!state_opt) return nlohmann::json::object();
 
-    auto workflow_it = active_workflows_.find(world_id);
-    if (workflow_it == active_workflows_.end()) return nlohmann::json::object();
-
-    const auto* wf = get_workflow(workflow_it->second);
+    std::string wf_name;
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        if (it == worlds_.end()) return nlohmann::json::object();
+        wf_name = it->second.workflow_name;
+    }
+    const auto* wf = get_workflow(wf_name);
     if (!wf) return nlohmann::json::object();
 
     const auto* phase_def = wf->get_phase(state_opt->current_phase);
@@ -721,9 +756,12 @@ std::string PipelineManager::snapshot_to_json(const std::string& world_id) const
     to_json(snapshot, *state_opt);
     snapshot["_snapshot_at"] = current_iso_timestamp();
 
-    auto workflow_it = active_workflows_.find(world_id);
-    if (workflow_it != active_workflows_.end()) {
-        snapshot["_active_workflow"] = workflow_it->second;
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        if (it != worlds_.end()) {
+            snapshot["_active_workflow"] = it->second.workflow_name;
+        }
     }
 
     return snapshot.dump();
@@ -735,13 +773,10 @@ void PipelineManager::restore_from_snapshot(const std::string& world_id,
         auto j = nlohmann::json::parse(json);
         auto state = j.get<PipelineState>();
         {
-            std::unique_lock lock(state_mutex_);
-            state_cache_[world_id] = state;
+            std::unique_lock lock(world_mutex_);
+            worlds_[world_id] = WorldEntry{state, j.value("_active_workflow", "")};
         }
         persist_state(state);
-        if (j.contains("_active_workflow")) {
-            active_workflows_[world_id] = j["_active_workflow"].get<std::string>();
-        }
         spdlog::info("PipelineManager: restored state from snapshot for world {}", world_id);
     } catch (const std::exception& e) {
         spdlog::error("PipelineManager: failed to restore from snapshot: {}", e.what());
@@ -834,13 +869,12 @@ void PipelineManager::handle_advance_failure(const std::string& world_id,
 }
 
 void PipelineManager::clear_last_error(const std::string& world_id) {
-    auto state_opt = get_state(world_id);
-    if (!state_opt) return;
-
-    auto state = *state_opt;
-    if (state.extra.contains("last_error")) {
-        state.extra.erase("last_error");
-        save_state(state);
+    std::unique_lock lock(world_mutex_);
+    auto it = worlds_.find(world_id);
+    if (it == worlds_.end()) return;
+    if (it->second.state.extra.contains("last_error")) {
+        it->second.state.extra.erase("last_error");
+        persist_state(it->second.state);
     }
 }
 
@@ -850,8 +884,8 @@ PipelineManager::PipelineMetrics PipelineManager::get_metrics() const {
     m.start_time = start_time_;
 
     {
-        std::shared_lock lock(state_mutex_);
-        m.active_states = state_cache_.size();
+        std::shared_lock lock(world_mutex_);
+        m.active_states = worlds_.size();
     }
 
     if (deps_.condition_evaluator) {
