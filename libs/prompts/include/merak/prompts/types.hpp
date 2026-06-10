@@ -92,6 +92,10 @@ struct PromptProfile {
     // DSL 上下文注入所需
     std::optional<std::string> active_world_id;
     std::optional<std::string> active_agent_id;
+
+    // ═══ Pipeline phase context (from PipelineManager) ═══
+    std::string phase_context;                         // phase guidance text for system prompt
+    std::vector<std::string> phase_allowed_tools;      // tools allowed in current phase
 };
 
 // ─── PromptSection（对标 astra PromptSection）───
