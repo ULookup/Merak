@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <optional>
 #include <stdexcept>
 #include <filesystem>
@@ -108,6 +109,10 @@ public:
     std::shared_ptr<EventSubscription> subscribe(const std::string& session_id);
     RuntimeEvent emit_event(const std::string& session_id, const std::string& run_id,
                             const std::string& type, nlohmann::json payload = {});
+    void broadcast_to_world(const std::string& world_id, RuntimeEvent event);
+    void register_session_world(const std::string& session_id, const std::string& world_id);
+    void unregister_session_world(const std::string& session_id);
+    size_t world_session_count(const std::string& world_id) const;
 
 private:
     class Control;
@@ -117,6 +122,9 @@ private:
     std::map<std::string, SubAgentConfig> agents_;
     SubRunExecutor sub_run_executor_;
     mutable std::mutex mutex_;
+    std::map<std::string, std::set<std::string>> world_sessions_;  // world_id -> session_ids
+    std::map<std::string, std::string> session_world_;              // session_id -> world_id
+    mutable std::mutex world_sessions_mutex_;
     std::map<std::string, std::shared_ptr<CancellationToken>> tokens_;
     std::map<std::string, std::shared_ptr<Control>> controls_;
     std::map<std::string, std::vector<std::string>> child_runs_;

@@ -257,6 +257,7 @@ RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const 
 SessionRecord RuntimeService::create_session(const std::string& title, const std::string& world_id, const std::string& agent_id) {
     auto s = store_.create_session(title, world_id, agent_id);
     emit(s.id, "", "session_created", {{"title", title}});
+    if (!world_id.empty()) register_session_world(s.id, world_id);
     if (!world_id.empty() && pipeline_mgr_) {
         if (!pipeline_mgr_->get_state(world_id)) {
             pipeline_mgr_->init_state_for_world(world_id);
@@ -611,6 +612,46 @@ std::vector<RuntimeEvent>RuntimeService::events_after(const std::string&id,long 
 std::shared_ptr<EventSubscription>RuntimeService::subscribe(const std::string&id){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return bus_.subscribe(id);}
 RuntimeEvent RuntimeService::emit_event(const std::string&id,const std::string&run_id,const std::string&type,nlohmann::json payload){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return emit(id,run_id,type,std::move(payload));}
 
+void RuntimeService::broadcast_to_world(const std::string& world_id, RuntimeEvent event) {
+    std::lock_guard lock(world_sessions_mutex_);
+    auto it = world_sessions_.find(world_id);
+    if (it == world_sessions_.end()) return;
+    for (const auto& session_id : it->second) {
+        try {
+            auto e = event;
+            e.session_id = session_id;
+            bus_.publish(e);
+        } catch (const std::exception& ex) {
+            spdlog::warn("broadcast_to_world: failed for session {} in world {}: {}",
+                         session_id, world_id, ex.what());
+        }
+    }
+}
+void RuntimeService::register_session_world(const std::string& session_id, const std::string& world_id) {
+    std::lock_guard lock(world_sessions_mutex_);
+    world_sessions_[world_id].insert(session_id);
+    session_world_[session_id] = world_id;
+}
+void RuntimeService::unregister_session_world(const std::string& session_id) {
+    std::lock_guard lock(world_sessions_mutex_);
+    auto it = session_world_.find(session_id);
+    if (it == session_world_.end()) return;
+    const auto& world_id = it->second;
+    auto wit = world_sessions_.find(world_id);
+    if (wit != world_sessions_.end()) {
+        wit->second.erase(session_id);
+        if (wit->second.empty()) {
+            world_sessions_.erase(wit);
+        }
+    }
+    session_world_.erase(it);
+}
+size_t RuntimeService::world_session_count(const std::string& world_id) const {
+    std::lock_guard lock(world_sessions_mutex_);
+    auto it = world_sessions_.find(world_id);
+    if (it == world_sessions_.end()) return 0;
+    return it->second.size();
+}
 std::vector<Message>RuntimeService::restore_messages(const std::string&id)const{std::vector<Message>out;for(const auto&e:store_.events_after(id,0)){if(e.type=="message_appended")out.push_back(message_from_json(e.payload));else if(e.type=="compaction_applied"&&!out.empty()){auto summary=out.back();out.pop_back();auto count=std::min<size_t>(e.payload.value("replaced_count",0),out.size());out.erase(out.begin(),out.begin()+static_cast<long>(count));out.insert(out.begin(),std::move(summary));}}return out;}
 void RuntimeService::resume_after_restarted_approval(RunRecord run,ApprovalRecord approval,bool allowed){
     if(!loop_factory_)throw RuntimeError("runtime_unconfigured","Agent loop is not configured");
