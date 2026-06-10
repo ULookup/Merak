@@ -6,6 +6,7 @@ add_library(merak-worldbuilding STATIC
     src/agent_store.cpp
     src/pipeline.cpp
     src/pipeline_workflow_def.cpp
+    src/pipeline_validation.cpp
     src/condition_evaluator.cpp
     src/pipeline_manager.cpp
     src/card_access.cpp
