@@ -1,90 +1,137 @@
 #pragma once
 #include <merak/worldbuilding/pipeline_workflow_def.hpp>
+#include <atomic>
+#include <chrono>
 #include <functional>
 #include <map>
+#include <memory>
+#include <shared_mutex>
+#include <string>
+#include <vector>
 
 namespace pqxx { class connection; }
 
 namespace merak::worldbuilding {
 
-// Condition evaluation function signature
-// Input: ConditionDef (definition), PipelineState (current state), pqxx::connection (DB)
-// Output: ConditionResult (evaluation result)
 using ConditionEvalFn = std::function<ConditionResult(
     const ConditionDef& cond,
     const PipelineState& state,
     pqxx::connection& conn
 )>;
 
+using CheckEvalFn = ConditionEvalFn;
+
 class ConditionEvaluator {
 public:
-    static ConditionEvaluator& instance();
+    ConditionEvaluator() = default;
 
-    // Register a custom condition type
+    // Factory: create default instance with all builtins registered
+    static std::shared_ptr<ConditionEvaluator> create_default();
+
+    // Register all built-in condition types and checks (public, callable from tests)
+    void register_all_builtins();
+
+    // Register custom condition/check (thread-safe)
     void register_condition(const std::string& type, ConditionEvalFn fn);
+    void register_check(const std::string& name, CheckEvalFn fn);
 
-    // Evaluate a single condition
+    // Evaluate (const, thread-safe)
     ConditionResult evaluate(const ConditionDef& cond,
                              const PipelineState& state,
                              pqxx::connection& conn) const;
 
-    // Evaluate a condition group (with AND/OR logic)
     ConditionEvalSummary evaluate_group(const ConditionGroup& group,
                                         const PipelineState& state,
                                         pqxx::connection& conn,
                                         const std::string& phase_key) const;
 
+    // Query registered types (for validation and debugging)
+    std::vector<std::string> list_condition_types() const;
+    std::vector<std::string> list_check_names() const;
+
+    // Statistics
+    struct Stats {
+        std::atomic<uint64_t> total_evaluations{0};
+        std::atomic<uint64_t> total_failures{0};
+        std::atomic<uint64_t> total_errors{0};
+        mutable std::chrono::steady_clock::time_point last_eval_time{};
+    };
+    const Stats& stats() const { return stats_; }
+
 private:
-    ConditionEvaluator();
-    void register_builtins();
+    mutable std::shared_mutex registry_mutex_;
     std::map<std::string, ConditionEvalFn> registry_;
+    std::map<std::string, CheckEvalFn> check_registry_;
+    mutable Stats stats_;
 };
 
-// ─── 9 built-in condition evaluation functions ───
+// ─── 12 built-in condition evaluation function declarations ───
 
-// "entity_count" — SELECT COUNT(*) FROM {entity} WHERE world_id=$1 [AND kind=$2]
 ConditionResult eval_entity_count(const ConditionDef& cond,
                                   const PipelineState& state,
                                   pqxx::connection& conn);
 
-// "all_characters_have_cards" — all 'individual' agents have character_cards
 ConditionResult eval_all_characters_have_cards(const ConditionDef& cond,
                                                const PipelineState& state,
                                                pqxx::connection& conn);
 
-// "world_has_rule_system" — world_knowledge has category='rules' entries
 ConditionResult eval_world_has_rule_system(const ConditionDef& cond,
                                            const PipelineState& state,
                                            pqxx::connection& conn);
 
-// "scene_count_in_chapter" — scenes in active_chapter >= $total_scenes_target
 ConditionResult eval_scene_count_in_chapter(const ConditionDef& cond,
                                             const PipelineState& state,
                                             pqxx::connection& conn);
 
-// "all_scenes_ended" — all scenes in active_chapter are completed + have diary
 ConditionResult eval_all_scenes_ended(const ConditionDef& cond,
                                       const PipelineState& state,
                                       pqxx::connection& conn);
 
-// "all_checks_passed" — run named check items
 ConditionResult eval_all_checks_passed(const ConditionDef& cond,
                                        const PipelineState& state,
                                        pqxx::connection& conn);
 
-// "has_more_chapters" — are there draft/planned chapters remaining in the arc?
 ConditionResult eval_has_more_chapters(const ConditionDef& cond,
                                        const PipelineState& state,
                                        pqxx::connection& conn);
 
-// "user_confirmed" — checks pipeline_states.user_confirm flag
 ConditionResult eval_user_confirmed(const ConditionDef& cond,
                                     const PipelineState& state,
                                     pqxx::connection& conn);
 
-// "custom_sql" — execute arbitrary SQL, compare result with target_int
-ConditionResult eval_custom_sql(const ConditionDef& cond,
-                                const PipelineState& state,
-                                pqxx::connection& conn);
+ConditionResult eval_diary_completeness(const ConditionDef& cond,
+                                         const PipelineState& state,
+                                         pqxx::connection& conn);
+
+ConditionResult eval_relation_currency(const ConditionDef& cond,
+                                        const PipelineState& state,
+                                        pqxx::connection& conn);
+
+ConditionResult eval_orphaned_foreshadowing(const ConditionDef& cond,
+                                              const PipelineState& state,
+                                              pqxx::connection& conn);
+
+ConditionResult eval_scene_completeness(const ConditionDef& cond,
+                                         const PipelineState& state,
+                                         pqxx::connection& conn);
+
+ConditionResult eval_character_consistency(const ConditionDef& cond,
+                                            const PipelineState& state,
+                                            pqxx::connection& conn);
+
+ConditionResult eval_plot_coherence(const ConditionDef& cond,
+                                     const PipelineState& state,
+                                     pqxx::connection& conn);
+
+ConditionResult eval_foreshadow_management(const ConditionDef& cond,
+                                            const PipelineState& state,
+                                            pqxx::connection& conn);
+
+ConditionResult eval_pacing(const ConditionDef& cond,
+                             const PipelineState& state,
+                             pqxx::connection& conn);
+
+// Keyword extraction utility
+std::vector<std::string> extract_significant_keywords(const std::string& text);
 
 } // namespace merak::worldbuilding
