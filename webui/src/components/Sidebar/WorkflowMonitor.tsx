@@ -29,11 +29,13 @@ export default function WorkflowMonitor() {
   }, []);
 
   const handleWorkflowChange = async (name: string) => {
+    const prev = selectedWorkflow;
     setSelectedWorkflow(name);
     try {
       await activatePipelineWorkflow(state.worldId!, name);
       dispatch({ type: 'PIPELINE_WORKFLOW_ACTIVATED', name });
     } catch (err) {
+      setSelectedWorkflow(prev);
       alert(`Failed to activate workflow: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
