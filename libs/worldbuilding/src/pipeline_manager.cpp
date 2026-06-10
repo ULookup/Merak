@@ -268,7 +268,7 @@ void PipelineManager::ensure_tables() {
         txn.exec(R"(
             CREATE TABLE IF NOT EXISTS pipeline_states (
                 id              SERIAL PRIMARY KEY,
-                world_id        VARCHAR(64) NOT NULL UNIQUE REFERENCES worlds(id) ON DELETE CASCADE,
+                world_id        VARCHAR(64) NOT NULL UNIQUE,
                 active_workflow VARCHAR(128) NOT NULL DEFAULT 'default_creative_pipeline',
                 state_json      JSONB NOT NULL,
                 auto_advance    BOOLEAN NOT NULL DEFAULT true,
@@ -281,8 +281,8 @@ void PipelineManager::ensure_tables() {
 
         txn.exec(R"(
             CREATE TABLE IF NOT EXISTS pipeline_history (
-                id              SERIAL PRIMARY KEY,
-                world_id        VARCHAR(64) NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+                id              VARCHAR(64) PRIMARY KEY,
+                world_id        VARCHAR(64) NOT NULL,
                 from_phase      VARCHAR(32) NOT NULL,
                 to_phase        VARCHAR(32) NOT NULL,
                 trigger_type    VARCHAR(32) NOT NULL DEFAULT 'auto',
@@ -293,8 +293,12 @@ void PipelineManager::ensure_tables() {
         )");
 
         txn.exec(R"(
-            CREATE INDEX IF NOT EXISTS idx_pipeline_history_world_time
-                ON pipeline_history(world_id, created_at DESC)
+            CREATE INDEX IF NOT EXISTS idx_pipeline_history_created_at
+                ON pipeline_history(created_at)
+        )");
+        txn.exec(R"(
+            CREATE INDEX IF NOT EXISTS idx_pipeline_history_world_id
+                ON pipeline_history(world_id)
         )");
 
         // Trigger for updated_at
@@ -529,10 +533,10 @@ void PipelineManager::record_transition(const PhaseTransitionRecord& record) {
         nlohmann::json conditions_json;
         to_json(conditions_json, record.conditions_at_transition);
         txn.exec_params0(R"(
-            INSERT INTO pipeline_history (world_id, from_phase, to_phase, trigger_type,
+            INSERT INTO pipeline_history (id, world_id, from_phase, to_phase, trigger_type,
                                            triggered_by, conditions_json)
-            VALUES ($1, $2, $3, $4, $5, $6)
-        )", record.world_id, to_string(record.from_phase), to_string(record.to_phase),
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        )", record.id, record.world_id, to_string(record.from_phase), to_string(record.to_phase),
            record.trigger, record.triggered_by.value_or(""), conditions_json.dump());
         txn.commit();
     } catch (const std::exception& e) {
