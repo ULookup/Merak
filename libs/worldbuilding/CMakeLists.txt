@@ -60,6 +60,7 @@ target_link_libraries(test_creation_flow PRIVATE
 add_executable(pipeline_tests
     tests/test_condition_evaluator.cpp
     tests/test_pipeline_manager.cpp
+    tests/test_pipeline_validation.cpp
 )
 target_link_libraries(pipeline_tests PRIVATE
     merak-worldbuilding
