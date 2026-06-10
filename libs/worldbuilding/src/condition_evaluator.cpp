@@ -92,7 +92,6 @@ void ConditionEvaluator::register_all_builtins() {
     registry_["world_has_rule_system"] = eval_world_has_rule_system;
     registry_["scene_count_in_chapter"] = eval_scene_count_in_chapter;
     registry_["all_scenes_ended"] = eval_all_scenes_ended;
-    registry_["all_checks_passed"] = eval_all_checks_passed;
     registry_["has_more_chapters"] = eval_has_more_chapters;
     registry_["user_confirmed"] = eval_user_confirmed;
     registry_["diary_completeness"] = eval_diary_completeness;
@@ -138,6 +137,39 @@ ConditionResult ConditionEvaluator::evaluate(const ConditionDef& cond,
                                               const PipelineState& state,
                                               pqxx::connection& conn) const {
     stats_.total_evaluations++;
+
+    // all_checks_passed: expand via check_registry_ directly
+    if (cond.type == "all_checks_passed") {
+        ConditionResult result{cond.message, true, std::nullopt, std::nullopt, {}};
+        nlohmann::json check_results = nlohmann::json::array();
+
+        if (!cond.checks || cond.checks->empty()) return result;
+
+        std::shared_lock lock(registry_mutex_);
+        for (auto& check_name : *cond.checks) {
+            auto it = check_registry_.find(check_name);
+            if (it == check_registry_.end()) {
+                check_results.push_back({
+                    {"name", check_name}, {"passed", false},
+                    {"error", "unknown check: " + check_name}
+                });
+                result.met = false;
+                continue;
+            }
+            auto sub_result = it->second(cond, state, conn);
+            check_results.push_back({
+                {"name", check_name}, {"passed", sub_result.met},
+                {"current", sub_result.current}, {"target", sub_result.target}
+            });
+            if (!sub_result.met) result.met = false;
+        }
+
+        result.extra["checks"] = check_results;
+        result.current = static_cast<int>(cond.checks->size());
+        result.target = static_cast<int>(cond.checks->size());
+        if (!result.met) stats_.total_failures++;
+        return result;
+    }
 
     ConditionEvalFn fn;
     {
@@ -358,34 +390,6 @@ ConditionResult eval_all_scenes_ended(const ConditionDef& cond,
         spdlog::error("eval_all_scenes_ended: {}", e.what());
         result.extra["error"] = e.what();
     }
-    return result;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// eval_all_checks_passed — rewired via check_registry_ dispatch
-// ═══════════════════════════════════════════════════════════════
-ConditionResult eval_all_checks_passed(const ConditionDef& cond,
-                                        const PipelineState& state,
-                                        pqxx::connection& conn) {
-    ConditionResult result{cond.message, true, std::nullopt, std::nullopt, {}};
-    if (!cond.checks || cond.checks->empty()) return result;
-
-    // eval_all_checks_passed is a freestanding function without access to
-    // check_registry_. For now, it reports that checks require pipeline manager
-    // context to evaluate. The PipelineManager will handle all_checks_passed
-    // expansion directly using its injected ConditionEvaluator instance.
-    nlohmann::json check_results = nlohmann::json::array();
-    for (auto& check_name : *cond.checks) {
-        check_results.push_back({
-            {"name", check_name},
-            {"passed", false},
-            {"error", "all_checks_passed requires pipeline manager context"}
-        });
-    }
-    result.extra["checks"] = check_results;
-    result.current = 0;
-    result.target = static_cast<int>(cond.checks->size());
-    result.met = false;
     return result;
 }
 

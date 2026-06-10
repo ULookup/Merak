@@ -87,10 +87,6 @@ ConditionResult eval_all_scenes_ended(const ConditionDef& cond,
                                       const PipelineState& state,
                                       pqxx::connection& conn);
 
-ConditionResult eval_all_checks_passed(const ConditionDef& cond,
-                                       const PipelineState& state,
-                                       pqxx::connection& conn);
-
 ConditionResult eval_has_more_chapters(const ConditionDef& cond,
                                        const PipelineState& state,
                                        pqxx::connection& conn);
