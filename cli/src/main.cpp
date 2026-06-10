@@ -8,6 +8,8 @@
 #include <merak/portable_pg.hpp>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
+#include <merak/worldbuilding/pipeline_manager.hpp>
+#include <pqxx/pqxx>
 #include <merak/worldbuilding_http_handler.hpp>
 #include <merak/tool_catalog.hpp>
 #include <merak/tool_search_tool.hpp>
@@ -194,6 +196,23 @@ static int run_server(int argc,char**argv) {
     };
     auto runtime=std::make_shared<RuntimeService>(merak_home(),factory,cfg.agent.sub_agents,sub_executor);runtime->initialize();
     if (wb_service) runtime->set_worldbuilding_service(wb_service.get());
+    // Initialize PipelineManager
+    std::shared_ptr<merak::worldbuilding::PipelineManager> pipeline_mgr;
+    if (wb_service && !cfg.memory.db_connection.empty()) {
+        pipeline_mgr = std::make_shared<merak::worldbuilding::PipelineManager>(
+            merak::worldbuilding::PipelineManager::Dependencies{
+                .pg_connection_factory = [db_connection = cfg.memory.db_connection]() -> std::shared_ptr<pqxx::connection> {
+                    return std::make_shared<pqxx::connection>(db_connection);
+                },
+                .event_emitter = [&runtime](const merak::RuntimeEvent& e) {
+                    runtime->emit_event(e.session_id, e.run_id, e.type, e.payload);
+                },
+                .pipeline_config_dir = merak_home() / "pipelines",
+            }
+        );
+        pipeline_mgr->initialize();
+        runtime->set_pipeline_manager(pipeline_mgr);
+    }
     RuntimeMetadata metadata;
     metadata.provider = cfg.llm.provider;
     metadata.model = cfg.llm.default_model;
@@ -219,6 +238,7 @@ static int run_server(int argc,char**argv) {
     std::shared_ptr<WorldbuildingHttpHandler> wb_handler;
     if (wb_service) {
         wb_handler = std::make_shared<WorldbuildingHttpHandler>(wb_service, runtime);
+        if (pipeline_mgr) wb_handler->set_pipeline_manager(pipeline_mgr);
         wb_handler->install_routes(server.raw_server());
     }
     auto port=parse_port(argc,argv);std::cout<<"merak serve listening on 127.0.0.1:"<<port<<"\n";server.listen(port);return 0;
