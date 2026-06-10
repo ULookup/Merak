@@ -56,7 +56,9 @@ const std::set<std::string> PipelineManager::RELEVANT_EVENTS = {
     "world_time_advanced", "memory_summary_created"
 };
 
-PipelineManager::PipelineManager(Dependencies deps) : deps_(std::move(deps)) {}
+PipelineManager::PipelineManager(Dependencies deps) : deps_(std::move(deps)) {
+    start_time_ = std::chrono::steady_clock::now();
+}
 PipelineManager::~PipelineManager() = default;
 
 std::string PipelineManager::advance_result_to_string(AdvanceResult r) {
@@ -522,15 +524,15 @@ ConditionEvalSummary PipelineManager::evaluate_phase_conditions(
     if (!phase_def || !phase_def->advance_when) return {};
 
     auto conn = deps_.pg_connection_factory();
-    return ConditionEvaluator::instance()
-        .evaluate_group(*phase_def->advance_when, state, *conn,
+    return deps_.condition_evaluator
+        ->evaluate_group(*phase_def->advance_when, state, *conn,
                         to_string(state.current_phase));
 }
 
 ConditionResult PipelineManager::evaluate_single_condition(
     const ConditionDef& cond, const PipelineState& state) const {
     auto conn = deps_.pg_connection_factory();
-    return ConditionEvaluator::instance().evaluate(cond, state, *conn);
+    return deps_.condition_evaluator->evaluate(cond, state, *conn);
 }
 
 // ─── Context Injection ───
@@ -607,7 +609,7 @@ void PipelineManager::execute_actions(const std::vector<ActionDef>& actions,
             cond.type = condition_type;
             cond.message = "conditional action check";
             auto conn = deps_.pg_connection_factory();
-            auto result = ConditionEvaluator::instance().evaluate(cond, state, *conn);
+            auto result = deps_.condition_evaluator->evaluate(cond, state, *conn);
             if (result.met && action.params.contains("then")) {
                 ActionDef then_action;
                 then_action.type = action.params["then"].value("type", "");
@@ -708,6 +710,145 @@ void PipelineManager::restore_from_snapshot(const std::string& world_id,
         spdlog::info("PipelineManager: restored state from snapshot for world {}", world_id);
     } catch (const std::exception& e) {
         spdlog::error("PipelineManager: failed to restore from snapshot: {}", e.what());
+    }
+}
+
+// ─── Loop Condition Evaluation ───
+bool PipelineManager::evaluate_loop_condition(const AutoLoopDef& loop,
+                                               const PipelineState& state) const {
+    const std::string& expr = loop.continue_while;
+    if (expr.empty()) return false;
+
+    // Parse expression: "field op value"
+    // Supported fields: scene_count, total_scenes_target, chapter_count,
+    //                   total_chapters_target, cycle_count
+    // Supported ops: <, >, <=, >=, ==, !=
+    // Value can be a field name or an integer literal
+
+    auto resolve = [&](const std::string& token) -> std::optional<int> {
+        if (token == "scene_count") return state.scene_count_in_chapter;
+        if (token == "total_scenes_target") return state.total_scenes_target;
+        if (token == "chapter_count") return state.chapter_count;
+        if (token == "total_chapters_target") return state.total_chapters_target;
+        if (token == "cycle_count") return state.cycle_count;
+        // Try integer literal
+        try {
+            return std::stoi(token);
+        } catch (...) {
+            return std::nullopt;
+        }
+    };
+
+    // Split by whitespace into tokens
+    std::vector<std::string> tokens;
+    std::istringstream iss(expr);
+    std::string tok;
+    while (iss >> tok) tokens.push_back(tok);
+
+    if (tokens.size() < 3) return false;
+
+    auto lhs = resolve(tokens[0]);
+    std::string op = tokens[1];
+
+    // Handle potential two-char operators (>=, <=, !=, ==)
+    std::string rhs_str;
+    if (tokens.size() >= 3) {
+        rhs_str = tokens[2];
+    } else {
+        return false;
+    }
+
+    auto rhs = resolve(rhs_str);
+    if (!lhs || !rhs) return false;
+
+    if (op == "<")  return *lhs < *rhs;
+    if (op == ">")  return *lhs > *rhs;
+    if (op == "<=") return *lhs <= *rhs;
+    if (op == ">=") return *lhs >= *rhs;
+    if (op == "==") return *lhs == *rhs;
+    if (op == "!=") return *lhs != *rhs;
+
+    return false;
+}
+
+// ─── Advance Failure Handling ───
+void PipelineManager::handle_advance_failure(const std::string& world_id,
+                                              const PipelineState& state,
+                                              AdvanceResult result) {
+    // Store last_error in state.extra
+    auto mutable_state = state;
+    mutable_state.extra["last_error"] = {
+        {"result", advance_result_to_string(result)},
+        {"timestamp", current_iso_timestamp()}
+    };
+
+    // Update cache and persist
+    save_state(mutable_state);
+
+    // Emit SSE event
+    if (deps_.event_emitter) {
+        RuntimeEvent event;
+        event.type = "pipeline_advance_failed";
+        event.payload = {
+            {"world_id", world_id},
+            {"phase", to_string(state.current_phase)},
+            {"result", advance_result_to_string(result)}
+        };
+        deps_.event_emitter(event);
+    }
+}
+
+void PipelineManager::clear_last_error(const std::string& world_id) {
+    auto state_opt = get_state(world_id);
+    if (!state_opt) return;
+
+    auto state = *state_opt;
+    if (state.extra.contains("last_error")) {
+        state.extra.erase("last_error");
+        save_state(state);
+    }
+}
+
+// ─── Metrics ───
+PipelineManager::PipelineMetrics PipelineManager::get_metrics() const {
+    PipelineMetrics m{};
+    m.start_time = start_time_;
+
+    {
+        std::shared_lock lock(state_mutex_);
+        m.active_states = state_cache_.size();
+    }
+
+    if (deps_.condition_evaluator) {
+        const auto& stats = deps_.condition_evaluator->stats();
+        m.total_evaluations = stats.total_evaluations.load();
+        m.total_failures = stats.total_failures.load();
+        m.total_errors = stats.total_errors.load();
+        m.last_eval_time = stats.last_eval_time;
+    }
+
+    // Count transitions from DB history table
+    try {
+        auto conn = deps_.pg_connection_factory();
+        pqxx::work txn(*conn);
+        auto row = txn.exec1("SELECT COUNT(*) FROM pipeline_history");
+        m.total_transitions = row[0].as<size_t>();
+    } catch (...) {
+        m.total_transitions = 0;
+    }
+
+    return m;
+}
+
+// ─── History Maintenance ───
+void PipelineManager::prune_old_history() {
+    try {
+        auto conn = deps_.pg_connection_factory();
+        pqxx::work txn(*conn);
+        txn.exec("DELETE FROM pipeline_history WHERE created_at < NOW() - INTERVAL '30 days'");
+        txn.commit();
+    } catch (const std::exception& e) {
+        spdlog::warn("PipelineManager: failed to prune history: {}", e.what());
     }
 }
 
