@@ -89,6 +89,7 @@ export interface AppState {
     nextPhase: string;
     conditions: ConditionState[];
   } | null;
+  pipelineCycleComplete: { message: string } | null;
 }
 
 export const initialState: AppState = {
@@ -146,6 +147,7 @@ export const initialState: AppState = {
   pipelineAllowedRetreat: [],
   pipelineAutoAdvance: true,
   showPhaseAdvancePrompt: null,
+  pipelineCycleComplete: null,
 };
 
 let nextId = 1;
@@ -804,13 +806,12 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       };
 
     case 'pipeline_cycle_complete':
-      return reducer(state, {
-        type: 'ADD_TOAST',
-        toast: {
-          type: 'success',
+      return {
+        ...state,
+        pipelineCycleComplete: {
           message: (p.message as string) || '创作管线全周期完成',
         },
-      });
+      };
 
     case 'world_switched':
       return reducer(state, { type: 'SET_WORLD', worldId: (p.world_id as string) ?? null });
