@@ -124,12 +124,14 @@ private:
     // Loaded workflow definitions: name → def
     std::map<std::string, PipelineWorkflowDef> workflow_defs_;
 
-    // Active workflow per world: world_id → workflow_name
-    std::map<std::string, std::string> active_workflows_;
+    // Unified world state (single lock, atomic read/write)
+    struct WorldEntry {
+        PipelineState state;
+        std::string workflow_name;
+    };
 
-    // In-memory state cache: world_id → PipelineState
-    mutable std::shared_mutex state_mutex_;
-    std::map<std::string, PipelineState> state_cache_;
+    mutable std::shared_mutex world_mutex_;
+    std::map<std::string, WorldEntry> worlds_;
 
     // Debounce: prevent repeated condition evaluation within 2 seconds
     mutable std::mutex debounce_mutex_;
@@ -151,7 +153,6 @@ private:
     bool is_transition_allowed(CreativePhase from, CreativePhase to,
                                const PhaseDefinition* phase_def) const;
 
-    std::shared_ptr<ConditionEvaluator> condition_evaluator_;
     std::atomic<int> advance_depth_{0};
     static constexpr int MAX_ADVANCE_DEPTH = 32;
     std::chrono::steady_clock::time_point start_time_;
