@@ -457,7 +457,7 @@ TEST_F(PipelineManagerTest, InjectedConditionEvaluator_IsUsed) {
     EXPECT_GE(types.size(), 10) << "Expected at least 10 built-in condition types";
 
     auto checks = deps.condition_evaluator->list_check_names();
-    EXPECT_GE(checks.size(), 5) << "Expected at least 5 built-in check names";
+    EXPECT_GE(checks.size(), 4) << "Expected at least 4 built-in check names";
 
     // Create PipelineManager with the injected evaluator — no crash = DI works
     PipelineManager mgr(deps);

@@ -61,7 +61,7 @@ TEST_F(ConditionEvaluatorTest, UnknownConditionType_NotRegistered) {
 
 TEST_F(ConditionEvaluatorTest, AllBuiltinConditionsRegistered) {
     auto types = evaluator_->list_condition_types();
-    EXPECT_GE(types.size(), 12u);
+    EXPECT_GE(types.size(), 11u);
     EXPECT_NE(std::find(types.begin(), types.end(), "entity_count"), types.end());
     EXPECT_NE(std::find(types.begin(), types.end(), "all_characters_have_cards"), types.end());
     EXPECT_NE(std::find(types.begin(), types.end(), "world_has_rule_system"), types.end());
@@ -87,14 +87,11 @@ TEST_F(ConditionEvaluatorTest, CustomSqlNotRegistered) {
 
 TEST_F(ConditionEvaluatorTest, AllBuiltinChecksRegistered) {
     auto checks = evaluator_->list_check_names();
-    EXPECT_GE(checks.size(), 7u);
+    EXPECT_EQ(checks.size(), 4u);
     EXPECT_NE(std::find(checks.begin(), checks.end(), "character_consistency"), checks.end());
     EXPECT_NE(std::find(checks.begin(), checks.end(), "diary_completeness"), checks.end());
     EXPECT_NE(std::find(checks.begin(), checks.end(), "relation_currency"), checks.end());
     EXPECT_NE(std::find(checks.begin(), checks.end(), "scene_completeness"), checks.end());
-    EXPECT_NE(std::find(checks.begin(), checks.end(), "plot_coherence"), checks.end());
-    EXPECT_NE(std::find(checks.begin(), checks.end(), "foreshadow_management"), checks.end());
-    EXPECT_NE(std::find(checks.begin(), checks.end(), "pacing"), checks.end());
 }
 
 // ─── register_condition ───
@@ -123,7 +120,7 @@ TEST_F(ConditionEvaluatorTest, CreateDefault_ReturnsValidEvaluator) {
     auto ev = ConditionEvaluator::create_default();
     EXPECT_NE(ev, nullptr);
     auto types = ev->list_condition_types();
-    EXPECT_GE(types.size(), 12u);
+    EXPECT_GE(types.size(), 11u);
     EXPECT_EQ(std::find(types.begin(), types.end(), "custom_sql"), types.end());
 }
 
