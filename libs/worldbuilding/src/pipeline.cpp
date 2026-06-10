@@ -1,4 +1,5 @@
 #include <merak/worldbuilding/pipeline.hpp>
+#include <nlohmann/json.hpp>
 
 namespace merak::worldbuilding {
 
@@ -124,6 +125,50 @@ std::string generate_phase_context(const PipelineState& state) {
         }
     }
     return "";
+}
+
+void to_json(nlohmann::json& j, const PipelineState& s) {
+    j = {
+        {"world_id", s.world_id},
+        {"current_phase", to_string(s.current_phase)},
+        {"last_updated", s.last_updated},
+        {"active_workflow", s.active_workflow},
+        {"chapter_count", s.chapter_count},
+        {"total_chapters_target", s.total_chapters_target},
+        {"is_cycle_complete", s.is_cycle_complete},
+        {"cycle_count", s.cycle_count},
+        {"extra", s.extra}
+    };
+    if (s.active_arc_id) j["active_arc_id"] = *s.active_arc_id;
+    if (s.active_chapter_id) j["active_chapter_id"] = *s.active_chapter_id;
+    if (s.active_scene_id) j["active_scene_id"] = *s.active_scene_id;
+    j["scene_count_in_chapter"] = s.scene_count_in_chapter;
+    j["total_scenes_target"] = s.total_scenes_target;
+    j["needs_diary_update"] = s.needs_diary_update;
+    j["needs_character_update"] = s.needs_character_update;
+}
+
+void from_json(const nlohmann::json& j, PipelineState& s) {
+    j.at("world_id").get_to(s.world_id);
+    s.current_phase = creative_phase_from_string(j.at("current_phase").get<std::string>())
+                          .value_or(CreativePhase::Worldbuilding);
+    if (j.contains("active_arc_id") && !j.at("active_arc_id").is_null())
+        s.active_arc_id = j.at("active_arc_id").get<std::string>();
+    if (j.contains("active_chapter_id") && !j.at("active_chapter_id").is_null())
+        s.active_chapter_id = j.at("active_chapter_id").get<std::string>();
+    if (j.contains("active_scene_id") && !j.at("active_scene_id").is_null())
+        s.active_scene_id = j.at("active_scene_id").get<std::string>();
+    s.scene_count_in_chapter = j.value("scene_count_in_chapter", 0);
+    s.total_scenes_target = j.value("total_scenes_target", 0);
+    s.needs_diary_update = j.value("needs_diary_update", false);
+    s.needs_character_update = j.value("needs_character_update", false);
+    j.at("last_updated").get_to(s.last_updated);
+    s.active_workflow = j.value("active_workflow", "");
+    s.chapter_count = j.value("chapter_count", 0);
+    s.total_chapters_target = j.value("total_chapters_target", 0);
+    s.is_cycle_complete = j.value("is_cycle_complete", false);
+    s.cycle_count = j.value("cycle_count", 0);
+    if (j.contains("extra")) s.extra = j.at("extra");
 }
 
 } // namespace merak::worldbuilding

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <vector>
@@ -50,6 +51,14 @@ struct PipelineState {
     bool needs_diary_update = false;
     bool needs_character_update = false;
     std::string last_updated;
+
+    // ═══ New fields (PipelineManager engine) ═══
+    std::string active_workflow;
+    int chapter_count = 0;
+    int total_chapters_target = 0;
+    bool is_cycle_complete = false;
+    int cycle_count = 0;
+    nlohmann::json extra;
 };
 
 // Phase transition rules
@@ -57,5 +66,9 @@ std::vector<CreativePhase> allowed_next_phases(CreativePhase current);
 
 // Generate phase guidance context for injection into system prompt
 std::string generate_phase_context(const PipelineState& state);
+
+// JSON serialization for PostgreSQL JSONB persistence
+void to_json(nlohmann::json& j, const PipelineState& s);
+void from_json(const nlohmann::json& j, PipelineState& s);
 
 } // namespace merak::worldbuilding
