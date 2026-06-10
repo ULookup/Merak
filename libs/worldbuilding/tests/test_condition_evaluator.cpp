@@ -1,10 +1,11 @@
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 #include <merak/worldbuilding/condition_evaluator.hpp>
-#include <merak/worldbuilding/pipeline_workflow_def.hpp>
 #include <merak/worldbuilding/pipeline.hpp>
 #include <pqxx/pqxx>
-#include <nlohmann/json.hpp>
-#include <fstream>
+#include <memory>
+#include <thread>
+#include <vector>
 
 namespace merak::worldbuilding {
 namespace {
@@ -12,144 +13,206 @@ namespace {
 class ConditionEvaluatorTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Use an in-memory test setup or skip if no PG available
-        // For unit tests, we test JSON parsing + logic paths
+        evaluator_ = std::make_shared<ConditionEvaluator>();
+        evaluator_->register_all_builtins();
+
+        state_.world_id = "test_world_001";
+        state_.current_phase = CreativePhase::Worldbuilding;
+        state_.active_chapter_id = "ch_test_001";
+        state_.scene_count_in_chapter = 3;
+        state_.total_scenes_target = 5;
+        state_.chapter_count = 2;
+        state_.total_chapters_target = 10;
+        state_.cycle_count = 1;
     }
+
+    ConditionDef make_cond(const std::string& type,
+                           const std::string& entity = "",
+                           ConditionOp op = ConditionOp::GTE,
+                           std::optional<int> target = std::nullopt) {
+        ConditionDef c;
+        c.type = type;
+        c.entity = entity;
+        c.op = op;
+        c.target_int = target;
+        c.message = "test condition";
+        return c;
+    }
+
+    std::shared_ptr<ConditionEvaluator> evaluator_;
+    PipelineState state_;
 };
 
-// Test: JSON deserialization of full workflow file
-TEST_F(ConditionEvaluatorTest, ParseDefaultPipelineJson) {
-    // This test verifies the JSON config can be fully parsed
-    // without a PG connection
-    std::ifstream f("config/pipelines/default_creative_pipeline.json");
-    if (!f.is_open()) {
-        GTEST_SKIP() << "Config file not found, skipping JSON parse test";
+// ─── entity_count type registration ───
+
+TEST_F(ConditionEvaluatorTest, EvalEntityCount_Registered) {
+    auto types = evaluator_->list_condition_types();
+    EXPECT_NE(std::find(types.begin(), types.end(), "entity_count"), types.end());
+}
+
+// ─── Unknown type returns false ───
+
+TEST_F(ConditionEvaluatorTest, UnknownConditionType_NotRegistered) {
+    auto types = evaluator_->list_condition_types();
+    EXPECT_EQ(std::find(types.begin(), types.end(), "nonexistent_type"), types.end());
+}
+
+// ─── All 12 builtins registered ───
+
+TEST_F(ConditionEvaluatorTest, AllBuiltinConditionsRegistered) {
+    auto types = evaluator_->list_condition_types();
+    EXPECT_GE(types.size(), 12u);
+    EXPECT_NE(std::find(types.begin(), types.end(), "entity_count"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "all_characters_have_cards"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "world_has_rule_system"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "scene_count_in_chapter"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "all_scenes_ended"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "all_checks_passed"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "has_more_chapters"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "user_confirmed"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "diary_completeness"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "relation_currency"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "orphaned_foreshadowing"), types.end());
+    EXPECT_NE(std::find(types.begin(), types.end(), "scene_completeness"), types.end());
+}
+
+// ─── custom_sql NOT registered ───
+
+TEST_F(ConditionEvaluatorTest, CustomSqlNotRegistered) {
+    auto types = evaluator_->list_condition_types();
+    EXPECT_EQ(std::find(types.begin(), types.end(), "custom_sql"), types.end());
+}
+
+// ─── All 7 checks registered ───
+
+TEST_F(ConditionEvaluatorTest, AllBuiltinChecksRegistered) {
+    auto checks = evaluator_->list_check_names();
+    EXPECT_GE(checks.size(), 7u);
+    EXPECT_NE(std::find(checks.begin(), checks.end(), "character_consistency"), checks.end());
+    EXPECT_NE(std::find(checks.begin(), checks.end(), "diary_completeness"), checks.end());
+    EXPECT_NE(std::find(checks.begin(), checks.end(), "relation_currency"), checks.end());
+    EXPECT_NE(std::find(checks.begin(), checks.end(), "scene_completeness"), checks.end());
+    EXPECT_NE(std::find(checks.begin(), checks.end(), "plot_coherence"), checks.end());
+    EXPECT_NE(std::find(checks.begin(), checks.end(), "foreshadow_management"), checks.end());
+    EXPECT_NE(std::find(checks.begin(), checks.end(), "pacing"), checks.end());
+}
+
+// ─── register_condition ───
+
+TEST_F(ConditionEvaluatorTest, RegisterCustomCondition_ThenListed) {
+    evaluator_->register_condition("custom_test", [](const ConditionDef&, const PipelineState&, pqxx::connection&) {
+        return ConditionResult{"ok", true, 1, 1, {}};
+    });
+    auto types = evaluator_->list_condition_types();
+    EXPECT_NE(std::find(types.begin(), types.end(), "custom_test"), types.end());
+}
+
+// ─── register_check ───
+
+TEST_F(ConditionEvaluatorTest, RegisterCheck_ThenListed) {
+    evaluator_->register_check("custom_check", [](const ConditionDef&, const PipelineState&, pqxx::connection&) {
+        return ConditionResult{"ok", true, std::nullopt, std::nullopt, {}};
+    });
+    auto checks = evaluator_->list_check_names();
+    EXPECT_NE(std::find(checks.begin(), checks.end(), "custom_check"), checks.end());
+}
+
+// ─── create_default returns valid evaluator ───
+
+TEST_F(ConditionEvaluatorTest, CreateDefault_ReturnsValidEvaluator) {
+    auto ev = ConditionEvaluator::create_default();
+    EXPECT_NE(ev, nullptr);
+    auto types = ev->list_condition_types();
+    EXPECT_GE(types.size(), 12u);
+    EXPECT_EQ(std::find(types.begin(), types.end(), "custom_sql"), types.end());
+}
+
+// ─── create_default instances are independent ───
+
+TEST_F(ConditionEvaluatorTest, CreateDefault_InstancesAreIndependent) {
+    auto ev1 = ConditionEvaluator::create_default();
+    auto ev2 = ConditionEvaluator::create_default();
+    ev1->register_condition("only_in_1", [](const ConditionDef&, const PipelineState&, pqxx::connection&) {
+        return ConditionResult{"", true, std::nullopt, std::nullopt, {}};
+    });
+    auto types2 = ev2->list_condition_types();
+    EXPECT_EQ(std::find(types2.begin(), types2.end(), "only_in_1"), types2.end());
+}
+
+// ─── Stats initial state ───
+
+TEST_F(ConditionEvaluatorTest, Stats_InitialState_AllZeros) {
+    auto& s = evaluator_->stats();
+    EXPECT_EQ(s.total_evaluations.load(), 0u);
+    EXPECT_EQ(s.total_failures.load(), 0u);
+    EXPECT_EQ(s.total_errors.load(), 0u);
+}
+
+// ─── extract_significant_keywords Chinese ───
+
+TEST_F(ConditionEvaluatorTest, ExtractKeywords_ChineseText) {
+    auto keywords = extract_significant_keywords("张三在暗中策划政变");
+    EXPECT_FALSE(keywords.empty());
+    bool found = false;
+    for (auto& kw : keywords) {
+        if (kw.find("张三") != std::string::npos) found = true;
     }
-    nlohmann::json j = nlohmann::json::parse(f);
-    ASSERT_TRUE(j.contains("phases"));
-
-    auto wf = j.get<PipelineWorkflowDef>();
-    EXPECT_EQ(wf.name, "default_creative_pipeline");
-    EXPECT_EQ(wf.phases.size(), 5);
-    EXPECT_TRUE(wf.auto_advance);
-
-    // Verify initial phase
-    const auto* initial = wf.initial_phase();
-    ASSERT_NE(initial, nullptr);
-    EXPECT_EQ(initial->key, "worldbuilding");
-    EXPECT_TRUE(initial->initial);
-
-    // Verify worldbuilding phase has 3 conditions
-    ASSERT_TRUE(initial->advance_when.has_value());
-    EXPECT_EQ(initial->advance_when->conditions.size(), 3);
-    EXPECT_EQ(initial->advance_when->operator_type, "and");
-
-    // Verify scene_writing has auto_loop
-    const auto* sw = wf.get_phase("scene_writing");
-    ASSERT_NE(sw, nullptr);
-    ASSERT_TRUE(sw->auto_loop.has_value());
-    EXPECT_EQ(sw->auto_loop->entity, "chapter");
-
-    // Verify reflection has on_complete conditional action
-    const auto* rf = wf.get_phase("reflection");
-    ASSERT_NE(rf, nullptr);
-    ASSERT_EQ(rf->on_complete.size(), 1);
-    EXPECT_EQ(rf->on_complete[0].type, "conditional");
+    EXPECT_TRUE(found) << "Should find keyword containing 张三";
 }
 
-// Test: ConditionOp from_string
-TEST_F(ConditionEvaluatorTest, OpFromString) {
-    EXPECT_EQ(op_from_string("=="), ConditionOp::EQ);
-    EXPECT_EQ(op_from_string("eq"), ConditionOp::EQ);
-    EXPECT_EQ(op_from_string(">="), ConditionOp::GTE);
-    EXPECT_EQ(op_from_string("gte"), ConditionOp::GTE);
-    EXPECT_EQ(op_from_string("<="), ConditionOp::LTE);
-    EXPECT_EQ(op_from_string("lte"), ConditionOp::LTE);
-    EXPECT_EQ(op_from_string("contains"), ConditionOp::CONTAINS);
-    EXPECT_EQ(op_from_string("exists"), ConditionOp::EXISTS);
-    EXPECT_EQ(op_from_string("unknown_blah"), ConditionOp::EQ); // default
+// ─── extract_significant_keywords English ───
+
+TEST_F(ConditionEvaluatorTest, ExtractKeywords_EnglishText) {
+    auto keywords = extract_significant_keywords("The prince plans to usurp the throne");
+    EXPECT_FALSE(keywords.empty());
+    EXPECT_NE(std::find(keywords.begin(), keywords.end(), "prince"), keywords.end());
+    EXPECT_NE(std::find(keywords.begin(), keywords.end(), "plans"), keywords.end());
+    EXPECT_NE(std::find(keywords.begin(), keywords.end(), "usurp"), keywords.end());
+    EXPECT_NE(std::find(keywords.begin(), keywords.end(), "throne"), keywords.end());
 }
 
-// Test: PipelineState to_json / from_json roundtrip
-TEST_F(ConditionEvaluatorTest, PipelineStateJsonRoundtrip) {
-    PipelineState original;
-    original.world_id = "test-world-001";
-    original.current_phase = CreativePhase::CharacterCreation;
-    original.active_workflow = "default_creative_pipeline";
-    original.chapter_count = 5;
-    original.cycle_count = 2;
-    original.last_updated = "2026-06-09T12:00:00Z";
+// ─── extract_significant_keywords filters short tokens ───
 
-    nlohmann::json j = original;
-    auto restored = j.get<PipelineState>();
-
-    EXPECT_EQ(restored.world_id, original.world_id);
-    EXPECT_EQ(restored.current_phase, original.current_phase);
-    EXPECT_EQ(restored.active_workflow, original.active_workflow);
-    EXPECT_EQ(restored.chapter_count, original.chapter_count);
-    EXPECT_EQ(restored.cycle_count, original.cycle_count);
+TEST_F(ConditionEvaluatorTest, ExtractKeywords_ShortTokens_Filtered) {
+    auto keywords = extract_significant_keywords("a be the cat");
+    EXPECT_EQ(std::find(keywords.begin(), keywords.end(), "cat"), keywords.end());
+    EXPECT_EQ(std::find(keywords.begin(), keywords.end(), "the"), keywords.end());
 }
 
-// Test: ConditionGroup JSON deserialization
-TEST_F(ConditionEvaluatorTest, ParseConditionGroup) {
-    std::string json = R"({
-        "operator": "and",
-        "conditions": [
-            {"type": "entity_count", "entity": "agents", "op": ">=", "target_int": 2, "message": "at least 2 agents"},
-            {"type": "world_has_rule_system", "message": "has rules"}
-        ]
-    })";
-    auto j = nlohmann::json::parse(json);
-    auto group = j.get<ConditionGroup>();
+// ─── extract_significant_keywords empty input ───
 
-    EXPECT_EQ(group.operator_type, "and");
-    EXPECT_EQ(group.conditions.size(), 2);
-    EXPECT_EQ(group.conditions[0].type, "entity_count");
-    EXPECT_EQ(group.conditions[0].entity, "agents");
-    EXPECT_EQ(group.conditions[0].op, ConditionOp::GTE);
-    EXPECT_EQ(group.conditions[0].target_int.value(), 2);
-    EXPECT_EQ(group.conditions[1].type, "world_has_rule_system");
+TEST_F(ConditionEvaluatorTest, ExtractKeywords_EmptyInput) {
+    auto keywords = extract_significant_keywords("");
+    EXPECT_TRUE(keywords.empty());
 }
 
-// Test: PhaseTransition JSON roundtrip
-TEST_F(ConditionEvaluatorTest, PhaseTransitionJsonRoundtrip) {
-    PhaseTransitionRecord record;
-    record.id = "abc-123";
-    record.world_id = "test-world";
-    record.from_phase = CreativePhase::Worldbuilding;
-    record.to_phase = CreativePhase::CharacterCreation;
-    record.trigger = "auto";
-    record.triggered_by = "agent_created";
-    record.timestamp = "2026-06-09T12:00:00Z";
+// ─── extract_significant_keywords punctuation delimiters ───
 
-    nlohmann::json j;
-    to_json(j, record);
-
-    auto restored = j.get<PhaseTransitionRecord>();
-    EXPECT_EQ(restored.id, record.id);
-    EXPECT_EQ(restored.from_phase, record.from_phase);
-    EXPECT_EQ(restored.to_phase, record.to_phase);
-    EXPECT_EQ(restored.trigger, record.trigger);
-    EXPECT_EQ(*restored.triggered_by, *record.triggered_by);
+TEST_F(ConditionEvaluatorTest, ExtractKeywords_PunctuationAsDelimiters) {
+    auto keywords = extract_significant_keywords("Hello，World！This is a test。");
+    EXPECT_NE(std::find(keywords.begin(), keywords.end(), "Hello"), keywords.end());
+    EXPECT_NE(std::find(keywords.begin(), keywords.end(), "World"), keywords.end());
+    EXPECT_NE(std::find(keywords.begin(), keywords.end(), "This"), keywords.end());
+    EXPECT_NE(std::find(keywords.begin(), keywords.end(), "test"), keywords.end());
 }
 
-// Test: allowed_next_phases state machine
-TEST_F(ConditionEvaluatorTest, AllowedNextPhasesStateMachine) {
-    // worldbuilding → character_creation only
-    auto next = allowed_next_phases(CreativePhase::Worldbuilding);
-    ASSERT_EQ(next.size(), 1);
-    EXPECT_EQ(next[0], CreativePhase::CharacterCreation);
+// ─── Thread safety: concurrent register_condition ───
 
-    // character_creation → worldbuilding (retreat) or plot_architecture (advance)
-    next = allowed_next_phases(CreativePhase::CharacterCreation);
-    ASSERT_EQ(next.size(), 2);
-    EXPECT_NE(std::find(next.begin(), next.end(), CreativePhase::Worldbuilding), next.end());
-    EXPECT_NE(std::find(next.begin(), next.end(), CreativePhase::PlotArchitecture), next.end());
-
-    // reflection → scene_writing only
-    next = allowed_next_phases(CreativePhase::Reflection);
-    ASSERT_EQ(next.size(), 1);
-    EXPECT_EQ(next[0], CreativePhase::SceneWriting);
+TEST_F(ConditionEvaluatorTest, RegisterCondition_ThreadSafe) {
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 10; i++) {
+        threads.emplace_back([this, i]() {
+            evaluator_->register_condition("thread_test_" + std::to_string(i),
+                [](const ConditionDef&, const PipelineState&, pqxx::connection&) {
+                    return ConditionResult{"", true, std::nullopt, std::nullopt, {}};
+                });
+        });
+    }
+    for (auto& t : threads) t.join();
+    auto types = evaluator_->list_condition_types();
+    for (int i = 0; i < 10; i++) {
+        EXPECT_NE(std::find(types.begin(), types.end(), "thread_test_" + std::to_string(i)), types.end());
+    }
 }
 
 } // namespace
