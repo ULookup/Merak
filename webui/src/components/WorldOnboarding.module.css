@@ -1,0 +1,163 @@
+.onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+  background: var(--color-bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 2.5rem 2rem;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: var(--color-text-primary);
+}
+
+.subtitle {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin: 0 0 2rem;
+}
+
+.field {
+  margin-bottom: 1.25rem;
+}
+
+.label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.375rem;
+}
+
+.input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.input:focus {
+  border-color: var(--color-accent);
+}
+
+.textarea {
+  composes: input;
+  min-height: 80px;
+  resize: vertical;
+}
+
+.toggleSection {
+  margin-bottom: 1.5rem;
+}
+
+.toggleBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.toggleBtn:hover {
+  text-decoration: underline;
+}
+
+.characterForm {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--color-bg);
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+}
+
+.submitBtn {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.submitBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error {
+  margin-top: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border-radius: 6px;
+  border: 1px solid var(--color-error-border);
+}
+
+.existingWorlds {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.existingTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.75rem;
+}
+
+.worldItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.75rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.worldItem:hover {
+  border-color: var(--color-accent);
+}
+
+.worldItemName {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.worldItemDesc {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.125rem;
+}

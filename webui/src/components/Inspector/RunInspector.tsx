@@ -79,6 +79,25 @@ export default function RunInspector() {
           </section>
 
           <section className={styles.section}>
+            <div className={styles.sectionTitle}>Available Tools</div>
+            {!state.metadata?.tools || state.metadata.tools.length === 0 ? (
+              <p className={styles.muted}>No tools loaded.</p>
+            ) : (
+              <div className={styles.toolList}>
+                {state.metadata.tools.map((tool) => (
+                  <div key={tool.name} className={styles.toolRow}>
+                    <span className={styles.toolSource}>
+                      {tool.source === 'mcp' ? '\u{1F50C}' : '\u{1F527}'}
+                    </span>
+                    <span className={styles.toolName}>{tool.name}</span>
+                    <span className={styles.toolBadge}>{tool.source ?? 'built-in'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className={styles.section}>
             <div className={styles.sectionTitle}>Context Health</div>
             <div className={styles.meter}>
               <div style={{ width: `${pct}%` }} />

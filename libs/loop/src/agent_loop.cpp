@@ -23,6 +23,14 @@ void AgentLoop::restore_history(std::vector<Message> history) {
     session_history_ = std::move(history);
 }
 
+void AgentLoop::set_system_prompt(const std::string& prompt) {
+    if (!session_history_.empty() && session_history_[0].role == "system") {
+        session_history_[0].content = prompt;
+    } else {
+        session_history_.insert(session_history_.begin(), {"system", prompt, {}, {}, ""});
+    }
+}
+
 void AgentLoop::transition_to(TurnState next, RunControl& control) {
     auto prev = state_;
     state_ = next;

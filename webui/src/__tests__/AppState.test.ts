@@ -41,7 +41,7 @@ describe('AppState reducer', () => {
     const next = reducer(prev, {
       type: 'SET_SESSIONS',
       sessions: [
-        { id: 's1', title: 'Test', last_seq: 0, created_at: '', updated_at: '', archived_at: null },
+        { id: 's1', title: 'Test', world_id: null, agent_id: null, last_seq: 0, created_at: '', updated_at: '', archived_at: null },
       ],
     });
     expect(next.sessions).toHaveLength(1);

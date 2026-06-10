@@ -41,6 +41,9 @@ public:
     // Load history from persistent storage (journal restore).
     void restore_history(std::vector<Message> history);
 
+    // Replace or insert system message at position 0.
+    void set_system_prompt(const std::string& prompt);
+
     // Process a user message. Appends user msg to session_history_,
     // then enters the ReAct loop. Returns final response.
     std::future<AgentResponse> run(

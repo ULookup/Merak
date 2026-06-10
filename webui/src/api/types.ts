@@ -105,6 +105,8 @@ export interface ApprovalResponse {
 export interface SessionSummary {
   id: string;
   title: string;
+  world_id: string | null;
+  agent_id: string | null;
   last_seq: number;
   created_at: string;
   updated_at: string;

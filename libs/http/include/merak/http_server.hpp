@@ -37,7 +37,7 @@ public:
     httplib::Server& raw_server() { return server_; }
     HttpResult handle_runtime_metadata() const;
     HttpResult handle_session_memory(const std::string& id) const;
-    HttpResult handle_create_session(const std::string& title = "");
+    HttpResult handle_create_session(const std::string& title = "", const std::string& world_id = "", const std::string& agent_id = "");
     HttpResult handle_get_session(const std::string& id) const;
     HttpResult handle_update_session(const std::string& id, const std::string& title);
     HttpResult handle_archive_session(const std::string& id, bool archived);

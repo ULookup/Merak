@@ -5,23 +5,32 @@ import { useAppState } from '../../AppState';
 import { useToast } from '../Toast';
 import styles from './SessionList.module.css';
 
-export default function SessionList() {
+interface SessionListProps {
+  worldId?: string;
+  agentId?: string;
+}
+
+export default function SessionList({ worldId, agentId }: SessionListProps) {
   const { state, dispatch } = useAppState();
   const { showToast } = useToast();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
   async function create() {
-    const data = await api.createSession();
-    const id = data.session_id;
-    dispatch({
-      type: 'SET_SESSIONS',
-      sessions: [
-        ...state.sessions,
-        { id, title: '', last_seq: 0, created_at: '', updated_at: '', archived_at: null },
-      ],
-    });
-    select(id);
+    try {
+      const data = await api.createSession('', worldId, agentId);
+      const id = data.session_id;
+      dispatch({
+        type: 'SET_SESSIONS',
+        sessions: [
+          ...state.sessions,
+          { id, title: '', world_id: worldId ?? null, agent_id: agentId ?? null, last_seq: 0, created_at: '', updated_at: '', archived_at: null },
+        ],
+      });
+      select(id);
+    } catch {
+      showToast('Failed to create session', 'error');
+    }
   }
 
   function select(id: string) {
@@ -41,14 +50,18 @@ export default function SessionList() {
   async function confirmRename(id: string) {
     const newTitle = editValue.trim();
     if (newTitle) {
-      const data = await api.updateSession(id, newTitle);
-      const updated = data.session;
-      dispatch({
-        type: 'SET_SESSIONS',
-        sessions: state.sessions.map((s) =>
-          s.id === id ? { ...s, title: updated.title, updated_at: updated.updated_at } : s,
-        ),
-      });
+      try {
+        const data = await api.updateSession(id, newTitle);
+        const updated = data.session;
+        dispatch({
+          type: 'SET_SESSIONS',
+          sessions: state.sessions.map((s) =>
+            s.id === id ? { ...s, title: updated.title, updated_at: updated.updated_at } : s,
+          ),
+        });
+      } catch {
+        showToast('Failed to rename session', 'error');
+      }
     }
     setEditingId(null);
     setEditValue('');
@@ -86,7 +99,11 @@ export default function SessionList() {
     }
   }
 
-  const sessions = [...state.sessions].sort(
+  const sessions = state.sessions.filter((s) => {
+    if (worldId && s.world_id !== worldId) return false;
+    if (agentId && s.agent_id !== agentId) return false;
+    return true;
+  }).sort(
     (a, b) =>
       new Date(b.updated_at || b.created_at).getTime() -
       new Date(a.updated_at || a.created_at).getTime(),

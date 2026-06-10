@@ -253,7 +253,11 @@ std::string RuntimeService::extract_title(const std::string& message, size_t max
 RuntimeService::RuntimeService(std::filesystem::path root,LoopFactory factory,std::map<std::string, SubAgentConfig> agents,SubRunExecutor sub_run_executor):store_(std::move(root)),loop_factory_(std::move(factory)),agents_(std::move(agents)),sub_run_executor_(std::move(sub_run_executor)){}
 void RuntimeService::initialize(){store_.initialize();for(const auto&r:store_.interrupt_running_runs())emit(r.session_id,r.id,"run_interrupted",{{"reason","server restarted"}});}
 RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const std::string&t,nlohmann::json p){RuntimeEvent e{0,"",s,r,t,std::move(p)};try{e=store_.append_event(e);}catch(const nlohmann::json::exception&ex){spdlog::warn("Failed to serialize event {}: {}",t,ex.what());}catch(const std::exception&){throw;}bus_.publish(e);return e;}
-SessionRecord RuntimeService::create_session(const std::string&title){auto s=store_.create_session(title);emit(s.id,"","session_created",{{"title",title}});return *store_.get_session(s.id);}
+SessionRecord RuntimeService::create_session(const std::string& title, const std::string& world_id, const std::string& agent_id) {
+    auto s = store_.create_session(title, world_id, agent_id);
+    emit(s.id, "", "session_created", {{"title", title}});
+    return *store_.get_session(s.id);
+}
 void RuntimeService::update_session(const std::string&id,const std::string&title){store_.update_session(id,title);emit(id,"","session_updated",{{"title",title}});}
 SessionRecord RuntimeService::archive_session(const std::string&id,bool archived){auto s=store_.archive_session(id,archived);emit(id,"","session_updated",{{"archived",archived},{"archived_at",s.archived_at}});return s;}
 std::string RuntimeService::generate_title(const std::string&session_id){
@@ -282,7 +286,9 @@ std::string RuntimeService::generate_title(const std::string&session_id){
     if(result.size()>50)result=result.substr(0,50);
     return result;
 }
-std::vector<SessionRecord>RuntimeService::list_sessions()const{return store_.list_sessions();}
+std::vector<SessionRecord> RuntimeService::list_sessions(const std::string& world_id) const {
+    return store_.list_sessions(world_id);
+}
 std::optional<SessionRecord>RuntimeService::get_session(const std::string&id)const{return store_.get_session(id);}
 std::optional<RunRecord>RuntimeService::get_run(const std::string&id)const{return store_.get_run(id);}
 RunRecord RuntimeService::create_run_record(const std::string&s,const std::string&m){if(!store_.get_session(s))throw RuntimeError("session_not_found","Session does not exist");if(store_.has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");auto r=store_.create_run(s,m);emit(s,r.id,"run_started",{{"message",m}});
@@ -323,7 +329,54 @@ DelegationStart RuntimeService::start_delegation(const std::string&s,const Deleg
     std::thread([self=shared_from_this(),parent,request,delegation_id]{self->execute_delegation(parent,request,delegation_id);}).detach();
     return{delegation_id,parent.id,s};
 }
-void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=store_.get_run(r.id);!current||current->status==RunStatus::Cancelled)return;auto token=std::make_shared<CancellationToken>();auto control=std::make_shared<Control>(*this,r,token);{std::lock_guard lock(mutex_);tokens_[r.id]=token;controls_[r.id]=control;}store_.update_run_status(r.id,RunStatus::Running);try{std::shared_ptr<AgentLoop> loop;{std::lock_guard lock(session_loops_mutex_);auto it=session_loops_.find(r.session_id);if(it!=session_loops_.end()){loop=it->second;}else{loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_(model)));session_loops_[r.session_id]=loop;auto history=restore_messages(r.session_id);if(!history.empty()){loop->restore_history(std::move(history));}}}loop->run(r.user_message,*control).get();if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed");}}catch(const std::exception&e){if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
+prompts::PromptProfile RuntimeService::build_prompt_profile(
+    const std::string& world_id, const std::string& agent_id) {
+
+    prompts::PromptProfile profile;
+    profile.category = prompts::AgentCategory::Worldbuilding;
+
+    if (!wb_service_) return profile;
+
+    auto agent = wb_service_->agents().get_agent(agent_id);
+    if (!agent) return profile;
+
+    int kind = static_cast<int>(agent->kind);
+    profile.worldbuilding_kind = kind;
+    profile.active_world_id = world_id;
+    profile.active_agent_id = agent_id;
+
+    try {
+        // Find first active scene (writing or draft status) — single query, scan in-memory
+        auto scenes = wb_service_->narrative().list_scenes(world_id);
+        for (const auto& sc : scenes) {
+            if (sc.status == "writing" || sc.status == "draft") {
+                prompts::SceneContext ctx;
+                ctx.scene_title = sc.title;
+                ctx.world_time_label = sc.world_time;
+                ctx.participant_names = sc.participant_ids;
+                profile.scene_ctx = ctx;
+                break;
+            }
+        }
+    } catch (const std::exception& e) {
+        spdlog::warn("build_prompt_profile: failed to load scene context for world={} agent={}: {}",
+                     world_id, agent_id, e.what());
+    }
+
+    return profile;
+}
+
+void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=store_.get_run(r.id);!current||current->status==RunStatus::Cancelled)return;auto token=std::make_shared<CancellationToken>();auto control=std::make_shared<Control>(*this,r,token);{std::lock_guard lock(mutex_);tokens_[r.id]=token;controls_[r.id]=control;}store_.update_run_status(r.id,RunStatus::Running);try{std::shared_ptr<AgentLoop> loop;{std::lock_guard lock(session_loops_mutex_);auto it=session_loops_.find(r.session_id);if(it!=session_loops_.end()){loop=it->second;}else{loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_(model)));session_loops_[r.session_id]=loop;auto history=restore_messages(r.session_id);if(!history.empty()){loop->restore_history(std::move(history));}}}        // Build dynamic system_prompt from WorldbuildingService when session is bound
+        auto session = store_.get_session(r.session_id);
+        if (session && !session->world_id.empty() && !session->agent_id.empty() && wb_service_) {
+            auto profile = build_prompt_profile(session->world_id, session->agent_id);
+            prompts::PromptCompositor compositor;
+            std::string composed = compositor.assemble(profile);
+            if (!composed.empty()) {
+                loop->set_system_prompt(composed);
+            }
+        }
+        loop->run(r.user_message,*control).get();if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed");}}catch(const std::exception&e){if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
 AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig& agent_, const std::string& task, const RunRecord& parent, const std::string& delegation_id, std::optional<std::string> previous_output) {
     // Enhance system_prompt with PromptCompositor output for platform agents
     SubAgentConfig agent = agent_;
@@ -496,6 +549,12 @@ nlohmann::json RuntimeService::resolve_creation(
                                 {"world_id", pending->world_id},
                                 {"resource_type", resource_type},
                                 {"resource_id", resource_id}
+                            });
+                        }
+                        if (resource_type == "scene") {
+                            emit(run->session_id, run_id, "scene_changed", {
+                                {"scene_id", resource_id},
+                                {"world_id", pending->world_id}
                             });
                         }
                     }
