@@ -5,6 +5,9 @@ add_library(merak-worldbuilding STATIC
     src/ids.cpp
     src/agent_store.cpp
     src/pipeline.cpp
+    src/pipeline_workflow_def.cpp
+    src/condition_evaluator.cpp
+    src/pipeline_manager.cpp
     src/card_access.cpp
     src/foreshadowing_store.cpp
     src/narrative_store.cpp
@@ -53,3 +56,14 @@ target_link_libraries(test_creation_flow PRIVATE
     GTest::gtest_main
     SQLite::SQLite3
 )
+
+add_executable(pipeline_tests
+    tests/test_condition_evaluator.cpp
+    tests/test_pipeline_manager.cpp
+)
+target_link_libraries(pipeline_tests PRIVATE
+    merak-worldbuilding
+    GTest::gtest_main
+    ${PostgreSQL_LIBRARIES}
+)
+add_test(NAME pipeline_tests COMMAND pipeline_tests)
