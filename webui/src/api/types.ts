@@ -494,23 +494,6 @@ export interface WorkflowSummary {
   phase_count: number;
 }
 
-export interface PipelineError {
-  result: string;
-  phase: string;
-  timestamp: string;
-}
-
-export interface PipelineHistoryRecord {
-  id: string;
-  world_id: string;
-  from_phase: string;
-  to_phase: string;
-  trigger: string;
-  triggered_by?: string;
-  conditions_summary?: Record<string, unknown>;
-  timestamp: string;
-}
-
 // === Review ===
 export interface ReviewIssue {
   severity: 'error' | 'warning' | 'info';

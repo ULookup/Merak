@@ -8,6 +8,7 @@ import SettingsPanel from './Sidebar/SettingsPanel';
 import ToolPanel from './Sidebar/ToolPanel';
 import WorldSelector from './Sidebar/WorldSelector';
 import PipelineNavigator from './Sidebar/PipelineNavigator';
+import WorkflowMonitor from './Sidebar/WorkflowMonitor';
 
 interface SidebarProps {
   open?: boolean;
@@ -35,6 +36,7 @@ export default function Sidebar({ open = true, onClose }: SidebarProps) {
       </div>
       <WorldSelector />
       <PipelineNavigator />
+      <WorkflowMonitor />
       <SessionList />
       <ModelSelector />
       <ToolPanel />

@@ -5,6 +5,7 @@ import BrandMark from './BrandMark';
 import ContextMeter from './Sidebar/ContextMeter';
 import ModelSelector from './Sidebar/ModelSelector';
 import PipelineNavigator from './Sidebar/PipelineNavigator';
+import WorkflowMonitor from './Sidebar/WorkflowMonitor';
 import SessionList from './Sidebar/SessionList';
 import SettingsPanel from './Sidebar/SettingsPanel';
 import WorldSelector from './Sidebar/WorldSelector';
@@ -68,6 +69,7 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
       <WorldSelector />
 
       <PipelineNavigator />
+      <WorkflowMonitor />
 
       {/* Story Tree — from storyOverview (current arc / chapter / scene) */}
       {overview && (overview.current_arc || overview.current_chapter || overview.current_scene) && (
