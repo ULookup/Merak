@@ -1,0 +1,93 @@
+.container {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border, #333);
+  font-size: 12px;
+}
+
+.title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted, #888);
+  margin-bottom: 8px;
+}
+
+.section {
+  margin-bottom: 10px;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  color: var(--muted, #888);
+  margin-bottom: 4px;
+}
+
+.progressHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  color: var(--muted, #999);
+}
+
+.progressBar {
+  height: 4px;
+  background: var(--border, #333);
+  border-radius: 2px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--teal-soft, #4a8);
+  border-radius: 2px;
+  transition: width 300ms ease;
+}
+
+.conditionList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.conditionItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.checkGreen {
+  color: var(--teal-soft, #4a8);
+  font-size: 10px;
+}
+
+.checkGray {
+  color: var(--muted, #666);
+  font-size: 10px;
+}
+
+.conditionName {
+  flex: 1;
+  color: var(--fg-primary, #ccc);
+}
+
+.conditionProgress {
+  color: var(--muted, #888);
+  font-size: 11px;
+}
+
+.historyItem {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  color: var(--muted, #999);
+}
+
+.historyPhases {
+  color: var(--fg-primary, #ccc);
+}
+
+.historyTrigger {
+  font-size: 10px;
+  color: var(--muted, #666);
+}
