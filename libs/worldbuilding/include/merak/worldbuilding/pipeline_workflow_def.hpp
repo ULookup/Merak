@@ -9,7 +9,7 @@
 namespace merak::worldbuilding {
 
 // ─── Condition operator enum ───
-enum class ConditionOp { EQ, NEQ, GT, GTE, LT, LTE, CONTAINS, EXISTS };
+enum class ConditionOp { EQ, NEQ, GT, GTE, LT, LTE };
 
 inline ConditionOp op_from_string(const std::string& s) {
     if (s == "==" || s == "eq") return ConditionOp::EQ;
@@ -18,8 +18,6 @@ inline ConditionOp op_from_string(const std::string& s) {
     if (s == ">=" || s == "gte") return ConditionOp::GTE;
     if (s == "<" || s == "lt") return ConditionOp::LT;
     if (s == "<=" || s == "lte") return ConditionOp::LTE;
-    if (s == "contains") return ConditionOp::CONTAINS;
-    if (s == "exists") return ConditionOp::EXISTS;
     return ConditionOp::EQ;
 }
 
