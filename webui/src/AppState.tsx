@@ -14,6 +14,7 @@ import type {
   WorkspaceFile,
   WorkspaceFileContent,
 } from './api/types';
+import type { ConditionState, PhaseTransition, PipelineViewData } from './api/types';
 
 export type InspectorTab = 'story' | 'files' | 'agents' | 'run' | 'creation';
 export type WorldbuildingStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -76,6 +77,18 @@ export interface AppState {
   runTimeline: RunTimelineItem[];
   storyVersion: number;
   pipelinePhase: string | null;
+  // ═══ Pipeline (extended) ═══
+  pipelineConditions: ConditionState[];
+  pipelineActiveWorkflow: string;
+  pipelineHistory: PhaseTransition[];
+  pipelineNextAllowed: string[];
+  pipelineAllowedRetreat: string[];
+  pipelineAutoAdvance: boolean;
+  showPhaseAdvancePrompt: {
+    phase: string;
+    nextPhase: string;
+    conditions: ConditionState[];
+  } | null;
 }
 
 export const initialState: AppState = {
@@ -126,6 +139,13 @@ export const initialState: AppState = {
   editorError: null,
   runTimeline: [],
   pipelinePhase: null,
+  pipelineConditions: [],
+  pipelineActiveWorkflow: '',
+  pipelineHistory: [],
+  pipelineNextAllowed: [],
+  pipelineAllowedRetreat: [],
+  pipelineAutoAdvance: true,
+  showPhaseAdvancePrompt: null,
 };
 
 let nextId = 1;
@@ -178,7 +198,10 @@ export type Action =
   | { type: 'ADD_RUN_TIMELINE_ITEM'; item: RunTimelineItem }
   | { type: 'COMMIT_ACTIVE' }
   | { type: 'SET_STORY_VERSION' }
-  | { type: 'APPLY_SSE'; frame: SseFrame };
+  | { type: 'APPLY_SSE'; frame: SseFrame }
+  | { type: 'SET_PIPELINE_CONDITIONS'; conditions: ConditionState[] }
+  | { type: 'SET_PIPELINE_VIEW'; view: Partial<PipelineViewData> }
+  | { type: 'DISMISS_PHASE_PROMPT' };
 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -485,6 +508,25 @@ export function reducer(state: AppState, action: Action): AppState {
       return applySseFrame(state, frame);
     }
 
+    case 'SET_PIPELINE_CONDITIONS':
+      return { ...state, pipelineConditions: action.conditions };
+
+    case 'SET_PIPELINE_VIEW': {
+      const v = action.view;
+      return {
+        ...state,
+        ...(v.phase !== undefined && { pipelinePhase: v.phase }),
+        ...(v.conditions !== undefined && { pipelineConditions: v.conditions }),
+        ...(v.active_workflow !== undefined && { pipelineActiveWorkflow: v.active_workflow }),
+        ...(v.recent_history !== undefined && { pipelineHistory: v.recent_history }),
+        ...(v.next_allowed !== undefined && { pipelineNextAllowed: v.next_allowed }),
+        ...(v.allowed_retreat !== undefined && { pipelineAllowedRetreat: v.allowed_retreat }),
+      };
+    }
+
+    case 'DISMISS_PHASE_PROMPT':
+      return { ...state, showPhaseAdvancePrompt: null };
+
     default:
       return state;
   }
@@ -727,15 +769,48 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         storyVersion: state.storyVersion + 1,
       };
 
-    case 'pipeline_phase_changed':
+    case 'pipeline_phase_changed': {
+      const conditions = Array.isArray(p.conditions)
+        ? (p.conditions as ConditionState[])
+        : state.pipelineConditions;
       return {
         ...state,
         pipelinePhase: typeof p.phase === 'string' ? p.phase : state.pipelinePhase,
+        pipelineConditions: conditions,
+        pipelineNextAllowed: Array.isArray(p.next_allowed)
+          ? (p.next_allowed as string[]) : state.pipelineNextAllowed,
+        pipelineAllowedRetreat: Array.isArray(p.allowed_retreat)
+          ? (p.allowed_retreat as string[]) : state.pipelineAllowedRetreat,
+        showPhaseAdvancePrompt: null,
+      };
+    }
+
+    case 'pipeline_condition_progress': {
+      const conditions = Array.isArray(p.conditions)
+        ? (p.conditions as ConditionState[])
+        : state.pipelineConditions;
+      return { ...state, pipelineConditions: conditions };
+    }
+
+    case 'pipeline_condition_met':
+      return {
+        ...state,
+        showPhaseAdvancePrompt: {
+          phase: (p.phase as string) || '',
+          nextPhase: (p.next_phase as string) || '',
+          conditions: Array.isArray(p.conditions)
+            ? (p.conditions as ConditionState[]) : [],
+        },
       };
 
-    case 'pipeline_stats_updated':
-      // TODO: wire pipeline stats (e.g., word_count, scene_count) into AppState
-      return state;
+    case 'pipeline_cycle_complete':
+      return reducer(state, {
+        type: 'ADD_TOAST',
+        toast: {
+          type: 'success',
+          message: (p.message as string) || '创作管线全周期完成',
+        },
+      });
 
     case 'world_switched':
       return reducer(state, { type: 'SET_WORLD', worldId: (p.world_id as string) ?? null });
