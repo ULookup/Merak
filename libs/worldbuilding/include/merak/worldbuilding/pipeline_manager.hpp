@@ -2,6 +2,7 @@
 #include <merak/worldbuilding/pipeline_workflow_def.hpp>
 #include <merak/worldbuilding/condition_evaluator.hpp>
 #include <merak/runtime_event.hpp>
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <functional>
@@ -24,6 +25,7 @@ public:
         std::function<std::shared_ptr<pqxx::connection>()> pg_connection_factory;
         std::function<void(const RuntimeEvent&)> event_emitter;
         std::filesystem::path pipeline_config_dir;
+        std::shared_ptr<ConditionEvaluator> condition_evaluator;
     };
 
     explicit PipelineManager(Dependencies deps);
@@ -63,6 +65,28 @@ public:
 
     AdvanceResult advance_phase(const AdvanceRequest& req);
     static std::string advance_result_to_string(AdvanceResult r);
+
+    // ─── Loop condition evaluation ───
+    bool evaluate_loop_condition(const AutoLoopDef& loop, const PipelineState& state) const;
+
+    // ─── Error handling ───
+    void handle_advance_failure(const std::string& world_id, const PipelineState& state, AdvanceResult result);
+    void clear_last_error(const std::string& world_id);
+
+    // ─── Metrics ───
+    struct PipelineMetrics {
+        size_t active_states;
+        size_t total_transitions;
+        uint64_t total_evaluations;
+        uint64_t total_failures;
+        uint64_t total_errors;
+        std::chrono::steady_clock::time_point start_time;
+        std::chrono::steady_clock::time_point last_eval_time;
+    };
+    PipelineMetrics get_metrics() const;
+
+    // ─── History maintenance ───
+    void prune_old_history();
 
     // ─── Condition evaluation ───
     ConditionEvalSummary evaluate_phase_conditions(const PipelineState& state) const;
@@ -126,6 +150,11 @@ private:
                                const PhaseDefinition* phase_def) const;
     std::vector<PhaseTransitionRecord> load_recent_history(const std::string& world_id,
                                                             int limit = 10) const;
+
+    std::shared_ptr<ConditionEvaluator> condition_evaluator_;
+    std::atomic<int> advance_depth_{0};
+    static constexpr int MAX_ADVANCE_DEPTH = 32;
+    std::chrono::steady_clock::time_point start_time_;
 };
 
 } // namespace merak::worldbuilding
