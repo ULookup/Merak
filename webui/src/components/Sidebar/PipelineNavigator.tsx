@@ -1,7 +1,8 @@
+import { useEffect } from 'react';
 import { BookOpen, FileText, PenLine } from 'lucide-react';
 import { useAppState } from '../../AppState';
 import type { CreativePhase } from '../../api/types';
-import { advancePipeline } from '../../api/client';
+import { advancePipeline, getPipelineState } from '../../api/client';
 import styles from './PipelineNavigator.module.css';
 
 const PHASES: { key: CreativePhase; label: string; desc: string }[] = [
@@ -24,6 +25,17 @@ export default function PipelineNavigator() {
   const conditions = state.pipelineConditions ?? [];
   const nextAllowed = new Set(state.pipelineNextAllowed ?? []);
   const allowedRetreat = new Set(state.pipelineAllowedRetreat ?? []);
+
+  useEffect(() => {
+    if (!state.worldId) return;
+    let cancelled = false;
+    getPipelineState(state.worldId)
+      .then(view => {
+        if (!cancelled) dispatch({ type: 'SET_PIPELINE_VIEW', view });
+      })
+      .catch(console.error);
+    return () => { cancelled = true; };
+  }, [state.worldId]);
 
   const handlePhaseClick = async (targetPhase: CreativePhase) => {
     const targetIdx = PHASES.findIndex(p => p.key === targetPhase);
@@ -50,7 +62,12 @@ export default function PipelineNavigator() {
         target_phase: targetPhase,
         force: isRetreat,
       });
+      dispatch({ type: 'PIPELINE_ERROR_CLEARED' });
     } catch (err) {
+      dispatch({
+        type: 'PIPELINE_ADVANCE_FAILED',
+        reason: err instanceof Error ? err.message : 'Unknown error',
+      });
       alert(`Pipeline advance failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
@@ -61,6 +78,39 @@ export default function PipelineNavigator() {
         <div className={styles.errorBanner}>
           <span>Advance failed: {state.pipelineAdvanceError}</span>
           <button onClick={() => dispatch({ type: 'PIPELINE_ERROR_CLEARED' })}>Dismiss</button>
+        </div>
+      )}
+      {state.showPhaseAdvancePrompt && (
+        <div className={styles.confirmOverlay}>
+          <div className={styles.confirmDialog}>
+            <p>Conditions met — advance to next phase?</p>
+            <div className={styles.confirmActions}>
+              <button
+                className={styles.confirmBtn}
+                onClick={() => {
+                  advancePipeline(state.worldId!, {
+                    target_phase: state.showPhaseAdvancePrompt!.nextPhase,
+                    force: false,
+                  });
+                  dispatch({ type: 'CLEAR_PHASE_ADVANCE_PROMPT' });
+                }}
+              >
+                Advance
+              </button>
+              <button
+                className={styles.cancelBtn}
+                onClick={() => dispatch({ type: 'CLEAR_PHASE_ADVANCE_PROMPT' })}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {state.pipelineCycleComplete && (
+        <div className={styles.completeBanner}>
+          <span>{state.pipelineCycleComplete.message}</span>
+          <button onClick={() => dispatch({ type: 'CLEAR_CYCLE_COMPLETE' })}>Dismiss</button>
         </div>
       )}
       <div className={styles.titleRow}>
