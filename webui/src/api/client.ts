@@ -39,7 +39,6 @@ import type {
   WorkspaceFileListResponse,
   WorldListResponse,
   WorldTimeResponse,
-  PipelineHistoryRecord,
   PipelineViewData,
   WorkflowSummary,
 } from './types';
