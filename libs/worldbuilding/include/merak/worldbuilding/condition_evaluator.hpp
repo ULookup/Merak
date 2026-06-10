@@ -19,8 +19,6 @@ using ConditionEvalFn = std::function<ConditionResult(
     pqxx::connection& conn
 )>;
 
-using CheckEvalFn = ConditionEvalFn;
-
 class ConditionEvaluator {
 public:
     ConditionEvaluator() = default;
@@ -33,7 +31,7 @@ public:
 
     // Register custom condition/check (thread-safe)
     void register_condition(const std::string& type, ConditionEvalFn fn);
-    void register_check(const std::string& name, CheckEvalFn fn);
+    void register_check(const std::string& name, ConditionEvalFn fn);
 
     // Evaluate (const, thread-safe)
     ConditionResult evaluate(const ConditionDef& cond,
@@ -61,7 +59,7 @@ public:
 private:
     mutable std::shared_mutex registry_mutex_;
     std::map<std::string, ConditionEvalFn> registry_;
-    std::map<std::string, CheckEvalFn> check_registry_;
+    std::map<std::string, ConditionEvalFn> check_registry_;
     mutable Stats stats_;
 };
 
@@ -114,18 +112,6 @@ ConditionResult eval_scene_completeness(const ConditionDef& cond,
 ConditionResult eval_character_consistency(const ConditionDef& cond,
                                             const PipelineState& state,
                                             pqxx::connection& conn);
-
-ConditionResult eval_plot_coherence(const ConditionDef& cond,
-                                     const PipelineState& state,
-                                     pqxx::connection& conn);
-
-ConditionResult eval_foreshadow_management(const ConditionDef& cond,
-                                            const PipelineState& state,
-                                            pqxx::connection& conn);
-
-ConditionResult eval_pacing(const ConditionDef& cond,
-                             const PipelineState& state,
-                             pqxx::connection& conn);
 
 // Keyword extraction utility
 std::vector<std::string> extract_significant_keywords(const std::string& text);

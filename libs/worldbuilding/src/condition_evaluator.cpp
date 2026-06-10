@@ -101,9 +101,6 @@ void ConditionEvaluator::register_all_builtins() {
 
     // ─── check types (for all_checks_passed dispatch) ───
     check_registry_["character_consistency"] = eval_character_consistency;
-    check_registry_["plot_coherence"] = eval_plot_coherence;
-    check_registry_["foreshadow_management"] = eval_foreshadow_management;
-    check_registry_["pacing"] = eval_pacing;
     check_registry_["diary_completeness"] = eval_diary_completeness;
     check_registry_["relation_currency"] = eval_relation_currency;
     check_registry_["scene_completeness"] = eval_scene_completeness;
@@ -114,7 +111,7 @@ void ConditionEvaluator::register_condition(const std::string& type, ConditionEv
     registry_[type] = std::move(fn);
 }
 
-void ConditionEvaluator::register_check(const std::string& name, CheckEvalFn fn) {
+void ConditionEvaluator::register_check(const std::string& name, ConditionEvalFn fn) {
     std::unique_lock lock(registry_mutex_);
     check_registry_[name] = std::move(fn);
 }
@@ -648,33 +645,6 @@ ConditionResult eval_character_consistency(const ConditionDef& cond,
 
     result.extra["secret_leak_suspects"] = leak_suspects;
     result.extra["suspect_count"] = leak_suspects.size();
-    return result;
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Reserved check functions — return true (not yet implemented)
-// ═══════════════════════════════════════════════════════════════
-ConditionResult eval_plot_coherence(const ConditionDef& cond,
-                                     const PipelineState& state,
-                                     pqxx::connection& conn) {
-    ConditionResult result{cond.message, true, std::nullopt, std::nullopt, {}};
-    result.extra["status"] = "not_implemented";
-    spdlog::debug("eval_plot_coherence: not yet implemented, returning true");
-    return result;
-}
-
-ConditionResult eval_foreshadow_management(const ConditionDef& cond,
-                                            const PipelineState& state,
-                                            pqxx::connection& conn) {
-    return eval_orphaned_foreshadowing(cond, state, conn);
-}
-
-ConditionResult eval_pacing(const ConditionDef& cond,
-                             const PipelineState& state,
-                             pqxx::connection& conn) {
-    ConditionResult result{cond.message, true, std::nullopt, std::nullopt, {}};
-    result.extra["status"] = "not_implemented";
-    spdlog::debug("eval_pacing: not yet implemented, returning true");
     return result;
 }
 
