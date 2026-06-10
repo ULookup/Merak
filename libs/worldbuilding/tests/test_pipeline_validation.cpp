@@ -2,25 +2,7 @@
 #include <nlohmann/json.hpp>
 
 #include <merak/worldbuilding/pipeline_workflow_def.hpp>
-
-// ─── Forward-declare validation types and functions ───
-// (Implementation comes in Task 7: pipeline_validation.cpp)
-
-namespace merak::worldbuilding {
-
-struct PipelineValidationError {
-    std::string file_path;
-    std::string field;
-    std::string message;
-    enum Severity { ERROR, WARNING } severity;
-};
-
-std::vector<PipelineValidationError> validate_workflow_def(
-    const PipelineWorkflowDef& def, const std::string& file_path);
-
-PipelineWorkflowDef make_test_workflow();
-
-} // namespace merak::worldbuilding
+#include <merak/worldbuilding/pipeline_validation.hpp>
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Test suite: PipelineValidationTest

@@ -1,5 +1,6 @@
 #include <merak/worldbuilding/pipeline_manager.hpp>
 #include <merak/worldbuilding/pipeline.hpp>
+#include <merak/worldbuilding/pipeline_validation.hpp>
 #include <pqxx/pqxx>
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
@@ -76,6 +77,7 @@ std::string PipelineManager::advance_result_to_string(AdvanceResult r) {
 void PipelineManager::initialize() {
     ensure_tables();
     load_workflow_defs();
+    prune_old_history();
 
     // Restore all active PipelineState from PostgreSQL to memory cache
     try {
@@ -108,6 +110,22 @@ void PipelineManager::load_workflow_defs() {
             std::ifstream f(entry.path());
             nlohmann::json j = nlohmann::json::parse(f);
             auto def = j.get<PipelineWorkflowDef>();
+            auto validation_errors = validate_workflow_def(def, entry.path().string());
+            bool has_errors = false;
+            for (auto& ve : validation_errors) {
+                if (ve.severity == PipelineValidationError::ERROR) {
+                    spdlog::error("PipelineManager: validation error in {}: [{}] {}",
+                                  ve.file_path, ve.field, ve.message);
+                    has_errors = true;
+                } else {
+                    spdlog::warn("PipelineManager: validation warning in {}: [{}] {}",
+                                 ve.file_path, ve.field, ve.message);
+                }
+            }
+            if (has_errors) {
+                spdlog::warn("PipelineManager: skipping invalid workflow '{}'", def.name);
+                continue;
+            }
             spdlog::info("PipelineManager: loaded workflow '{}' (v{}, {} phases)",
                          def.name, def.version, def.phases.size());
             workflow_defs_[def.name] = std::move(def);
@@ -295,6 +313,16 @@ void PipelineManager::ensure_tables() {
 
 // ─── Phase Advancement ───
 PipelineManager::AdvanceResult PipelineManager::advance_phase(const AdvanceRequest& req) {
+    // DepthGuard: prevent infinite recursion from action-triggered advances
+    int depth = advance_depth_.fetch_add(1);
+    if (depth >= MAX_ADVANCE_DEPTH) {
+        advance_depth_.fetch_sub(1);
+        spdlog::error("PipelineManager: advance_phase depth {} exceeds MAX_ADVANCE_DEPTH", depth);
+        return AdvanceResult::INVALID_TRANSITION;
+    }
+    struct DepthGuard { std::atomic<int>& d; ~DepthGuard() { d.fetch_sub(1); } };
+    DepthGuard guard{advance_depth_};
+
     auto state_opt = get_state(req.world_id);
     if (!state_opt) return AdvanceResult::NO_ACTIVE_STATE;
 
@@ -454,9 +482,18 @@ void PipelineManager::on_world_event(const std::string& world_id,
                 deps_.event_emitter(confirm_event);
             }
         } else {
-            // Auto-advance mode
+            // Auto-advance mode — check auto_loop first
+            const auto* current_def = wf->get_phase(state_opt->current_phase);
+            if (current_def && current_def->auto_loop) {
+                bool should_continue = evaluate_loop_condition(
+                    *current_def->auto_loop, *state_opt);
+                if (should_continue) return; // Stay in current phase, continue looping
+            }
             AdvanceRequest auto_req{world_id, std::nullopt, "auto", event_type, false, false};
-            advance_phase(auto_req);
+            auto result = advance_phase(auto_req);
+            if (result != AdvanceResult::SUCCESS && result != AdvanceResult::NO_ACTIVE_STATE) {
+                handle_advance_failure(world_id, *state_opt, result);
+            }
         }
     }
 }
@@ -670,10 +707,8 @@ PipelineManager::PipelineViewData PipelineManager::get_view_data(
 
     data.state = *state_opt;
     data.active_workflow_name = data.state.active_workflow;
-    data.current_conditions = const_cast<PipelineManager*>(this)
-                                  ->evaluate_phase_conditions(data.state);
-    data.recent_history = const_cast<PipelineManager*>(this)
-                              ->load_recent_history(world_id, 10);
+    data.current_conditions = evaluate_phase_conditions(data.state);
+    data.recent_history = load_recent_history(world_id, 10);
     return data;
 }
 

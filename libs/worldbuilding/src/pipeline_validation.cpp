@@ -1,3 +1,4 @@
+#include <merak/worldbuilding/pipeline_validation.hpp>
 #include <merak/worldbuilding/pipeline_workflow_def.hpp>
 #include <merak/worldbuilding/pipeline.hpp>
 #include <spdlog/spdlog.h>
@@ -9,16 +10,6 @@
 #include <map>
 
 namespace merak::worldbuilding {
-
-// ═══════════════════════════════════════════════════════════════
-// PipelineValidationError — 校验错误结构
-// ═══════════════════════════════════════════════════════════════
-struct PipelineValidationError {
-    std::string file_path;
-    std::string field;
-    std::string message;
-    enum Severity { ERROR, WARNING } severity;
-};
 
 // ═══════════════════════════════════════════════════════════════
 // validate_workflow_def（设计文档第 4 节）
