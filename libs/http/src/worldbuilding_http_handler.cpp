@@ -344,6 +344,63 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
             res.set_content(response.dump(), "application/json");
         });
 
+    server.Get("/api/worldbuilding/pipeline/history",
+        [this](const auto& req, auto& res) {
+            if (!pipeline_mgr_) {
+                res.status = 503;
+                res.set_content(R"({"error":"pipeline_not_available"})", "application/json");
+                return;
+            }
+            if (!req.has_param("world_id") || req.get_param_value("world_id").empty()) {
+                error_response(res, "Missing required query parameter: world_id", 400, "missing_param");
+                return;
+            }
+            std::string world_id = req.get_param_value("world_id");
+            int limit = 10;
+            if (req.has_param("limit")) {
+                try {
+                    limit = std::stoi(req.get_param_value("limit"));
+                    if (limit < 1) limit = 1;
+                    if (limit > 100) limit = 100;
+                } catch (...) {
+                    error_response(res, "Invalid limit parameter", 400);
+                    return;
+                }
+            }
+            try {
+                auto records = pipeline_mgr_->load_recent_history(world_id, limit);
+                nlohmann::json arr = nlohmann::json::array();
+                for (const auto& h : records) {
+                    nlohmann::json hj;
+                    hj["id"] = h.id;
+                    hj["world_id"] = h.world_id;
+                    hj["from_phase"] = worldbuilding::to_string(h.from_phase);
+                    hj["to_phase"] = worldbuilding::to_string(h.to_phase);
+                    hj["trigger"] = h.trigger;
+                    if (h.triggered_by) hj["triggered_by"] = *h.triggered_by;
+                    nlohmann::json cs;
+                    cs["all_met"] = h.conditions_at_transition.all_met;
+                    cs["phase"] = h.conditions_at_transition.phase_key;
+                    nlohmann::json crs = nlohmann::json::array();
+                    for (const auto& cr : h.conditions_at_transition.results) {
+                        nlohmann::json crj;
+                        crj["name"] = cr.message;
+                        crj["met"] = cr.met;
+                        if (cr.current) crj["current"] = *cr.current;
+                        if (cr.target) crj["target"] = *cr.target;
+                        crs.push_back(crj);
+                    }
+                    cs["results"] = crs;
+                    hj["conditions_summary"] = cs;
+                    hj["timestamp"] = h.timestamp;
+                    arr.push_back(hj);
+                }
+                json_response(res, {{"ok", true}, {"history", arr}});
+            } catch (const std::exception& e) {
+                error_response(res, std::string("Database error: ") + e.what(), 500, "database_error");
+            }
+        });
+
     server.Post(R"(/api/worldbuilding/([^/]+)/pipeline/activate)",
         [this](const auto& req, auto& res) {
             std::string world_id = req.matches[1];

@@ -9,6 +9,7 @@
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
 #include <merak/worldbuilding/pipeline_manager.hpp>
+#include <merak/worldbuilding/condition_evaluator.hpp>
 #include <pqxx/pqxx>
 #include <merak/worldbuilding_http_handler.hpp>
 #include <merak/tool_catalog.hpp>
@@ -205,9 +206,20 @@ static int run_server(int argc,char**argv) {
                     return std::make_shared<pqxx::connection>(db_connection);
                 },
                 .event_emitter = [&runtime](const merak::RuntimeEvent& e) {
-                    runtime->emit_event(e.session_id, e.run_id, e.type, e.payload);
+                    auto wid = e.payload.value("world_id", "");
+                    if (!wid.empty()) {
+                        runtime->broadcast_to_world(wid, e);
+                    } else if (!e.session_id.empty()) {
+                        runtime->emit_event(e.session_id, e.run_id, e.type, e.payload);
+                    }
                 },
-                .pipeline_config_dir = merak_home() / "pipelines",
+                .pipeline_config_dir = [] {
+                    auto exe = exe_dir_path();
+                    auto primary = exe / "pipelines";
+                    if (!exe.empty() && std::filesystem::exists(primary)) return primary;
+                    return exe / ".." / "config" / "pipelines";
+                }(),
+                .condition_evaluator = merak::worldbuilding::ConditionEvaluator::create_default(),
             }
         );
         pipeline_mgr->initialize();

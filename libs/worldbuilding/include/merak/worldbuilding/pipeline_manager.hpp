@@ -87,6 +87,8 @@ public:
 
     // ─── History maintenance ───
     void prune_old_history();
+    std::vector<PhaseTransitionRecord> load_recent_history(const std::string& world_id,
+                                                            int limit = 10) const;
 
     // ─── Condition evaluation ───
     ConditionEvalSummary evaluate_phase_conditions(const PipelineState& state) const;
@@ -148,8 +150,6 @@ private:
                             const AdvanceRequest& req);
     bool is_transition_allowed(CreativePhase from, CreativePhase to,
                                const PhaseDefinition* phase_def) const;
-    std::vector<PhaseTransitionRecord> load_recent_history(const std::string& world_id,
-                                                            int limit = 10) const;
 
     std::shared_ptr<ConditionEvaluator> condition_evaluator_;
     std::atomic<int> advance_depth_{0};
