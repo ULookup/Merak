@@ -459,6 +459,41 @@ export interface PipelineState {
   needs_character_update: boolean;
 }
 
+// === Pipeline (extended) ===
+
+export interface ConditionState {
+  name: string;
+  met: boolean;
+  current?: number;
+  target?: number;
+}
+
+export interface PhaseTransition {
+  id: string;
+  from: CreativePhase;
+  to: CreativePhase;
+  trigger: string;
+  timestamp: string;
+}
+
+export interface PipelineViewData {
+  phase: CreativePhase;
+  label: string;
+  conditions: ConditionState[];
+  all_conditions_met: boolean;
+  active_workflow: string;
+  recent_history: PhaseTransition[];
+  next_allowed: CreativePhase[];
+  allowed_retreat: CreativePhase[];
+}
+
+export interface WorkflowSummary {
+  name: string;
+  description: string;
+  version: number;
+  phase_count: number;
+}
+
 // === Review ===
 export interface ReviewIssue {
   severity: 'error' | 'warning' | 'info';
