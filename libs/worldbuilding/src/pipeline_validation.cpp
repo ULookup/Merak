@@ -107,17 +107,11 @@ std::vector<PipelineValidationError> validate_workflow_def(
                     std::to_string(tokens.size()));
             } else {
                 // Validate operator — E10
-                static const std::set<std::string> valid_ops =
-                    {"<", ">", "<=", ">=", "==", "!="};
-                if (!valid_ops.count(tokens[1])) {
+                if (!VALID_LOOP_OPS.count(tokens[1])) {
                     err(prefix, "unknown operator: " + tokens[1]);
                 }
                 // Validate LHS field name — E11
-                static const std::set<std::string> valid_fields = {
-                    "scene_count", "total_scenes_target",
-                    "chapter_count", "total_chapters_target", "cycle_count"
-                };
-                if (!valid_fields.count(tokens[0])) {
+                if (!VALID_LOOP_FIELDS.count(tokens[0])) {
                     err(prefix, "unknown field: " + tokens[0]);
                 }
             }

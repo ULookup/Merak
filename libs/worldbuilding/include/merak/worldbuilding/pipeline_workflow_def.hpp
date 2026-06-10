@@ -2,11 +2,20 @@
 #include <merak/worldbuilding/pipeline.hpp>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <set>
 #include <string>
 #include <variant>
 #include <vector>
 
 namespace merak::worldbuilding {
+
+// Shared constants for auto_loop expression validation and evaluation
+inline const std::set<std::string> VALID_LOOP_OPS = {"<", ">", "<=", ">=", "==", "!="};
+
+inline const std::set<std::string> VALID_LOOP_FIELDS = {
+    "scene_count", "total_scenes_target",
+    "chapter_count", "total_chapters_target", "cycle_count"
+};
 
 // ─── Condition operator enum ───
 enum class ConditionOp { EQ, NEQ, GT, GTE, LT, LTE };
