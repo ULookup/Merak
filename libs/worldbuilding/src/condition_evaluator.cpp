@@ -3,6 +3,7 @@
 #include <pqxx/pqxx>
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <sstream>
 
 namespace merak::worldbuilding {
@@ -11,6 +12,11 @@ namespace merak::worldbuilding {
 // entity_count table name whitelist
 // ═══════════════════════════════════════════════════════════════
 namespace {
+const std::set<std::string> VALID_KINDS = {
+    "individual", "god", "group", "creature", "force",
+    "organization", "location_bound", "abstract"
+};
+
 const std::map<std::string, std::string> ENTITY_TABLES = {
     {"agents", "agents"},
     {"locations", "locations"},
@@ -246,8 +252,17 @@ ConditionResult eval_entity_count(const ConditionDef& cond,
         return result;
     }
 
+    if (cond.kind_filter) {
+        if (!VALID_KINDS.count(*cond.kind_filter)) {
+            spdlog::warn("eval_entity_count: unknown kind '{}'", *cond.kind_filter);
+            result.met = false;
+            result.extra["error"] = "unknown kind: " + *cond.kind_filter;
+            return result;
+        }
+    }
+
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         std::string query = "SELECT COUNT(*) FROM " + table_it->second + " WHERE world_id = $1";
         if (cond.kind_filter) {
             query += " AND kind = " + txn.quote(*cond.kind_filter);
@@ -281,7 +296,7 @@ ConditionResult eval_all_characters_have_cards(const ConditionDef& cond,
                                                 pqxx::connection& conn) {
     ConditionResult result{cond.message, false, std::nullopt, std::nullopt, {}};
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         auto row = txn.exec_params1(R"(
             SELECT COUNT(*)
             FROM agents a
@@ -307,7 +322,7 @@ ConditionResult eval_world_has_rule_system(const ConditionDef& cond,
                                             pqxx::connection& conn) {
     ConditionResult result{cond.message, false, std::nullopt, std::nullopt, {}};
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         auto row = txn.exec_params1(
             "SELECT COUNT(*) FROM world_knowledge WHERE world_id = $1 AND category = 'rules'",
             state.world_id);
@@ -335,7 +350,7 @@ ConditionResult eval_scene_count_in_chapter(const ConditionDef& cond,
         return result;
     }
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         auto row = txn.exec_params1(
             "SELECT COUNT(*) FROM scenes WHERE chapter_id = $1",
             *state.active_chapter_id);
@@ -370,7 +385,7 @@ ConditionResult eval_all_scenes_ended(const ConditionDef& cond,
         return result;
     }
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         auto row = txn.exec_params1(R"(
             SELECT COUNT(*)
             FROM scenes s
@@ -403,7 +418,7 @@ ConditionResult eval_has_more_chapters(const ConditionDef& cond,
         return result;
     }
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         auto row = txn.exec_params1(
             "SELECT COUNT(*) FROM chapters WHERE arc_id = $1 AND status IN ('draft','planned')",
             *state.active_arc_id);
@@ -426,7 +441,7 @@ ConditionResult eval_user_confirmed(const ConditionDef& cond,
                                      pqxx::connection& conn) {
     ConditionResult result{cond.message, false, std::nullopt, std::nullopt, {}};
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         auto row = txn.exec_params1(
             "SELECT user_confirm FROM pipeline_states WHERE world_id = $1",
             state.world_id);
@@ -452,7 +467,7 @@ ConditionResult eval_scene_completeness(const ConditionDef& cond,
         return result;
     }
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         auto draft_row = txn.exec_params1(R"(
             SELECT COUNT(*) FROM scenes
             WHERE chapter_id = $1 AND status = 'draft'
@@ -492,7 +507,7 @@ ConditionResult eval_diary_completeness(const ConditionDef& cond,
         return result;
     }
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         // Assume scenes.participant_ids is a JSONB array
         auto row = txn.exec_params1(R"(
             WITH scene_participants AS (
@@ -531,7 +546,7 @@ ConditionResult eval_relation_currency(const ConditionDef& cond,
         return result;
     }
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         auto first_scene = txn.exec_params1(R"(
             SELECT created_at FROM scenes
             WHERE chapter_id = $1 ORDER BY created_at ASC LIMIT 1
@@ -562,7 +577,7 @@ ConditionResult eval_orphaned_foreshadowing(const ConditionDef& cond,
                                               pqxx::connection& conn) {
     ConditionResult result{cond.message, false, std::nullopt, 0, {}};
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         auto row = txn.exec_params1(R"(
             SELECT COUNT(*) FROM foreshadowings
             WHERE world_id = $1 AND status = 'open' AND updated_at = created_at
@@ -592,7 +607,7 @@ ConditionResult eval_character_consistency(const ConditionDef& cond,
     nlohmann::json leak_suspects = nlohmann::json::array();
 
     try {
-        pqxx::work txn(conn);
+        pqxx::read_transaction txn(conn);
         auto rows = txn.exec_params(R"(
             WITH active_secrets AS (
                 SELECT id, truth, aware_character_ids
