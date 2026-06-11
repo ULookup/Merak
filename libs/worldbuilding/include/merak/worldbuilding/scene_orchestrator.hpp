@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+namespace merak::kg { class KnowledgeGraphProvider; }
+
 namespace merak::worldbuilding {
 
 class WorldbuildingService;
@@ -46,7 +48,8 @@ public:
                       NarrativeStore& narrative,
                       ForeshadowingStore& foreshadowing,
                       SecretStore& secrets,
-                      VoiceAnalyzer& voice);
+                      VoiceAnalyzer& voice,
+                      merak::kg::KnowledgeGraphProvider* kg_provider = nullptr);
 
     ScenePreparation prepare_scene(const std::string& world_id,
                                     const std::string& scene_id,
@@ -66,6 +69,7 @@ private:
     ForeshadowingStore& foreshadowing_;
     SecretStore& secrets_;
     VoiceAnalyzer& voice_;
+    merak::kg::KnowledgeGraphProvider* kg_provider_ = nullptr;
 };
 
 } // namespace merak::worldbuilding
