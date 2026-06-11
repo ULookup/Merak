@@ -38,7 +38,7 @@ public:
     void load_workflow_defs(); // scan config/pipelines/*.json
     const PipelineWorkflowDef* get_workflow(const std::string& name) const;
     std::vector<std::string> list_workflows() const;
-    void activate_workflow(const std::string& world_id, const std::string& workflow_name);
+    bool activate_workflow(const std::string& world_id, const std::string& workflow_name);
 
     // ─── PipelineState CRUD ───
     std::optional<PipelineState> get_state(const std::string& world_id) const;

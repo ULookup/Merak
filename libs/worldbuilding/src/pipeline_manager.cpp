@@ -153,17 +153,23 @@ std::vector<std::string> PipelineManager::list_workflows() const {
     return names;
 }
 
-void PipelineManager::activate_workflow(const std::string& world_id,
+bool PipelineManager::activate_workflow(const std::string& world_id,
                                          const std::string& workflow_name) {
     if (!workflow_defs_.count(workflow_name)) {
         spdlog::warn("PipelineManager: workflow '{}' not found", workflow_name);
-        return;
+        return false;
     }
     {
         std::unique_lock lock(world_mutex_);
-        worlds_[world_id].workflow_name = workflow_name;
+        auto& entry = worlds_[world_id];
+        // Same workflow with existing state — idempotent, preserve progress
+        if (entry.workflow_name == workflow_name && !entry.state.world_id.empty()) {
+            return true;
+        }
+        entry.workflow_name = workflow_name;
     }
     init_state_for_world(world_id);
+    return true;
 }
 
 // ─── PipelineState CRUD ───
@@ -175,6 +181,29 @@ std::optional<PipelineState> PipelineManager::get_state(const std::string& world
 }
 
 void PipelineManager::init_state_for_world(const std::string& world_id) {
+    // 1. Already in memory — idempotent, nothing to do
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        if (it != worlds_.end() && !it->second.state.world_id.empty()) {
+            return;
+        }
+    }
+
+    // 2. Try to restore persisted state from DB
+    load_state_from_db(world_id);
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        if (it != worlds_.end() && !it->second.state.world_id.empty()) {
+            // load_state_from_db already synced workflow_name from state.active_workflow
+            spdlog::info("PipelineManager: restored state for world '{}' from DB (phase: {})",
+                         world_id, static_cast<int>(it->second.state.current_phase));
+            return;
+        }
+    }
+
+    // 3. No persisted state — create fresh from workflow definition
     std::string workflow_name;
     {
         std::shared_lock lock(world_mutex_);
@@ -211,9 +240,6 @@ void PipelineManager::init_state_for_world(const std::string& world_id) {
         AdvanceRequest dummy_req{world_id, state.current_phase, "init", "system", false, false};
         emit_phase_changed(state, initial, dummy_req);
     }
-
-    spdlog::info("PipelineManager: initialized state for world {} at phase {}",
-                 world_id, to_string(state.current_phase));
 }
 
 void PipelineManager::save_state(const PipelineState& state) {
@@ -254,7 +280,13 @@ void PipelineManager::load_state_from_db(const std::string& world_id) {
         auto state = nlohmann::json::parse(row["state_json"].as<std::string>())
                          .get<PipelineState>();
         std::unique_lock lock(world_mutex_);
-        worlds_[world_id] = std::move(state);
+        auto& entry = worlds_[world_id];
+        entry.state = std::move(state);
+        // Sync workflow_name: initialize() bulk restore only sets .state,
+        // and init_state_for_world reads workflow_name from the entry.
+        if (!entry.state.active_workflow.empty() && entry.workflow_name.empty()) {
+            entry.workflow_name = entry.state.active_workflow;
+        }
     } catch (const pqxx::unexpected_rows&) {
         // No state for this world — that's fine
     }
@@ -385,6 +417,27 @@ PipelineManager::AdvanceResult PipelineManager::advance_phase(const AdvanceReque
         conditions = evaluate_phase_conditions(state);
         if (!conditions.all_met)
             return AdvanceResult::CONDITIONS_NOT_MET;
+    }
+
+    // Execute on_complete actions of the current phase (transition decision hook).
+    // Must fire after conditions verified met, before exit→transition→enter.
+    // If on_complete triggers a goto_phase action, it handles the transition
+    // and we must not proceed with the default transition below.
+    if (is_forward && current_def && !current_def->on_complete.empty() && !req.force) {
+        auto phase_before = state.current_phase;
+        execute_actions(current_def->on_complete, state);
+        // Reload: goto_phase calls advance_phase() which updates worlds_[id].state.
+        // NOTE: The shared_lock is released after the reload; a concurrent thread could
+        // theoretically modify this world's phase in that window, causing a false positive
+        // early return. In practice on_world_event debounces to 2s and advance_phase
+        // holds a unique_lock for the actual mutation, so this race is benign.
+        {
+            std::shared_lock lock(world_mutex_);
+            auto it = worlds_.find(req.world_id);
+            if (it != worlds_.end() && it->second.state.current_phase != phase_before) {
+                return AdvanceResult::SUCCESS;
+            }
+        }
     }
 
     auto old_phase = state.current_phase;
@@ -679,22 +732,30 @@ void PipelineManager::execute_actions(const std::vector<ActionDef>& actions,
                 advance_phase(auto_req);
             }
         } else if (action.type == "conditional") {
-            // Evaluate a nested condition and branch
-            auto condition_type = action.params.value("condition_type", "");
+            // Construct ConditionDef from params — support two modes:
+            //   "condition": full JSON object → from_json deserialization
+            //   "condition_type": simple string (backward compatible)
             ConditionDef cond;
-            cond.type = condition_type;
-            cond.message = "conditional action check";
+            if (action.params.contains("condition")) {
+                from_json(action.params["condition"], cond);
+            } else if (action.params.contains("condition_type")) {
+                cond.type = action.params["condition_type"].get<std::string>();
+            } else {
+                spdlog::warn("PipelineAction: conditional action missing condition or condition_type");
+                continue;
+            }
+            if (cond.message.empty()) cond.message = "conditional action check";
+
             auto conn = deps_.pg_connection_factory();
             auto result = deps_.condition_evaluator->evaluate(cond, state, *conn);
+
             if (result.met && action.params.contains("then")) {
                 ActionDef then_action;
-                then_action.type = action.params["then"].value("type", "");
-                then_action.params = action.params["then"].value("params", nlohmann::json::object());
+                from_json(action.params["then"], then_action);
                 execute_actions({then_action}, state);
             } else if (!result.met && action.params.contains("else")) {
                 ActionDef else_action;
-                else_action.type = action.params["else"].value("type", "");
-                else_action.params = action.params["else"].value("params", nlohmann::json::object());
+                from_json(action.params["else"], else_action);
                 execute_actions({else_action}, state);
             }
         }
