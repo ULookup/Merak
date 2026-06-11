@@ -176,6 +176,29 @@ std::optional<PipelineState> PipelineManager::get_state(const std::string& world
 }
 
 void PipelineManager::init_state_for_world(const std::string& world_id) {
+    // 1. Already in memory — idempotent, nothing to do
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        if (it != worlds_.end() && !it->second.state.world_id.empty()) {
+            return;
+        }
+    }
+
+    // 2. Try to restore persisted state from DB
+    load_state_from_db(world_id);
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        if (it != worlds_.end() && !it->second.state.world_id.empty()) {
+            // load_state_from_db already synced workflow_name from state.active_workflow
+            spdlog::info("PipelineManager: restored state for world '{}' from DB (phase: {})",
+                         world_id, static_cast<int>(it->second.state.current_phase));
+            return;
+        }
+    }
+
+    // 3. No persisted state — create fresh from workflow definition
     std::string workflow_name;
     {
         std::shared_lock lock(world_mutex_);
@@ -212,9 +235,6 @@ void PipelineManager::init_state_for_world(const std::string& world_id) {
         AdvanceRequest dummy_req{world_id, state.current_phase, "init", "system", false, false};
         emit_phase_changed(state, initial, dummy_req);
     }
-
-    spdlog::info("PipelineManager: initialized state for world {} at phase {}",
-                 world_id, to_string(state.current_phase));
 }
 
 void PipelineManager::save_state(const PipelineState& state) {
