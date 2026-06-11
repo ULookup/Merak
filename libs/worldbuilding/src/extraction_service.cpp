@@ -1,6 +1,5 @@
 #include <merak/worldbuilding/extraction_service.hpp>
 #include <merak/worldbuilding/ids.hpp>
-#include <merak/llm/llm_client.hpp>
 
 #include <nlohmann/json.hpp>
 
@@ -59,7 +58,8 @@ static std::string join_names(const std::vector<std::string>& names) {
 
 // ─── Construction ───
 
-ExtractionService::ExtractionService(Dependencies deps) : deps_(std::move(deps)) {}
+ExtractionService::ExtractionService(merak::kg::KnowledgeGraphProvider* kg_provider)
+    : kg_provider_(kg_provider) {}
 
 // ─── Prompt builder ───
 
@@ -183,8 +183,8 @@ ExtractionService::parse_llm_response(
 
 // ─── Main extraction pipeline ───
 
-ExtractionResult ExtractionService::extract_from_scene(
-    const std::string& scene_text,
+ExtractionResult ExtractionService::process_llm_response(
+    const std::string& llm_response,
     const std::string& world_id,
     const std::vector<std::string>& participant_agent_ids,
     const std::vector<std::string>& participant_names) {
@@ -193,17 +193,6 @@ ExtractionResult ExtractionService::extract_from_scene(
     std::unordered_map<std::string, std::string> name_to_id;
     for (size_t i = 0; i < participant_names.size() && i < participant_agent_ids.size(); ++i) {
         name_to_id[participant_names[i]] = participant_agent_ids[i];
-    }
-
-    // Build prompt and call LLM
-    const auto prompt = build_extraction_prompt(scene_text, participant_names);
-
-    std::string llm_response;
-    try {
-        llm_response = deps_.llm_client->complete(prompt);
-    } catch (const std::exception& e) {
-        throw std::runtime_error(
-            "LLM extraction call failed: " + std::string(e.what()));
     }
 
     // Parse LLM response into candidates
@@ -217,7 +206,6 @@ ExtractionResult ExtractionService::extract_from_scene(
         if (src_it != name_to_id.end()) {
             rel.source_id = src_it->second;
         } else {
-            // Fallback: use name as ID for entities not in participant list
             rel.source_id = rel.source_name;
         }
 
@@ -253,7 +241,7 @@ ExtractionResult ExtractionService::deduplicate(
         // Query existing relations between the two entities
         merak::kg::SubGraph subgraph;
         try {
-            subgraph = deps_.kg_provider->query_subgraph(
+            subgraph = kg_provider_->query_subgraph(
                 rel.world_id,
                 {rel.source_name, rel.target_name},
                 merak::kg::QueryFilters{});
