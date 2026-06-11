@@ -1,5 +1,6 @@
 #pragma once
 
+#include <merak/kg/kg_models.hpp>
 #include <nlohmann/json.hpp>
 
 #include <optional>
@@ -14,6 +15,7 @@ enum class AgentKind {
     HistoryManager,
     MagicSystemManager,
     FactionManager,
+    RelationManager,
     Individual,
     Group
 };
@@ -277,6 +279,8 @@ inline std::string to_string(AgentKind value) {
         return "magic_system_manager";
     case AgentKind::FactionManager:
         return "faction_manager";
+    case AgentKind::RelationManager:
+        return "relation_manager";
     case AgentKind::Individual:
         return "individual";
     case AgentKind::Group:
@@ -382,5 +386,32 @@ inline std::string to_string(KnowledgeState value) {
     }
     return "unknown";
 }
+
+// ─── Knowledge Graph Extraction types ───
+
+enum class CandidateStatus {
+    New,
+    Conflict,
+    StanceChange,
+    FactUpdate,
+    NoChange
+};
+
+struct ExtractionCandidate {
+    merak::kg::GraphRelation relation;
+    CandidateStatus status;
+    std::optional<merak::kg::GraphRelation> existing;
+    std::string evidence;
+    std::vector<std::string> change_summary;
+};
+
+struct ExtractionResult {
+    std::vector<ExtractionCandidate> candidates;
+    std::string scene_id;
+    std::string world_id;
+    std::string extraction_timestamp;
+};
+
+enum class ExtractionConfirmAction { Approve, Reject, Edit, KeepExisting };
 
 } // namespace merak::worldbuilding
