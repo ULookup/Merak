@@ -1,6 +1,6 @@
 import { FileText, FolderOpen, Save, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { api } from '../../api/client';
+import { api, formatApiError } from '../../api/client';
 import { useAppState } from '../../AppState';
 import styles from '../InspectorPanel.module.css';
 import { useToast } from '../Toast';
@@ -10,6 +10,10 @@ function formatSize(size: number) {
   if (size > 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
   if (size > 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${size} B`;
+}
+
+function displayFileName(name: string) {
+  return name.replace(/\.(md|markdown|txt|docx|json|ya?ml)$/i, '');
 }
 
 export default function FilesInspector() {
@@ -42,7 +46,7 @@ export default function FilesInspector() {
       await api.openWorkspacePath(path, reveal);
       showToast(reveal ? 'File revealed in workspace.' : 'Workspace folder opened.', 'success');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not open workspace path.', 'error');
+      showToast(formatApiError(error, 'Could not open workspace path.'), 'error');
     } finally {
       setOpeningPath(null);
     }
@@ -58,7 +62,7 @@ export default function FilesInspector() {
       dispatch({ type: 'SET_EDITOR_CONTENT', fileId, content: res.file });
       if (res.fallback) showToast('Loaded a local preview buffer while the file API is pending.', 'info');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Could not read file.', 'error');
+      showToast(formatApiError(error, 'Could not read file.'), 'error');
     } finally {
       setLoadingFileId(null);
     }
@@ -90,7 +94,7 @@ export default function FilesInspector() {
       dispatch({
         type: 'SET_EDITOR_SAVE_STATUS',
         status: 'error',
-        error: error instanceof Error ? error.message : 'Save failed.',
+        error: formatApiError(error, 'Save failed.'),
       });
     }
   }
@@ -152,6 +156,9 @@ export default function FilesInspector() {
         ) : (
           <div className={styles.fileList}>
             {visibleFiles.map((file) => (
+              (() => {
+                const displayName = displayFileName(file.name);
+                return (
               <article
                 className={`${styles.fileItem} ${
                   activeFile?.id === file.id ? styles.fileItemActive : ''
@@ -160,7 +167,7 @@ export default function FilesInspector() {
                 onDoubleClick={() => openFile(file.id)}
               >
                 <div>
-                  <strong>{file.name}</strong>
+                  <strong>{displayName}</strong>
                   <code>{file.path}</code>
                   <small>
                     {file.ext || 'file'} / {formatSize(file.size)}
@@ -171,7 +178,7 @@ export default function FilesInspector() {
                   <button
                     className={styles.entryButton}
                     type="button"
-                    aria-label={`Open ${file.name} in editor`}
+                    aria-label={`Open ${displayName} in editor`}
                     onClick={() => openFile(file.id)}
                   >
                     <FileText size={14} aria-hidden="true" strokeWidth={2.3} />
@@ -180,7 +187,7 @@ export default function FilesInspector() {
                   <button
                     className={styles.entryButton}
                     type="button"
-                    aria-label={`Reveal ${file.name} in folder`}
+                    aria-label={`Reveal ${displayName} in folder`}
                     disabled={openingPath === file.path}
                     onClick={() => openWorkspacePath(file.path, true)}
                   >
@@ -189,6 +196,8 @@ export default function FilesInspector() {
                   </button>
                 </div>
               </article>
+                );
+              })()
             ))}
           </div>
         )}
@@ -199,14 +208,14 @@ export default function FilesInspector() {
           <div className={styles.editorHeader}>
             <div>
               <div className={styles.sectionTitle}>Text Editor</div>
-              <strong>{activeFile.name}</strong>
+              <strong>{displayFileName(activeFile.name)}</strong>
               <code>{activeFile.path}</code>
             </div>
             <span>{state.editorSaveStatus === 'dirty' ? 'Unsaved' : 'Local draft'}</span>
           </div>
           <textarea
             className={styles.editor}
-            aria-label={`Edit ${activeFile.name}`}
+            aria-label={`Edit ${displayFileName(activeFile.name)}`}
             value={state.editorBuffers[activeFile.id] ?? ''}
             onChange={(event) =>
               dispatch({

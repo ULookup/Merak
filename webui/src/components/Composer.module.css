@@ -14,6 +14,48 @@
   margin-bottom: 9px;
 }
 
+.runModeToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+}
+
+.runModeBtn,
+.runModeActive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 78px;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.runModeBtn {
+  background: transparent;
+  color: var(--muted-strong);
+}
+
+.runModeActive {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.runModeBtn:disabled,
+.runModeActive:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .modeBtn {
   display: inline-flex;
   align-items: center;
@@ -47,6 +89,86 @@
 
 .modeBtn svg {
   flex: 0 0 auto;
+}
+
+.delegatePanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) 150px;
+  gap: 10px;
+  margin-bottom: 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.delegateGroup,
+.delegateField {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.delegateGroup > span,
+.delegateField > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.choiceRow,
+.agentChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.choiceBtn,
+.choiceActive,
+.agentChoice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.choiceBtn,
+.agentChoice {
+  background: var(--surface-strong);
+  color: var(--muted-strong);
+}
+
+.choiceActive {
+  border-color: rgba(15, 118, 110, 0.28);
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.agentChoice input {
+  margin: 0;
+}
+
+.delegateField select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  padding: 8px 9px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.delegateHint {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .box {
@@ -170,8 +292,22 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .runModeToggle {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .runModeBtn,
+  .runModeActive {
+    flex: 1;
+  }
+
   .modeBtn {
     justify-content: center;
+  }
+
+  .delegatePanel {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .box {

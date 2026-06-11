@@ -11,6 +11,24 @@
   margin-bottom: 12px;
 }
 
+.sourceBanner {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid rgba(183, 121, 31, 0.26);
+  border-radius: 6px;
+  background: var(--amber-soft, #fff7ed);
+  color: var(--brand-strong, #92400e);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.sourceBackend {
+  border-color: rgba(15, 118, 110, 0.22);
+  background: var(--teal-soft, #ecfdf5);
+  color: var(--teal, #0f766e);
+}
+
 .section {
   margin-bottom: 14px;
   padding-bottom: 12px;

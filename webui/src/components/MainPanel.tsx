@@ -28,16 +28,8 @@ export default function MainPanel({
   const currentAgent = state.agents.find((a) => a.id === state.agentId);
   const currentWorld = state.worlds.find((w) => w.id === state.worldId);
 
-  // Adapt agent kind to actual type (string, not number)
-  const AGENT_ICONS: Record<string, string> = {
-    'god': '\u{1F451}', 'map_manager': '\u{1F5FA}', 'history_manager': '\u{1F4DC}',
-    'magic_system_manager': '\u{1F52E}', 'faction_manager': '\u{2694}', 'individual': '\u{1F9D1}', 'group': '\u{1F465}',
-    '0': '\u{1F451}', '1': '\u{1F5FA}', '2': '\u{1F4DC}',
-    '3': '\u{1F52E}', '4': '\u{2694}', '5': '\u{1F9D1}', '6': '\u{1F465}',
-  };
-
   const headerTitle = currentAgent
-    ? `${AGENT_ICONS[currentAgent.kind] ?? ''} ${currentAgent.display_name || currentAgent.name} · ${currentWorld?.name ?? ''}`
+    ? `${currentAgent.display_name || currentAgent.name} · ${currentWorld?.name ?? ''}`
     : 'Merak Workbench';
 
   const headerSubtitle = currentAgent

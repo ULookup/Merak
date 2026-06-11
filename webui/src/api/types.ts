@@ -474,6 +474,12 @@ export interface PhaseTransition {
   to: CreativePhase;
   trigger: string;
   timestamp: string;
+  world_id?: string;
+}
+
+export interface PipelineHistoryResponse {
+  ok: boolean;
+  history: PhaseTransition[];
 }
 
 export interface PipelineViewData {

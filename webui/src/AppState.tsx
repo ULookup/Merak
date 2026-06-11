@@ -41,6 +41,7 @@ export interface AppState {
   sessionId: string;
   lastSeq: number;
   currentRun: string | null;
+  lastRunId: string | null;
   messages: Message[];
   status: StatusLabel;
   usage: { inputTokens: number; outputTokens: number };
@@ -99,6 +100,7 @@ export const initialState: AppState = {
   sessionId: '',
   lastSeq: 0,
   currentRun: null,
+  lastRunId: null,
   messages: [],
   status: 'idle',
   usage: { inputTokens: 0, outputTokens: 0 },
@@ -198,6 +200,7 @@ export type Action =
   | { type: 'SET_STATUS'; status: StatusLabel }
   | { type: 'SET_USAGE'; inputTokens: number; outputTokens: number }
   | { type: 'SET_CURRENT_RUN'; runId: string | null }
+  | { type: 'PIPELINE_WORKFLOW_ACTIVATED'; name: string }
   | { type: 'ADD_RUN_TIMELINE_ITEM'; item: RunTimelineItem }
   | { type: 'COMMIT_ACTIVE' }
   | { type: 'SET_STORY_VERSION' }
@@ -224,6 +227,7 @@ export function reducer(state: AppState, action: Action): AppState {
         messages: [],
         lastSeq: 0,
         currentRun: null,
+        lastRunId: null,
         status: 'idle',
       };
 
@@ -235,6 +239,7 @@ export function reducer(state: AppState, action: Action): AppState {
         messages: [],
         lastSeq: 0,
         currentRun: null,
+        lastRunId: null,
         status: 'idle',
       };
 
@@ -497,7 +502,14 @@ export function reducer(state: AppState, action: Action): AppState {
       };
 
     case 'SET_CURRENT_RUN':
-      return { ...state, currentRun: action.runId };
+      return {
+        ...state,
+        currentRun: action.runId,
+        lastRunId: action.runId ?? state.lastRunId,
+      };
+
+    case 'PIPELINE_WORKFLOW_ACTIVATED':
+      return { ...state, pipelineActiveWorkflow: action.name };
 
     case 'ADD_RUN_TIMELINE_ITEM':
       return { ...state, runTimeline: [action.item, ...state.runTimeline].slice(0, 32) };

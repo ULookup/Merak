@@ -1,4 +1,19 @@
 import { useState } from 'react';
+import {
+  ArrowLeft,
+  BookOpen,
+  Crown,
+  FileText,
+  Map,
+  PenLine,
+  ScrollText,
+  Settings,
+  Sparkles,
+  Swords,
+  UserRound,
+  UsersRound,
+  X,
+} from 'lucide-react';
 import { api } from '../api/client';
 import { useAppState } from '../AppState';
 import BrandMark from './BrandMark';
@@ -17,22 +32,16 @@ interface WorldSidebarProps {
   onClose: () => void;
 }
 
-const AGENT_ICONS: Record<string, string> = {
-  '0': '👑',
-  '1': '🗺️',
-  '2': '📜',
-  '3': '🔮',
-  '4': '⚔️',
-  '5': '🧑',
-  '6': '👥',
-  ruler: '👑',
-  cartographer: '🗺️',
-  scribe: '📜',
-  oracle: '🔮',
-  warrior: '⚔️',
-  character: '🧑',
-  collective: '👥',
-};
+function AgentIcon({ kind }: { kind: string }) {
+  const common = { size: 15, 'aria-hidden': true as const, strokeWidth: 2.3 };
+  if (kind === 'god' || kind === '0' || kind === 'ruler') return <Crown {...common} />;
+  if (kind === 'map_manager' || kind === '1' || kind === 'cartographer') return <Map {...common} />;
+  if (kind === 'history_manager' || kind === '2' || kind === 'scribe') return <ScrollText {...common} />;
+  if (kind === 'magic_system_manager' || kind === '3' || kind === 'oracle') return <Sparkles {...common} />;
+  if (kind === 'faction_manager' || kind === '4' || kind === 'warrior') return <Swords {...common} />;
+  if (kind === 'group' || kind === '6' || kind === 'collective') return <UsersRound {...common} />;
+  return <UserRound {...common} />;
+}
 
 export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps) {
   const { state, dispatch } = useAppState();
@@ -50,7 +59,7 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
     <aside className={styles.sidebar}>
       {open && <div className={styles.overlay} onClick={onClose} />}
       <button className={styles.closeBtn} onClick={onClose} aria-label="Close sidebar">
-        ✕
+        <X size={16} aria-hidden="true" strokeWidth={2.4} />
       </button>
 
       <div className={styles.brandSection}>
@@ -60,7 +69,7 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
       {/* World Header — click to go back to dashboard */}
       <div className={styles.worldHeader} onClick={handleBackToDashboard} role="button" tabIndex={0}
         onKeyDown={(e) => { if (e.key === 'Enter') handleBackToDashboard(); }}>
-        <span>←</span>
+        <ArrowLeft size={15} aria-hidden="true" strokeWidth={2.4} />
         <span className={styles.worldHeaderName}>
           {currentWorld?.name ?? 'Select World'}
         </span>
@@ -77,11 +86,15 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
           <div className={styles.storyTreeLabel}>Story Tree</div>
           {overview.current_arc && (
             <div>
-              <div className={styles.storyTreeItem}>📘 {overview.current_arc.title ?? overview.current_arc.id}</div>
+              <div className={styles.storyTreeItem}>
+                <BookOpen size={13} aria-hidden="true" />
+                {overview.current_arc.title ?? overview.current_arc.id}
+              </div>
               {overview.current_chapter && (
                 <div>
                   <div className={`${styles.storyTreeItem} ${styles.storyTreeChild}`}>
-                    📄 {overview.current_chapter.title ?? overview.current_chapter.id}
+                    <FileText size={13} aria-hidden="true" />
+                    {overview.current_chapter.title ?? overview.current_chapter.id}
                   </div>
                   {overview.current_scene && (
                     <div
@@ -89,7 +102,8 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
                       style={{ paddingLeft: '2.5rem' }}
                       onClick={() => dispatch({ type: 'SET_INSPECTOR_TAB', tab: 'story' })}
                     >
-                      ✍️ {overview.current_scene.title ?? overview.current_scene.id}
+                      <PenLine size={13} aria-hidden="true" />
+                      {overview.current_scene.title ?? overview.current_scene.id}
                     </div>
                   )}
                 </div>
@@ -130,7 +144,7 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAgentClick(); }}
               >
-                <span>{AGENT_ICONS[kind] ?? '🧑'}</span>
+                <span className={styles.agentIcon}><AgentIcon kind={kind} /></span>
                 <span>{agent.name ?? agent.id}</span>
               </div>
             );
@@ -150,7 +164,8 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === 'Enter') setSettingsOpen((prev) => !prev); }}
       >
-        ⚙ Settings
+        <Settings size={15} aria-hidden="true" strokeWidth={2.3} />
+        Settings
       </div>
       {settingsOpen && <SettingsPanel />}
     </aside>

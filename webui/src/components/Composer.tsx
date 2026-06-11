@@ -1,7 +1,17 @@
 import { useCallback, useRef, useState } from 'react';
-import { BookOpen, Feather, Globe2, PenLine, Send, Square, WandSparkles } from 'lucide-react';
+import {
+  BookOpen,
+  Feather,
+  GitBranch,
+  Globe2,
+  PenLine,
+  Send,
+  Square,
+  UsersRound,
+  WandSparkles,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { api } from '../api/client';
+import { api, formatApiError } from '../api/client';
 import { useAppState } from '../AppState';
 import styles from './Composer.module.css';
 import { useToast } from './Toast';
@@ -40,7 +50,7 @@ const promptModes: Array<{ label: string; Icon: LucideIcon; template: string }> 
 ];
 
 export default function Composer() {
-  const { state } = useAppState();
+  const { state, dispatch } = useAppState();
   const { showToast } = useToast();
 
   const currentAgent = state.agents.find((a) => a.id === state.agentId);
@@ -57,7 +67,23 @@ export default function Composer() {
   })();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [runMode, setRunMode] = useState<'single' | 'delegate'>('single');
+  const [delegationPattern, setDelegationPattern] = useState('fan_out');
+  const [aggregation, setAggregation] = useState('all_results');
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const ref = useRef<HTMLTextAreaElement>(null);
+
+  const availablePatterns = state.metadata?.delegation_patterns?.length
+    ? state.metadata.delegation_patterns
+    : ['fan_out', 'sequential', 'pipeline'];
+
+  function toggleAgent(agentId: string) {
+    setSelectedAgentIds((current) =>
+      current.includes(agentId)
+        ? current.filter((id) => id !== agentId)
+        : [...current, agentId],
+    );
+  }
 
   const cancel = useCallback(async () => {
     if (!state.currentRun) return;
@@ -79,13 +105,55 @@ export default function Composer() {
     setSending(true);
 
     try {
-      await api.startRun(state.sessionId, msg, state.selectedModel);
+      if (runMode === 'delegate') {
+        const agents = selectedAgentIds.length
+          ? selectedAgentIds
+          : state.agentId
+            ? [state.agentId]
+            : [];
+        if (agents.length === 0) {
+          showToast('请选择至少一个 Agent。', 'info');
+          setText(msg);
+          return;
+        }
+        const res = await api.startDelegation(
+          state.sessionId,
+          delegationPattern,
+          agents,
+          msg,
+          aggregation,
+        );
+        dispatch({ type: 'SET_CURRENT_RUN', runId: res.parent_run_id });
+        dispatch({
+          type: 'APPEND_MESSAGE',
+          message: {
+            id: `delegation_${Date.now()}`,
+            kind: 'system',
+            text: `Delegate 已启动：${delegationPattern} · ${agents.length} Agent`,
+          },
+        });
+        showToast('Delegate Run 已启动。', 'success');
+      } else {
+        await api.startRun(state.sessionId, msg, state.selectedModel);
+      }
     } catch (e) {
-      showToast(`Error: ${e}`, 'error');
+      showToast(formatApiError(e), 'error');
     } finally {
       setSending(false);
     }
-  }, [text, sending, state.sessionId, state.selectedModel, showToast]);
+  }, [
+    aggregation,
+    delegationPattern,
+    dispatch,
+    runMode,
+    selectedAgentIds,
+    sending,
+    showToast,
+    state.agentId,
+    state.sessionId,
+    state.selectedModel,
+    text,
+  ]);
 
   const isRunning =
     state.currentRun !== null && state.status !== 'idle' && state.status !== 'waiting_approval';
@@ -105,6 +173,26 @@ export default function Composer() {
   return (
     <div className={styles.area}>
       <div className={styles.modeRail} aria-label="Creative prompt modes">
+        <div className={styles.runModeToggle} role="group" aria-label="Run mode">
+          <button
+            type="button"
+            className={runMode === 'single' ? styles.runModeActive : styles.runModeBtn}
+            onClick={() => setRunMode('single')}
+            disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
+          >
+            <Send size={13} aria-hidden="true" strokeWidth={2.3} />
+            Single
+          </button>
+          <button
+            type="button"
+            className={runMode === 'delegate' ? styles.runModeActive : styles.runModeBtn}
+            onClick={() => setRunMode('delegate')}
+            disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
+          >
+            <UsersRound size={13} aria-hidden="true" strokeWidth={2.3} />
+            Delegate
+          </button>
+        </div>
         {promptModes.map(({ label, Icon, template }) => (
           <button
             key={label}
@@ -119,6 +207,53 @@ export default function Composer() {
           </button>
         ))}
       </div>
+      {runMode === 'delegate' && (
+        <div className={styles.delegatePanel} aria-label="Delegate run options">
+          <div className={styles.delegateGroup}>
+            <span>Pattern</span>
+            <div className={styles.choiceRow}>
+              {availablePatterns.map((pattern) => (
+                <button
+                  key={pattern}
+                  type="button"
+                  className={delegationPattern === pattern ? styles.choiceActive : styles.choiceBtn}
+                  onClick={() => setDelegationPattern(pattern)}
+                >
+                  <GitBranch size={12} aria-hidden="true" strokeWidth={2.2} />
+                  {pattern}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className={styles.delegateField}>
+            <span>Aggregation</span>
+            <select value={aggregation} onChange={(e) => setAggregation(e.target.value)}>
+              <option value="all_results">all_results</option>
+              <option value="consensus">consensus</option>
+              <option value="summary">summary</option>
+            </select>
+          </label>
+          <div className={styles.delegateGroup}>
+            <span>Agents</span>
+            <div className={styles.agentChoices}>
+              {state.agents.length === 0 ? (
+                <span className={styles.delegateHint}>当前世界没有可选 Agent。</span>
+              ) : (
+                state.agents.map((agent) => (
+                  <label key={agent.id} className={styles.agentChoice}>
+                    <input
+                      type="checkbox"
+                      checked={selectedAgentIds.includes(agent.id)}
+                      onChange={() => toggleAgent(agent.id)}
+                    />
+                    {agent.display_name || agent.name || agent.id}
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <div className={styles.box}>
         <textarea
           ref={ref}
@@ -151,7 +286,7 @@ export default function Composer() {
             aria-label="Send message"
           >
             <Send size={14} aria-hidden="true" strokeWidth={2.4} />
-            Send
+            {runMode === 'delegate' ? 'Start Delegate' : 'Send'}
           </button>
         )}
       </div>
