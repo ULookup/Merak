@@ -15,11 +15,11 @@
 namespace merak::worldbuilding {
 namespace {
 
-constexpr std::array<std::string_view, 13> kWorldDirectories = {
-    "world_knowledge", "god",         "managers/map",   "managers/history",
-    "managers/magic",  "managers/faction", "agents",    "scenes",
-    "chapters",        "arcs",        "secrets",        "foreshadows",
-    "sessions"};
+constexpr std::array<std::string_view, 14> kWorldDirectories = {
+    "world_knowledge", "god",          "managers/map",    "managers/history",
+    "managers/magic",  "managers/faction", "managers/relation", "agents",
+    "scenes",          "chapters",     "arcs",            "secrets",
+    "foreshadows",     "sessions"};
 
 AgentKind agent_kind_from_string(const std::string& value) {
     if (value == "god") return AgentKind::God;
@@ -27,6 +27,7 @@ AgentKind agent_kind_from_string(const std::string& value) {
     if (value == "history_manager") return AgentKind::HistoryManager;
     if (value == "magic_system_manager") return AgentKind::MagicSystemManager;
     if (value == "faction_manager") return AgentKind::FactionManager;
+    if (value == "relation_manager") return AgentKind::RelationManager;
     if (value == "group") return AgentKind::Group;
     if (value == "individual") return AgentKind::Individual;
     throw std::runtime_error("unknown agent kind: " + value);
@@ -137,6 +138,13 @@ WorldMeta WorldStore::create_world(const std::string& name,
             "INSERT INTO agents(id, world_id, name, display_name, kind, created_at, updated_at) "
             "VALUES($1, $2, $3, $4, $5, $6, $7)",
             {agent_id, world.id, "god", "god", to_string(AgentKind::God), timestamp, timestamp});
+
+        const auto rm_id = make_id("agent");
+        conn.execute(
+            "INSERT INTO agents(id, world_id, name, display_name, kind, created_at, updated_at) "
+            "VALUES($1, $2, $3, $4, $5, $6, $7)",
+            {rm_id, world.id, "relation_manager", "relation_manager",
+             to_string(AgentKind::RelationManager), timestamp, timestamp});
 
         conn.exec("COMMIT");
     } catch (...) {
