@@ -534,6 +534,88 @@ private:
     ToolContext ctx_;
 };
 
+// ====== RelationManager Tools ======
+
+class QuerySubgraphTool : public Tool {
+public:
+    QuerySubgraphTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<QuerySubgraphTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return true; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
+class ExpandGraphTool : public Tool {
+public:
+    ExpandGraphTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<ExpandGraphTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return true; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
+class FindPathTool : public Tool {
+public:
+    FindPathTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<FindPathTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return true; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
+class CheckConsistencyTool : public Tool {
+public:
+    CheckConsistencyTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<CheckConsistencyTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return true; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
+class UpsertRelationTool : public Tool {
+public:
+    UpsertRelationTool(WorldbuildingService& svc, ToolContext ctx)
+        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ToolSpec spec() const override;
+    PermissionLevel permission() const override { return PermissionLevel::ask; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<UpsertRelationTool>(*svc_, ctx_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return false; }
+private:
+    WorldbuildingService* svc_;
+    ToolContext ctx_;
+};
+
 // ====== WorldbuildingTools Factory ======
 
 class WorldbuildingTools {

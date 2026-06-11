@@ -89,11 +89,21 @@ struct SubAgentConfig {
     bool can_delegate = false;
 };
 
+// ——— Knowledge Graph 配置 ———
+struct KnowledgeGraphConfig {
+    bool enabled = false;
+    std::string neo4j_uri = "bolt://localhost:7687";
+    std::string neo4j_user = "neo4j";
+    std::string neo4j_password;
+    std::string neo4j_database = "merak";
+};
+
 // ——— 顶层配置 ———
 struct Config {
     LLMConfig llm;
     std::vector<ModelEntry> models;
     MemoryConfig memory;
+    KnowledgeGraphConfig knowledge_graph;
     std::vector<MCPServerConfig> mcp_servers;
     AgentConfig agent;
     TuiConfig tui;

@@ -18,7 +18,7 @@ WorldbuildingService::WorldbuildingService(std::string_view pg_conninfo,
       foreshadowing_(worlds_, narrative_, pg_conninfo, root_),
       secrets_(worlds_, foreshadowing_, pg_conninfo, root_),
       voice_(),
-      orchestrator_(worlds_, agents_, narrative_, foreshadowing_, secrets_, voice_),
+      orchestrator_(worlds_, agents_, narrative_, foreshadowing_, secrets_, voice_, kg_provider_.get()),
       kg_provider_(std::move(kg_provider)) {}
 
 void WorldbuildingService::initialize() {

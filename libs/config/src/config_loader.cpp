@@ -68,6 +68,18 @@ static std::optional<Config> parse_config_file(const std::string& filepath) {
             if (mem.contains("decay_interval_days")) cfg.memory.decay_interval_days = mem["decay_interval_days"];
         }
 
+        if (j.contains("knowledge_graph")) {
+            auto& kg = j["knowledge_graph"];
+            if (kg.contains("enabled")) cfg.knowledge_graph.enabled = kg["enabled"];
+            if (kg.contains("neo4j")) {
+                auto& neo = kg["neo4j"];
+                if (neo.contains("uri")) cfg.knowledge_graph.neo4j_uri = neo["uri"];
+                if (neo.contains("user")) cfg.knowledge_graph.neo4j_user = neo["user"];
+                if (neo.contains("password")) cfg.knowledge_graph.neo4j_password = neo["password"];
+                if (neo.contains("database")) cfg.knowledge_graph.neo4j_database = neo["database"];
+            }
+        }
+
         if (j.contains("mcp_servers")) {
             for (auto& s : j["mcp_servers"]) {
                 MCPServerConfig sc;
@@ -160,6 +172,12 @@ void ConfigLoader::merge(Config& base, const Config& override_cfg) {
     if (override_cfg.memory.confidence_decay != 0.0f) base.memory.confidence_decay = override_cfg.memory.confidence_decay;
     if (override_cfg.memory.decay_interval_days > 0) base.memory.decay_interval_days = override_cfg.memory.decay_interval_days;
 
+    if (override_cfg.knowledge_graph.enabled) base.knowledge_graph.enabled = true;
+    if (!override_cfg.knowledge_graph.neo4j_uri.empty()) base.knowledge_graph.neo4j_uri = override_cfg.knowledge_graph.neo4j_uri;
+    if (!override_cfg.knowledge_graph.neo4j_user.empty()) base.knowledge_graph.neo4j_user = override_cfg.knowledge_graph.neo4j_user;
+    if (!override_cfg.knowledge_graph.neo4j_password.empty()) base.knowledge_graph.neo4j_password = override_cfg.knowledge_graph.neo4j_password;
+    if (!override_cfg.knowledge_graph.neo4j_database.empty()) base.knowledge_graph.neo4j_database = override_cfg.knowledge_graph.neo4j_database;
+
     if (!override_cfg.mcp_servers.empty()) base.mcp_servers = override_cfg.mcp_servers;
 
     auto& a = override_cfg.agent;
@@ -212,6 +230,11 @@ void ConfigLoader::apply_env_overrides(Config& cfg) {
     }
 
     if (auto* v = env_str("MERAK_DB_CONNECTION")) cfg.memory.db_connection = v;
+    if (auto* v = env_str("MERAK_KG_ENABLED")) cfg.knowledge_graph.enabled = (std::string(v) == "1" || std::string(v) == "true");
+    if (auto* v = env_str("MERAK_KG_NEO4J_URI")) cfg.knowledge_graph.neo4j_uri = v;
+    if (auto* v = env_str("MERAK_KG_NEO4J_USER")) cfg.knowledge_graph.neo4j_user = v;
+    if (auto* v = env_str("MERAK_KG_NEO4J_PASSWORD")) cfg.knowledge_graph.neo4j_password = v;
+    if (auto* v = env_str("MERAK_KG_NEO4J_DATABASE")) cfg.knowledge_graph.neo4j_database = v;
     if (auto* v = env_str("MERAK_SYSTEM_PROMPT")) cfg.agent.system_prompt = v;
     if (auto v = env_int("MERAK_MAX_TOOL_TURNS")) cfg.agent.max_tool_turns = *v;
     if (auto* v = env_str("MERAK_PERMISSION_MODE")) cfg.agent.permission_mode = v;

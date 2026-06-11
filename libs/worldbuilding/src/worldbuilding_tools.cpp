@@ -1,8 +1,10 @@
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
 #include <merak/worldbuilding/card_access.hpp>
+#include <merak/kg/kg_provider.hpp>
 #include <nlohmann/json.hpp>
 #include <future>
 #include <algorithm>
+#include <sstream>
 
 namespace merak::worldbuilding {
 
@@ -2043,6 +2045,300 @@ std::future<ToolResult> UpdateForeshadowTool::execute(ToolCall call, ToolExecuti
     });
 }
 
+// ========== RelationManager Tools ==========
+
+ToolSpec QuerySubgraphTool::spec() const {
+    ToolSpec s;
+    s.name = "query_subgraph";
+    s.description = R"(Query relations among specified entities. Returns all directed edges between them with stance, fact, and description. Example: query_subgraph(entity_names=["艾琳","卡伦","玛莎"]))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "entity_names": {"type": "array", "items": {"type": "string"}, "description": "Entity names to query relations for"}
+        },
+        "required": ["entity_names"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> QuerySubgraphTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+        try {
+            auto args = json::parse(call.arguments);
+            if (!args.contains("entity_names") || !args["entity_names"].is_array()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT, "entity_names (array) is required");
+                return result;
+            }
+            std::vector<std::string> names;
+            for (auto& n : args["entity_names"]) names.push_back(n.get<std::string>());
+
+            auto& svc = *static_cast<QuerySubgraphTool&>(*self).svc_;
+            auto& ctx = static_cast<QuerySubgraphTool&>(*self).ctx_;
+            auto* kg = svc.kg_provider();
+            if (!kg) {
+                result.output = error_response(ToolErrorCode::INTERNAL, "Knowledge Graph provider not available");
+                return result;
+            }
+            merak::kg::QueryFilters filters;
+            auto sg = kg->query_subgraph(ctx.world_id, names, filters);
+            auto md = merak::kg::KnowledgeGraphProvider::subgraph_to_markdown(sg);
+            result.output = ok_response({{"markdown", md.empty() ? "*No relations found*" : md}, {"relation_count", sg.relations.size()}});
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL, std::string("query_subgraph failed: ") + e.what());
+        }
+        return result;
+    });
+}
+
+ToolSpec ExpandGraphTool::spec() const {
+    ToolSpec s;
+    s.name = "expand_graph";
+    s.description = R"(Expand from an entity to find its N-hop neighbor graph. Returns neighbors and relations. Example: expand_graph(entity_name="艾琳", radius=2))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "entity_name": {"type": "string", "description": "Center entity name"},
+            "radius": {"type": "integer", "description": "Hop count (default: 1)", "default": 1}
+        },
+        "required": ["entity_name"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> ExpandGraphTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+        try {
+            auto args = json::parse(call.arguments);
+            std::string entity_name = args.value("entity_name", "");
+            if (entity_name.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT, "entity_name is required");
+                return result;
+            }
+            int radius = args.value("radius", 1);
+
+            auto& svc = *static_cast<ExpandGraphTool&>(*self).svc_;
+            auto& ctx = static_cast<ExpandGraphTool&>(*self).ctx_;
+            auto* kg = svc.kg_provider();
+            if (!kg) {
+                result.output = error_response(ToolErrorCode::INTERNAL, "Knowledge Graph provider not available");
+                return result;
+            }
+            merak::kg::QueryFilters filters;
+            auto ng = kg->expand(ctx.world_id, entity_name, radius, filters);
+            auto md = merak::kg::KnowledgeGraphProvider::neighbor_graph_to_markdown(ng);
+            result.output = ok_response({
+                {"markdown", md.empty() ? "*No neighbors found*" : md},
+                {"center", entity_name},
+                {"neighbor_count", ng.neighbor_entities.size()},
+                {"relation_count", ng.relations.size()}
+            });
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL, std::string("expand_graph failed: ") + e.what());
+        }
+        return result;
+    });
+}
+
+ToolSpec FindPathTool::spec() const {
+    ToolSpec s;
+    s.name = "find_path";
+    s.description = R"(Find indirect connection paths between two entities. Returns up to 10 shortest paths ordered by hop count. Example: find_path(source="王五", target="艾琳", max_depth=4))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "source": {"type": "string", "description": "Source entity name"},
+            "target": {"type": "string", "description": "Target entity name"},
+            "max_depth": {"type": "integer", "description": "Max hop depth (default: 4)", "default": 4}
+        },
+        "required": ["source", "target"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> FindPathTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+        try {
+            auto args = json::parse(call.arguments);
+            std::string source = args.value("source", "");
+            std::string target = args.value("target", "");
+            if (source.empty() || target.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT, "source and target are required");
+                return result;
+            }
+            int max_depth = args.value("max_depth", 4);
+
+            auto& svc = *static_cast<FindPathTool&>(*self).svc_;
+            auto& ctx = static_cast<FindPathTool&>(*self).ctx_;
+            auto* kg = svc.kg_provider();
+            if (!kg) {
+                result.output = error_response(ToolErrorCode::INTERNAL, "Knowledge Graph provider not available");
+                return result;
+            }
+            merak::kg::QueryFilters filters;
+            auto pr = kg->find_paths(ctx.world_id, source, target, max_depth, filters);
+            auto md = merak::kg::KnowledgeGraphProvider::path_result_to_markdown(pr);
+            result.output = ok_response({
+                {"markdown", md},
+                {"found", pr.found},
+                {"path_count", pr.paths.size()}
+            });
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL, std::string("find_path failed: ") + e.what());
+        }
+        return result;
+    });
+}
+
+ToolSpec CheckConsistencyTool::spec() const {
+    ToolSpec s;
+    s.name = "check_consistency";
+    s.description = R"(Check relation consistency for an entity. Returns the entity's subgraph and neighbor data for the agent to analyze for contradictions, stale information, or unexpected changes. Example: check_consistency(entity_name="艾琳"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "entity_name": {"type": "string", "description": "Entity name to check consistency for"}
+        },
+        "required": ["entity_name"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> CheckConsistencyTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+        try {
+            auto args = json::parse(call.arguments);
+            std::string entity_name = args.value("entity_name", "");
+            if (entity_name.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT, "entity_name is required");
+                return result;
+            }
+
+            auto& svc = *static_cast<CheckConsistencyTool&>(*self).svc_;
+            auto& ctx = static_cast<CheckConsistencyTool&>(*self).ctx_;
+            auto* kg = svc.kg_provider();
+            if (!kg) {
+                result.output = error_response(ToolErrorCode::INTERNAL, "Knowledge Graph provider not available");
+                return result;
+            }
+            merak::kg::QueryFilters filters;
+            auto ng = kg->expand(ctx.world_id, entity_name, 1, filters);
+            auto ng_md = merak::kg::KnowledgeGraphProvider::neighbor_graph_to_markdown(ng);
+
+            std::ostringstream report;
+            report << "## Consistency Check for: " << entity_name << "\n\n";
+            report << "**Direct Relations (" << ng.relations.size() << "):**\n\n";
+            if (ng.relations.empty()) {
+                report << "*No relations found — entity may be isolated.*\n";
+            } else {
+                report << ng_md;
+            }
+            report << "\n**Neighbors (" << ng.neighbor_entities.size() << "):** ";
+            for (size_t i = 0; i < ng.neighbor_entities.size(); ++i) {
+                if (i > 0) report << ", ";
+                report << ng.neighbor_entities[i].name;
+            }
+            report << "\n";
+
+            result.output = ok_response({
+                {"markdown", report.str()},
+                {"entity", entity_name},
+                {"relation_count", ng.relations.size()},
+                {"neighbor_count", ng.neighbor_entities.size()}
+            });
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL, std::string("check_consistency failed: ") + e.what());
+        }
+        return result;
+    });
+}
+
+ToolSpec UpsertRelationTool::spec() const {
+    ToolSpec s;
+    s.name = "upsert_relation";
+    s.description = R"(Create or update a relation in the knowledge graph. Relations are bidirectional with stances. Example: upsert_relation(source_name="艾琳", target_name="卡伦", kind_en="MasterApprentice", kind_cn="师徒", a_to_b_stance="Friendly", b_to_a_stance="Admiring", fact="艾琳是卡伦的武艺师父"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "source_name": {"type": "string", "description": "Source entity name"},
+            "target_name": {"type": "string", "description": "Target entity name"},
+            "kind_en": {"type": "string", "description": "Relation kind in English (Acquaintance, Friend, Lover, Kin, MasterApprentice, SuperiorSubordinate, Enemy, Rival, Ally, Member, Owner, Guardian, Benefactor, Grudge, Custom)"},
+            "kind_cn": {"type": "string", "description": "Relation kind in Chinese (认识, 朋友, 恋人, 血缘, 师徒, 上下级, 敌对, 竞争, 合作, 隶属, 拥有, 守护, 恩人, 仇人)"},
+            "a_to_b_stance": {"type": "string", "description": "A→B stance: Friendly, Admiring, Dependent, Neutral, Cautious, Distant, Suspicious, Hostile, Resentful, Fearful, Guilty, Disdainful, Unknown"},
+            "b_to_a_stance": {"type": "string", "description": "B→A stance"},
+            "fact": {"type": "string", "description": "One sentence fact summarizing the relation"},
+            "description": {"type": "string", "description": "Detailed description of the relation"}
+        },
+        "required": ["source_name", "target_name", "kind_en"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> UpsertRelationTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+        try {
+            auto args = json::parse(call.arguments);
+            std::string source_name = args.value("source_name", "");
+            std::string target_name = args.value("target_name", "");
+            if (source_name.empty() || target_name.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT, "source_name and target_name are required");
+                return result;
+            }
+
+            auto& svc = *static_cast<UpsertRelationTool&>(*self).svc_;
+            auto& ctx = static_cast<UpsertRelationTool&>(*self).ctx_;
+            auto* kg = svc.kg_provider();
+            if (!kg) {
+                result.output = error_response(ToolErrorCode::INTERNAL, "Knowledge Graph provider not available");
+                return result;
+            }
+
+            merak::kg::GraphRelation rel;
+            rel.source_name = source_name;
+            rel.target_name = target_name;
+            rel.source_id = source_name;
+            rel.target_id = target_name;
+            rel.kind_en = args.value("kind_en", "Acquaintance");
+            rel.kind_cn = args.value("kind_cn", "");
+            rel.a_to_b_stance = merak::kg::stance_from_string(args.value("a_to_b_stance", "Neutral"));
+            rel.b_to_a_stance = merak::kg::stance_from_string(args.value("b_to_a_stance", "Neutral"));
+            rel.fact = args.value("fact", "");
+            rel.description = args.value("description", "");
+            rel.world_id = ctx.world_id;
+
+            kg->upsert_relation(rel);
+            result.output = ok_response({
+                {"source_name", source_name},
+                {"target_name", target_name},
+                {"kind_en", rel.kind_en},
+                {"status", "upserted"}
+            });
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL, std::string("upsert_relation failed: ") + e.what());
+        }
+        return result;
+    });
+}
+
 // ========== WorldbuildingTools Factory ==========
 
 std::vector<ToolSpec> WorldbuildingTools::specs_for(AgentKind kind) const {
@@ -2103,6 +2399,13 @@ WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) const {
         break;
     case AgentKind::FactionManager:
         tools.push_back(std::make_unique<QueryFactionTool>(*service_, ctx));
+        break;
+    case AgentKind::RelationManager:
+        tools.push_back(std::make_unique<QuerySubgraphTool>(*service_, ctx));
+        tools.push_back(std::make_unique<ExpandGraphTool>(*service_, ctx));
+        tools.push_back(std::make_unique<FindPathTool>(*service_, ctx));
+        tools.push_back(std::make_unique<CheckConsistencyTool>(*service_, ctx));
+        tools.push_back(std::make_unique<UpsertRelationTool>(*service_, ctx));
         break;
     case AgentKind::Group:
         break;

@@ -1,4 +1,4 @@
-#include <merak/kg/kg_provider.hpp>
+#include <merak/kg/neo4j_provider.hpp>
 #include <merak/kg/kg_models.hpp>
 
 #include <neo4j-client.h>
@@ -24,7 +24,6 @@ std::string now_iso_utc() {
     return oss.str();
 }
 
-// RAII guard for neo4j sessions
 struct SessionGuard {
     neo4j_session_t* session = nullptr;
     ~SessionGuard() { if (session) neo4j_close_session(session); }
@@ -62,10 +61,16 @@ GraphRelation relation_from_neo4j_record(const neo4j_result_t* record) {
 
 } // namespace
 
-class Neo4jKGProvider : public KnowledgeGraphProvider {
-public:
-    Neo4jKGProvider(std::string uri, std::string user, std::string password,
-                    std::string database = "merak")
+// ─── PIMPL implementation ───
+
+struct Neo4jKGProvider::Impl {
+    neo4j_driver_t* driver_ = nullptr;
+    std::string uri_;
+    std::string user_;
+    std::string password_;
+    std::string database_;
+
+    Impl(std::string uri, std::string user, std::string password, std::string database)
         : uri_(std::move(uri)), user_(std::move(user)),
           password_(std::move(password)), database_(std::move(database))
     {
@@ -79,11 +84,52 @@ public:
         ensure_constraints();
     }
 
-    ~Neo4jKGProvider() override {
+    ~Impl() {
         if (driver_) neo4j_driver_destroy(driver_);
     }
 
-    void upsert_entity(const GraphEntity& entity) override {
+    void ensure_constraints() {
+        SessionGuard session{make_write_session()};
+        neo4j_result_stream_t* results = neo4j_run(session.session,
+            "CREATE CONSTRAINT entity_pk IF NOT EXISTS "
+            "FOR (e:Entity) REQUIRE (e.source_id, e.world_id) IS UNIQUE",
+            neo4j_null_params);
+        neo4j_close_results(results);
+
+        results = neo4j_run(session.session,
+            "CREATE INDEX entity_name_lookup IF NOT EXISTS "
+            "FOR (e:Entity) ON (e.world_id, e.name)",
+            neo4j_null_params);
+        neo4j_close_results(results);
+
+        results = neo4j_run(session.session,
+            "CREATE INDEX entity_world IF NOT EXISTS "
+            "FOR (e:Entity) ON (e.world_id)",
+            neo4j_null_params);
+        neo4j_close_results(results);
+    }
+
+    neo4j_session_t* make_read_session() const {
+        neo4j_session_config_t* config = neo4j_new_session_config();
+        neo4j_session_config_set_default_access_mode(config, NEO4J_ACCESS_MODE_READ);
+        neo4j_session_config_set_database(config, database_.c_str());
+        auto session = neo4j_new_session(driver_, config);
+        neo4j_free_session_config(config);
+        if (!session) throw std::runtime_error("Neo4jKGProvider: failed to create read session");
+        return session;
+    }
+
+    neo4j_session_t* make_write_session() const {
+        neo4j_session_config_t* config = neo4j_new_session_config();
+        neo4j_session_config_set_default_access_mode(config, NEO4J_ACCESS_MODE_WRITE);
+        neo4j_session_config_set_database(config, database_.c_str());
+        auto session = neo4j_new_session(driver_, config);
+        neo4j_free_session_config(config);
+        if (!session) throw std::runtime_error("Neo4jKGProvider: failed to create write session");
+        return session;
+    }
+
+    void upsert_entity(const GraphEntity& entity) {
         SessionGuard session{make_write_session()};
         neo4j_result_stream_t* results = neo4j_run(session.session,
             "MERGE (e:Entity {source_id: $source_id, world_id: $world_id}) "
@@ -98,7 +144,7 @@ public:
         neo4j_close_results(results);
     }
 
-    std::vector<GraphEntity> list_entities(const std::string& world_id) const override {
+    std::vector<GraphEntity> list_entities(const std::string& world_id) const {
         SessionGuard session{make_read_session()};
         neo4j_result_stream_t* results = neo4j_run(session.session,
             "MATCH (e:Entity {world_id: $world_id}) RETURN e.source_id, e.name, e.type, e.world_id, e.created_at",
@@ -119,10 +165,9 @@ public:
         return entities;
     }
 
-    void upsert_relation(const GraphRelation& relation) override {
+    void upsert_relation(const GraphRelation& relation) {
         SessionGuard session{make_write_session()};
 
-        // Ensure both endpoint entities exist
         upsert_entity({relation.source_name, relation.source_type,
                        relation.source_id, relation.world_id, ""});
         upsert_entity({relation.target_name, relation.target_type,
@@ -172,7 +217,7 @@ public:
         neo4j_close_results(results);
     }
 
-    void delete_relation(const RelationKey& key) override {
+    void delete_relation(const RelationKey& key) {
         SessionGuard session{make_write_session()};
         neo4j_result_stream_t* results = neo4j_run(session.session,
             "MATCH (a:Entity {source_id: $source_id, world_id: $world_id})"
@@ -190,7 +235,7 @@ public:
 
     SubGraph query_subgraph(const std::string& world_id,
                              const std::vector<std::string>& entity_names,
-                             const QueryFilters& filters) const override {
+                             const QueryFilters& filters) const {
         SessionGuard session{make_read_session()};
         nlohmann::json names_json = entity_names;
         std::string names_str = names_json.dump();
@@ -227,7 +272,7 @@ public:
     NeighborGraph expand(const std::string& world_id,
                           const std::string& entity_name,
                           int radius,
-                          const QueryFilters& filters) const override {
+                          const QueryFilters& filters) const {
         SessionGuard session{make_read_session()};
         std::string cypher = R"(
             MATCH (center:Entity {world_id: $world_id, name: $center_name})
@@ -292,7 +337,7 @@ public:
                            const std::string& source,
                            const std::string& target,
                            int max_depth,
-                           const QueryFilters& filters) const override {
+                           const QueryFilters& filters) const {
         SessionGuard session{make_read_session()};
         std::string cypher = R"(
             MATCH path = (src:Entity {world_id: $world_id, name: $source})
@@ -349,7 +394,6 @@ public:
                 pr.found = true;
             }
 
-            // Fields 1..16 are the relation fields (match relation_from_neo4j_record)
             GraphRelation rel;
             rel.source_id = neo4j_result_field(record, 1);
             rel.target_id = neo4j_result_field(record, 2);
@@ -376,7 +420,7 @@ public:
         return pr;
     }
 
-    void delete_world_graph(const std::string& world_id) override {
+    void delete_world_graph(const std::string& world_id) {
         SessionGuard session{make_write_session()};
         neo4j_result_stream_t* results = neo4j_run(session.session,
             "MATCH (e:Entity {world_id: $world_id}) "
@@ -384,55 +428,48 @@ public:
             neo4j_map_of("world_id", world_id.c_str()));
         neo4j_close_results(results);
     }
-
-private:
-    void ensure_constraints() {
-        SessionGuard session{make_write_session()};
-        neo4j_result_stream_t* results = neo4j_run(session.session,
-            "CREATE CONSTRAINT entity_pk IF NOT EXISTS "
-            "FOR (e:Entity) REQUIRE (e.source_id, e.world_id) IS UNIQUE",
-            neo4j_null_params);
-        neo4j_close_results(results);
-
-        results = neo4j_run(session.session,
-            "CREATE INDEX entity_name_lookup IF NOT EXISTS "
-            "FOR (e:Entity) ON (e.world_id, e.name)",
-            neo4j_null_params);
-        neo4j_close_results(results);
-
-        results = neo4j_run(session.session,
-            "CREATE INDEX entity_world IF NOT EXISTS "
-            "FOR (e:Entity) ON (e.world_id)",
-            neo4j_null_params);
-        neo4j_close_results(results);
-    }
-
-    neo4j_session_t* make_read_session() const {
-        neo4j_session_config_t* config = neo4j_new_session_config();
-        neo4j_session_config_set_default_access_mode(config, NEO4J_ACCESS_MODE_READ);
-        neo4j_session_config_set_database(config, database_.c_str());
-        auto session = neo4j_new_session(driver_, config);
-        neo4j_free_session_config(config);
-        if (!session) throw std::runtime_error("Neo4jKGProvider: failed to create read session");
-        return session;
-    }
-
-    neo4j_session_t* make_write_session() const {
-        neo4j_session_config_t* config = neo4j_new_session_config();
-        neo4j_session_config_set_default_access_mode(config, NEO4J_ACCESS_MODE_WRITE);
-        neo4j_session_config_set_database(config, database_.c_str());
-        auto session = neo4j_new_session(driver_, config);
-        neo4j_free_session_config(config);
-        if (!session) throw std::runtime_error("Neo4jKGProvider: failed to create write session");
-        return session;
-    }
-
-    neo4j_driver_t* driver_ = nullptr;
-    std::string uri_;
-    std::string user_;
-    std::string password_;
-    std::string database_;
 };
+
+// ─── Outer class: delegate to impl_ ───
+
+Neo4jKGProvider::Neo4jKGProvider(std::string uri, std::string user, std::string password,
+                                 std::string database)
+    : impl_(std::make_unique<Impl>(std::move(uri), std::move(user), std::move(password), std::move(database))) {}
+
+Neo4jKGProvider::~Neo4jKGProvider() = default;
+
+void Neo4jKGProvider::upsert_entity(const GraphEntity& entity) { impl_->upsert_entity(entity); }
+
+std::vector<GraphEntity> Neo4jKGProvider::list_entities(const std::string& world_id) const {
+    return impl_->list_entities(world_id);
+}
+
+void Neo4jKGProvider::upsert_relation(const GraphRelation& relation) { impl_->upsert_relation(relation); }
+
+void Neo4jKGProvider::delete_relation(const RelationKey& key) { impl_->delete_relation(key); }
+
+SubGraph Neo4jKGProvider::query_subgraph(const std::string& world_id,
+                                          const std::vector<std::string>& entity_names,
+                                          const QueryFilters& filters) const {
+    return impl_->query_subgraph(world_id, entity_names, filters);
+}
+
+NeighborGraph Neo4jKGProvider::expand(const std::string& world_id,
+                                       const std::string& entity_name,
+                                       int radius,
+                                       const QueryFilters& filters) const {
+    return impl_->expand(world_id, entity_name, radius, filters);
+}
+
+PathResult Neo4jKGProvider::find_paths(const std::string& world_id,
+                                        const std::string& source,
+                                        const std::string& target,
+                                        int max_depth,
+                                        const QueryFilters& filters) const {
+    return impl_->find_paths(world_id, source, target, max_depth, filters);
+}
+
+void Neo4jKGProvider::delete_world_graph(const std::string& world_id) { impl_->delete_world_graph(world_id); }
 
 // ─── Formatting helpers ───
 
