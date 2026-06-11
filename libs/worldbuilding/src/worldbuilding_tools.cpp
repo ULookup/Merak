@@ -2320,11 +2320,14 @@ std::future<ToolResult> ExtractSceneRelationsTool::execute(ToolCall call, ToolEx
 
             // 2. Resolve participant names from AgentStore
             std::vector<std::string> participant_names;
+            participant_names.reserve(scene.participant_ids.size());
             for (const auto& pid : scene.participant_ids) {
                 auto agent = svc.agents().get_agent(pid);
                 if (agent) {
                     participant_names.push_back(
                         agent->display_name.empty() ? agent->name : agent->display_name);
+                } else {
+                    participant_names.push_back(pid); // fallback: use raw ID when agent not found
                 }
             }
 
@@ -2342,9 +2345,12 @@ std::future<ToolResult> ExtractSceneRelationsTool::execute(ToolCall call, ToolEx
                         report << merak::kg::KnowledgeGraphProvider::subgraph_to_markdown(sg);
                         report << "\n";
                     }
-                } catch (...) {
+                } catch (const std::exception&) {
                     // KG query is best-effort; continue without existing data
                 }
+            } else if (include_existing && !kg) {
+                report << "## Existing Relations\n\n";
+                report << "*Knowledge Graph provider not available — existing relations not queried.*\n\n";
             }
 
             // 4. Build extraction prompt via ExtractionService
