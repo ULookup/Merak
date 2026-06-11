@@ -411,7 +411,10 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
             }
             auto body = nlohmann::json::parse(req.body);
             auto workflow_name = body.value("workflow_name", "default_creative_pipeline");
-            pipeline_mgr_->activate_workflow(world_id, workflow_name);
+            if (!pipeline_mgr_->activate_workflow(world_id, workflow_name)) {
+                error_response(res, "Workflow not found: " + workflow_name, 400, "workflow_not_found");
+                return;
+            }
             res.set_content(R"({"ok":true})", "application/json");
         });
 }

@@ -153,17 +153,18 @@ std::vector<std::string> PipelineManager::list_workflows() const {
     return names;
 }
 
-void PipelineManager::activate_workflow(const std::string& world_id,
+bool PipelineManager::activate_workflow(const std::string& world_id,
                                          const std::string& workflow_name) {
     if (!workflow_defs_.count(workflow_name)) {
         spdlog::warn("PipelineManager: workflow '{}' not found", workflow_name);
-        return;
+        return false;
     }
     {
         std::unique_lock lock(world_mutex_);
         worlds_[world_id].workflow_name = workflow_name;
     }
     init_state_for_world(world_id);
+    return true;
 }
 
 // ─── PipelineState CRUD ───
