@@ -254,7 +254,7 @@ void PipelineManager::load_state_from_db(const std::string& world_id) {
         auto state = nlohmann::json::parse(row["state_json"].as<std::string>())
                          .get<PipelineState>();
         std::unique_lock lock(world_mutex_);
-        worlds_[world_id] = std::move(state);
+        worlds_[world_id].state = std::move(state);
     } catch (const pqxx::unexpected_rows&) {
         // No state for this world — that's fine
     }
