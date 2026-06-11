@@ -255,7 +255,13 @@ void PipelineManager::load_state_from_db(const std::string& world_id) {
         auto state = nlohmann::json::parse(row["state_json"].as<std::string>())
                          .get<PipelineState>();
         std::unique_lock lock(world_mutex_);
-        worlds_[world_id].state = std::move(state);
+        auto& entry = worlds_[world_id];
+        entry.state = std::move(state);
+        // Sync workflow_name: initialize() bulk restore only sets .state,
+        // and init_state_for_world reads workflow_name from the entry.
+        if (!entry.state.active_workflow.empty() && entry.workflow_name.empty()) {
+            entry.workflow_name = entry.state.active_workflow;
+        }
     } catch (const pqxx::unexpected_rows&) {
         // No state for this world — that's fine
     }
