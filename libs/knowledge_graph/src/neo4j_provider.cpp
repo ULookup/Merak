@@ -16,30 +16,47 @@ namespace {
 
 std::string now_iso_utc() {
     auto now = std::chrono::system_clock::now();
-    auto time_t = std::chrono::system_clock::to_time_t(now);
+    auto t = std::chrono::system_clock::to_time_t(now);
+    struct tm buf;
+    gmtime_r(&t, &buf);
     std::ostringstream oss;
-    oss << std::put_time(std::gmtime(&time_t), "%Y-%m-%dT%H:%M:%SZ");
+    oss << std::put_time(&buf, "%Y-%m-%dT%H:%M:%SZ");
     return oss.str();
+}
+
+// RAII guard for neo4j sessions
+struct SessionGuard {
+    neo4j_session_t* session = nullptr;
+    ~SessionGuard() { if (session) neo4j_close_session(session); }
+    SessionGuard(const SessionGuard&) = delete;
+    SessionGuard& operator=(const SessionGuard&) = delete;
+    SessionGuard(SessionGuard&&) = delete;
+    SessionGuard& operator=(SessionGuard&&) = delete;
+};
+
+const char* field_or_empty(const neo4j_result_t* record, int idx) {
+    const char* val = neo4j_result_field(record, idx);
+    return val ? val : "";
 }
 
 GraphRelation relation_from_neo4j_record(const neo4j_result_t* record) {
     GraphRelation r;
-    r.source_id = neo4j_result_field(record, 0);
-    r.target_id = neo4j_result_field(record, 1);
-    r.source_name = neo4j_result_field(record, 2);
-    r.target_name = neo4j_result_field(record, 3);
-    r.kind_en = neo4j_result_field(record, 4);
-    r.kind_cn = neo4j_result_field(record, 5);
-    r.kind_custom = neo4j_result_field(record, 6);
-    r.a_to_b_stance = stance_from_string(neo4j_result_field(record, 7));
-    r.b_to_a_stance = stance_from_string(neo4j_result_field(record, 8));
-    r.a_to_b_addressing = neo4j_result_field(record, 9);
-    r.b_to_a_addressing = neo4j_result_field(record, 10);
-    r.fact = neo4j_result_field(record, 11);
-    r.description = neo4j_result_field(record, 12);
-    r.world_id = neo4j_result_field(record, 13);
-    r.created_at = neo4j_result_field(record, 14);
-    r.updated_at = neo4j_result_field(record, 15);
+    r.source_id = field_or_empty(record, 0);
+    r.target_id = field_or_empty(record, 1);
+    r.source_name = field_or_empty(record, 2);
+    r.target_name = field_or_empty(record, 3);
+    r.kind_en = field_or_empty(record, 4);
+    r.kind_cn = field_or_empty(record, 5);
+    r.kind_custom = field_or_empty(record, 6);
+    r.a_to_b_stance = stance_from_string(field_or_empty(record, 7));
+    r.b_to_a_stance = stance_from_string(field_or_empty(record, 8));
+    r.a_to_b_addressing = field_or_empty(record, 9);
+    r.b_to_a_addressing = field_or_empty(record, 10);
+    r.fact = field_or_empty(record, 11);
+    r.description = field_or_empty(record, 12);
+    r.world_id = field_or_empty(record, 13);
+    r.created_at = field_or_empty(record, 14);
+    r.updated_at = field_or_empty(record, 15);
     return r;
 }
 
@@ -67,8 +84,8 @@ public:
     }
 
     void upsert_entity(const GraphEntity& entity) override {
-        auto session = make_write_session();
-        neo4j_result_stream_t* results = neo4j_run(session,
+        SessionGuard session{make_write_session()};
+        neo4j_result_stream_t* results = neo4j_run(session.session,
             "MERGE (e:Entity {source_id: $source_id, world_id: $world_id}) "
             "SET e.name = $name, e.type = $type, e.created_at = $created_at",
             neo4j_map_of(
@@ -79,12 +96,11 @@ public:
                 "created_at", entity.created_at.empty() ? now_iso_utc().c_str() : entity.created_at.c_str()
             ));
         neo4j_close_results(results);
-        neo4j_close_session(session);
     }
 
     std::vector<GraphEntity> list_entities(const std::string& world_id) const override {
-        auto session = make_read_session();
-        neo4j_result_stream_t* results = neo4j_run(session,
+        SessionGuard session{make_read_session()};
+        neo4j_result_stream_t* results = neo4j_run(session.session,
             "MATCH (e:Entity {world_id: $world_id}) RETURN e.source_id, e.name, e.type, e.world_id, e.created_at",
             neo4j_map_of("world_id", world_id.c_str()));
 
@@ -100,12 +116,11 @@ public:
             entities.push_back(e);
         }
         neo4j_close_results(results);
-        neo4j_close_session(session);
         return entities;
     }
 
     void upsert_relation(const GraphRelation& relation) override {
-        auto session = make_write_session();
+        SessionGuard session{make_write_session()};
 
         // Ensure both endpoint entities exist
         upsert_entity({relation.source_name, relation.source_type,
@@ -135,7 +150,7 @@ public:
                 r.updated_at = $updated_at
         )";
 
-        neo4j_result_stream_t* results = neo4j_run(session, cypher.c_str(),
+        neo4j_result_stream_t* results = neo4j_run(session.session, cypher.c_str(),
             neo4j_map_of(
                 "source_id", relation.source_id.c_str(),
                 "target_id", relation.target_id.c_str(),
@@ -155,12 +170,11 @@ public:
                 "updated_at", now_iso_utc().c_str()
             ));
         neo4j_close_results(results);
-        neo4j_close_session(session);
     }
 
     void delete_relation(const RelationKey& key) override {
-        auto session = make_write_session();
-        neo4j_result_stream_t* results = neo4j_run(session,
+        SessionGuard session{make_write_session()};
+        neo4j_result_stream_t* results = neo4j_run(session.session,
             "MATCH (a:Entity {source_id: $source_id, world_id: $world_id})"
             "-[r:RELATES_TO {kind_en: $kind_en}]->"
             "(b:Entity {source_id: $target_id, world_id: $world_id}) "
@@ -172,13 +186,12 @@ public:
                 "world_id", key.world_id.c_str()
             ));
         neo4j_close_results(results);
-        neo4j_close_session(session);
     }
 
     SubGraph query_subgraph(const std::string& world_id,
                              const std::vector<std::string>& entity_names,
                              const QueryFilters& filters) const override {
-        auto session = make_read_session();
+        SessionGuard session{make_read_session()};
         nlohmann::json names_json = entity_names;
         std::string names_str = names_json.dump();
 
@@ -194,7 +207,7 @@ public:
             LIMIT $top_k
         )";
 
-        neo4j_result_stream_t* results = neo4j_run(session, cypher.c_str(),
+        neo4j_result_stream_t* results = neo4j_run(session.session, cypher.c_str(),
             neo4j_map_of("world_id", world_id.c_str(),
                          "top_k", std::to_string(filters.top_k).c_str()));
 
@@ -208,7 +221,6 @@ public:
                 " (" + to_string(rel.a_to_b_stance) + "/" + to_string(rel.b_to_a_stance) + ")");
         }
         neo4j_close_results(results);
-        neo4j_close_session(session);
         return sg;
     }
 
@@ -216,7 +228,7 @@ public:
                           const std::string& entity_name,
                           int radius,
                           const QueryFilters& filters) const override {
-        auto session = make_read_session();
+        SessionGuard session{make_read_session()};
         std::string cypher = R"(
             MATCH (center:Entity {world_id: $world_id, name: $center_name})
             MATCH path = (center)-[rels:RELATES_TO*1..)" + std::to_string(radius) + R"(]-(neighbor:Entity {world_id: $world_id})
@@ -240,7 +252,7 @@ public:
             LIMIT $top_k
         )";
 
-        neo4j_result_stream_t* results = neo4j_run(session, cypher.c_str(),
+        neo4j_result_stream_t* results = neo4j_run(session.session, cypher.c_str(),
             neo4j_map_of("world_id", world_id.c_str(),
                          "center_name", entity_name.c_str(),
                          "top_k", std::to_string(filters.top_k).c_str()));
@@ -273,7 +285,6 @@ public:
             ng.relations.push_back(rel);
         }
         neo4j_close_results(results);
-        neo4j_close_session(session);
         return ng;
     }
 
@@ -282,7 +293,7 @@ public:
                            const std::string& target,
                            int max_depth,
                            const QueryFilters& filters) const override {
-        auto session = make_read_session();
+        SessionGuard session{make_read_session()};
         std::string cypher = R"(
             MATCH path = (src:Entity {world_id: $world_id, name: $source})
                          -[rels:RELATES_TO*1..)" + std::to_string(max_depth) + R"(]->
@@ -315,7 +326,7 @@ public:
             ORDER BY path_idx, hop
         )";
 
-        neo4j_result_stream_t* results = neo4j_run(session, cypher.c_str(),
+        neo4j_result_stream_t* results = neo4j_run(session.session, cypher.c_str(),
             neo4j_map_of("world_id", world_id.c_str(),
                          "source", source.c_str(),
                          "target", target.c_str()));
@@ -362,41 +373,38 @@ public:
             pr.paths.push_back(std::move(current_path));
         }
         neo4j_close_results(results);
-        neo4j_close_session(session);
         return pr;
     }
 
     void delete_world_graph(const std::string& world_id) override {
-        auto session = make_write_session();
-        neo4j_result_stream_t* results = neo4j_run(session,
+        SessionGuard session{make_write_session()};
+        neo4j_result_stream_t* results = neo4j_run(session.session,
             "MATCH (e:Entity {world_id: $world_id}) "
             "DETACH DELETE e",
             neo4j_map_of("world_id", world_id.c_str()));
         neo4j_close_results(results);
-        neo4j_close_session(session);
     }
 
 private:
     void ensure_constraints() {
-        auto session = make_write_session();
-        neo4j_result_stream_t* results = neo4j_run(session,
+        SessionGuard session{make_write_session()};
+        neo4j_result_stream_t* results = neo4j_run(session.session,
             "CREATE CONSTRAINT entity_pk IF NOT EXISTS "
             "FOR (e:Entity) REQUIRE (e.source_id, e.world_id) IS UNIQUE",
             neo4j_null_params);
         neo4j_close_results(results);
 
-        results = neo4j_run(session,
+        results = neo4j_run(session.session,
             "CREATE INDEX entity_name_lookup IF NOT EXISTS "
             "FOR (e:Entity) ON (e.world_id, e.name)",
             neo4j_null_params);
         neo4j_close_results(results);
 
-        results = neo4j_run(session,
+        results = neo4j_run(session.session,
             "CREATE INDEX entity_world IF NOT EXISTS "
             "FOR (e:Entity) ON (e.world_id)",
             neo4j_null_params);
         neo4j_close_results(results);
-        neo4j_close_session(session);
     }
 
     neo4j_session_t* make_read_session() const {
@@ -405,6 +413,7 @@ private:
         neo4j_session_config_set_database(config, database_.c_str());
         auto session = neo4j_new_session(driver_, config);
         neo4j_free_session_config(config);
+        if (!session) throw std::runtime_error("Neo4jKGProvider: failed to create read session");
         return session;
     }
 
@@ -414,6 +423,7 @@ private:
         neo4j_session_config_set_database(config, database_.c_str());
         auto session = neo4j_new_session(driver_, config);
         neo4j_free_session_config(config);
+        if (!session) throw std::runtime_error("Neo4jKGProvider: failed to create write session");
         return session;
     }
 
