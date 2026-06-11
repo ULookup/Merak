@@ -1,13 +1,16 @@
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <merak/worldbuilding/ids.hpp>
 
+#include <spdlog/spdlog.h>
+
 #include <stdexcept>
 #include <string>
 
 namespace merak::worldbuilding {
 
 WorldbuildingService::WorldbuildingService(std::string_view pg_conninfo,
-                                           std::filesystem::path root)
+                                           std::filesystem::path root,
+                                           std::unique_ptr<merak::kg::KnowledgeGraphProvider> kg_provider)
     : root_(std::move(root)),
       worlds_(pg_conninfo, root_),
       agents_(worlds_, pg_conninfo, root_),
@@ -15,7 +18,8 @@ WorldbuildingService::WorldbuildingService(std::string_view pg_conninfo,
       foreshadowing_(worlds_, narrative_, pg_conninfo, root_),
       secrets_(worlds_, foreshadowing_, pg_conninfo, root_),
       voice_(),
-      orchestrator_(worlds_, agents_, narrative_, foreshadowing_, secrets_, voice_) {}
+      orchestrator_(worlds_, agents_, narrative_, foreshadowing_, secrets_, voice_, kg_provider_.get()),
+      kg_provider_(std::move(kg_provider)) {}
 
 void WorldbuildingService::initialize() {
     worlds_.initialize();
@@ -39,7 +43,10 @@ std::vector<WorldMeta> WorldbuildingService::list_worlds() const {
 AgentRecord
 WorldbuildingService::create_character(const std::string& world_id,
                                         CharacterCard card) {
-    return agents_.create_character(world_id, std::move(card));
+    auto agent = agents_.create_character(world_id, std::move(card));
+    sync_entity_to_kg({agent.name, merak::kg::EntityType::Agent,
+                       agent.id, agent.world_id, agent.created_at});
+    return agent;
 }
 
 AgentRecord
@@ -56,8 +63,11 @@ WorldbuildingService::create_group(const std::string& world_id,
                                     std::string name,
                                     std::string culture_card,
                                     std::vector<std::string> members) {
-    return agents_.create_group(world_id, std::move(name),
-                                 std::move(culture_card), std::move(members));
+    auto agent = agents_.create_group(world_id, std::move(name),
+                                     std::move(culture_card), std::move(members));
+    sync_entity_to_kg({agent.name, merak::kg::EntityType::Organization,
+                       agent.id, agent.world_id, agent.created_at});
+    return agent;
 }
 
 Chapter WorldbuildingService::create_chapter(const std::string& world_id,
@@ -340,6 +350,8 @@ nlohmann::json WorldbuildingService::resolve_creation(
 
             auto created = worlds().add_location(pc.world_id, std::move(loc));
             result["location_id"] = created.id;
+            sync_entity_to_kg({created.name, merak::kg::EntityType::Location,
+                               created.id, pc.world_id, created.created_at});
 
         } else {
             throw std::runtime_error("Unknown tool_name: " + pc.tool_name);
@@ -352,6 +364,15 @@ nlohmann::json WorldbuildingService::resolve_creation(
     }
 
     return result;
+}
+
+void WorldbuildingService::sync_entity_to_kg(const merak::kg::GraphEntity& entity) {
+    if (!kg_provider_) {
+        spdlog::warn("sync_entity_to_kg: kg_provider not available, skipping entity '{}'",
+                     entity.name);
+        return;
+    }
+    kg_provider_->upsert_entity(entity);
 }
 
 } // namespace merak::worldbuilding

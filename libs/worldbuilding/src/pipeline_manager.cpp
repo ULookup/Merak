@@ -758,6 +758,18 @@ void PipelineManager::execute_actions(const std::vector<ActionDef>& actions,
                 from_json(action.params["else"], else_action);
                 execute_actions({else_action}, state);
             }
+        } else if (action.type == "invoke_agent") {
+            if (deps_.invoke_agent) {
+                auto agent_id = action.params.value("agent_id", "");
+                auto task = action.params.value("task", "");
+                spdlog::info("PipelineAction: invoking agent {} with task: {}", agent_id, task);
+                auto result = deps_.invoke_agent(state.world_id, agent_id, task);
+                if (!result.success) {
+                    spdlog::warn("PipelineAction: agent invocation failed: {}", result.error);
+                }
+            } else {
+                spdlog::warn("PipelineAction: invoke_agent callback not set, skipping");
+            }
         }
     }
 }

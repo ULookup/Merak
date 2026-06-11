@@ -1,5 +1,6 @@
 #include <merak/dsl/resolver.hpp>
 
+#include <merak/kg/kg_provider.hpp>
 #include <merak/worldbuilding/agent_store.hpp>
 #include <merak/worldbuilding/foreshadowing_store.hpp>
 #include <merak/worldbuilding/narrative_store.hpp>
@@ -469,6 +470,63 @@ ResolvedContent Resolver::resolve(const DslRef& ref) {
         os << "### Relations\n\n";
         os << format_relations(relations);
         result.rendered = os.str();
+        return result;
+    }
+
+    if (ref.type == "graph_subgraph") {
+        auto* kg = svc_.kg_provider();
+        if (!kg) {
+            result.rendered = "<!-- DSL: KG provider not available -->";
+            return result;
+        }
+        std::vector<std::string> names;
+        auto names_param = param("names");
+        if (!names_param.empty()) {
+            std::istringstream nss(names_param);
+            std::string n;
+            while (std::getline(nss, n, ',')) {
+                auto trimmed = n;
+                trimmed.erase(0, trimmed.find_first_not_of(" \t"));
+                trimmed.erase(trimmed.find_last_not_of(" \t") + 1);
+                if (!trimmed.empty()) names.push_back(trimmed);
+            }
+        }
+        merak::kg::QueryFilters filters;
+        auto sg = kg->query_subgraph(world_id_, names, filters);
+        result.rendered = merak::kg::KnowledgeGraphProvider::subgraph_to_markdown(sg);
+        if (result.rendered.empty()) result.rendered = "*暂无关系数据*";
+        return result;
+    }
+
+    if (ref.type == "graph_expand") {
+        auto* kg = svc_.kg_provider();
+        if (!kg) {
+            result.rendered = "<!-- DSL: KG provider not available -->";
+            return result;
+        }
+        auto center = param("center");
+        auto radius_str = param("radius");
+        int radius = radius_str.empty() ? 1 : std::stoi(radius_str);
+        merak::kg::QueryFilters filters;
+        auto ng = kg->expand(world_id_, center, radius, filters);
+        result.rendered = merak::kg::KnowledgeGraphProvider::neighbor_graph_to_markdown(ng);
+        if (result.rendered.empty()) result.rendered = "*未找到相邻实体*";
+        return result;
+    }
+
+    if (ref.type == "graph_path") {
+        auto* kg = svc_.kg_provider();
+        if (!kg) {
+            result.rendered = "<!-- DSL: KG provider not available -->";
+            return result;
+        }
+        auto from = param("from");
+        auto to = param("to");
+        auto depth_str = param("max_depth");
+        int max_depth = depth_str.empty() ? 3 : std::stoi(depth_str);
+        merak::kg::QueryFilters filters;
+        auto pr = kg->find_paths(world_id_, from, to, max_depth, filters);
+        result.rendered = merak::kg::KnowledgeGraphProvider::path_result_to_markdown(pr);
         return result;
     }
 

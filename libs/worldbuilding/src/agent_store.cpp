@@ -37,6 +37,9 @@ AgentKind agent_kind_from_string(const std::string& value) {
     if (value == "faction_manager") {
         return AgentKind::FactionManager;
     }
+    if (value == "relation_manager") {
+        return AgentKind::RelationManager;
+    }
     if (value == "individual") {
         return AgentKind::Individual;
     }
@@ -222,6 +225,8 @@ std::filesystem::path manager_domain_path(AgentKind kind) {
         return "magic";
     case AgentKind::FactionManager:
         return "faction";
+    case AgentKind::RelationManager:
+        return "relation";
     default:
         throw std::runtime_error("agent kind is not a manager");
     }

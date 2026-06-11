@@ -1,6 +1,7 @@
 #include <merak/worldbuilding/scene_orchestrator.hpp>
 #include <merak/worldbuilding/ids.hpp>
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
+#include <merak/kg/kg_provider.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -169,13 +170,15 @@ SceneOrchestrator::SceneOrchestrator(WorldStore& worlds,
                                      NarrativeStore& narrative,
                                      ForeshadowingStore& foreshadowing,
                                      SecretStore& secrets,
-                                     VoiceAnalyzer& voice)
+                                     VoiceAnalyzer& voice,
+                                     merak::kg::KnowledgeGraphProvider* kg_provider)
     : worlds_(worlds),
       agents_(agents),
       narrative_(narrative),
       foreshadowing_(foreshadowing),
       secrets_(secrets),
-      voice_(voice) {}
+      voice_(voice),
+      kg_provider_(kg_provider) {}
 
 ScenePreparation
 SceneOrchestrator::prepare_scene(const std::string& world_id,
@@ -242,6 +245,27 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                 god << "- " << id << "\n";
             }
             god << "\n";
+        }
+
+        // Knowledge Graph: relation subgraph for scene participants
+        if (kg_provider_ && !scene.participant_ids.empty()) {
+            std::vector<std::string> participant_names;
+            for (const auto& pid : scene.participant_ids) {
+                try {
+                    auto agent = agents_.get_agent(pid);
+                    if (agent) participant_names.push_back(agent->name);
+                } catch (...) {}
+            }
+            if (participant_names.size() > 1) {
+                try {
+                    merak::kg::QueryFilters filters;
+                    auto sg = kg_provider_->query_subgraph(world_id, participant_names, filters);
+                    auto md = merak::kg::KnowledgeGraphProvider::subgraph_to_markdown(sg);
+                    if (!md.empty()) {
+                        god << md << "\n";
+                    }
+                } catch (...) {}
+            }
         }
 
         prep.god_context = god.str();
@@ -319,7 +343,8 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
 
     // Manager tools.
     for (auto kind : {AgentKind::MapManager, AgentKind::HistoryManager,
-                       AgentKind::MagicSystemManager, AgentKind::FactionManager}) {
+                       AgentKind::MagicSystemManager, AgentKind::FactionManager,
+                       AgentKind::RelationManager}) {
         ToolContext ctx{world_id, scene_id, ""};
         auto instances = tools_factory.create_tools(kind, ctx);
         std::string key = to_string(kind);
@@ -355,25 +380,6 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
             agents_.append_diary_entry(diary);
             wrap.diaries_written.push_back(diary);
         } catch (...) {
-        }
-    }
-
-    // Relation updates between participants
-    for (size_t i = 0; i < scene.participant_ids.size(); ++i) {
-        for (size_t j = i + 1; j < scene.participant_ids.size(); ++j) {
-            try {
-                RelationEntry rel;
-                rel.agent_id = scene.participant_ids[i];
-                rel.target_id = scene.participant_ids[j];
-                rel.relation_type = "场景交互";
-                rel.description = "共同出现在 " + scene.title;
-                rel.intimacy = 1;
-                rel.key_events = {scene_id};
-                rel.updated_at = now_iso_utc();
-                agents_.upsert_relation(rel);
-                wrap.relations_updated.push_back(rel);
-            } catch (...) {
-            }
         }
     }
 

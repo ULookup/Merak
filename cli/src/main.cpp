@@ -10,6 +10,7 @@
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
 #include <merak/worldbuilding/pipeline_manager.hpp>
 #include <merak/worldbuilding/condition_evaluator.hpp>
+#include <merak/kg/neo4j_provider.hpp>
 #include <pqxx/pqxx>
 #include <merak/worldbuilding_http_handler.hpp>
 #include <merak/tool_catalog.hpp>
@@ -50,6 +51,15 @@ static const char* SETTINGS_TEMPLATE = R"({
   "llm": {"provider":"openai","api_key":"sk-your-api-key-here","default_model":"gpt-4o","max_output_tokens":4096},
   "agent": {"system_prompt":"You are a helpful AI assistant. Use tools to complete tasks."},
   "memory": {"enabled":false},
+  "knowledge_graph": {
+    "enabled": false,
+    "neo4j": {
+      "uri": "bolt://localhost:7687",
+      "user": "neo4j",
+      "password": "",
+      "database": "merak"
+    }
+  },
   "tui": {
     "theme": {
       "preset": "auto",
@@ -133,14 +143,30 @@ static int run_server(int argc,char**argv) {
     }
     // Instantiate WorldbuildingService
     std::shared_ptr<worldbuilding::WorldbuildingService> wb_service;
-    try {
-        if (!cfg.memory.db_connection.empty()) {
-            wb_service = std::make_shared<worldbuilding::WorldbuildingService>(
-                cfg.memory.db_connection, merak_home() / "worldbuilding");
-            wb_service->initialize();
+    std::unique_ptr<merak::kg::KnowledgeGraphProvider> kg_provider;
+    if (!cfg.memory.db_connection.empty()) {
+        if (cfg.knowledge_graph.enabled) {
+            try {
+                kg_provider = std::make_unique<merak::kg::Neo4jKGProvider>(
+                    cfg.knowledge_graph.neo4j_uri,
+                    cfg.knowledge_graph.neo4j_user,
+                    cfg.knowledge_graph.neo4j_password,
+                    cfg.knowledge_graph.neo4j_database);
+                std::cout << "Knowledge Graph: connected to Neo4j at "
+                          << cfg.knowledge_graph.neo4j_uri << "\n";
+            } catch (const std::exception& e) {
+                std::cerr << "Warning: Knowledge Graph unavailable: " << e.what() << "\n";
+                kg_provider.reset();
+            }
         }
-    } catch (const std::exception& e) {
-        std::cerr << "Warning: WorldbuildingService not available: " << e.what() << "\n";
+        try {
+            wb_service = std::make_shared<worldbuilding::WorldbuildingService>(
+                cfg.memory.db_connection, merak_home() / "worldbuilding",
+                std::move(kg_provider));
+            wb_service->initialize();
+        } catch (const std::exception& e) {
+            std::cerr << "Warning: WorldbuildingService not available: " << e.what() << "\n";
+        }
     }
     std::shared_ptr<LlmProvider>llm=cfg.llm.provider=="anthropic"
         ?std::static_pointer_cast<LlmProvider>(std::make_shared<AnthropicProvider>(cfg.llm))
@@ -200,6 +226,10 @@ static int run_server(int argc,char**argv) {
     // Initialize PipelineManager
     std::shared_ptr<merak::worldbuilding::PipelineManager> pipeline_mgr;
     if (wb_service && !cfg.memory.db_connection.empty()) {
+        auto condition_evaluator = merak::worldbuilding::ConditionEvaluator::create_default();
+        if (wb_service->kg_provider()) {
+            condition_evaluator->set_kg_provider(wb_service->kg_provider());
+        }
         pipeline_mgr = std::make_shared<merak::worldbuilding::PipelineManager>(
             merak::worldbuilding::PipelineManager::Dependencies{
                 .pg_connection_factory = [db_connection = cfg.memory.db_connection]() -> std::shared_ptr<pqxx::connection> {
@@ -219,7 +249,7 @@ static int run_server(int argc,char**argv) {
                     if (!exe.empty() && std::filesystem::exists(primary)) return primary;
                     return exe / ".." / "config" / "pipelines";
                 }(),
-                .condition_evaluator = merak::worldbuilding::ConditionEvaluator::create_default(),
+                .condition_evaluator = condition_evaluator,
             }
         );
         pipeline_mgr->initialize();
