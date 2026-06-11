@@ -387,6 +387,23 @@ PipelineManager::AdvanceResult PipelineManager::advance_phase(const AdvanceReque
             return AdvanceResult::CONDITIONS_NOT_MET;
     }
 
+    // Execute on_complete actions of the current phase (transition decision hook).
+    // Must fire after conditions verified met, before exit→transition→enter.
+    // If on_complete triggers a goto_phase action, it handles the transition
+    // and we must not proceed with the default transition below.
+    if (is_forward && current_def && !current_def->on_complete.empty() && !req.force) {
+        auto phase_before = state.current_phase;
+        execute_actions(current_def->on_complete, state);
+        // Reload: goto_phase calls advance_phase() which updates worlds_[id].state
+        {
+            std::shared_lock lock(world_mutex_);
+            auto it = worlds_.find(req.world_id);
+            if (it != worlds_.end() && it->second.state.current_phase != phase_before) {
+                return AdvanceResult::SUCCESS;
+            }
+        }
+    }
+
     auto old_phase = state.current_phase;
 
     // Execute exit actions of current phase
