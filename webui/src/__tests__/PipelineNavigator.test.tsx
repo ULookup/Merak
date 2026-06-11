@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AppStateProvider, useAppState } from '../AppState';
 import type { CreativePhase } from '../api/types';
 
@@ -12,10 +13,13 @@ vi.mock('../api/client', () => ({
 import PipelineNavigator from '../components/Sidebar/PipelineNavigator';
 import { advancePipeline, getPipelineState } from '../api/client';
 
+const EMPTY_ARR: string[] = [];
+const NEXT_CHAR_CREATION: CreativePhase[] = ['character_creation'];
+
 function PipelineHarness({
   phase = 'worldbuilding',
-  nextAllowed = [] as string[],
-  allowedRetreat = [] as string[],
+  nextAllowed = EMPTY_ARR,
+  allowedRetreat = EMPTY_ARR,
   pipelineAdvanceError,
 }: {
   phase?: CreativePhase;
@@ -24,8 +28,11 @@ function PipelineHarness({
   pipelineAdvanceError?: string;
 } = {}) {
   const { dispatch } = useAppState();
+  const didInit = useRef(false);
 
   useEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
     dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
     dispatch({
       type: 'SET_PIPELINE_VIEW',
@@ -41,7 +48,7 @@ function PipelineHarness({
     if (pipelineAdvanceError) {
       dispatch({ type: 'PIPELINE_ADVANCE_FAILED', reason: pipelineAdvanceError });
     }
-  }, [dispatch, phase, nextAllowed, allowedRetreat, pipelineAdvanceError]);
+  }, []);
 
   return <PipelineNavigator />;
 }
@@ -91,7 +98,7 @@ describe('PipelineNavigator', () => {
 
     expect(screen.getByText(/Advance failed: Test error/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('Dismiss'));
+    fireEvent.click(within(screen.getByText(/Advance failed: Test error/).parentElement!).getByText('Dismiss'));
 
     await waitFor(() => {
       expect(screen.queryByText(/Advance failed: Test error/)).toBeNull();
@@ -106,7 +113,7 @@ describe('PipelineNavigator', () => {
       <AppStateProvider>
         <PipelineHarness
           phase="worldbuilding"
-          nextAllowed={['character_creation']}
+          nextAllowed={NEXT_CHAR_CREATION}
         />
       </AppStateProvider>,
     );
