@@ -161,7 +161,12 @@ bool PipelineManager::activate_workflow(const std::string& world_id,
     }
     {
         std::unique_lock lock(world_mutex_);
-        worlds_[world_id].workflow_name = workflow_name;
+        auto& entry = worlds_[world_id];
+        // Same workflow with existing state — idempotent, preserve progress
+        if (entry.workflow_name == workflow_name && !entry.state.world_id.empty()) {
+            return true;
+        }
+        entry.workflow_name = workflow_name;
     }
     init_state_for_world(world_id);
     return true;
