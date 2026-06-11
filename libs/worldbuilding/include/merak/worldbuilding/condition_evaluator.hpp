@@ -10,6 +10,7 @@
 #include <vector>
 
 namespace pqxx { class connection; }
+namespace merak::kg { class KnowledgeGraphProvider; }
 
 namespace merak::worldbuilding {
 
@@ -25,6 +26,9 @@ public:
 
     // Factory: create default instance with all builtins registered
     static std::shared_ptr<ConditionEvaluator> create_default();
+
+    // Knowledge Graph integration
+    void set_kg_provider(merak::kg::KnowledgeGraphProvider* provider) { kg_provider_ = provider; }
 
     // Register all built-in condition types and checks (public, callable from tests)
     void register_all_builtins();
@@ -60,6 +64,7 @@ private:
     mutable std::shared_mutex registry_mutex_;
     std::map<std::string, ConditionEvalFn> registry_;
     std::map<std::string, ConditionEvalFn> check_registry_;
+    merak::kg::KnowledgeGraphProvider* kg_provider_ = nullptr;
     mutable Stats stats_;
 };
 

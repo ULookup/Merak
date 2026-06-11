@@ -1,5 +1,6 @@
 #include <merak/worldbuilding/condition_evaluator.hpp>
 #include <merak/worldbuilding/pipeline.hpp>
+#include <merak/kg/kg_provider.hpp>
 #include <pqxx/pqxx>
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
@@ -104,6 +105,61 @@ void ConditionEvaluator::register_all_builtins() {
     registry_["relation_currency"] = eval_relation_currency;
     registry_["orphaned_foreshadowing"] = eval_orphaned_foreshadowing;
     registry_["scene_completeness"] = eval_scene_completeness;
+
+    // ─── KG condition types ───
+    registry_["kg_relation_count"] = [this](const ConditionDef& cond,
+                                             const PipelineState& state,
+                                             pqxx::connection&) -> ConditionResult {
+        ConditionResult result{cond.message, true, std::nullopt, std::nullopt, {}};
+        if (!kg_provider_) {
+            result.met = false;
+            result.error = "KG provider not available";
+            return result;
+        }
+        try {
+            int threshold = cond.params.contains("min_count")
+                ? cond.params["min_count"].get<int>() : 1;
+            auto entities = kg_provider_->list_entities(state.world_id);
+            // Count distinct entity names that appear in relations
+            merak::kg::QueryFilters filters;
+            auto sg = kg_provider_->query_subgraph(state.world_id, {}, filters);
+            int count = static_cast<int>(sg.relations.size());
+            result.met = (count >= threshold);
+            result.extra["relation_count"] = count;
+        } catch (const std::exception& e) {
+            result.met = false;
+            result.error = e.what();
+        }
+        return result;
+    };
+
+    registry_["kg_entity_has_relations"] = [this](const ConditionDef& cond,
+                                                    const PipelineState& state,
+                                                    pqxx::connection&) -> ConditionResult {
+        ConditionResult result{cond.message, true, std::nullopt, std::nullopt, {}};
+        if (!kg_provider_) {
+            result.met = false;
+            result.error = "KG provider not available";
+            return result;
+        }
+        try {
+            std::string entity_name = cond.params.value("entity_name", "");
+            if (entity_name.empty()) {
+                result.met = false;
+                result.error = "entity_name parameter required";
+                return result;
+            }
+            merak::kg::QueryFilters filters;
+            auto ng = kg_provider_->expand(state.world_id, entity_name, 1, filters);
+            result.met = !ng.relations.empty();
+            result.extra["relation_count"] = static_cast<int>(ng.relations.size());
+            result.extra["neighbor_count"] = static_cast<int>(ng.neighbor_entities.size());
+        } catch (const std::exception& e) {
+            result.met = false;
+            result.error = e.what();
+        }
+        return result;
+    };
 
     // ─── check types (for all_checks_passed dispatch) ───
     check_registry_["character_consistency"] = eval_character_consistency;
