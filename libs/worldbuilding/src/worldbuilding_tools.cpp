@@ -5,6 +5,7 @@
 #include <future>
 #include <algorithm>
 #include <sstream>
+#include <merak/worldbuilding/extraction_service.hpp>
 
 namespace merak::worldbuilding {
 
@@ -2268,6 +2269,117 @@ std::future<ToolResult> CheckConsistencyTool::execute(ToolCall call, ToolExecuti
     });
 }
 
+// ========== ExtractSceneRelationsTool ==========
+
+ToolSpec ExtractSceneRelationsTool::spec() const {
+    ToolSpec s;
+    s.name = "extract_scene_relations";
+    s.description = R"(Load a scene's full text and participant list, and return a structured extraction prompt plus existing KG context. Use this to prepare for relation extraction — the returned prompt guides you through identifying character relationships from the scene narrative. After analysis, write each relation via upsert_relation. Example: extract_scene_relations(scene_id="scene-42"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "scene_id": {"type": "string", "description": "Scene ID to extract relations from"},
+            "include_existing": {"type": "boolean", "description": "Pre-query existing KG relations among participants (default: true)", "default": true}
+        },
+        "required": ["scene_id"]
+    })";
+    return s;
+}
+
+std::future<ToolResult> ExtractSceneRelationsTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+        try {
+            auto args = json::parse(call.arguments);
+            std::string scene_id = args.value("scene_id", "");
+            if (scene_id.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT, "scene_id is required");
+                return result;
+            }
+            bool include_existing = args.value("include_existing", true);
+
+            auto& svc = *static_cast<ExtractSceneRelationsTool&>(*self).svc_;
+            auto& ctx = static_cast<ExtractSceneRelationsTool&>(*self).ctx_;
+            auto* kg = svc.kg_provider();
+
+            // 1. Load scene from NarrativeStore
+            auto scene_opt = svc.narrative().get_scene(ctx.world_id, scene_id);
+            if (!scene_opt) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND,
+                    "Scene not found: " + scene_id);
+                return result;
+            }
+            auto& scene = *scene_opt;
+            if (scene.narrative.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "Scene has no narrative text: " + scene_id);
+                return result;
+            }
+
+            // 2. Resolve participant names from AgentStore
+            std::vector<std::string> participant_names;
+            participant_names.reserve(scene.participant_ids.size());
+            for (const auto& pid : scene.participant_ids) {
+                auto agent = svc.agents().get_agent(pid);
+                if (agent) {
+                    participant_names.push_back(
+                        agent->display_name.empty() ? agent->name : agent->display_name);
+                } else {
+                    participant_names.push_back(pid); // fallback: use raw ID when agent not found
+                }
+            }
+
+            std::ostringstream report;
+
+            // 3. Pre-query existing KG relations if requested
+            int existing_count = 0;
+            if (include_existing && kg && !participant_names.empty()) {
+                try {
+                    merak::kg::QueryFilters filters;
+                    auto sg = kg->query_subgraph(ctx.world_id, participant_names, filters);
+                    existing_count = static_cast<int>(sg.relations.size());
+                    if (existing_count > 0) {
+                        report << "## Existing Relations\n\n";
+                        report << merak::kg::KnowledgeGraphProvider::subgraph_to_markdown(sg);
+                        report << "\n";
+                    }
+                } catch (const std::exception&) {
+                    // KG query is best-effort; continue without existing data
+                }
+            } else if (include_existing && !kg) {
+                report << "## Existing Relations\n\n";
+                report << "*Knowledge Graph provider not available — existing relations not queried.*\n\n";
+            }
+
+            // 4. Build extraction prompt via ExtractionService
+            ExtractionService extraction(kg);
+            auto prompt = extraction.build_extraction_prompt(
+                scene.narrative, participant_names);
+
+            report << "## Extraction Task\n\n";
+            report << prompt;
+
+            // 5. Return assembled output
+            nlohmann::json data;
+            data["markdown"] = report.str();
+            data["scene_id"] = scene_id;
+            data["scene_title"] = scene.title;
+            data["participant_count"] = static_cast<int>(participant_names.size());
+            data["participant_names"] = participant_names;
+            data["existing_relation_count"] = existing_count;
+            result.output = ok_response(data);
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("extract_scene_relations failed: ") + e.what());
+        }
+        return result;
+    });
+}
+
 ToolSpec UpsertRelationTool::spec() const {
     ToolSpec s;
     s.name = "upsert_relation";
@@ -2414,6 +2526,7 @@ WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) const {
         tools.push_back(std::make_unique<ExpandGraphTool>(*service_, ctx));
         tools.push_back(std::make_unique<FindPathTool>(*service_, ctx));
         tools.push_back(std::make_unique<CheckConsistencyTool>(*service_, ctx));
+        tools.push_back(std::make_unique<ExtractSceneRelationsTool>(*service_, ctx));
         tools.push_back(std::make_unique<UpsertRelationTool>(*service_, ctx));
         break;
     case AgentKind::Group:
