@@ -696,22 +696,30 @@ void PipelineManager::execute_actions(const std::vector<ActionDef>& actions,
                 advance_phase(auto_req);
             }
         } else if (action.type == "conditional") {
-            // Evaluate a nested condition and branch
-            auto condition_type = action.params.value("condition_type", "");
+            // Construct ConditionDef from params — support two modes:
+            //   "condition": full JSON object → from_json deserialization
+            //   "condition_type": simple string (backward compatible)
             ConditionDef cond;
-            cond.type = condition_type;
-            cond.message = "conditional action check";
+            if (action.params.contains("condition")) {
+                from_json(action.params["condition"], cond);
+            } else if (action.params.contains("condition_type")) {
+                cond.type = action.params["condition_type"].get<std::string>();
+            } else {
+                spdlog::warn("PipelineAction: conditional action missing condition or condition_type");
+                continue;
+            }
+            if (cond.message.empty()) cond.message = "conditional action check";
+
             auto conn = deps_.pg_connection_factory();
             auto result = deps_.condition_evaluator->evaluate(cond, state, *conn);
+
             if (result.met && action.params.contains("then")) {
                 ActionDef then_action;
-                then_action.type = action.params["then"].value("type", "");
-                then_action.params = action.params["then"].value("params", nlohmann::json::object());
+                from_json(action.params["then"], then_action);
                 execute_actions({then_action}, state);
             } else if (!result.met && action.params.contains("else")) {
                 ActionDef else_action;
-                else_action.type = action.params["else"].value("type", "");
-                else_action.params = action.params["else"].value("params", nlohmann::json::object());
+                from_json(action.params["else"], else_action);
                 execute_actions({else_action}, state);
             }
         }
