@@ -106,7 +106,10 @@
       "advance_when": {
         "operator": "and",
         "conditions": [
-          { "type": "all_checks_passed", "checks": ["character_consistency", "plot_coherence", "foreshadow_management", "pacing"], "message": "所有检查项目通过" }
+          { "type": "diary_completeness", "message": "所有角色日记完整" },
+          { "type": "relation_currency", "message": "角色关系已反映本章变化" },
+          { "type": "orphaned_foreshadowing", "message": "不存在被遗忘的伏笔" },
+          { "type": "scene_completeness", "message": "无半成品场景" }
         ]
       },
       "on_complete": [
