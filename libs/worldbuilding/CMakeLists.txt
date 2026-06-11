@@ -20,6 +20,7 @@ add_library(merak-worldbuilding STATIC
     src/scene_orchestrator.cpp
     src/worldbuilding_service.cpp
     src/worldbuilding_tools.cpp
+    src/extraction_service.cpp
 )
 target_include_directories(merak-worldbuilding PUBLIC
     include
@@ -28,6 +29,8 @@ target_include_directories(merak-worldbuilding PUBLIC
 )
 target_link_libraries(merak-worldbuilding PUBLIC
     merak-tools
+    merak-llm
+    merak-knowledge-graph
     nlohmann_json::nlohmann_json
     ${PostgreSQL_LIBRARIES}
     SQLite::SQLite3
