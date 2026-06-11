@@ -2311,11 +2311,20 @@ std::future<ToolResult> UpsertRelationTool::execute(ToolCall call, ToolExecution
                 return result;
             }
 
+            // Resolve entity names to agent IDs to avoid phantom entity nodes
+            auto agents = svc.agents().list_agents(ctx.world_id);
+            auto resolve_id = [&agents](const std::string& name) -> std::string {
+                for (const auto& a : agents) {
+                    if (a.name == name || a.display_name == name) return a.id;
+                }
+                return name; // fallback: use name as ID for non-agent entities
+            };
+
             merak::kg::GraphRelation rel;
             rel.source_name = source_name;
             rel.target_name = target_name;
-            rel.source_id = source_name;
-            rel.target_id = target_name;
+            rel.source_id = resolve_id(source_name);
+            rel.target_id = resolve_id(target_name);
             rel.kind_en = args.value("kind_en", "Acquaintance");
             rel.kind_cn = args.value("kind_cn", "");
             rel.a_to_b_stance = merak::kg::stance_from_string(args.value("a_to_b_stance", "Neutral"));

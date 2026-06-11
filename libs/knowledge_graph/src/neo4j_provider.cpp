@@ -154,11 +154,11 @@ struct Neo4jKGProvider::Impl {
         neo4j_result_t* record;
         while ((record = neo4j_fetch_next(results)) != nullptr) {
             GraphEntity e;
-            e.source_id = neo4j_result_field(record, 0);
-            e.name = neo4j_result_field(record, 1);
-            e.type = entity_type_from_string(neo4j_result_field(record, 2));
-            e.world_id = neo4j_result_field(record, 3);
-            e.created_at = neo4j_result_field(record, 4);
+            e.source_id = field_or_empty(record, 0);
+            e.name = field_or_empty(record, 1);
+            e.type = entity_type_from_string(field_or_empty(record, 2));
+            e.world_id = field_or_empty(record, 3);
+            e.created_at = field_or_empty(record, 4);
             entities.push_back(e);
         }
         neo4j_close_results(results);

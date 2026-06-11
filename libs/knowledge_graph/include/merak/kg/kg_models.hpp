@@ -45,12 +45,6 @@ enum class Stance {
     Unknown
 };
 
-struct RelationEvent {
-    std::string summary;
-    std::optional<int> chapter_number;
-    std::optional<int> volume_number;
-};
-
 struct GraphRelation {
     std::string source_id;
     std::string target_id;
@@ -72,8 +66,6 @@ struct GraphRelation {
 
     std::string fact;
     std::string description;
-
-    std::vector<RelationEvent> recent_events;
 
     std::string created_at;
     std::string updated_at;
@@ -235,7 +227,7 @@ inline void to_json(nlohmann::json& j, const GraphEntity& e) {
 
 inline void from_json(const nlohmann::json& j, GraphEntity& e) {
     j.at("name").get_to(e.name);
-    e.type = EntityType::Agent;
+    if (j.contains("type")) e.type = entity_type_from_string(j.at("type").get<std::string>());
     j.at("source_id").get_to(e.source_id);
     j.at("world_id").get_to(e.world_id);
     j.at("created_at").get_to(e.created_at);
@@ -262,7 +254,12 @@ inline void from_json(const nlohmann::json& j, GraphRelation& r) {
     j.at("target_id").get_to(r.target_id);
     j.at("source_name").get_to(r.source_name);
     j.at("target_name").get_to(r.target_name);
-    if (j.contains("kind_en")) j.at("kind_en").get_to(r.kind_en);
+    if (j.contains("source_type")) r.source_type = entity_type_from_string(j.at("source_type").get<std::string>());
+    if (j.contains("target_type")) r.target_type = entity_type_from_string(j.at("target_type").get<std::string>());
+    if (j.contains("kind_en")) {
+        j.at("kind_en").get_to(r.kind_en);
+        r.kind = relation_kind_from_string(r.kind_en);
+    }
     if (j.contains("kind_cn")) j.at("kind_cn").get_to(r.kind_cn);
     if (j.contains("kind_custom")) j.at("kind_custom").get_to(r.kind_custom);
     if (j.contains("a_to_b_stance")) r.a_to_b_stance = stance_from_string(j.at("a_to_b_stance").get<std::string>());
