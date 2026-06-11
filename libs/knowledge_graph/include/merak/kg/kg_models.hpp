@@ -45,6 +45,12 @@ enum class Stance {
     Unknown
 };
 
+struct RelationEvent {
+    std::string summary;
+    std::optional<int> chapter_number;
+    std::optional<int> volume_number;
+};
+
 struct GraphRelation {
     std::string source_id;
     std::string target_id;
@@ -66,6 +72,8 @@ struct GraphRelation {
 
     std::string fact;
     std::string description;
+
+    std::vector<RelationEvent> recent_events;
 
     std::string created_at;
     std::string updated_at;
