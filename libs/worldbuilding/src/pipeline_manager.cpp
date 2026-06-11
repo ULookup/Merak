@@ -395,7 +395,11 @@ PipelineManager::AdvanceResult PipelineManager::advance_phase(const AdvanceReque
     if (is_forward && current_def && !current_def->on_complete.empty() && !req.force) {
         auto phase_before = state.current_phase;
         execute_actions(current_def->on_complete, state);
-        // Reload: goto_phase calls advance_phase() which updates worlds_[id].state
+        // Reload: goto_phase calls advance_phase() which updates worlds_[id].state.
+        // NOTE: The shared_lock is released after the reload; a concurrent thread could
+        // theoretically modify this world's phase in that window, causing a false positive
+        // early return. In practice on_world_event debounces to 2s and advance_phase
+        // holds a unique_lock for the actual mutation, so this race is benign.
         {
             std::shared_lock lock(world_mutex_);
             auto it = worlds_.find(req.world_id);
