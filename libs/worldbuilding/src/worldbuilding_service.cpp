@@ -1,13 +1,16 @@
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <merak/worldbuilding/ids.hpp>
 
+#include <spdlog/spdlog.h>
+
 #include <stdexcept>
 #include <string>
 
 namespace merak::worldbuilding {
 
 WorldbuildingService::WorldbuildingService(std::string_view pg_conninfo,
-                                           std::filesystem::path root)
+                                           std::filesystem::path root,
+                                           std::unique_ptr<merak::kg::KnowledgeGraphProvider> kg_provider)
     : root_(std::move(root)),
       worlds_(pg_conninfo, root_),
       agents_(worlds_, pg_conninfo, root_),
@@ -15,7 +18,8 @@ WorldbuildingService::WorldbuildingService(std::string_view pg_conninfo,
       foreshadowing_(worlds_, narrative_, pg_conninfo, root_),
       secrets_(worlds_, foreshadowing_, pg_conninfo, root_),
       voice_(),
-      orchestrator_(worlds_, agents_, narrative_, foreshadowing_, secrets_, voice_) {}
+      orchestrator_(worlds_, agents_, narrative_, foreshadowing_, secrets_, voice_),
+      kg_provider_(std::move(kg_provider)) {}
 
 void WorldbuildingService::initialize() {
     worlds_.initialize();
@@ -352,6 +356,15 @@ nlohmann::json WorldbuildingService::resolve_creation(
     }
 
     return result;
+}
+
+void WorldbuildingService::sync_entity_to_kg(const merak::kg::GraphEntity& entity) {
+    if (!kg_provider_) {
+        spdlog::warn("sync_entity_to_kg: kg_provider not available, skipping entity '{}'",
+                     entity.name);
+        return;
+    }
+    kg_provider_->upsert_entity(entity);
 }
 
 } // namespace merak::worldbuilding

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <merak/kg/kg_provider.hpp>
 #include <merak/worldbuilding/agent_store.hpp>
 #include <merak/worldbuilding/foreshadowing_store.hpp>
 #include <merak/worldbuilding/narrative_store.hpp>
@@ -13,6 +14,7 @@
 #include <chrono>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -32,8 +34,13 @@ struct PendingCreation {
 
 class WorldbuildingService {
 public:
-    WorldbuildingService(std::string_view pg_conninfo, std::filesystem::path root);
+    WorldbuildingService(std::string_view pg_conninfo, std::filesystem::path root,
+                         std::unique_ptr<merak::kg::KnowledgeGraphProvider> kg_provider = nullptr);
     void initialize();
+
+    // Knowledge Graph
+    merak::kg::KnowledgeGraphProvider* kg_provider() const { return kg_provider_.get(); }
+    void sync_entity_to_kg(const merak::kg::GraphEntity& entity);
 
     // World
     WorldMeta create_world(std::string name, std::string description);
@@ -113,6 +120,7 @@ private:
     SecretStore secrets_;
     VoiceAnalyzer voice_;
     SceneOrchestrator orchestrator_;
+    std::unique_ptr<merak::kg::KnowledgeGraphProvider> kg_provider_;
 
     // NOTE: pending_creations_ is in-memory only. On server restart, in-flight
     // creation confirmations are lost. The tool result in the session history
