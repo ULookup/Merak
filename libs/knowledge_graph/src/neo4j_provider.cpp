@@ -288,29 +288,31 @@ public:
                          -[rels:RELATES_TO*1..)" + std::to_string(max_depth) + R"(]->
                          (tgt:Entity {world_id: $world_id, name: $target})
             WHERE all(rel IN rels WHERE rel.world_id = $world_id)
-            WITH rels, length(path) AS plen
+            WITH path, rels, length(path) AS plen
             ORDER BY plen ASC
             LIMIT 10
-            UNWIND range(0, plen - 1) AS hop
-            RETURN startNode(rels[hop]).source_id AS src_id,
-                   endNode(rels[hop]).source_id AS tgt_id,
-                   startNode(rels[hop]).name AS src_name,
-                   endNode(rels[hop]).name AS tgt_name,
-                   rels[hop].kind_en AS kind_en,
-                   rels[hop].kind_cn AS kind_cn,
-                   rels[hop].kind_custom AS kind_custom,
-                   rels[hop].a_to_b_stance AS a_to_b_stance,
-                   rels[hop].b_to_a_stance AS b_to_a_stance,
-                   rels[hop].a_to_b_addressing AS a_to_b_addressing,
-                   rels[hop].b_to_a_addressing AS b_to_a_addressing,
-                   rels[hop].fact AS fact,
-                   rels[hop].description AS description,
-                   rels[hop].world_id AS world_id,
-                   rels[hop].created_at AS created_at,
-                   rels[hop].updated_at AS updated_at,
-                   plen AS path_len,
-                   hop
-            ORDER BY plen, hop
+            WITH collect({rels: rels, plen: plen}) AS paths
+            UNWIND range(0, size(paths) - 1) AS path_idx
+            WITH paths[path_idx] AS p, path_idx
+            UNWIND range(0, p.plen - 1) AS hop
+            RETURN path_idx,
+                   startNode(p.rels[hop]).source_id AS src_id,
+                   endNode(p.rels[hop]).source_id AS tgt_id,
+                   startNode(p.rels[hop]).name AS src_name,
+                   endNode(p.rels[hop]).name AS tgt_name,
+                   p.rels[hop].kind_en AS kind_en,
+                   p.rels[hop].kind_cn AS kind_cn,
+                   p.rels[hop].kind_custom AS kind_custom,
+                   p.rels[hop].a_to_b_stance AS a_to_b_stance,
+                   p.rels[hop].b_to_a_stance AS b_to_a_stance,
+                   p.rels[hop].a_to_b_addressing AS a_to_b_addressing,
+                   p.rels[hop].b_to_a_addressing AS b_to_a_addressing,
+                   p.rels[hop].fact AS fact,
+                   p.rels[hop].description AS description,
+                   p.rels[hop].world_id AS world_id,
+                   p.rels[hop].created_at AS created_at,
+                   p.rels[hop].updated_at AS updated_at
+            ORDER BY path_idx, hop
         )";
 
         neo4j_result_stream_t* results = neo4j_run(session, cypher.c_str(),
@@ -321,22 +323,39 @@ public:
         PathResult pr;
         pr.found = false;
         std::vector<GraphRelation> current_path;
-        int current_path_len = -1;
+        int current_path_idx = -1;
 
         neo4j_result_t* record;
         while ((record = neo4j_fetch_next(results)) != nullptr) {
-            int path_len = std::stoi(neo4j_result_field(record, 16));
+            int path_idx = std::stoi(neo4j_result_field(record, 0));
 
-            if (path_len != current_path_len) {
+            if (path_idx != current_path_idx) {
                 if (!current_path.empty()) {
                     pr.paths.push_back(std::move(current_path));
                     current_path.clear();
                 }
-                current_path_len = path_len;
+                current_path_idx = path_idx;
                 pr.found = true;
             }
 
-            GraphRelation rel = relation_from_neo4j_record(record);
+            // Fields 1..16 are the relation fields (match relation_from_neo4j_record)
+            GraphRelation rel;
+            rel.source_id = neo4j_result_field(record, 1);
+            rel.target_id = neo4j_result_field(record, 2);
+            rel.source_name = neo4j_result_field(record, 3);
+            rel.target_name = neo4j_result_field(record, 4);
+            rel.kind_en = neo4j_result_field(record, 5);
+            rel.kind_cn = neo4j_result_field(record, 6);
+            rel.kind_custom = neo4j_result_field(record, 7);
+            rel.a_to_b_stance = stance_from_string(neo4j_result_field(record, 8));
+            rel.b_to_a_stance = stance_from_string(neo4j_result_field(record, 9));
+            rel.a_to_b_addressing = neo4j_result_field(record, 10);
+            rel.b_to_a_addressing = neo4j_result_field(record, 11);
+            rel.fact = neo4j_result_field(record, 12);
+            rel.description = neo4j_result_field(record, 13);
+            rel.world_id = neo4j_result_field(record, 14);
+            rel.created_at = neo4j_result_field(record, 15);
+            rel.updated_at = neo4j_result_field(record, 16);
             current_path.push_back(rel);
         }
         if (!current_path.empty()) {
