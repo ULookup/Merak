@@ -61,7 +61,7 @@ std::vector<DslRef> Parser::parse(const std::string& template_text) {
 
     // Regex: @(type){params}
     static const std::regex dsl_regex(
-        R"(@(agent|scene|chapter|arc|foreshadow|secret|world|diary|relation)\{([^}]*)\})");
+        R"(@(agent|scene|chapter|arc|foreshadow|secret|world|diary|relation|graph_subgraph|graph_expand|graph_path)\{([^}]*)\})");
 
     auto begin = std::sregex_iterator(template_text.begin(), template_text.end(), dsl_regex);
     auto end = std::sregex_iterator();
