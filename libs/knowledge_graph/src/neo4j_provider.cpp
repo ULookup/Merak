@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -93,7 +94,7 @@ public:
             GraphEntity e;
             e.source_id = neo4j_result_field(record, 0);
             e.name = neo4j_result_field(record, 1);
-            e.type = EntityType::Agent;
+            e.type = entity_type_from_string(neo4j_result_field(record, 2));
             e.world_id = neo4j_result_field(record, 3);
             e.created_at = neo4j_result_field(record, 4);
             entities.push_back(e);
@@ -218,9 +219,24 @@ public:
         auto session = make_read_session();
         std::string cypher = R"(
             MATCH (center:Entity {world_id: $world_id, name: $center_name})
-            MATCH (center)-[r:RELATES_TO*1..)" + std::to_string(radius) + R"(]-(neighbor:Entity {world_id: $world_id})
-            WHERE all(rel IN r WHERE rel.world_id = $world_id)
-            RETURN DISTINCT neighbor, r
+            MATCH path = (center)-[rels:RELATES_TO*1..)" + std::to_string(radius) + R"(]-(neighbor:Entity {world_id: $world_id})
+            WHERE all(rel IN rels WHERE rel.world_id = $world_id)
+            WITH DISTINCT neighbor, center, rels
+            UNWIND rels AS rel
+            RETURN DISTINCT
+                neighbor.name AS neighbor_name,
+                startNode(rel).name AS src_name,
+                endNode(rel).name AS tgt_name,
+                rel.kind_en AS kind_en,
+                rel.kind_cn AS kind_cn,
+                rel.kind_custom AS kind_custom,
+                rel.a_to_b_stance AS a_to_b_stance,
+                rel.b_to_a_stance AS b_to_a_stance,
+                rel.a_to_b_addressing AS a_to_b_addressing,
+                rel.b_to_a_addressing AS b_to_a_addressing,
+                rel.fact AS fact,
+                rel.description AS description,
+                rel.world_id AS world_id
             LIMIT $top_k
         )";
 
@@ -231,11 +247,30 @@ public:
 
         NeighborGraph ng;
         ng.center_entity = entity_name;
+        std::set<std::string> seen_neighbors;
         neo4j_result_t* record;
         while ((record = neo4j_fetch_next(results)) != nullptr) {
-            GraphEntity neighbor;
-            neighbor.name = neo4j_result_field(record, 0);
-            ng.neighbor_entities.push_back(neighbor);
+            std::string neighbor_name = neo4j_result_field(record, 0);
+            if (seen_neighbors.insert(neighbor_name).second) {
+                GraphEntity neighbor;
+                neighbor.name = neighbor_name;
+                ng.neighbor_entities.push_back(neighbor);
+            }
+
+            GraphRelation rel;
+            rel.source_name = neo4j_result_field(record, 1);
+            rel.target_name = neo4j_result_field(record, 2);
+            rel.kind_en = neo4j_result_field(record, 3);
+            rel.kind_cn = neo4j_result_field(record, 4);
+            rel.kind_custom = neo4j_result_field(record, 5);
+            rel.a_to_b_stance = stance_from_string(neo4j_result_field(record, 6));
+            rel.b_to_a_stance = stance_from_string(neo4j_result_field(record, 7));
+            rel.a_to_b_addressing = neo4j_result_field(record, 8);
+            rel.b_to_a_addressing = neo4j_result_field(record, 9);
+            rel.fact = neo4j_result_field(record, 10);
+            rel.description = neo4j_result_field(record, 11);
+            rel.world_id = neo4j_result_field(record, 12);
+            ng.relations.push_back(rel);
         }
         neo4j_close_results(results);
         neo4j_close_session(session);
@@ -250,12 +285,32 @@ public:
         auto session = make_read_session();
         std::string cypher = R"(
             MATCH path = (src:Entity {world_id: $world_id, name: $source})
-                         -[r:RELATES_TO*1..)" + std::to_string(max_depth) + R"(]->
+                         -[rels:RELATES_TO*1..)" + std::to_string(max_depth) + R"(]->
                          (tgt:Entity {world_id: $world_id, name: $target})
-            WHERE all(rel IN relationships(path) WHERE rel.world_id = $world_id)
-            RETURN path
-            ORDER BY length(path) ASC
+            WHERE all(rel IN rels WHERE rel.world_id = $world_id)
+            WITH rels, length(path) AS plen
+            ORDER BY plen ASC
             LIMIT 10
+            UNWIND range(0, plen - 1) AS hop
+            RETURN startNode(rels[hop]).source_id AS src_id,
+                   endNode(rels[hop]).source_id AS tgt_id,
+                   startNode(rels[hop]).name AS src_name,
+                   endNode(rels[hop]).name AS tgt_name,
+                   rels[hop].kind_en AS kind_en,
+                   rels[hop].kind_cn AS kind_cn,
+                   rels[hop].kind_custom AS kind_custom,
+                   rels[hop].a_to_b_stance AS a_to_b_stance,
+                   rels[hop].b_to_a_stance AS b_to_a_stance,
+                   rels[hop].a_to_b_addressing AS a_to_b_addressing,
+                   rels[hop].b_to_a_addressing AS b_to_a_addressing,
+                   rels[hop].fact AS fact,
+                   rels[hop].description AS description,
+                   rels[hop].world_id AS world_id,
+                   rels[hop].created_at AS created_at,
+                   rels[hop].updated_at AS updated_at,
+                   plen AS path_len,
+                   hop
+            ORDER BY plen, hop
         )";
 
         neo4j_result_stream_t* results = neo4j_run(session, cypher.c_str(),
@@ -265,11 +320,27 @@ public:
 
         PathResult pr;
         pr.found = false;
+        std::vector<GraphRelation> current_path;
+        int current_path_len = -1;
+
         neo4j_result_t* record;
         while ((record = neo4j_fetch_next(results)) != nullptr) {
-            pr.found = true;
-            std::vector<GraphRelation> path;
-            pr.paths.push_back(path);
+            int path_len = std::stoi(neo4j_result_field(record, 16));
+
+            if (path_len != current_path_len) {
+                if (!current_path.empty()) {
+                    pr.paths.push_back(std::move(current_path));
+                    current_path.clear();
+                }
+                current_path_len = path_len;
+                pr.found = true;
+            }
+
+            GraphRelation rel = relation_from_neo4j_record(record);
+            current_path.push_back(rel);
+        }
+        if (!current_path.empty()) {
+            pr.paths.push_back(std::move(current_path));
         }
         neo4j_close_results(results);
         neo4j_close_session(session);

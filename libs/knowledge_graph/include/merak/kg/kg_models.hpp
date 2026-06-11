@@ -122,6 +122,14 @@ inline std::string to_string(EntityType t) {
     return "Agent";
 }
 
+inline EntityType entity_type_from_string(const std::string& s) {
+    if (s == "Location")      return EntityType::Location;
+    if (s == "Organization")  return EntityType::Organization;
+    if (s == "Item")          return EntityType::Item;
+    if (s == "Concept")       return EntityType::Concept;
+    return EntityType::Agent;
+}
+
 inline std::string to_string(RelationKind k) {
     switch (k) {
     case RelationKind::Acquaintance:        return "acquaintance";
