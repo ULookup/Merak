@@ -17,10 +17,12 @@ public:
         std::shared_ptr<RuntimeService> runtime = nullptr);
 
     void install_routes(httplib::Server& server);
+    void set_pipeline_manager(std::shared_ptr<worldbuilding::PipelineManager> mgr);
 
 private:
     std::shared_ptr<worldbuilding::WorldbuildingService> service_;
     std::shared_ptr<RuntimeService> runtime_;
+    std::shared_ptr<worldbuilding::PipelineManager> pipeline_mgr_;
 
     // World
     void handle_list_worlds(const httplib::Request&, httplib::Response&);

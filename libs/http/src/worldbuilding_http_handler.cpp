@@ -2,6 +2,7 @@
 #include <merak/runtime_service.hpp>
 #include <merak/worldbuilding/world_models.hpp>
 #include <merak/worldbuilding/card_access.hpp>
+#include <merak/worldbuilding/pipeline_manager.hpp>
 
 #include <algorithm>
 #include <optional>
@@ -163,6 +164,11 @@ WorldbuildingHttpHandler::WorldbuildingHttpHandler(
     std::shared_ptr<RuntimeService> runtime)
     : service_(std::move(service)), runtime_(std::move(runtime)) {}
 
+void WorldbuildingHttpHandler::set_pipeline_manager(
+    std::shared_ptr<worldbuilding::PipelineManager> mgr) {
+    pipeline_mgr_ = std::move(mgr);
+}
+
 void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
     // World
     server.Get("/api/worldbuilding/worlds",
@@ -231,6 +237,183 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_secret_create(req, res); });
     server.Patch(R"(/api/worldbuilding/([^/]+)/secrets/([^/]+))",
         [this](const auto& req, auto& res) { handle_patch_secret(req, res); });
+
+    // ─── Pipeline endpoints ───
+    server.Get(R"(/api/worldbuilding/([^/]+)/pipeline/state)",
+        [this](const auto& req, auto& res) {
+            std::string world_id = req.matches[1];
+            if (!pipeline_mgr_) {
+                res.status = 503;
+                res.set_content(R"({"error":"pipeline_not_available"})", "application/json");
+                return;
+            }
+            auto data = pipeline_mgr_->get_view_data(world_id);
+            const auto* wf = pipeline_mgr_->get_workflow(data.active_workflow_name);
+            const auto* phase_def = wf ? wf->get_phase(data.state.current_phase) : nullptr;
+
+            nlohmann::json response;
+            response["phase"] = worldbuilding::to_string(data.state.current_phase);
+            response["label"] = phase_def ? phase_def->label : "";
+            response["active_workflow"] = data.active_workflow_name;
+
+            nlohmann::json conds = nlohmann::json::array();
+            for (auto& r : data.current_conditions.results) {
+                nlohmann::json cj;
+                cj["name"] = r.message;
+                cj["met"] = r.met;
+                if (r.current) cj["current"] = *r.current;
+                if (r.target) cj["target"] = *r.target;
+                conds.push_back(cj);
+            }
+            response["conditions"] = conds;
+            response["all_conditions_met"] = data.current_conditions.all_met;
+
+            auto next_phases = worldbuilding::allowed_next_phases(data.state.current_phase);
+            nlohmann::json next_arr = nlohmann::json::array();
+            for (auto& np : next_phases) next_arr.push_back(worldbuilding::to_string(np));
+            response["next_allowed"] = next_arr;
+            response["allowed_retreat"] = phase_def ? nlohmann::json(phase_def->allowed_retreat) : nlohmann::json::array();
+
+            nlohmann::json history = nlohmann::json::array();
+            for (auto& h : data.recent_history) {
+                nlohmann::json hj;
+                hj["id"] = h.id;
+                hj["from"] = worldbuilding::to_string(h.from_phase);
+                hj["to"] = worldbuilding::to_string(h.to_phase);
+                hj["trigger"] = h.trigger;
+                hj["timestamp"] = h.timestamp;
+                history.push_back(hj);
+            }
+            response["recent_history"] = history;
+
+            res.set_content(response.dump(), "application/json");
+        });
+
+    server.Post(R"(/api/worldbuilding/([^/]+)/pipeline/advance)",
+        [this](const auto& req, auto& res) {
+            std::string world_id = req.matches[1];
+            if (!pipeline_mgr_) {
+                res.status = 503;
+                res.set_content(R"({"error":"pipeline_not_available"})", "application/json");
+                return;
+            }
+            auto body = nlohmann::json::parse(req.body);
+
+            worldbuilding::PipelineManager::AdvanceRequest areq;
+            areq.world_id = world_id;
+            if (body.contains("target_phase")) {
+                areq.target_phase = worldbuilding::creative_phase_from_string(body["target_phase"].get<std::string>());
+            }
+            areq.trigger = "manual";
+            areq.triggered_by = "user_click";
+            areq.force = body.value("force", false);
+
+            auto result = pipeline_mgr_->advance_phase(areq);
+            if (result == worldbuilding::PipelineManager::AdvanceResult::SUCCESS) {
+                res.set_content(R"({"ok":true})", "application/json");
+            } else {
+                res.status = 400;
+                nlohmann::json err = {
+                    {"ok", false},
+                    {"error", worldbuilding::PipelineManager::advance_result_to_string(result)}
+                };
+                res.set_content(err.dump(), "application/json");
+            }
+        });
+
+    server.Get("/api/worldbuilding/pipeline/workflows",
+        [this](const auto& req, auto& res) {
+            if (!pipeline_mgr_) {
+                res.status = 503;
+                res.set_content(R"({"error":"pipeline_not_available"})", "application/json");
+                return;
+            }
+            auto names = pipeline_mgr_->list_workflows();
+            nlohmann::json list = nlohmann::json::array();
+            for (auto& name : names) {
+                auto* wf = pipeline_mgr_->get_workflow(name);
+                if (!wf) continue;
+                list.push_back({
+                    {"name", wf->name},
+                    {"description", wf->description},
+                    {"version", wf->version},
+                    {"phase_count", wf->phases.size()}
+                });
+            }
+            nlohmann::json response{{"workflows", list}};
+            res.set_content(response.dump(), "application/json");
+        });
+
+    server.Get("/api/worldbuilding/pipeline/history",
+        [this](const auto& req, auto& res) {
+            if (!pipeline_mgr_) {
+                res.status = 503;
+                res.set_content(R"({"error":"pipeline_not_available"})", "application/json");
+                return;
+            }
+            if (!req.has_param("world_id") || req.get_param_value("world_id").empty()) {
+                error_response(res, "Missing required query parameter: world_id", 400, "missing_param");
+                return;
+            }
+            std::string world_id = req.get_param_value("world_id");
+            int limit = 10;
+            if (req.has_param("limit")) {
+                try {
+                    limit = std::stoi(req.get_param_value("limit"));
+                    if (limit < 1) limit = 1;
+                    if (limit > 100) limit = 100;
+                } catch (...) {
+                    error_response(res, "Invalid limit parameter", 400);
+                    return;
+                }
+            }
+            try {
+                auto records = pipeline_mgr_->load_recent_history(world_id, limit);
+                nlohmann::json arr = nlohmann::json::array();
+                for (const auto& h : records) {
+                    nlohmann::json hj;
+                    hj["id"] = h.id;
+                    hj["world_id"] = h.world_id;
+                    hj["from_phase"] = worldbuilding::to_string(h.from_phase);
+                    hj["to_phase"] = worldbuilding::to_string(h.to_phase);
+                    hj["trigger"] = h.trigger;
+                    if (h.triggered_by) hj["triggered_by"] = *h.triggered_by;
+                    nlohmann::json cs;
+                    cs["all_met"] = h.conditions_at_transition.all_met;
+                    cs["phase"] = h.conditions_at_transition.phase_key;
+                    nlohmann::json crs = nlohmann::json::array();
+                    for (const auto& cr : h.conditions_at_transition.results) {
+                        nlohmann::json crj;
+                        crj["name"] = cr.message;
+                        crj["met"] = cr.met;
+                        if (cr.current) crj["current"] = *cr.current;
+                        if (cr.target) crj["target"] = *cr.target;
+                        crs.push_back(crj);
+                    }
+                    cs["results"] = crs;
+                    hj["conditions_summary"] = cs;
+                    hj["timestamp"] = h.timestamp;
+                    arr.push_back(hj);
+                }
+                json_response(res, {{"ok", true}, {"history", arr}});
+            } catch (const std::exception& e) {
+                error_response(res, std::string("Database error: ") + e.what(), 500, "database_error");
+            }
+        });
+
+    server.Post(R"(/api/worldbuilding/([^/]+)/pipeline/activate)",
+        [this](const auto& req, auto& res) {
+            std::string world_id = req.matches[1];
+            if (!pipeline_mgr_) {
+                res.status = 503;
+                res.set_content(R"({"error":"pipeline_not_available"})", "application/json");
+                return;
+            }
+            auto body = nlohmann::json::parse(req.body);
+            auto workflow_name = body.value("workflow_name", "default_creative_pipeline");
+            pipeline_mgr_->activate_workflow(world_id, workflow_name);
+            res.set_content(R"({"ok":true})", "application/json");
+        });
 }
 
 // --- World handlers ---

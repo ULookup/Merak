@@ -1,0 +1,125 @@
+{
+  "name": "default_creative_pipeline",
+  "description": "标准5阶段创作管线：世界观→角色→情节→场景→反思",
+  "version": 1,
+  "auto_advance": true,
+  "require_confirmation": false,
+  "phases": [
+    {
+      "key": "worldbuilding",
+      "label": "世界观构建",
+      "initial": true,
+      "context": {
+        "inject": ["phase_guidance", "available_tools", "world_summary"]
+      },
+      "allowed_tools": [
+        "create_location", "add_world_knowledge",
+        "create_character_card", "update_world"
+      ],
+      "advance_when": {
+        "operator": "and",
+        "conditions": [
+          { "type": "entity_count", "entity": "agents", "op": ">=", "target_int": 2, "message": "至少创建 2 个角色" },
+          { "type": "world_has_rule_system", "message": "世界规则体系已建立" },
+          { "type": "entity_count", "entity": "locations", "op": ">=", "target_int": 1, "message": "至少定义 1 个主要地点" }
+        ]
+      },
+      "on_enter": [
+        { "type": "log", "params": { "level": "info", "message": "进入世界观构建阶段" } }
+      ],
+      "on_exit": []
+    },
+    {
+      "key": "character_creation",
+      "label": "角色创建",
+      "context": {
+        "inject": ["phase_guidance", "world_summary", "character_relations"],
+        "extra": { "include_existing_characters": true }
+      },
+      "allowed_tools": [
+        "create_character_card", "update_character_card",
+        "add_relation", "add_character_diary", "create_location"
+      ],
+      "advance_when": {
+        "operator": "and",
+        "conditions": [
+          { "type": "entity_count", "entity": "agents", "kind_filter": "individual", "op": ">=", "target_int": 3, "message": "至少创建 3 个主要角色" },
+          { "type": "entity_count", "entity": "agent_relations", "op": ">=", "target_int": 2, "message": "至少建立 2 条角色关系" },
+          { "type": "all_characters_have_cards", "message": "所有角色均有完整角色卡" }
+        ]
+      },
+      "allowed_retreat": ["worldbuilding"]
+    },
+    {
+      "key": "plot_architecture",
+      "label": "情节架构",
+      "context": {
+        "inject": ["phase_guidance", "character_summary", "plot_templates"]
+      },
+      "allowed_tools": [
+        "create_arc", "create_chapter", "plant_foreshadowing",
+        "create_secret", "add_timeline_event", "update_character_card"
+      ],
+      "advance_when": {
+        "operator": "and",
+        "conditions": [
+          { "type": "entity_count", "entity": "chapters", "op": ">=", "target_int": 1, "message": "至少创建 1 个章节" },
+          { "type": "entity_count", "entity": "foreshadowings", "op": ">=", "target_int": 1, "message": "至少布置 1 个伏笔" }
+        ]
+      },
+      "allowed_retreat": ["character_creation"]
+    },
+    {
+      "key": "scene_writing",
+      "label": "场景写作",
+      "context": {
+        "inject": ["phase_guidance", "current_scene_context", "participant_cards", "secret_knowledge_boundaries"]
+      },
+      "allowed_tools": [
+        "create_scene", "end_scene", "update_foreshadow",
+        "add_diary", "add_relation", "voice_check"
+      ],
+      "advance_when": {
+        "operator": "and",
+        "conditions": [
+          { "type": "scene_count_in_chapter", "op": ">=", "target_str": "$total_scenes_target", "message": "当前章节场景数达标" },
+          { "type": "all_scenes_ended", "message": "所有场景已结束（日记+关系已更新）" }
+        ]
+      },
+      "auto_loop": {
+        "entity": "chapter",
+        "target": "all_scenes_in_chapter",
+        "continue_while": "scene_count < total_scenes_target"
+      },
+      "allowed_retreat": ["plot_architecture"]
+    },
+    {
+      "key": "reflection",
+      "label": "回顾整理",
+      "context": {
+        "inject": ["phase_guidance", "chapter_summary", "unresolved_foreshadowing", "exposed_secrets"]
+      },
+      "allowed_tools": [
+        "voice_check", "update_foreshadow", "review_chapter",
+        "update_character_card", "add_memory_summary"
+      ],
+      "advance_when": {
+        "operator": "and",
+        "conditions": [
+          { "type": "all_checks_passed", "checks": ["character_consistency", "plot_coherence", "foreshadow_management", "pacing"], "message": "所有检查项目通过" }
+        ]
+      },
+      "on_complete": [
+        {
+          "type": "conditional",
+          "params": {
+            "condition_type": "has_more_chapters",
+            "then": { "type": "goto_phase", "params": { "target": "scene_writing" } },
+            "else": { "type": "emit_sse", "params": { "event": "pipeline_cycle_complete", "params": { "message": "所有章节创作完成" } } }
+          }
+        }
+      ],
+      "allowed_retreat": ["scene_writing"]
+    }
+  ]
+}

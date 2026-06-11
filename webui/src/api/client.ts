@@ -39,6 +39,8 @@ import type {
   WorkspaceFileListResponse,
   WorldListResponse,
   WorldTimeResponse,
+  PipelineViewData,
+  WorkflowSummary,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
@@ -549,3 +551,44 @@ export const api = {
   resolveCreation: (id: string, decision: string, modifications?: Record<string, unknown>) =>
     request<ResolveCreationResponse>('POST', `/v1/creations/${id}/resolve`, { decision, modifications }),
 };
+
+export async function getPipelineState(worldId: string): Promise<PipelineViewData> {
+  const res = await fetch(`/api/worldbuilding/${worldId}/pipeline/state`);
+  if (!res.ok) throw new Error(`Failed to get pipeline state: ${res.status}`);
+  return res.json();
+}
+
+export async function advancePipeline(
+  worldId: string,
+  body: { target_phase?: string; force?: boolean }
+): Promise<void> {
+  const res = await fetch(`/api/worldbuilding/${worldId}/pipeline/advance`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || 'advance failed');
+  }
+}
+
+export async function listPipelineWorkflows(): Promise<WorkflowSummary[]> {
+  const res = await fetch('/api/worldbuilding/pipeline/workflows');
+  if (!res.ok) throw new Error(`Failed to list workflows: ${res.status}`);
+  const data = await res.json();
+  return data.workflows;
+}
+
+export async function activatePipelineWorkflow(
+  worldId: string,
+  workflowName: string
+): Promise<void> {
+  const res = await fetch(`/api/worldbuilding/${worldId}/pipeline/activate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workflow_name: workflowName }),
+  });
+  if (!res.ok) throw new Error(`Failed to activate workflow: ${res.status}`);
+}
+

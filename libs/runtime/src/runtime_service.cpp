@@ -2,6 +2,7 @@
 #include <merak/turn_state.hpp>
 #include <merak/prompts/compositor.hpp>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
+#include <merak/worldbuilding/pipeline_manager.hpp>
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <atomic>
@@ -256,6 +257,12 @@ RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const 
 SessionRecord RuntimeService::create_session(const std::string& title, const std::string& world_id, const std::string& agent_id) {
     auto s = store_.create_session(title, world_id, agent_id);
     emit(s.id, "", "session_created", {{"title", title}});
+    if (!world_id.empty()) register_session_world(s.id, world_id);
+    if (!world_id.empty() && pipeline_mgr_) {
+        if (!pipeline_mgr_->get_state(world_id)) {
+            pipeline_mgr_->init_state_for_world(world_id);
+        }
+    }
     return *store_.get_session(s.id);
 }
 void RuntimeService::update_session(const std::string&id,const std::string&title){store_.update_session(id,title);emit(id,"","session_updated",{{"title",title}});}
@@ -370,13 +377,21 @@ void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=
         auto session = store_.get_session(r.session_id);
         if (session && !session->world_id.empty() && !session->agent_id.empty() && wb_service_) {
             auto profile = build_prompt_profile(session->world_id, session->agent_id);
+            // Inject pipeline phase context into system prompt
+            if (pipeline_mgr_ && !session->world_id.empty()) {
+                auto phase_ctx = pipeline_mgr_->get_phase_context(session->world_id);
+                if (!phase_ctx.empty()) {
+                    profile.phase_context = std::move(phase_ctx);
+                }
+                profile.phase_allowed_tools = pipeline_mgr_->get_allowed_tools(session->world_id);
+            }
             prompts::PromptCompositor compositor;
             std::string composed = compositor.assemble(profile);
             if (!composed.empty()) {
                 loop->set_system_prompt(composed);
             }
         }
-        loop->run(r.user_message,*control).get();if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed");}}catch(const std::exception&e){if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
+        loop->run(r.user_message,*control).get();if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed",{{"pipeline_snapshot",(session&&!session->world_id.empty()&&pipeline_mgr_)?pipeline_mgr_->snapshot_to_json(session->world_id):""}});}}catch(const std::exception&e){if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
 AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig& agent_, const std::string& task, const RunRecord& parent, const std::string& delegation_id, std::optional<std::string> previous_output) {
     // Enhance system_prompt with PromptCompositor output for platform agents
     SubAgentConfig agent = agent_;
@@ -470,6 +485,20 @@ ApprovalRecord RuntimeService::resolve_approval(const std::string&id,ApprovalSta
 void RuntimeService::set_worldbuilding_service(worldbuilding::WorldbuildingService* wb_service) {
     wb_service_ = wb_service;
 }
+
+void RuntimeService::set_pipeline_manager(
+    std::shared_ptr<merak::worldbuilding::PipelineManager> mgr) {
+    pipeline_mgr_ = std::move(mgr);
+}
+
+void RuntimeService::after_entity_event(const std::string& world_id,
+                                         const std::string& event_type,
+                                         const nlohmann::json& payload) {
+    if (pipeline_mgr_) {
+        pipeline_mgr_->on_world_event(world_id, event_type, payload);
+    }
+}
+
 nlohmann::json RuntimeService::resolve_creation(
         const std::string& creation_id,
         const std::string& decision,
@@ -550,6 +579,18 @@ nlohmann::json RuntimeService::resolve_creation(
                                 {"resource_type", resource_type},
                                 {"resource_id", resource_id}
                             });
+                            // Wire into PipelineManager
+                            std::string event_type;
+                            if (resource_type == "agent") event_type = "agent_created";
+                            else if (resource_type == "scene") event_type = "scene_created";
+                            else if (resource_type == "chapter") event_type = "chapter_created";
+                            else if (resource_type == "secret") event_type = "secret_created";
+                            else if (resource_type == "foreshadowing") event_type = "foreshadow_created";
+                            else if (resource_type == "arc") event_type = "arc_created";
+                            if (!event_type.empty()) {
+                                after_entity_event(pending->world_id, event_type,
+                                                   {{resource_type + "_id", resource_id}});
+                            }
                         }
                         if (resource_type == "scene") {
                             emit(run->session_id, run_id, "scene_changed", {
@@ -571,6 +612,46 @@ std::vector<RuntimeEvent>RuntimeService::events_after(const std::string&id,long 
 std::shared_ptr<EventSubscription>RuntimeService::subscribe(const std::string&id){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return bus_.subscribe(id);}
 RuntimeEvent RuntimeService::emit_event(const std::string&id,const std::string&run_id,const std::string&type,nlohmann::json payload){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return emit(id,run_id,type,std::move(payload));}
 
+void RuntimeService::broadcast_to_world(const std::string& world_id, RuntimeEvent event) {
+    std::lock_guard lock(world_sessions_mutex_);
+    auto it = world_sessions_.find(world_id);
+    if (it == world_sessions_.end()) return;
+    for (const auto& session_id : it->second) {
+        try {
+            auto e = event;
+            e.session_id = session_id;
+            bus_.publish(e);
+        } catch (const std::exception& ex) {
+            spdlog::warn("broadcast_to_world: failed for session {} in world {}: {}",
+                         session_id, world_id, ex.what());
+        }
+    }
+}
+void RuntimeService::register_session_world(const std::string& session_id, const std::string& world_id) {
+    std::lock_guard lock(world_sessions_mutex_);
+    world_sessions_[world_id].insert(session_id);
+    session_world_[session_id] = world_id;
+}
+void RuntimeService::unregister_session_world(const std::string& session_id) {
+    std::lock_guard lock(world_sessions_mutex_);
+    auto it = session_world_.find(session_id);
+    if (it == session_world_.end()) return;
+    const auto& world_id = it->second;
+    auto wit = world_sessions_.find(world_id);
+    if (wit != world_sessions_.end()) {
+        wit->second.erase(session_id);
+        if (wit->second.empty()) {
+            world_sessions_.erase(wit);
+        }
+    }
+    session_world_.erase(it);
+}
+size_t RuntimeService::world_session_count(const std::string& world_id) const {
+    std::lock_guard lock(world_sessions_mutex_);
+    auto it = world_sessions_.find(world_id);
+    if (it == world_sessions_.end()) return 0;
+    return it->second.size();
+}
 std::vector<Message>RuntimeService::restore_messages(const std::string&id)const{std::vector<Message>out;for(const auto&e:store_.events_after(id,0)){if(e.type=="message_appended")out.push_back(message_from_json(e.payload));else if(e.type=="compaction_applied"&&!out.empty()){auto summary=out.back();out.pop_back();auto count=std::min<size_t>(e.payload.value("replaced_count",0),out.size());out.erase(out.begin(),out.begin()+static_cast<long>(count));out.insert(out.begin(),std::move(summary));}}return out;}
 void RuntimeService::resume_after_restarted_approval(RunRecord run,ApprovalRecord approval,bool allowed){
     if(!loop_factory_)throw RuntimeError("runtime_unconfigured","Agent loop is not configured");

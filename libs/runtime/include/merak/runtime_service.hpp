@@ -10,12 +10,13 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <optional>
 #include <stdexcept>
 #include <filesystem>
 #include <vector>
 
-namespace merak::worldbuilding { class WorldbuildingService; }
+namespace merak::worldbuilding { class WorldbuildingService; class PipelineManager; }
 
 namespace merak {
 
@@ -98,6 +99,8 @@ public:
     std::vector<AgentMetadata> agents() const;
     ApprovalRecord resolve_approval(const std::string& id, ApprovalStatus status);
     void set_worldbuilding_service(merak::worldbuilding::WorldbuildingService* wb_service);
+    void set_pipeline_manager(std::shared_ptr<merak::worldbuilding::PipelineManager> mgr);
+    merak::worldbuilding::PipelineManager* pipeline_manager() { return pipeline_mgr_.get(); }
     nlohmann::json resolve_creation(const std::string& creation_id,
                                     const std::string& decision,
                                     const nlohmann::json& modifications);
@@ -106,6 +109,10 @@ public:
     std::shared_ptr<EventSubscription> subscribe(const std::string& session_id);
     RuntimeEvent emit_event(const std::string& session_id, const std::string& run_id,
                             const std::string& type, nlohmann::json payload = {});
+    void broadcast_to_world(const std::string& world_id, RuntimeEvent event);
+    void register_session_world(const std::string& session_id, const std::string& world_id);
+    void unregister_session_world(const std::string& session_id);
+    size_t world_session_count(const std::string& world_id) const;
 
 private:
     class Control;
@@ -115,17 +122,24 @@ private:
     std::map<std::string, SubAgentConfig> agents_;
     SubRunExecutor sub_run_executor_;
     mutable std::mutex mutex_;
+    std::map<std::string, std::set<std::string>> world_sessions_;  // world_id -> session_ids
+    std::map<std::string, std::string> session_world_;              // session_id -> world_id
+    mutable std::mutex world_sessions_mutex_;
     std::map<std::string, std::shared_ptr<CancellationToken>> tokens_;
     std::map<std::string, std::shared_ptr<Control>> controls_;
     std::map<std::string, std::vector<std::string>> child_runs_;
     std::map<std::string, std::shared_ptr<AgentLoop>> session_loops_;
     std::mutex session_loops_mutex_;
     merak::worldbuilding::WorldbuildingService* wb_service_ = nullptr;
+    std::shared_ptr<merak::worldbuilding::PipelineManager> pipeline_mgr_;
     RuntimeEvent emit(const std::string& session_id, const std::string& run_id,
                       const std::string& type, nlohmann::json payload = {});
     void execute_run(RunRecord run, std::string model);
     prompts::PromptProfile build_prompt_profile(
         const std::string& world_id, const std::string& agent_id);
+    void after_entity_event(const std::string& world_id,
+                            const std::string& event_type,
+                            const nlohmann::json& payload);
     void execute_delegation(RunRecord parent, DelegationRequest request,
                             std::string delegation_id);
     AgentResponse execute_sub_run(
