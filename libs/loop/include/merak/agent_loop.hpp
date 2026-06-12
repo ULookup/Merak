@@ -13,6 +13,7 @@
 #include <merak/turn_guard.hpp>
 #include <merak/turn_ingestor.hpp>
 #include <merak/execution.hpp>
+#include <atomic>
 #include <functional>
 #include <future>
 #include <memory>
@@ -64,8 +65,8 @@ public:
 
     ContextPipeline& pipeline() { return *pipeline_; }
 
-    void set_plan_mode(bool on) { plan_mode_ = on; }
-    bool is_plan_mode() const { return plan_mode_; }
+    void set_plan_mode_source(std::shared_ptr<std::atomic<bool>> source) { plan_mode_ = std::move(source); }
+    bool is_plan_mode() const { return plan_mode_ && plan_mode_->load(); }
     TurnIngestor& turn_ingestor() { return turn_ingestor_; }
 
 private:
@@ -82,7 +83,7 @@ private:
     TurnIngestor turn_ingestor_;
 
     std::vector<Message> session_history_;
-    bool plan_mode_ = false;
+    std::shared_ptr<std::atomic<bool>> plan_mode_;
     std::function<std::string()> working_memory_provider_;
     std::map<std::string, int> tool_failure_streak_;
     static constexpr int kCircuitBreakerThreshold = 3;

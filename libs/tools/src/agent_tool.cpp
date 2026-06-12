@@ -3,6 +3,8 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
+#include <thread>
+
 namespace merak::tools {
 
 ToolSpec AgentTool::spec() const {
@@ -63,7 +65,7 @@ std::future<ToolResult> AgentTool::execute(ToolCall call, ToolExecutionContext) 
             }
             else if (action == "spawn") {
                 std::string agent_id = json.value("agent_id", "");
-                std::string task = json.value("task", "");
+                std::string task_text = json.value("task", "");
 
                 auto it = profiles_.find(agent_id);
                 if (it == profiles_.end()) {
@@ -76,11 +78,24 @@ std::future<ToolResult> AgentTool::execute(ToolCall call, ToolExecutionContext) 
                     result.output = out.dump();
                     result.is_error = true;
                 } else {
+                    // Launch sub-agent asynchronously via executor
+                    auto agent_cfg = it->second;
+                    auto exec = executor_;
+
+                    std::thread([exec = std::move(exec), agent_cfg = std::move(agent_cfg), task_text]() {
+                        try {
+                            NullRunControl control;
+                            exec(agent_cfg, task_text, control);
+                        } catch (const std::exception& e) {
+                            spdlog::error("AgentTool: sub-agent failed: {}", e.what());
+                        }
+                    }).detach();
+
                     nlohmann::json out;
                     out["status"] = "ok";
-                    out["message"] = "Sub-agent spawn requested";
+                    out["message"] = "Sub-agent spawned";
                     out["agent_id"] = agent_id;
-                    out["task"] = task;
+                    out["task"] = task_text;
                     result.output = out.dump();
                 }
             }

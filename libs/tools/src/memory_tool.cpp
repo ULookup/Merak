@@ -201,13 +201,26 @@ std::future<ToolResult> MemoryTool::execute(ToolCall call, ToolExecutionContext 
                     weight = -0.1;
                 }
 
-                spdlog::info("MemoryTool feedback: id={} signal={} weight={}", memory_id, signal, weight);
+                // Attempt observable action: for negative signals, auto-forget the entry
+                if (weight < 0.0) {
+                    auto removed = store->remove(memory_id);
+                    if (removed.has_value()) {
+                        spdlog::info("MemoryTool feedback: id={} signal={} — entry removed", memory_id, signal);
+                    } else {
+                        spdlog::warn("MemoryTool feedback: id={} signal={} — remove failed: {}",
+                                     memory_id, signal, removed.error().what());
+                    }
+                } else {
+                    spdlog::info("MemoryTool feedback: id={} signal={} weight={} — confidence boost noted",
+                                 memory_id, signal, weight);
+                }
 
                 nlohmann::json out;
                 out["status"] = "ok";
-                out["message"] = "Feedback recorded";
+                out["message"] = "Feedback recorded for memory " + memory_id
+                    + " (signal: " + signal + ", adjustment: " + (weight >= 0.0 ? "+" : "") + std::to_string(weight) + ")";
                 out["signal"] = signal;
-                out["weight"] = weight;
+                out["weight_adjustment"] = weight;
                 result.output = out.dump();
 
             } else if (action == "profile") {

@@ -186,9 +186,18 @@ static int run_server(int argc,char**argv) {
     tools->register_tool(std::make_unique<tools::LspTool>());
     tools->register_tool(std::make_unique<tools::SymbolsTool>());
     tools->register_tool(std::make_unique<tools::MemoryTool>(memory));
-    tools->register_tool(std::make_unique<tools::SessionTool>());
     tools->register_tool(std::make_unique<tools::TaskTool>());
-    tools->register_tool(std::make_unique<tools::AskUserTool>());
+    auto ask_handler = [](const std::string& question, const std::vector<std::string>& options) -> std::string {
+        std::cout << "\n[AskUser] " << question << "\n";
+        for (size_t i = 0; i < options.size(); ++i) {
+            std::cout << "  [" << (i + 1) << "] " << options[i] << "\n";
+        }
+        std::cout << "Your answer: ";
+        std::string answer;
+        std::getline(std::cin, answer);
+        return answer;
+    };
+    tools->register_tool(std::make_unique<tools::AskUserTool>(ask_handler));
     auto plan_mode = std::make_shared<std::atomic<bool>>(false);
     tools->register_tool(std::make_unique<tools::EnterPlanModeTool>(plan_mode));
     tools->register_tool(std::make_unique<tools::ExitPlanModeTool>(plan_mode));
@@ -197,7 +206,9 @@ static int run_server(int argc,char**argv) {
     // Register Worldbuilding tools if service is available
     if (wb_service) {
         tools->set_capabilities(tools->capabilities() | Capability::Worldbuilding);
-        worldbuilding::WorldbuildingTools wb_tools(*wb_service);
+        worldbuilding::WorldbuildingTools wb_tools(
+            *wb_service, llm, cfg.memory.diary_compression_threshold,
+            cfg.memory.diary_model);
         auto wb_ctx = worldbuilding::ToolContext{};
         auto god_tools = wb_tools.create_tools(worldbuilding::AgentKind::God, wb_ctx);
         for (auto& tool : god_tools) {
@@ -231,14 +242,17 @@ auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
         return std::pair{context,compactor};
     };
     auto [context,compactor]=make_context(llm);
-    auto factory=[cfg,llm,tools,memory,context,compactor](const std::string&model){AgentLoop::Config c;c.system_prompt=cfg.agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=model.empty()?cfg.llm.default_model:model;c.max_output_tokens=cfg.llm.max_output_tokens;return std::make_unique<AgentLoop>(c,llm,tools,memory,context,compactor);};
-    auto sub_executor=[cfg,llm,tools,memory,make_context](const SubAgentConfig&agent,const std::string&task,RunControl&control){
+    // Register SessionTool with real MemoryStore and Compactor references
+    tools->register_tool(std::make_unique<tools::SessionTool>(memory, compactor));
+    auto factory=[cfg,llm,tools,memory,context,compactor,plan_mode](const std::string&model){AgentLoop::Config c;c.system_prompt=cfg.agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=model.empty()?cfg.llm.default_model:model;c.max_output_tokens=cfg.llm.max_output_tokens;auto loop=std::make_unique<AgentLoop>(c,llm,tools,memory,context,compactor);loop->set_plan_mode_source(plan_mode);return loop;};
+    auto sub_executor=[cfg,llm,tools,memory,make_context,plan_mode](const SubAgentConfig&agent,const std::string&task,RunControl&control){
         auto sub_tools=std::make_shared<ToolRegistry>();sub_tools->set_permission_mode(cfg.agent.permission_mode);
         if(agent.tool_allowlist.empty()){for(const auto&spec:tools->all_tools()){if(auto*tool=tools->get_tool(spec.name))sub_tools->register_tool(tool->clone());}}
         else{for(const auto&name:agent.tool_allowlist){if(auto*tool=tools->get_tool(name))sub_tools->register_tool(tool->clone());}}
         auto [sub_context,sub_compactor]=make_context(llm);
         AgentLoop::Config c;c.system_prompt=agent.system_prompt.empty()?cfg.agent.system_prompt:agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=agent.model.empty()?cfg.llm.default_model:agent.model;c.max_output_tokens=cfg.llm.max_output_tokens;
         auto loop=std::make_unique<AgentLoop>(c,llm,sub_tools,memory,sub_context,sub_compactor);
+        loop->set_plan_mode_source(plan_mode);
         return loop->run(task,control).get();
     };
     tools->register_tool(std::make_unique<tools::AgentTool>(cfg.agent.sub_agents, sub_executor));
