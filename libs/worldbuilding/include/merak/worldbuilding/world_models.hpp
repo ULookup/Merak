@@ -233,6 +233,10 @@ struct CharacterCard {
 
 struct DiaryEntry {
     std::string id, agent_id, scene_id, world_time, content, created_at;
+    std::string mood;                    // 心情标签
+    std::string status = "completed";    // generating/completed/failed
+    int leak_risk_level = 0;            // 0=安全, 1=低风险, 2=高风险
+    int tokens_used = 0;
 };
 
 struct MemorySummary {

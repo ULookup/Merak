@@ -93,7 +93,46 @@ WorldbuildingService::prepare_scene(const std::string& world_id,
 SceneWrapUp WorldbuildingService::end_scene(const std::string& world_id,
                                               const std::string& scene_id,
                                               const std::string& final_markdown) {
-    return orchestrator_.finish_scene(world_id, scene_id, final_markdown);
+    auto wrapup = orchestrator_.finish_scene(world_id, scene_id, final_markdown);
+
+    if (entity_event_handler_) {
+        entity_event_handler_("scene_ended", world_id, {
+            {"scene_id", scene_id},
+            {"pending_diary_agents", wrapup.pending_diary_agents}
+        });
+    }
+
+    return wrapup;
+}
+
+void WorldbuildingService::notify_diary_created(const std::string& world_id,
+                                                  const std::string& diary_id,
+                                                  const std::string& agent_id,
+                                                  const std::string& scene_id,
+                                                  const std::string& mood,
+                                                  int leak_risk_level) {
+    if (entity_event_handler_) {
+        entity_event_handler_("diary_created", world_id, {
+            {"diary_id", diary_id},
+            {"agent_id", agent_id},
+            {"scene_id", scene_id},
+            {"mood", mood},
+            {"leak_risk_level", leak_risk_level}
+        });
+    }
+}
+
+void WorldbuildingService::notify_memory_summary_created(const std::string& world_id,
+                                                          const std::string& summary_id,
+                                                          const std::string& agent_id,
+                                                          const std::vector<std::string>& source_diary_ids) {
+    if (entity_event_handler_) {
+        entity_event_handler_("memory_summary_created", world_id, {
+            {"summary_id", summary_id},
+            {"agent_id", agent_id},
+            {"source_diary_ids", source_diary_ids}
+        });
+    }
 }
 
 Foreshadowing

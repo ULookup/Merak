@@ -169,6 +169,7 @@ static int run_server(int argc,char**argv) {
                 cfg.memory.db_connection, merak_home() / "worldbuilding",
                 std::move(kg_provider));
             wb_service->initialize();
+            wb_service->set_diary_context_limit(cfg.memory.diary_context_limit);
         } catch (const std::exception& e) {
             std::cerr << "Warning: WorldbuildingService not available: " << e.what() << "\n";
         }

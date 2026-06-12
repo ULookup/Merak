@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+namespace merak { class LlmProvider; }
+
 namespace merak::worldbuilding {
 
 struct ToolContext {
@@ -486,20 +488,39 @@ private:
     ToolContext ctx_;
 };
 
-class AddCharacterDiaryTool : public Tool {
+class WriteMyDiaryTool : public Tool {
 public:
-    AddCharacterDiaryTool(WorldbuildingService& svc, ToolContext ctx)
+    WriteMyDiaryTool(WorldbuildingService& svc, ToolContext ctx)
         : svc_(&svc), ctx_(std::move(ctx)) {}
     ToolSpec spec() const override;
-    PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<AddCharacterDiaryTool>(*svc_, ctx_);
+        return std::make_unique<WriteMyDiaryTool>(*svc_, ctx_);
     }
-    bool is_concurrent_safe(const ToolCall&) const override { return false; }
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
 private:
     WorldbuildingService* svc_;
     ToolContext ctx_;
+};
+
+class CompressMyMemoryTool : public Tool {
+public:
+    CompressMyMemoryTool(WorldbuildingService& svc, std::shared_ptr<LlmProvider> llm,
+                         ToolContext ctx, int threshold, const std::string& model)
+        : svc_(&svc), llm_(std::move(llm)), ctx_(std::move(ctx)),
+          threshold_(threshold), model_(model) {}
+    ToolSpec spec() const override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<CompressMyMemoryTool>(*svc_, llm_, ctx_, threshold_, model_);
+    }
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
+private:
+    WorldbuildingService* svc_;
+    std::shared_ptr<LlmProvider> llm_;
+    ToolContext ctx_;
+    int threshold_;
+    std::string model_;
 };
 
 class AddRelationTool : public Tool {
@@ -636,8 +657,13 @@ private:
 
 class WorldbuildingTools {
 public:
-    explicit WorldbuildingTools(WorldbuildingService& service)
-        : service_(&service) {}
+    WorldbuildingTools(WorldbuildingService& service,
+                       std::shared_ptr<LlmProvider> llm = nullptr,
+                       int compression_threshold = 20,
+                       std::string diary_model = "")
+        : service_(&service), llm_(std::move(llm)),
+          compression_threshold_(compression_threshold),
+          diary_model_(std::move(diary_model)) {}
 
     std::vector<ToolSpec> specs_for(AgentKind kind) const;
     std::vector<std::unique_ptr<Tool>>
@@ -645,6 +671,9 @@ public:
 
 private:
     WorldbuildingService* service_;
+    std::shared_ptr<LlmProvider> llm_;
+    int compression_threshold_ = 20;
+    std::string diary_model_;
 };
 
 } // namespace merak::worldbuilding
