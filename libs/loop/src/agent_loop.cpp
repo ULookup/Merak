@@ -59,6 +59,7 @@ std::future<AgentResponse> AgentLoop::run(
             tool_failure_streak_.clear();
             turn_guard_.reset();
             stall_detector_.reset();
+            consecutive_content_avoidance_ = 0;
 
             return run_loop(control);
         });
@@ -110,6 +111,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
             std::unordered_set<std::string> blocked(
                 restricted_tools_.begin(), restricted_tools_.end());
             std::vector<ToolSpec> filtered;
+            filtered.reserve(tool_specs.size());
             for (auto& ts : tool_specs) {
                 if (!blocked.count(ts.name)) filtered.push_back(ts);
             }
@@ -371,11 +373,11 @@ std::vector<Message> AgentLoop::build_context() {
     sources.skills_text = [this]() -> std::string {
         if (!skills_) return "";
         auto defs = skills_->inline_skills();
-        std::string text;
+        std::ostringstream oss;
         for (auto& def : defs) {
-            text += def.body + "\n";
+            oss << def.body << '\n';
         }
-        return text;
+        return oss.str();
     };
     sources.tool_specs = tools_->pinned_schemas();
     sources.working_memory_text = [this]() -> std::string {

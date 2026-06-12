@@ -3,7 +3,6 @@
 #include <merak/tool_registry.hpp>
 #include <merak/token_counter.hpp>
 #include <merak/compactor.hpp>
-#include <spdlog/spdlog.h>
 
 namespace merak::tools {
 
@@ -67,18 +66,21 @@ std::future<ToolResult> ForkSkillTool::execute(
 
         AgentLoop sub_loop(cfg, llm_, sub_tools, memory_, comp, nullptr, nullptr);
 
-        if (!context.world_id.empty()) {
-            sub_loop.set_active_world_id(context.world_id);
-        }
-
         NullRunControl control;
-        auto response = sub_loop.run(call.arguments, control).get();
-
-        ToolResult result;
-        result.call_id = call.id;
-        result.output = response.text;
-        result.is_error = false;
-        return result;
+        try {
+            auto response = sub_loop.run(call.arguments, control).get();
+            ToolResult result;
+            result.call_id = call.id;
+            result.output = response.text;
+            result.is_error = false;
+            return result;
+        } catch (const std::exception& e) {
+            ToolResult result;
+            result.call_id = call.id;
+            result.output = std::string("Fork skill '") + skill_.name + "' failed: " + e.what();
+            result.is_error = true;
+            return result;
+        }
     });
 }
 

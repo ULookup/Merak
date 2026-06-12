@@ -2,6 +2,7 @@
 #include <merak/skills/skill_loader.hpp>
 #include <merak/tool_registry.hpp>
 #include <merak/fork_skill_tool.hpp>
+#include <spdlog/spdlog.h>
 
 namespace merak::skills {
 
@@ -46,6 +47,7 @@ void SkillRegistry::add(SkillDef skill) {
 
 std::vector<SkillDef> SkillRegistry::inline_skills() const {
     std::vector<SkillDef> result;
+    result.reserve(skills_.size());
     for (const auto& [name, skill] : skills_) {
         if (skill.context_mode.empty() || skill.context_mode == "inline") {
             result.push_back(skill);
@@ -56,6 +58,7 @@ std::vector<SkillDef> SkillRegistry::inline_skills() const {
 
 std::vector<SkillDef> SkillRegistry::fork_skills() const {
     std::vector<SkillDef> result;
+    result.reserve(skills_.size());
     for (const auto& [name, skill] : skills_) {
         if (skill.context_mode == "fork") {
             result.push_back(skill);
