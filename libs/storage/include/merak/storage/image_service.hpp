@@ -10,6 +10,7 @@
 #include <functional>
 #include <optional>
 #include <set>
+#include <unordered_map>
 
 namespace merak {
 
@@ -85,6 +86,12 @@ public:
     // Image management
     std::vector<ImageRecord> list_images(const std::string& agent_id);
     std::optional<ImageRecord> get_image(const std::string& image_id);
+
+    // Batch query: returns map of agent_id → primary avatar ImageRecord.
+    // Single DB query, no N+1. Agents without a primary avatar are absent from the map.
+    std::unordered_map<std::string, ImageRecord> list_primary_avatars(
+        const std::vector<std::string>& agent_ids);
+
     void delete_image(const std::string& image_id);
     void update_image(const std::string& image_id,
                       std::optional<bool> is_primary,

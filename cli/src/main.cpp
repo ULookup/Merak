@@ -11,6 +11,9 @@
 #include <merak/worldbuilding/pipeline_manager.hpp>
 #include <merak/worldbuilding/condition_evaluator.hpp>
 #include <merak/kg/neo4j_provider.hpp>
+#include <merak/storage/image_service.hpp>
+#include <merak/storage/local_file_image_store.hpp>
+#include <merak/worldbuilding/ids.hpp>
 #include <pqxx/pqxx>
 #include <merak/worldbuilding_http_handler.hpp>
 #include <merak/tool_catalog.hpp>
@@ -35,6 +38,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <regex>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -281,6 +285,131 @@ static int run_server(int argc,char**argv) {
     if (wb_service) {
         wb_handler = std::make_shared<WorldbuildingHttpHandler>(wb_service, runtime);
         if (pipeline_mgr) wb_handler->set_pipeline_manager(pipeline_mgr);
+        // Wire up ImageService for character image upload
+        {
+            auto images_dir = (merak_home() / "data" / "images").string();
+            auto uploads_dir = (merak_home() / "data" / "uploads" / "chunks").string();
+            fs::create_directories(images_dir);
+            fs::create_directories(uploads_dir);
+
+            auto image_store = std::make_shared<merak::LocalFileImageStore>(
+                images_dir, "/api/worldbuilding/images");
+
+            // Shared DB connection — reused across all callbacks, guarded by mutex
+            auto conn = std::make_shared<pqxx::connection>(cfg.memory.db_connection);
+            auto conn_mutex = std::make_shared<std::mutex>();
+
+            // Translates @param_name placeholders to $1, $2, ... for pgxx parameterized queries.
+            // NOTE: regex matches any @[word] token. The SQL strings passed to these callbacks
+            // must not contain @-prefixed literals outside of parameter placeholders.
+            auto translate_sql = [](const std::string& sql, const nlohmann::json& params,
+                                     std::string& translated, pqxx::params& pq_params) {
+                static const std::regex param_re(R"(@([a-zA-Z_][a-zA-Z0-9_]*))");
+                std::vector<std::string> param_names;
+                translated.clear();
+                size_t pos = 0;
+                auto it = std::sregex_iterator(sql.begin(), sql.end(), param_re);
+                auto end = std::sregex_iterator();
+                for (; it != end; ++it) {
+                    param_names.push_back((*it)[1].str());
+                    translated += sql.substr(pos, it->position() - pos);
+                    translated += "$" + std::to_string(param_names.size());
+                    pos = it->position() + it->length();
+                }
+                translated += sql.substr(pos);
+
+                for (const auto& name : param_names) {
+                    auto p = params.find(name);
+                    if (p == params.end()) {
+                        pq_params.append(std::string{});
+                        continue;
+                    }
+                    const auto& val = *p;
+                    switch (val.type()) {
+                    case nlohmann::json::value_t::string:
+                        pq_params.append(val.get<std::string>());
+                        break;
+                    case nlohmann::json::value_t::boolean:
+                        pq_params.append(val.get<bool>());
+                        break;
+                    case nlohmann::json::value_t::number_integer:
+                    case nlohmann::json::value_t::number_unsigned:
+                        pq_params.append(val.get<long long>());
+                        break;
+                    case nlohmann::json::value_t::number_float:
+                        pq_params.append(val.get<double>());
+                        break;
+                    default:
+                        pq_params.append(std::string{});
+                        break;
+                    }
+                }
+            };
+
+            auto db_query = [conn, conn_mutex, translate_sql](
+                const std::string& sql, const nlohmann::json& params) -> nlohmann::json
+            {
+                std::lock_guard<std::mutex> lock(*conn_mutex);
+                pqxx::work txn(*conn);
+                std::string translated;
+                pqxx::params pq_params;
+                translate_sql(sql, params, translated, pq_params);
+                auto res = txn.exec_params(translated, pq_params);
+                txn.commit();
+                nlohmann::json result = nlohmann::json::array();
+                for (const auto& row : res) {
+                    nlohmann::json obj;
+                    for (int i = 0; i < static_cast<int>(row.columns()); ++i) {
+                        if (row[i].is_null()) {
+                            obj[row.column_name(i)] = nullptr;
+                            continue;
+                        }
+                        // Use column OID to preserve the correct JSON type
+                        auto oid = row.column_type(i);
+                        switch (oid) {
+                        case 16:   // bool
+                            obj[row.column_name(i)] = row[i].as<bool>();
+                            break;
+                        case 20:   // int8
+                        case 21:   // int2
+                        case 23:   // int4
+                            obj[row.column_name(i)] = row[i].as<long long>();
+                            break;
+                        case 700:  // float4
+                        case 701:  // float8
+                        case 1700: // numeric
+                            obj[row.column_name(i)] = row[i].as<double>();
+                            break;
+                        default:
+                            obj[row.column_name(i)] = row[i].c_str();
+                            break;
+                        }
+                    }
+                    result.push_back(obj);
+                }
+                return result;
+            };
+
+            auto db_exec = [conn, conn_mutex, translate_sql](
+                const std::string& sql, const nlohmann::json& params) -> bool
+            {
+                std::lock_guard<std::mutex> lock(*conn_mutex);
+                pqxx::work txn(*conn);
+                std::string translated;
+                pqxx::params pq_params;
+                translate_sql(sql, params, translated, pq_params);
+                txn.exec_params(translated, pq_params);
+                txn.commit();
+                return true; // false on error would be silently ignored; let pqxx throw instead
+            };
+
+            auto image_service = std::make_shared<merak::ImageService>(
+                image_store, db_query, db_exec,
+                []{ return merak::worldbuilding::make_id("img"); },
+                []{ return merak::worldbuilding::now_iso_utc(); },
+                uploads_dir);
+            wb_handler->set_image_service(image_service);
+        }
         wb_handler->install_routes(server.raw_server());
     }
     auto port=parse_port(argc,argv);std::cout<<"merak serve listening on 127.0.0.1:"<<port<<"\n";server.listen(port);return 0;

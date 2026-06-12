@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <unordered_map>
 
 namespace merak {
 namespace {
@@ -554,14 +555,27 @@ void WorldbuildingHttpHandler::handle_list_agents(const httplib::Request& req, h
             return;
         }
         auto agents = service_->agents().list_agents(wid);
+        // Batch-fetch primary avatars to avoid N+1 queries
+        std::unordered_map<std::string, ImageRecord> primary_avatars;
+        if (image_service_) {
+            std::vector<std::string> agent_ids;
+            agent_ids.reserve(agents.size());
+            for (const auto& a : agents) agent_ids.push_back(a.id);
+            primary_avatars = image_service_->list_primary_avatars(agent_ids);
+        }
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& a : agents) {
-            arr.push_back({
+            nlohmann::json agent_obj = {
                 {"id", a.id},
                 {"name", a.name},
                 {"display_name", a.display_name},
                 {"kind", worldbuilding::to_string(a.kind)}
-            });
+            };
+            auto it = primary_avatars.find(a.id);
+            if (it != primary_avatars.end()) {
+                agent_obj["avatar_url"] = "/api/worldbuilding/images/" + it->second.id;
+            }
+            arr.push_back(agent_obj);
         }
         json_response(res, {{"ok", true}, {"agents", arr}});
     } catch (const std::exception& e) {
@@ -645,6 +659,24 @@ void WorldbuildingHttpHandler::handle_get_agent(const httplib::Request& req, htt
             {"appearance", card.appearance},
             {"taboo_topics", card.taboo_topics}
         };
+        if (image_service_) {
+            auto imgs = image_service_->list_images(agent_id);
+            nlohmann::json avatars = nlohmann::json::array();
+            nlohmann::json designs = nlohmann::json::array();
+            for (const auto& img : imgs) {
+                auto img_j = image_json(img);
+                img_j["url"] = "/api/worldbuilding/images/" + img.id;
+                if (img.image_type == "avatar") {
+                    avatars.push_back(img_j);
+                    if (img.is_primary) {
+                        j["avatar_url"] = "/api/worldbuilding/images/" + img.id;
+                    }
+                } else if (img.image_type == "design") {
+                    designs.push_back(img_j);
+                }
+            }
+            j["images"] = {{"avatar", avatars}, {"design", designs}};
+        }
         json_response(res, {{"ok", true}, {"agent", j}});
     } catch (const std::exception& e) {
         error_response(res, e.what());
@@ -1232,7 +1264,7 @@ void WorldbuildingHttpHandler::handle_list_images(const httplib::Request& req, h
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& img : images) {
             auto j = image_json(img);
-            j["url"] = image_service_->public_url(img.storage_key);
+            j["url"] = "/api/worldbuilding/images/" + img.id;
             arr.push_back(j);
         }
         json_response(res, {{"ok", true}, {"images", arr}});
@@ -1278,7 +1310,7 @@ void WorldbuildingHttpHandler::handle_upload_image(const httplib::Request& req, 
         auto img = image_service_->upload(wid, aid, image_type, file.filename, file.content_type, bytes);
 
         auto j = image_json(img);
-        j["url"] = image_service_->public_url(img.storage_key);
+        j["url"] = "/api/worldbuilding/images/" + img.id;
         json_response(res, {{"ok", true}, {"image", j}}, 201);
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
@@ -1429,7 +1461,7 @@ void WorldbuildingHttpHandler::handle_complete_chunked(const httplib::Request& r
         }
         auto img = image_service_->complete_chunked(upload_id);
         auto j = image_json(img);
-        j["url"] = image_service_->public_url(img.storage_key);
+        j["url"] = "/api/worldbuilding/images/" + img.id;
         json_response(res, {{"ok", true}, {"image", j}}, 201);
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);

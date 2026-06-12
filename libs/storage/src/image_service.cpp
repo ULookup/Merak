@@ -51,7 +51,7 @@ void ImageService::set_primary(const std::string& agent_id,
     unset_params["agent_id"] = agent_id;
     unset_params["image_type"] = image_type;
     db_exec_(
-        "UPDATE images SET is_primary = 0 WHERE agent_id = @agent_id AND image_type = @image_type",
+        "UPDATE agent_images SET is_primary = 0 WHERE agent_id = @agent_id AND image_type = @image_type",
         unset_params
     );
 
@@ -59,7 +59,7 @@ void ImageService::set_primary(const std::string& agent_id,
     nlohmann::json set_params;
     set_params["id"] = image_id;
     db_exec_(
-        "UPDATE images SET is_primary = 1 WHERE id = @id",
+        "UPDATE agent_images SET is_primary = 1 WHERE id = @id",
         set_params
     );
 }
@@ -93,7 +93,7 @@ ImageRecord ImageService::upload(const std::string& world_id,
         query_params["agent_id"] = agent_id;
         query_params["image_type"] = image_type;
         auto existing = db_query_(
-            "SELECT COUNT(*) as cnt FROM images WHERE agent_id = @agent_id AND image_type = @image_type",
+            "SELECT COUNT(*) as cnt FROM agent_images WHERE agent_id = @agent_id AND image_type = @image_type",
             query_params
         );
 
@@ -123,7 +123,7 @@ ImageRecord ImageService::upload(const std::string& world_id,
         insert_params["sort_order"] = rec.sort_order;
         insert_params["created_at"] = rec.created_at;
         db_exec_(
-            "INSERT INTO images (id, agent_id, image_type, storage_key, mime_type, "
+            "INSERT INTO agent_images (id, agent_id, image_type, storage_key, mime_type, "
             "original_name, file_size_bytes, is_primary, sort_order, created_at) "
             "VALUES (@id, @agent_id, @image_type, @storage_key, @mime_type, "
             "@original_name, @file_size_bytes, @is_primary, @sort_order, @created_at)",
@@ -202,63 +202,62 @@ std::set<int> ImageService::uploaded_chunks(const std::string& upload_id) const 
 }
 
 ImageRecord ImageService::complete_chunked(const std::string& upload_id) {
+    // File I/O is done under the lock to prevent TOCTOU race with cancel_chunked.
+    // Tradeoff: chunk reads block concurrent upload_chunk/init_chunked for other
+    // upload_ids. Acceptable because chunked uploads are infrequent and local-disk
+    // reads are fast (typically <100ms even for large files).
+    // See: upload_chunk / cancel_chunked also acquire this mutex.
     ChunkedUploadState state;
+    std::vector<unsigned char> complete_data;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = chunked_uploads_.find(upload_id);
         if (it == chunked_uploads_.end()) {
             throw std::runtime_error("Chunked upload not found: " + upload_id);
         }
-        state = it->second;  // copy out before erasing
-    }
+        state = it->second;
 
-    // Verify all chunks present
-    for (int i = 0; i < state.chunks_total; ++i) {
-        std::ostringstream chunk_name;
-        chunk_name << "chunk_" << std::setfill('0') << std::setw(4) << i;
-        fs::path chunk_path = fs::path(state.temp_dir) / chunk_name.str();
-        if (!fs::exists(chunk_path)) {
-            throw std::runtime_error("Missing chunk " + std::to_string(i) + " for upload " + upload_id);
+        // Verify all chunks present
+        for (int i = 0; i < state.chunks_total; ++i) {
+            std::ostringstream chunk_name;
+            chunk_name << "chunk_" << std::setfill('0') << std::setw(4) << i;
+            if (!fs::exists(fs::path(state.temp_dir) / chunk_name.str())) {
+                throw std::runtime_error("Missing chunk " + std::to_string(i) + " for upload " + upload_id);
+            }
         }
-    }
 
-    // Concatenate all chunks in order
-    std::vector<unsigned char> complete_data;
-    for (int i = 0; i < state.chunks_total; ++i) {
-        std::ostringstream chunk_name;
-        chunk_name << "chunk_" << std::setfill('0') << std::setw(4) << i;
-        fs::path chunk_path = fs::path(state.temp_dir) / chunk_name.str();
+        // Concatenate all chunks in order
+        for (int i = 0; i < state.chunks_total; ++i) {
+            std::ostringstream chunk_name;
+            chunk_name << "chunk_" << std::setfill('0') << std::setw(4) << i;
+            fs::path chunk_path = fs::path(state.temp_dir) / chunk_name.str();
 
-        std::ifstream in(chunk_path, std::ios::binary | std::ios::ate);
-        if (!in) {
-            throw std::runtime_error("Failed to read chunk file: " + chunk_path.string());
+            std::ifstream in(chunk_path, std::ios::binary | std::ios::ate);
+            if (!in) {
+                throw std::runtime_error("Failed to read chunk file: " + chunk_path.string());
+            }
+            auto file_size = in.tellg();
+            in.seekg(0);
+            std::vector<unsigned char> chunk_data(static_cast<size_t>(file_size));
+            in.read(reinterpret_cast<char*>(chunk_data.data()), file_size);
+            complete_data.insert(complete_data.end(), chunk_data.begin(), chunk_data.end());
         }
-        auto file_size = in.tellg();
-        in.seekg(0);
-        std::vector<unsigned char> chunk_data(static_cast<size_t>(file_size));
-        in.read(reinterpret_cast<char*>(chunk_data.data()), file_size);
-        complete_data.insert(complete_data.end(), chunk_data.begin(), chunk_data.end());
+
+        // Verify total size
+        if (static_cast<int64_t>(complete_data.size()) != state.total_size) {
+            throw std::runtime_error(
+                "Chunked upload size mismatch: expected " + std::to_string(state.total_size)
+                + " bytes, got " + std::to_string(complete_data.size()) + " bytes"
+            );
+        }
+
+        // Clean up temp dir and state before releasing lock
+        std::error_code ec;
+        fs::remove_all(state.temp_dir, ec);
+        chunked_uploads_.erase(it);
     }
+    // Lock released — upload() uses db_query_/db_exec_ which are independently synchronized
 
-    // Verify total size
-    if (static_cast<int64_t>(complete_data.size()) != state.total_size) {
-        throw std::runtime_error(
-            "Chunked upload size mismatch: expected " + std::to_string(state.total_size)
-            + " bytes, got " + std::to_string(complete_data.size()) + " bytes"
-        );
-    }
-
-    // Remove temp dir
-    std::error_code ec;
-    fs::remove_all(state.temp_dir, ec);
-
-    // Remove from map
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        chunked_uploads_.erase(upload_id);
-    }
-
-    // Upload the combined data
     return upload(state.world_id, state.agent_id, state.image_type,
                   state.file_name, state.mime_type, complete_data);
 }
@@ -285,7 +284,7 @@ std::vector<ImageRecord> ImageService::list_images(const std::string& agent_id) 
     auto rows = db_query_(
         "SELECT id, agent_id, image_type, storage_key, mime_type, "
         "original_name, file_size_bytes, is_primary, sort_order, created_at "
-        "FROM images WHERE agent_id = @agent_id ORDER BY sort_order ASC, created_at DESC",
+        "FROM agent_images WHERE agent_id = @agent_id ORDER BY sort_order ASC, created_at DESC",
         query_params
     );
 
@@ -313,7 +312,7 @@ std::optional<ImageRecord> ImageService::get_image(const std::string& image_id) 
     auto rows = db_query_(
         "SELECT id, agent_id, image_type, storage_key, mime_type, "
         "original_name, file_size_bytes, is_primary, sort_order, created_at "
-        "FROM images WHERE id = @id",
+        "FROM agent_images WHERE id = @id",
         query_params
     );
 
@@ -336,6 +335,43 @@ std::optional<ImageRecord> ImageService::get_image(const std::string& image_id) 
     return rec;
 }
 
+std::unordered_map<std::string, ImageRecord> ImageService::list_primary_avatars(
+    const std::vector<std::string>& agent_ids) {
+    std::unordered_map<std::string, ImageRecord> result;
+    if (agent_ids.empty()) return result;
+
+    // Build IN clause with @a0, @a1, ... placeholders for parameterized query
+    nlohmann::json query_params;
+    std::ostringstream sql;
+    sql << "SELECT id, agent_id, image_type, storage_key, mime_type, "
+           "original_name, file_size_bytes, is_primary, sort_order, created_at "
+           "FROM agent_images WHERE agent_id IN (";
+    for (size_t i = 0; i < agent_ids.size(); ++i) {
+        if (i > 0) sql << ", ";
+        std::string param_name = "a" + std::to_string(i);
+        sql << "@" << param_name;
+        query_params[param_name] = agent_ids[i];
+    }
+    sql << ") AND image_type = 'avatar' AND is_primary = true";
+
+    auto rows = db_query_(sql.str(), query_params);
+    for (const auto& row : rows) {
+        ImageRecord rec;
+        rec.id = row.value("id", "");
+        rec.agent_id = row.value("agent_id", "");
+        rec.image_type = row.value("image_type", "");
+        rec.storage_key = row.value("storage_key", "");
+        rec.mime_type = row.value("mime_type", "");
+        rec.original_name = row.value("original_name", "");
+        rec.file_size_bytes = row.value("file_size_bytes", 0);
+        rec.is_primary = row.value("is_primary", false);
+        rec.sort_order = row.value("sort_order", 0);
+        rec.created_at = row.value("created_at", "");
+        result[rec.agent_id] = std::move(rec);
+    }
+    return result;
+}
+
 void ImageService::delete_image(const std::string& image_id) {
     // Load the record to get the storage_key for file removal
     auto record = get_image(image_id);
@@ -351,7 +387,7 @@ void ImageService::delete_image(const std::string& image_id) {
     // Delete the DB record
     nlohmann::json delete_params;
     delete_params["id"] = image_id;
-    db_exec_("DELETE FROM images WHERE id = @id", delete_params);
+    db_exec_("DELETE FROM agent_images WHERE id = @id", delete_params);
 }
 
 void ImageService::update_image(const std::string& image_id,
@@ -371,7 +407,7 @@ void ImageService::update_image(const std::string& image_id,
         update_params["id"] = image_id;
         update_params["sort_order"] = sort_order.value();
         db_exec_(
-            "UPDATE images SET sort_order = @sort_order WHERE id = @id",
+            "UPDATE agent_images SET sort_order = @sort_order WHERE id = @id",
             update_params
         );
     }
