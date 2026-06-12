@@ -143,6 +143,12 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         if (accumulated_tool_calls.empty()) {
             transition_to(TurnState::Responding, control);
 
+            if (llm_response.text.size() < 200 && turn_count < config_.max_turns - 1) {
+                consecutive_content_avoidance_++;
+            } else {
+                consecutive_content_avoidance_ = 0;
+            }
+
             Message assistant_msg;
             assistant_msg.role = "assistant";
             assistant_msg.content = llm_response.text;
