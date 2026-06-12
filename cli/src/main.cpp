@@ -187,17 +187,7 @@ static int run_server(int argc,char**argv) {
     tools->register_tool(std::make_unique<tools::SymbolsTool>());
     tools->register_tool(std::make_unique<tools::MemoryTool>(memory));
     tools->register_tool(std::make_unique<tools::TaskTool>());
-    auto ask_handler = [](const std::string& question, const std::vector<std::string>& options) -> std::string {
-        std::cout << "\n[AskUser] " << question << "\n";
-        for (size_t i = 0; i < options.size(); ++i) {
-            std::cout << "  [" << (i + 1) << "] " << options[i] << "\n";
-        }
-        std::cout << "Your answer: ";
-        std::string answer;
-        std::getline(std::cin, answer);
-        return answer;
-    };
-    tools->register_tool(std::make_unique<tools::AskUserTool>(ask_handler));
+    tools->register_tool(std::make_unique<tools::AskUserTool>());
     auto plan_mode = std::make_shared<std::atomic<bool>>(false);
     tools->register_tool(std::make_unique<tools::EnterPlanModeTool>(plan_mode));
     tools->register_tool(std::make_unique<tools::ExitPlanModeTool>(plan_mode));

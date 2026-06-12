@@ -321,6 +321,23 @@ void HttpServer::install_routes(){
         }
     });
     server_.Post(R"(/v1/runs/([^/]+)/cancel)",[this](const auto&req,auto&r){try{runtime_->cancel_run(req.matches[1]);json(r,{202,{{"run_id",req.matches[1]},{"status","cancelled"}}});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),404));}});
+    server_.Post(R"(/v1/runs/([^/]+)/ask-response)", [this](const auto& req, auto& r) {
+        try {
+            auto b = nlohmann::json::parse(req.body);
+            std::string call_id = b.value("call_id", "");
+            std::string response = b.value("response", "");
+            if (call_id.empty()) {
+                json(r, error("invalid_request", "call_id is required", 400));
+                return;
+            }
+            runtime_->respond_to_ask_user(req.matches[1], call_id, response);
+            json(r, {200, {{"ok", true}, {"run_id", req.matches[1]}, {"call_id", call_id}}});
+        } catch (const RuntimeError& e) {
+            json(r, error(e.code(), e.what(), 404));
+        } catch (const std::exception& e) {
+            json(r, error("invalid_request", e.what(), 400));
+        }
+    });
     server_.Get(R"(/v1/runs/([^/]+))",[this](const auto&req,auto&r){json(r,handle_run_detail(req.matches[1]));});
     server_.Get(R"(/v1/sessions/([^/]+)/events/stream)",[this](const auto&req,auto&r){auto id=req.matches[1].str();auto cursor=after(req);try{auto subscription=runtime_->subscribe(id);auto backlog=runtime_->events_after(id,cursor);r.set_chunked_content_provider("text/event-stream",[subscription,backlog=std::move(backlog),cursor](size_t,httplib::DataSink&sink)mutable{auto send=[&](const RuntimeEvent&e){if(e.seq<=cursor||e.type=="message_appended"||e.type=="compaction_applied")return true;auto payload=nlohmann::json(e).dump();auto frame="id: "+std::to_string(e.seq)+"\nevent: "+e.type+"\ndata: "+payload+"\n\n";if(!sink.write(frame.data(),frame.size()))return false;cursor=e.seq;return true;};while(!backlog.empty()){auto e=backlog.front();backlog.erase(backlog.begin());if(!send(e))return false;}RuntimeEvent live;if(subscription->wait_next(live,std::chrono::milliseconds(1000)))return send(live);auto ping=std::string(": keepalive\n\n");return sink.write(ping.data(),ping.size());});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),404));}});
     server_.Get("/api/config/llm", [this](const auto& req, auto& res) { handle_config_get(req, res); });

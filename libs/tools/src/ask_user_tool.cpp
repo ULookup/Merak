@@ -3,7 +3,6 @@
 #include <nlohmann/json.hpp>
 
 #include <future>
-#include <memory>
 #include <string>
 
 namespace merak::tools {
@@ -47,7 +46,7 @@ PermissionLevel AskUserTool::permission() const {
 std::future<ToolResult> AskUserTool::execute(
     ToolCall call, ToolExecutionContext /*context*/) {
 
-    return std::async(std::launch::async, [call = std::move(call), handler = ask_handler_]() -> ToolResult {
+    return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -56,27 +55,11 @@ std::future<ToolResult> AskUserTool::execute(
             std::string question = args.value("question", "");
 
             nlohmann::json output;
-
-            if (handler) {
-                // Extract options from JSON array to vector<string>
-                std::vector<std::string> opts;
-                if (args.contains("options") && args["options"].is_array()) {
-                    for (const auto& o : args["options"]) {
-                        if (o.is_string()) opts.push_back(o.get<std::string>());
-                    }
-                }
-
-                std::string answer = handler(question, opts);
-                output["status"] = "ok";
-                output["question"] = question;
-                output["answer"] = answer;
-            } else {
-                // No UI integration, return the question for display
-                output["status"] = "pending";
-                output["question"] = question;
-                output["options"] = args.value("options", nlohmann::json::array());
-                output["multi_select"] = args.value("multi_select", false);
-            }
+            output["status"] = "pending";
+            output["question"] = question;
+            output["options"] = args.value("options", nlohmann::json::array());
+            output["multi_select"] = args.value("multi_select", false);
+            output["call_id"] = call.id;
 
             result.output = output.dump();
         } catch (const std::exception& e) {
@@ -89,7 +72,7 @@ std::future<ToolResult> AskUserTool::execute(
 }
 
 std::unique_ptr<Tool> AskUserTool::clone() const {
-    return std::make_unique<AskUserTool>(ask_handler_);
+    return std::make_unique<AskUserTool>();
 }
 
 } // namespace merak::tools
