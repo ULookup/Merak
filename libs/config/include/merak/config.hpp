@@ -44,6 +44,14 @@ struct MemoryConfig {
     int top_k_retrieval = 5;     // 语义检索返回数量
     float confidence_decay = 0.01;   // 每次衰减的步长
     int decay_interval_days = 7;     // 衰减间隔
+
+    // ——— Embedding 配置 ———
+    std::string embedding_api_url = "https://api.openai.com/v1";
+    std::string embedding_api_key;
+    std::string embedding_model = "text-embedding-3-small";
+    int embedding_cache_size = 512;
+    int embedding_batch_size = 20;
+    int embedding_timeout_ms = 10000;
 };
 
 // ——— MCP Server 配置 ———
