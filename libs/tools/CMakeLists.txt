@@ -18,11 +18,13 @@ add_library(merak-tools STATIC
     src/task_tool.cpp
     src/plan_mode_tools.cpp
     src/lsp_tool.cpp
+    src/fork_skill_tool.cpp
 )
 target_include_directories(merak-tools PUBLIC include)
 target_link_libraries(merak-tools PUBLIC
     merak-core
     merak-mcp
+    merak-loop
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     httplib::httplib

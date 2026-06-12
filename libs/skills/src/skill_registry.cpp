@@ -1,5 +1,7 @@
 #include <merak/skills/skill_registry.hpp>
 #include <merak/skills/skill_loader.hpp>
+#include <merak/tool_registry.hpp>
+#include <merak/fork_skill_tool.hpp>
 
 namespace merak::skills {
 
@@ -60,6 +62,20 @@ std::vector<SkillDef> SkillRegistry::fork_skills() const {
         }
     }
     return result;
+}
+
+void register_fork_skills(
+    const SkillRegistry& registry,
+    std::shared_ptr<ToolRegistry> tools,
+    std::shared_ptr<LlmProvider> llm,
+    std::shared_ptr<MemoryStore> memory) {
+    auto forks = registry.fork_skills();
+    for (auto& def : forks) {
+        auto tool = std::make_unique<tools::ForkSkillTool>(
+            def, llm, tools, memory);
+        tools->register_tool(std::move(tool));
+        spdlog::info("Registered fork skill tool: skill:{}", def.name);
+    }
 }
 
 } // namespace merak::skills
