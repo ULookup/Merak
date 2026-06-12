@@ -2,8 +2,9 @@
   display: flex;
   height: 100vh;
   overflow: hidden;
-  padding: 12px;
-  gap: 12px;
+  padding: 10px;
+  gap: 0;
+  background: var(--page);
 }
 
 .workspace {
@@ -13,10 +14,21 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: var(--shadow-md);
-  backdrop-filter: blur(18px);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  animation: workspaceIn 360ms var(--ease-spring);
+}
+
+@keyframes workspaceIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 767px) {
