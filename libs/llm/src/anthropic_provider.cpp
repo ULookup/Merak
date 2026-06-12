@@ -36,7 +36,13 @@ nlohmann::json AnthropicProvider::build_request_body(const ChatRequest& request)
     nlohmann::json messages = nlohmann::json::array();
     for (auto& m : request.messages) {
         if (m.role == "system") {
-            body["system"] = m.content;
+            nlohmann::json sys_block;
+            sys_block["type"] = "text";
+            sys_block["text"] = m.content;
+            if (request.enable_cache) {
+                sys_block["cache_control"]["type"] = "ephemeral";
+            }
+            body["system"] = nlohmann::json::array({sys_block});
             continue;
         }
 
@@ -103,6 +109,9 @@ nlohmann::json AnthropicProvider::build_request_body(const ChatRequest& request)
                 tool["input_schema"]["properties"] = nlohmann::json::object();
             }
             tools_arr.push_back(tool);
+        }
+        if (request.enable_cache && !tools_arr.empty()) {
+            tools_arr.back()["cache_control"]["type"] = "ephemeral";
         }
         body["tools"] = tools_arr;
     }
