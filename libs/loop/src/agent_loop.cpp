@@ -414,6 +414,15 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
             call, ToolExecutionContext{control.cancellation_token()});
         auto result = result_future.get();
 
+        if (call.name == "ask_user") {
+            try {
+                auto result_json = nlohmann::json::parse(result.output);
+                if (result_json.value("status", "") == "pending") {
+                    result = control.await_ask_user(call, result);
+                }
+            } catch (...) {}
+        }
+
         if (tools_->requires_confirmation(call.name)) {
             try {
                 auto result_json = nlohmann::json::parse(result.output);

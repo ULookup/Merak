@@ -213,6 +213,63 @@ public:
         creation_resolved_.reset();
         return final_result;
     }
+    ToolResult await_ask_user(const ToolCall& call, const ToolResult& pending_result) override {
+        auto pending_json = nlohmann::json::parse(pending_result.output);
+        std::string question = pending_json.value("question", "");
+        auto options = pending_json.value("options", nlohmann::json::array());
+        bool multi_select = pending_json.value("multi_select", false);
+
+        awaiting_ask_user_call_id_ = call.id;
+
+        service_.store_.update_run_status(run_.id, RunStatus::WaitingApproval);
+        service_.emit(run_.session_id, run_.id, "ask_user_requested", base_payload({
+            {"call_id", call.id},
+            {"question", question},
+            {"options", options},
+            {"multi_select", multi_select}
+        }));
+
+        bool timed_out = false;
+        {
+            std::unique_lock lock(ask_user_mutex_);
+            bool woke = ask_user_changed_.wait_for(lock, std::chrono::minutes(5), [&] {
+                return ask_user_response_.has_value() || token_->cancelled();
+            });
+            if (!woke && !token_->cancelled() && !ask_user_response_.has_value()) {
+                timed_out = true;
+            }
+        }
+
+        service_.store_.update_run_status(run_.id, RunStatus::Running);
+
+        if (timed_out || token_->cancelled()) {
+            ToolResult timeout_result;
+            timeout_result.call_id = call.id;
+            timeout_result.output = nlohmann::json{
+                {"status", "error"},
+                {"message", timed_out ? "AskUser timed out" : "Run cancelled"}
+            }.dump();
+            return timeout_result;
+        }
+
+        ToolResult final_result;
+        final_result.call_id = call.id;
+        final_result.output = nlohmann::json{
+            {"status", "ok"},
+            {"question", question},
+            {"answer", *ask_user_response_}
+        }.dump();
+        ask_user_response_.reset();
+        return final_result;
+    }
+    void resolve_ask_user(const std::string& call_id, const std::string& response) {
+        std::lock_guard lock(ask_user_mutex_);
+        if (awaiting_ask_user_call_id_ == call_id) {
+            ask_user_response_ = response;
+            ask_user_changed_.notify_all();
+        }
+    }
+    const std::string& awaiting_ask_user_call_id() const { return awaiting_ask_user_call_id_; }
     void resolve_creation_result(nlohmann::json result) {
         std::lock_guard lock(creation_mutex_);
         creation_resolved_ = std::move(result);
@@ -220,7 +277,7 @@ public:
     }
     const std::string& awaiting_creation_id() const { return awaiting_creation_id_; }
     void resolve(bool allowed){std::lock_guard lock(mutex_);decision_=allowed;changed_.notify_all();}
-    void cancel(){token_->cancel();std::lock_guard lock(mutex_);changed_.notify_all();{std::lock_guard lock2(creation_mutex_);creation_changed_.notify_all();}}
+    void cancel(){token_->cancel();std::lock_guard lock(mutex_);changed_.notify_all();{std::lock_guard lock2(creation_mutex_);creation_changed_.notify_all();}{std::lock_guard lock3(ask_user_mutex_);ask_user_changed_.notify_all();}}
     void emit_usage(int in,int out,bool exact)override{service_.emit(run_.session_id,run_.id,event_name("usage_updated"),base_payload({{"input_tokens",in},{"output_tokens",out},{"exact",exact}}));}
     void append_message(const Message&m)override{service_.emit(run_.session_id,run_.id,"message_appended",message_json(m));}
     void record_compaction(int count)override{service_.emit(run_.session_id,run_.id,"compaction_applied",{{"replaced_count",count}});}
@@ -229,6 +286,7 @@ public:
 private:
     RuntimeService&service_;RunRecord run_;std::shared_ptr<CancellationToken>token_;std::mutex mutex_;std::condition_variable changed_;std::optional<bool>decision_;
     std::mutex creation_mutex_;std::condition_variable creation_changed_;std::optional<nlohmann::json>creation_resolved_;std::string awaiting_creation_id_;
+    std::mutex ask_user_mutex_;std::condition_variable ask_user_changed_;std::optional<std::string>ask_user_response_;std::string awaiting_ask_user_call_id_;
 };
 
 std::string RuntimeService::extract_title(const std::string& message, size_t max_len) {
@@ -630,6 +688,12 @@ nlohmann::json RuntimeService::resolve_creation(
     return result;
 }
 void RuntimeService::cancel_run(const std::string&id){auto r=store_.get_run(id);if(!r)throw RuntimeError("run_not_found","Run does not exist");if(r->status==RunStatus::Completed||r->status==RunStatus::Failed||r->status==RunStatus::Cancelled)return;std::vector<std::string>children;{std::lock_guard lock(mutex_);auto child_it=child_runs_.find(id);if(child_it!=child_runs_.end())children=child_it->second;auto control=controls_.find(id);if(control!=controls_.end())control->second->cancel();else{auto token=tokens_.find(id);if(token!=tokens_.end())token->second->cancel();}for(const auto&child:children){auto child_control=controls_.find(child);if(child_control!=controls_.end())child_control->second->cancel();}}for(const auto&child:children){if(auto sub=store_.get_run(child);sub&&sub->status!=RunStatus::Completed&&sub->status!=RunStatus::Failed&&sub->status!=RunStatus::Cancelled){store_.update_run_status(child,RunStatus::Cancelled);emit(sub->session_id,child,"sub_run_completed",{{"run_id",child},{"parent_run_id",id},{"delegation_id",sub->delegation_id},{"agent_id",sub->agent_id},{"status","cancelled"}});}}store_.update_run_status(id,RunStatus::Cancelled);emit(r->session_id,id,"run_cancelled");}
+void RuntimeService::respond_to_ask_user(const std::string& run_id, const std::string& call_id, const std::string& response) {
+    std::lock_guard lock(mutex_);
+    auto it = controls_.find(run_id);
+    if (it == controls_.end()) throw RuntimeError("run_not_found", "Run does not exist");
+    it->second->resolve_ask_user(call_id, response);
+}
 std::vector<RuntimeEvent>RuntimeService::events_after(const std::string&id,long long after)const{if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return store_.events_after(id,after);}
 std::shared_ptr<EventSubscription>RuntimeService::subscribe(const std::string&id){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return bus_.subscribe(id);}
 RuntimeEvent RuntimeService::emit_event(const std::string&id,const std::string&run_id,const std::string&type,nlohmann::json payload){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return emit(id,run_id,type,std::move(payload));}
