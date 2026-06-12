@@ -167,8 +167,14 @@ std::future<AgentResponse> AnthropicProvider::chat(
 
                 if (event_type == "message_start") {
                     if (j.contains("message") && j["message"].contains("usage")) {
-                        input_tokens = j["message"]["usage"].value("input_tokens", 0);
+                        auto& usage = j["message"]["usage"];
+                        input_tokens = usage.value("input_tokens", 0);
                         has_usage = true;
+                        int cache_read = usage.value("cache_read_input_tokens", 0);
+                        int cache_write = usage.value("cache_creation_input_tokens", 0);
+                        if (cache_read > 0) stats_.cache_hits++;
+                        stats_.cache_read_tokens += cache_read;
+                        stats_.cache_write_tokens += cache_write;
                     }
                 }
                 else if (event_type == "content_block_start") {
