@@ -811,17 +811,31 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         runId: null,
       });
       state = reducer(state, { type: 'SET_STATUS', status: 'idle' });
-      return type === 'run_failed'
-        ? reducer(state, {
-            type: 'APPEND_MESSAGE',
-            message: {
-              id: msgId(),
-              kind: 'system',
-              text: (p.error as string) ?? 'Run failed',
-              error: true,
-            },
-          })
-        : state;
+      if (type === 'run_failed') {
+        return reducer(state, {
+          type: 'APPEND_MESSAGE',
+          message: {
+            id: msgId(),
+            kind: 'system',
+            text: (p.error as string) ?? 'Run failed',
+            error: true,
+          },
+        });
+      }
+      if (type === 'run_interrupted') {
+        const turns = p.turns_completed ?? '?';
+        const completed = p.tools_completed ?? '?';
+        const remaining = p.tools_remaining ?? '?';
+        const tool = p.interrupted_tool_name;
+        const detail = tool
+          ? `Run interrupted at turn ${turns} — ${completed} tools done, ${remaining} remaining (was about to run \`${tool}\`)`
+          : `Run interrupted at turn ${turns}`;
+        return reducer(state, {
+          type: 'APPEND_MESSAGE',
+          message: { id: msgId(), kind: 'system', text: detail, error: false },
+        });
+      }
+      return state;
 
     case 'workspace_file_created': {
       const path = (p.path ?? '') as string;

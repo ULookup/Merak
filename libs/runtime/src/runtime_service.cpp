@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <sstream>
 #include <thread>
+#include <merak/interruption.hpp>
 
 namespace merak {
 namespace {
@@ -277,6 +278,16 @@ public:
     }
     const std::string& awaiting_creation_id() const { return awaiting_creation_id_; }
     void resolve(bool allowed){std::lock_guard lock(mutex_);decision_=allowed;changed_.notify_all();}
+    void record_interruption(InterruptionRecord rec) override {
+        service_.emit(run_.session_id, run_.id, "run_interrupted", base_payload({
+            {"run_id", run_.id},
+            {"turns_completed", rec.turns_completed},
+            {"tools_completed", rec.tools_completed},
+            {"tools_remaining", rec.tools_remaining},
+            {"interrupted_tool_name", rec.interrupted_tool_name},
+            {"interrupted_tool_call_id", rec.interrupted_tool_call_id},
+        }));
+    }
     void cancel(){token_->cancel();std::lock_guard lock(mutex_);changed_.notify_all();{std::lock_guard lock2(creation_mutex_);creation_changed_.notify_all();}{std::lock_guard lock3(ask_user_mutex_);ask_user_changed_.notify_all();}}
     void emit_usage(int in,int out,bool exact)override{service_.emit(run_.session_id,run_.id,event_name("usage_updated"),base_payload({{"input_tokens",in},{"output_tokens",out},{"exact",exact}}));}
     void append_message(const Message&m)override{service_.emit(run_.session_id,run_.id,"message_appended",message_json(m));}

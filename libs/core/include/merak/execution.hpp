@@ -1,5 +1,6 @@
 #pragma once
 #include <merak/message.hpp>
+#include <merak/interruption.hpp>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -13,6 +14,9 @@ class CancellationToken {
 public:
     void cancel() { cancelled_.store(true); }
     bool cancelled() const { return cancelled_.load(); }
+
+    // 统一的中断检查入口。当前等价于 cancelled()，未来可扩展 pause 等。
+    bool should_stop() const { return cancelled_.load(); }
 
 private:
     std::atomic<bool> cancelled_ = false;
@@ -45,6 +49,7 @@ public:
     virtual ToolResult await_ask_user(const ToolCall& call, const ToolResult& pending_result) = 0;
     virtual void emit_usage(int input_tokens, int output_tokens, bool exact) = 0;
     virtual void append_message(const Message& message) = 0;
+    virtual void record_interruption(InterruptionRecord rec) = 0;
     virtual void record_compaction(int replaced_count) = 0;
     virtual bool cancelled() const = 0;
     virtual std::shared_ptr<CancellationToken> cancellation_token() const = 0;
@@ -73,6 +78,7 @@ public:
     void emit_usage(int, int, bool) override {}
     void append_message(const Message&) override {}
     void record_compaction(int) override {}
+    void record_interruption(InterruptionRecord) override {}
     bool cancelled() const override { return token_->cancelled(); }
     std::shared_ptr<CancellationToken> cancellation_token() const override { return token_; }
 
