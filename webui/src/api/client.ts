@@ -1,12 +1,17 @@
 import type {
   AgentDetailResponse,
+  AgentImageListResponse,
+  AgentImageType,
+  AgentImageUploadResponse,
   AgentListResponse,
   AgentPromptResponse,
-  ArchiveSessionResponse,
   ApprovalResponse,
+  ArchiveSessionResponse,
   CancelRunResponse,
   CapabilitiesResponse,
   ChapterListResponse,
+  ChunkedImageInitResponse,
+  ChunkedImageProgressResponse,
   CreateAgentResponse,
   CreateForeshadowingResponse,
   CreateSceneResponse,
@@ -21,30 +26,35 @@ import type {
   OpenWorkspacePathResponse,
   PatchAgentCardResponse,
   PipelineHistoryResponse,
+  PipelineViewData,
   RelationListResponse,
   ResolveCreationResponse,
   RunAuditResponse,
   RunDetailResponse,
   RuntimeMetadata,
   SaveWorkspaceFileResponse,
-  SecretListResponse,
   SceneListResponse,
+  SecretListResponse,
   SessionListResponse,
   SessionSummary,
-  StoryOverviewResponse,
   StartRunResponse,
+  StoryOverviewResponse,
   UpdateSessionResponse,
   UpdateWorldResponse,
-  WorldDetailResponse,
+  WorkflowSummary,
   WorkspaceFileContentResponse,
   WorkspaceFileListResponse,
+  WorldDetailResponse,
   WorldListResponse,
   WorldTimeResponse,
-  PipelineViewData,
-  WorkflowSummary,
 } from './types';
 
 const BASE = import.meta.env.VITE_API_BASE ?? '';
+
+export function apiUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${BASE}${path.startsWith('/') ? path : `/${path}`}`;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -61,7 +71,12 @@ export function formatApiError(error: unknown, fallback = '操作失败，请稍
   if (error instanceof ApiError) {
     if (error.code === 'version_conflict') return '内容已在后端更新，请刷新后再保存。';
     if (error.code === 'file_conflict') return '文件已被其他操作修改，请刷新后再保存。';
-    if (error.code === 'pipeline_not_available') return 'Pipeline 暂不可用，请确认后端已启用 worldbuilding pipeline。';
+    if (error.code === 'pipeline_not_available')
+      return 'Pipeline 暂不可用，请确认后端已启用 worldbuilding pipeline。';
+    if (error.code === 'image_service_not_available')
+      return '图片服务未启用，请确认后端 Image Service 已初始化。';
+    if (error.code === 'invalid_image_type') return '图片类型必须是头像或人设图。';
+    if (error.code === 'image_not_found') return '图片不存在或已被删除。';
     if (error.code === 'test_failed') return `连接测试失败：${error.message}`;
     if (error.code === 'test_unavailable') return '连接测试暂不可用，请检查后端配置。';
     return error.message || fallback;
@@ -77,7 +92,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (body !== undefined) {
     opts.body = JSON.stringify(body);
   }
-  const res = await fetch(`${BASE}${path}`, opts);
+  const res = await fetch(apiUrl(path), opts);
+  return parseJsonResponse<T>(res);
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
   let json: unknown;
   try {
     json = await res.json();
@@ -86,15 +105,27 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
   }
   if (res.status >= 400) {
-    const error = (json as { error?: { message?: string; code?: string } | string; message?: string }).error;
+    const error = (
+      json as { error?: { message?: string; code?: string } | string; message?: string }
+    ).error;
     const message =
       typeof error === 'string'
         ? error
         : (error?.message ?? (json as { message?: string }).message ?? `HTTP ${res.status}`);
-    const code = (typeof error === 'object' && error !== null) ? error.code : undefined;
+    const code = typeof error === 'object' && error !== null ? error.code : undefined;
     throw new ApiError(message, res.status, code);
   }
   return json as T;
+}
+
+async function requestForm<T>(path: string, body: FormData): Promise<T> {
+  const res = await fetch(apiUrl(path), { method: 'POST', body });
+  return parseJsonResponse<T>(res);
+}
+
+async function requestBlob<T>(method: string, path: string, body?: Blob): Promise<T> {
+  const res = await fetch(apiUrl(path), { method, body });
+  return parseJsonResponse<T>(res);
 }
 
 async function fallbackRequest<T>(path: string, fallback: T): Promise<T> {
@@ -275,7 +306,7 @@ export const api = {
   getOrCreateAgentSession: (worldId: string, agentId: string) =>
     request<{ session: SessionSummary; created: boolean }>(
       'GET',
-      `/v1/worlds/${encodeURIComponent(worldId)}/agents/${encodeURIComponent(agentId)}/session`
+      `/v1/worlds/${encodeURIComponent(worldId)}/agents/${encodeURIComponent(agentId)}/session`,
     ),
 
   getSession: (id: string) => request<SessionSummary>('GET', `/v1/sessions/${id}`),
@@ -382,7 +413,10 @@ export const api = {
   },
 
   fetchChapterContent: (worldId: string, chapterId: string) =>
-    request<{ ok: boolean; content?: string }>('GET', `/api/worldbuilding/${worldId}/chapters/${chapterId}`),
+    request<{ ok: boolean; content?: string }>(
+      'GET',
+      `/api/worldbuilding/${worldId}/chapters/${chapterId}`,
+    ),
 
   listScenes: (worldId: string, chapterId = '', status = '') => {
     const params = new URLSearchParams();
@@ -412,7 +446,8 @@ export const api = {
     const type = query.type?.toLowerCase();
     if (term || type) {
       fallback.files = fallback.files.filter((file) => {
-        const matchesTerm = !term || file.name.toLowerCase().includes(term) || file.path.toLowerCase().includes(term);
+        const matchesTerm =
+          !term || file.name.toLowerCase().includes(term) || file.path.toLowerCase().includes(term);
         const matchesType = !type || type === 'all' || file.ext.toLowerCase() === type;
         return matchesTerm && matchesType;
       });
@@ -434,7 +469,11 @@ export const api = {
       'PUT',
       '/api/workspace/files/content',
       { path, content, version },
-      { ok: true, fallback: true, file: { path, updated_at: nowIso(), version: version ?? 'mock-1' } },
+      {
+        ok: true,
+        fallback: true,
+        file: { path, updated_at: nowIso(), version: version ?? 'mock-1' },
+      },
     ),
 
   sseUrl: (id: string) => `${BASE}/v1/sessions/${id}/events/stream`,
@@ -458,14 +497,112 @@ export const api = {
   fetchAgentDetail: (worldId: string, agentId: string) =>
     request<AgentDetailResponse>('GET', `/api/worldbuilding/${worldId}/agents/${agentId}`),
 
-  patchAgentCard: (worldId: string, agentId: string, fields: Record<string, unknown>, version: number) =>
-    request<PatchAgentCardResponse>('PATCH', `/api/worldbuilding/${worldId}/agents/${agentId}`, { fields, version }),
+  patchAgentCard: (
+    worldId: string,
+    agentId: string,
+    fields: Record<string, unknown>,
+    version: number,
+  ) =>
+    request<PatchAgentCardResponse>('PATCH', `/api/worldbuilding/${worldId}/agents/${agentId}`, {
+      fields,
+      version,
+    }),
+
+  imageUrl: (path: string) => apiUrl(path),
+
+  listAgentImages: (worldId: string, agentId: string) =>
+    request<AgentImageListResponse>(
+      'GET',
+      `/api/worldbuilding/${worldId}/agents/${agentId}/images`,
+    ),
+
+  uploadAgentImage: (worldId: string, agentId: string, imageType: AgentImageType, file: File) => {
+    const form = new FormData();
+    form.set('image_type', imageType);
+    form.set('file', file);
+    return requestForm<AgentImageUploadResponse>(
+      `/api/worldbuilding/${worldId}/agents/${agentId}/images`,
+      form,
+    );
+  },
+
+  initAgentImageUpload: (
+    worldId: string,
+    agentId: string,
+    data: {
+      image_type: AgentImageType;
+      file_name: string;
+      mime_type: string;
+      total_size: number;
+      chunk_size: number;
+    },
+  ) =>
+    request<ChunkedImageInitResponse>(
+      'POST',
+      `/api/worldbuilding/${worldId}/agents/${agentId}/images/chunked`,
+      data,
+    ),
+
+  uploadAgentImageChunk: (
+    worldId: string,
+    agentId: string,
+    uploadId: string,
+    chunkIdx: number,
+    chunk: Blob,
+  ) =>
+    requestBlob<OkResponse>(
+      'PUT',
+      `/api/worldbuilding/${worldId}/agents/${agentId}/images/chunked/${uploadId}?chunk_idx=${chunkIdx}`,
+      chunk,
+    ),
+
+  getAgentImageUploadProgress: (worldId: string, agentId: string, uploadId: string) =>
+    request<ChunkedImageProgressResponse>(
+      'GET',
+      `/api/worldbuilding/${worldId}/agents/${agentId}/images/chunked/${uploadId}`,
+    ),
+
+  completeAgentImageUpload: (worldId: string, agentId: string, uploadId: string) =>
+    request<AgentImageUploadResponse>(
+      'POST',
+      `/api/worldbuilding/${worldId}/agents/${agentId}/images/chunked/${uploadId}/complete`,
+    ),
+
+  cancelAgentImageUpload: (worldId: string, agentId: string, uploadId: string) =>
+    request<OkResponse>(
+      'DELETE',
+      `/api/worldbuilding/${worldId}/agents/${agentId}/images/chunked/${uploadId}`,
+    ),
+
+  updateAgentImage: (
+    worldId: string,
+    agentId: string,
+    imageId: string,
+    fields: { is_primary?: boolean; sort_order?: number },
+  ) =>
+    request<OkResponse>(
+      'PATCH',
+      `/api/worldbuilding/${worldId}/agents/${agentId}/images/${imageId}`,
+      fields,
+    ),
+
+  deleteAgentImage: (worldId: string, agentId: string, imageId: string) =>
+    request<OkResponse>(
+      'DELETE',
+      `/api/worldbuilding/${worldId}/agents/${agentId}/images/${imageId}`,
+    ),
 
   // Diaries
   fetchDiaries: (worldId: string, agentId: string) =>
     request<DiaryListResponse>('GET', `/api/worldbuilding/${worldId}/agents/${agentId}/diaries`),
 
-  addDiary: (worldId: string, agentId: string, sceneId: string | undefined, content: string, worldTime?: string) =>
+  addDiary: (
+    worldId: string,
+    agentId: string,
+    sceneId: string | undefined,
+    content: string,
+    worldTime?: string,
+  ) =>
     request<OkResponse>('POST', `/api/worldbuilding/${worldId}/agents/${agentId}/diaries`, {
       scene_id: sceneId,
       content,
@@ -474,7 +611,10 @@ export const api = {
 
   // Relations
   fetchRelations: (worldId: string, agentId: string) =>
-    request<RelationListResponse>('GET', `/api/worldbuilding/${worldId}/agents/${agentId}/relations`),
+    request<RelationListResponse>(
+      'GET',
+      `/api/worldbuilding/${worldId}/agents/${agentId}/relations`,
+    ),
 
   // Patch other cards
   patchForeshadow: (worldId: string, id: string, fields: Record<string, unknown>) =>
@@ -490,72 +630,88 @@ export const api = {
     request<OkResponse>('PATCH', `/api/worldbuilding/${worldId}/secrets/${id}`, { fields }),
 
   // Run audit
-  fetchRunAudit: (runId: string) =>
-    request<RunAuditResponse>('GET', `/v1/runs/${runId}/audit`),
+  fetchRunAudit: (runId: string) => request<RunAuditResponse>('GET', `/v1/runs/${runId}/audit`),
 
   // Create mutations
-  createAgent: (worldId: string, data: {
-    name: string;
-    gender?: string;
-    age?: number;
-    race?: string;
-    identity?: string;
-    emotional_tendency?: string;
-    speaking_style?: string;
-    core_desire?: string;
-    deep_fear?: string;
-    daily_goal?: string;
-    background?: string;
-    knowledge_scope?: string;
-    appearance?: string;
-    core_traits?: string[];
-    taboo_topics?: string[];
-    version?: number;
-    session_id?: string;
-  }) =>
-    request<CreateAgentResponse>('POST', `/api/worldbuilding/${worldId}/agents`, data),
+  createAgent: (
+    worldId: string,
+    data: {
+      name: string;
+      gender?: string;
+      age?: number;
+      race?: string;
+      identity?: string;
+      emotional_tendency?: string;
+      speaking_style?: string;
+      core_desire?: string;
+      deep_fear?: string;
+      daily_goal?: string;
+      background?: string;
+      knowledge_scope?: string;
+      appearance?: string;
+      core_traits?: string[];
+      taboo_topics?: string[];
+      version?: number;
+      session_id?: string;
+    },
+  ) => request<CreateAgentResponse>('POST', `/api/worldbuilding/${worldId}/agents`, data),
 
-  createScene: (worldId: string, data: {
-    title?: string;
-    name?: string;
-    chapter_id: string;
-    world_time?: string;
-    narrative?: string;
-    section_id?: string;
-    location_id?: string;
-    participant_ids?: string[];
-    session_id?: string;
-  }) =>
-    request<CreateSceneResponse>('POST', `/api/worldbuilding/${worldId}/scenes`, data),
+  createScene: (
+    worldId: string,
+    data: {
+      title?: string;
+      name?: string;
+      chapter_id: string;
+      world_time?: string;
+      narrative?: string;
+      section_id?: string;
+      location_id?: string;
+      participant_ids?: string[];
+      session_id?: string;
+    },
+  ) => request<CreateSceneResponse>('POST', `/api/worldbuilding/${worldId}/scenes`, data),
 
-  endScene: (worldId: string, sceneId: string, data: {
-    final_markdown?: string;
-    session_id?: string;
-  }) =>
+  endScene: (
+    worldId: string,
+    sceneId: string,
+    data: {
+      final_markdown?: string;
+      session_id?: string;
+    },
+  ) =>
     request<EndSceneResponse>('POST', `/api/worldbuilding/${worldId}/scenes/${sceneId}/end`, data),
 
-  createForeshadowing: (worldId: string, data: {
-    content: string;
-    hint?: string;
-    pay_off_idea?: string;
-    hint_level?: string;
-    tags?: string[];
-    session_id?: string;
-  }) =>
-    request<CreateForeshadowingResponse>('POST', `/api/worldbuilding/${worldId}/foreshadowing`, data),
+  createForeshadowing: (
+    worldId: string,
+    data: {
+      content: string;
+      hint?: string;
+      pay_off_idea?: string;
+      hint_level?: string;
+      tags?: string[];
+      session_id?: string;
+    },
+  ) =>
+    request<CreateForeshadowingResponse>(
+      'POST',
+      `/api/worldbuilding/${worldId}/foreshadowing`,
+      data,
+    ),
 
-  createSecret: (worldId: string, data: {
-    title?: string;
-    holder_id?: string;
-    truth?: string;
-    public_version?: string;
-    stakes?: string;
-    aware_character_ids?: string[];
-    suspicious_character_ids?: string[];
-    related_foreshadowing_ids?: string[];
-    session_id?: string;
-  }) =>
-    request<CreateSecretResponse>('POST', `/api/worldbuilding/${worldId}/secrets`, data),
+  createSecret: (
+    worldId: string,
+    data: {
+      title?: string;
+      holder_id?: string;
+      truth?: string;
+      public_version?: string;
+      stakes?: string;
+      aware_character_ids?: string[];
+      suspicious_character_ids?: string[];
+      related_foreshadowing_ids?: string[];
+      session_id?: string;
+    },
+  ) => request<CreateSecretResponse>('POST', `/api/worldbuilding/${worldId}/secrets`, data),
 
   // Prompt
   getAgentPrompt: (agentId: string) =>
@@ -568,7 +724,10 @@ export const api = {
   // Creation resolution — wired for future SSE-driven creation approval flow
   // The backend emits creation requests via SSE; the UI will call this to allow/deny with optional modifications.
   resolveCreation: (id: string, decision: string, modifications?: Record<string, unknown>) =>
-    request<ResolveCreationResponse>('POST', `/v1/creations/${id}/resolve`, { decision, modifications }),
+    request<ResolveCreationResponse>('POST', `/v1/creations/${id}/resolve`, {
+      decision,
+      modifications,
+    }),
 };
 
 export async function getPipelineState(worldId: string): Promise<PipelineViewData> {
@@ -579,7 +738,7 @@ export async function getPipelineState(worldId: string): Promise<PipelineViewDat
 
 export async function advancePipeline(
   worldId: string,
-  body: { target_phase?: string; force?: boolean }
+  body: { target_phase?: string; force?: boolean },
 ): Promise<void> {
   const res = await fetch(`/api/worldbuilding/${worldId}/pipeline/advance`, {
     method: 'POST',
@@ -601,7 +760,7 @@ export async function listPipelineWorkflows(): Promise<WorkflowSummary[]> {
 
 export async function activatePipelineWorkflow(
   worldId: string,
-  workflowName: string
+  workflowName: string,
 ): Promise<void> {
   const res = await fetch(`/api/worldbuilding/${worldId}/pipeline/activate`, {
     method: 'POST',
@@ -623,4 +782,3 @@ export async function listPipelineHistory(
   if (!res.ok) throw new Error(`Failed to list pipeline history: ${res.status}`);
   return res.json();
 }
-

@@ -18,6 +18,10 @@ export interface Message {
   id: string;
   kind: MessageKind;
   text?: string;
+  assistantStatus?: StatusLabel;
+  thinkingStartedAt?: number;
+  thinkingCompletedAt?: number;
+  pending?: boolean;
   toolCallId?: string;
   toolName?: string;
   toolArgs?: string;
@@ -138,6 +142,7 @@ export interface WorldAgent {
   name: string;
   display_name: string;
   kind: string;
+  avatar_url?: string;
 }
 
 export interface AgentListResponse {
@@ -332,6 +337,52 @@ export interface WorkspaceFileContentResponse {
   fallback?: boolean;
 }
 
+export type AgentImageType = 'avatar' | 'design';
+
+export interface AgentImage {
+  id: string;
+  agent_id: string;
+  image_type: AgentImageType;
+  mime_type: string;
+  original_name: string;
+  file_size_bytes: number;
+  is_primary: boolean;
+  sort_order: number;
+  created_at: string;
+  url: string;
+}
+
+export interface AgentImageGroups {
+  avatar: AgentImage[];
+  design: AgentImage[];
+}
+
+export interface AgentImageListResponse {
+  ok: boolean;
+  images: AgentImage[];
+}
+
+export interface AgentImageUploadResponse {
+  ok: boolean;
+  image: AgentImage;
+}
+
+export interface ChunkedImageInitResponse {
+  ok: boolean;
+  upload_id: string;
+  chunks_total: number;
+  chunk_size: number;
+}
+
+export interface ChunkedImageProgressResponse {
+  ok: boolean;
+  upload_id: string;
+  chunks_total: number;
+  chunks_uploaded: number[];
+  chunk_size: number;
+  total_size: number;
+}
+
 export interface SaveWorkspaceFileResponse {
   ok: boolean;
   file: Pick<WorkspaceFileContent, 'path' | 'updated_at' | 'version'>;
@@ -397,6 +448,8 @@ export interface AgentDetail {
   kind: string;
   created_at: string;
   updated_at: string;
+  avatar_url?: string;
+  images?: AgentImageGroups;
   character_card: CharacterCardDetail;
 }
 

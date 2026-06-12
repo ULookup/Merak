@@ -39,14 +39,26 @@
   --shadow-md: 0 18px 54px rgba(25, 43, 38, 0.13);
   --ring: 0 0 0 3px rgba(122, 79, 19, 0.18);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --color-bg: var(--page);
+  --color-bg-secondary: var(--surface-muted);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-text: var(--ink);
+  --color-text-primary: var(--ink);
+  --color-text-secondary: var(--muted-strong);
+  --color-text-tertiary: var(--muted);
+  --color-accent: var(--ink);
+  --color-error: var(--ruby);
+  --color-error-bg: var(--ruby-soft);
+  --color-error-border: #fecaca;
+  --color-success: var(--green);
 }
 
 html,
 body,
 #root {
   height: 100%;
-  background:
-    linear-gradient(135deg, var(--page), #f8f5ed 46%, #eef6f2);
+  background: linear-gradient(135deg, var(--page), #f8f5ed 46%, #eef6f2);
   color: var(--ink);
   font-family:
     Inter,

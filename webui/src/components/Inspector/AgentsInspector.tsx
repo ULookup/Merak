@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Brain, Fingerprint, Plus, Shield, UserPlus, Users } from 'lucide-react';
 import { useAppState } from '../../AppState';
+import AgentAvatar from '../AgentAvatar';
+import styles from '../InspectorPanel.module.css';
 import AgentCardView from './AgentCardView';
 import AgentPromptViewer from './AgentPromptViewer';
 import CreateAgentModal from './CreateAgentModal';
-import styles from '../InspectorPanel.module.css';
 
 const kindLabels: Record<string, string> = {
   god: 'God',
@@ -30,7 +31,6 @@ export default function AgentsInspector() {
   const [promptAgentId, setPromptAgentId] = useState<string | null>(null);
 
   if (selectedAgentId) {
-    const agent = state.agents.find(a => a.id === selectedAgentId);
     return (
       <AgentCardView
         agentId={selectedAgentId}
@@ -74,7 +74,7 @@ export default function AgentsInspector() {
     return acc;
   }, {});
 
-  const promptAgent = promptAgentId ? state.agents.find(a => a.id === promptAgentId) : null;
+  const promptAgent = promptAgentId ? state.agents.find((a) => a.id === promptAgentId) : null;
 
   return (
     <>
@@ -91,10 +91,7 @@ export default function AgentsInspector() {
 
       <div style={{ display: 'flex', gap: 8 }}>
         {state.worldId && (
-          <button
-            className={styles.ghostButton}
-            onClick={() => setShowCreateAgent(true)}
-          >
+          <button className={styles.ghostButton} onClick={() => setShowCreateAgent(true)}>
             <Plus size={14} aria-hidden="true" />
             New Character
           </button>
@@ -111,9 +108,16 @@ export default function AgentsInspector() {
                 onClick={() => setSelectedAgentId(agent.id)}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter') setSelectedAgentId(agent.id); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') setSelectedAgentId(agent.id);
+                }}
               >
-                <div className={styles.avatar}>{(agent.display_name || agent.name).slice(0, 1)}</div>
+                <AgentAvatar
+                  name={agent.display_name || agent.name}
+                  src={agent.avatar_url}
+                  size="sm"
+                  className={styles.avatar}
+                />
                 <div>
                   <strong>{agent.display_name || agent.name}</strong>
                   <span>{kindLabels[agent.kind] ?? agent.kind}</span>
@@ -121,7 +125,10 @@ export default function AgentsInspector() {
               </div>
               <button
                 className={styles.addBtn}
-                onClick={(e) => { e.stopPropagation(); setPromptAgentId(agent.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPromptAgentId(agent.id);
+                }}
                 aria-label={`View prompt for ${agent.display_name || agent.name}`}
                 title="View system prompt"
               >

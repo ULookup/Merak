@@ -1,20 +1,22 @@
 import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
 import type {
+  ConditionState,
   ForeshadowingItem,
   Message,
+  PhaseTransition,
+  PipelineViewData,
   RuntimeMetadata,
   SecretItem,
   SessionSummary,
   SseFrame,
-  StoryOverview,
   StatusLabel,
+  StoryOverview,
   UiCapabilities,
-  WorldAgent,
-  WorldSummary,
   WorkspaceFile,
   WorkspaceFileContent,
+  WorldAgent,
+  WorldSummary,
 } from './api/types';
-import type { ConditionState, PhaseTransition, PipelineViewData, WorkflowSummary } from './api/types';
 
 export type InspectorTab = 'story' | 'files' | 'agents' | 'run' | 'creation';
 export type WorldbuildingStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -158,6 +160,84 @@ function msgId(): string {
   return `msg_${nextId++}_${Date.now()}`;
 }
 
+function findActiveAssistantIndex(messages: Message[]) {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const msg = messages[index];
+    if (msg.kind === 'assistant' && msg.toolCallId === 'active') return index;
+  }
+  return -1;
+}
+
+function ensureActiveAssistantMessage(messages: Message[], status: StatusLabel): Message[] {
+  const now = Date.now();
+  const index = findActiveAssistantIndex(messages);
+  if (index >= 0) {
+    return messages.map((msg, currentIndex) =>
+      currentIndex === index
+        ? {
+            ...msg,
+            assistantStatus: status,
+            pending: (msg.text ?? '').trim().length === 0,
+            thinkingStartedAt: msg.thinkingStartedAt ?? now,
+          }
+        : msg,
+    );
+  }
+  return [
+    ...messages,
+    {
+      id: msgId(),
+      kind: 'assistant',
+      text: '',
+      toolCallId: 'active',
+      assistantStatus: status,
+      pending: true,
+      thinkingStartedAt: now,
+    },
+  ];
+}
+
+function updateActiveAssistantStatus(messages: Message[], status: StatusLabel): Message[] {
+  const index = findActiveAssistantIndex(messages);
+  if (index < 0) return messages;
+  return messages.map((msg, currentIndex) =>
+    currentIndex === index ? { ...msg, assistantStatus: status } : msg,
+  );
+}
+
+function appendAssistantText(messages: Message[], text: string, status: StatusLabel): Message[] {
+  const now = Date.now();
+  const index = findActiveAssistantIndex(messages);
+  if (index >= 0) {
+    return messages.map((msg, currentIndex) => {
+      if (currentIndex !== index) return msg;
+      const previousText = msg.text ?? '';
+      const firstOutput = previousText.length === 0 && text.length > 0;
+      return {
+        ...msg,
+        text: previousText + text,
+        assistantStatus: 'responding',
+        pending: false,
+        thinkingStartedAt: msg.thinkingStartedAt ?? now,
+        thinkingCompletedAt: firstOutput ? now : msg.thinkingCompletedAt,
+      };
+    });
+  }
+  return [
+    ...messages,
+    {
+      id: msgId(),
+      kind: 'assistant',
+      text,
+      toolCallId: 'active',
+      assistantStatus: status === 'idle' ? 'responding' : status,
+      pending: false,
+      thinkingStartedAt: now,
+      thinkingCompletedAt: now,
+    },
+  ];
+}
+
 export type Action =
   | { type: 'SET_SESSION'; sessionId: string; agentId?: string }
   | { type: 'SET_APP_PHASE'; phase: AppState['appPhase'] }
@@ -192,6 +272,7 @@ export type Action =
   | { type: 'SET_MODEL'; model: string }
   | { type: 'SET_LAST_SEQ'; seq: number }
   | { type: 'APPEND_MESSAGE'; message: Message }
+  | { type: 'ENSURE_ASSISTANT_PENDING'; status?: StatusLabel }
   | { type: 'UPDATE_ASSISTANT'; text: string }
   | { type: 'SET_TOOL_RUNNING'; toolCallId: string; name: string; args: string }
   | { type: 'SET_TOOL_DONE'; toolCallId: string; output: string; isError: boolean }
@@ -435,16 +516,17 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'APPEND_MESSAGE':
       return { ...state, messages: [...state.messages, action.message] };
 
-    case 'UPDATE_ASSISTANT': {
-      const msgs = [...state.messages];
-      const last = msgs[msgs.length - 1];
-      if (last && last.kind === 'assistant' && last.toolCallId === 'active') {
-        msgs[msgs.length - 1] = { ...last, text: (last.text ?? '') + action.text };
-      } else {
-        msgs.push({ id: msgId(), kind: 'assistant', text: action.text, toolCallId: 'active' });
-      }
-      return { ...state, messages: msgs };
-    }
+    case 'ENSURE_ASSISTANT_PENDING':
+      return {
+        ...state,
+        messages: ensureActiveAssistantMessage(state.messages, action.status ?? state.status),
+      };
+
+    case 'UPDATE_ASSISTANT':
+      return {
+        ...state,
+        messages: appendAssistantText(state.messages, action.text, state.status),
+      };
 
     case 'SET_TOOL_RUNNING': {
       const msgs = [...state.messages];
@@ -490,7 +572,11 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, storyVersion: state.storyVersion + 1 };
 
     case 'SET_STATUS':
-      return { ...state, status: action.status };
+      return {
+        ...state,
+        status: action.status,
+        messages: updateActiveAssistantStatus(state.messages, action.status),
+      };
 
     case 'SET_USAGE':
       return {
@@ -515,8 +601,16 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, runTimeline: [action.item, ...state.runTimeline].slice(0, 32) };
 
     case 'COMMIT_ACTIVE': {
+      const now = Date.now();
       const msgs = state.messages.map((m) =>
-        m.toolCallId === 'active' ? { ...m, toolCallId: undefined } : m,
+        m.toolCallId === 'active'
+          ? {
+              ...m,
+              toolCallId: undefined,
+              pending: false,
+              thinkingCompletedAt: m.thinkingCompletedAt ?? now,
+            }
+          : m,
       );
       return { ...state, messages: msgs };
     }
@@ -573,22 +667,28 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
     case 'run_started':
       return reducer(
         reducer(
-          reducer(state, { type: 'SET_CURRENT_RUN', runId: (p.run_id as string) ?? '' }),
-          {
-            type: 'ADD_RUN_TIMELINE_ITEM',
-            item: {
-              id: `run_${p.run_id ?? frame.seq}`,
-              type: 'state',
-              label: 'Run started',
-              detail: (p.message as string) ?? '',
-              at: Date.now(),
-              status: 'thinking',
-            },
-          },
+          reducer(
+            reducer(
+              reducer(state, { type: 'SET_CURRENT_RUN', runId: (p.run_id as string) ?? '' }),
+              {
+                type: 'APPEND_MESSAGE',
+                message: { id: msgId(), kind: 'user', text: (p.message as string) ?? '' },
+              },
+            ),
+            { type: 'SET_STATUS', status: 'thinking' },
+          ),
+          { type: 'ENSURE_ASSISTANT_PENDING', status: 'thinking' },
         ),
         {
-          type: 'APPEND_MESSAGE',
-          message: { id: msgId(), kind: 'user', text: (p.message as string) ?? '' },
+          type: 'ADD_RUN_TIMELINE_ITEM',
+          item: {
+            id: `run_${p.run_id ?? frame.seq}`,
+            type: 'state',
+            label: 'Run started',
+            detail: (p.message as string) ?? '',
+            at: Date.now(),
+            status: 'thinking',
+          },
         },
       );
 
@@ -601,26 +701,38 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       if (to === 'complete' || to === 'error') return state;
       const validLabels = new Set(['thinking', 'responding', 'acting', 'observing']);
       const label = validLabels.has(to) ? (to as StatusLabel) : state.status;
-      return reducer(reducer(state, { type: 'SET_STATUS', status: label }), {
-        type: 'ADD_RUN_TIMELINE_ITEM',
-        item: {
-          id: `state_${frame.seq}_${to}`,
-          type: 'state',
-          label: `State: ${label.replace(/_/g, ' ')}`,
-          at: Date.now(),
+      return reducer(
+        reducer(reducer(state, { type: 'SET_STATUS', status: label }), {
+          type: 'ENSURE_ASSISTANT_PENDING',
           status: label,
+        }),
+        {
+          type: 'ADD_RUN_TIMELINE_ITEM',
+          item: {
+            id: `state_${frame.seq}_${to}`,
+            type: 'state',
+            label: `State: ${label.replace(/_/g, ' ')}`,
+            at: Date.now(),
+            status: label,
+          },
         },
-      });
+      );
     }
 
     case 'tool_started':
       return reducer(
-        reducer(state, {
-          type: 'SET_TOOL_RUNNING',
-          toolCallId: (p.id ?? p.tool_call_id ?? '') as string,
-          name: (p.name ?? p.tool ?? '') as string,
-          args: (p.arguments ?? '') as string,
-        }),
+        reducer(
+          reducer(reducer(state, { type: 'SET_STATUS', status: 'acting' }), {
+            type: 'ENSURE_ASSISTANT_PENDING',
+            status: 'acting',
+          }),
+          {
+            type: 'SET_TOOL_RUNNING',
+            toolCallId: (p.id ?? p.tool_call_id ?? '') as string,
+            name: (p.name ?? p.tool ?? '') as string,
+            args: (p.arguments ?? '') as string,
+          },
+        ),
         {
           type: 'ADD_RUN_TIMELINE_ITEM',
           item: {
@@ -716,7 +828,7 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
       if (!path) return state;
       const file = workspaceFileFromGenerated({
         id: `file_${path}`,
-        title: ((p.name as string) || fileTitle(path)),
+        title: (p.name as string) || fileTitle(path),
         path,
         updatedAt: Date.now(),
       });
@@ -750,7 +862,7 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
             ? {
                 ...file,
                 dirty: false,
-                updated_at: ((p.updated_at as string) || new Date().toISOString()),
+                updated_at: (p.updated_at as string) || new Date().toISOString(),
               }
             : file,
         ),
@@ -758,34 +870,37 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
     }
 
     case 'story_context_updated':
-      return reducer(
-        reducer(state, { type: 'SET_STORY_VERSION' }),
-        {
-          type: 'ADD_RUN_TIMELINE_ITEM',
-          item: {
-            id: `story_${frame.seq}`,
-            type: 'state',
-            label: `Story updated: ${(p.resource_type as string) || 'context'}`,
-            detail: (p.resource_id as string) || '',
-            at: Date.now(),
-            status: 'completed',
-          },
+      return reducer(reducer(state, { type: 'SET_STORY_VERSION' }), {
+        type: 'ADD_RUN_TIMELINE_ITEM',
+        item: {
+          id: `story_${frame.seq}`,
+          type: 'state',
+          label: `Story updated: ${(p.resource_type as string) || 'context'}`,
+          detail: (p.resource_id as string) || '',
+          at: Date.now(),
+          status: 'completed',
         },
-      );
+      });
 
     case 'run_step_changed': {
       const step = ((p.step as string) || 'thinking') as StatusLabel;
-      return reducer(reducer(state, { type: 'SET_STATUS', status: step }), {
-        type: 'ADD_RUN_TIMELINE_ITEM',
-        item: {
-          id: `run_step_${frame.seq}`,
-          type: 'state',
-          label: (p.label as string) || `Run step: ${step.replace(/_/g, ' ')}`,
-          detail: (p.detail as string) || '',
-          at: Date.now(),
+      return reducer(
+        reducer(reducer(state, { type: 'SET_STATUS', status: step }), {
+          type: 'ENSURE_ASSISTANT_PENDING',
           status: step,
+        }),
+        {
+          type: 'ADD_RUN_TIMELINE_ITEM',
+          item: {
+            id: `run_step_${frame.seq}`,
+            type: 'state',
+            label: (p.label as string) || `Run step: ${step.replace(/_/g, ' ')}`,
+            detail: (p.detail as string) || '',
+            at: Date.now(),
+            status: step,
+          },
         },
-      });
+      );
     }
 
     case 'scene_changed':
@@ -809,16 +924,21 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         pipelinePhase: typeof p.phase === 'string' ? p.phase : state.pipelinePhase,
         pipelineConditions: conditions,
         pipelineNextAllowed: Array.isArray(p.next_allowed)
-          ? (p.next_allowed as string[]) : state.pipelineNextAllowed,
+          ? (p.next_allowed as string[])
+          : state.pipelineNextAllowed,
         pipelineAllowedRetreat: Array.isArray(p.allowed_retreat)
-          ? (p.allowed_retreat as string[]) : state.pipelineAllowedRetreat,
+          ? (p.allowed_retreat as string[])
+          : state.pipelineAllowedRetreat,
         showPhaseAdvancePrompt: null,
         pipelineAdvanceError: undefined,
       };
     }
 
     case 'pipeline_advance_failed':
-      return { ...state, pipelineAdvanceError: (p.reason || p.result || 'Unknown error') as string };
+      return {
+        ...state,
+        pipelineAdvanceError: (p.reason || p.result || 'Unknown error') as string,
+      };
 
     case 'pipeline_condition_progress': {
       const conditions = Array.isArray(p.conditions)
@@ -833,8 +953,7 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         showPhaseAdvancePrompt: {
           phase: (p.phase as string) || '',
           nextPhase: (p.next_phase as string) || '',
-          conditions: Array.isArray(p.conditions)
-            ? (p.conditions as ConditionState[]) : [],
+          conditions: Array.isArray(p.conditions) ? (p.conditions as ConditionState[]) : [],
         },
       };
 

@@ -1,28 +1,28 @@
 .msg {
   max-width: 82%;
-  padding: 12px 16px;
-  border-radius: 16px;
+  padding: 11px 14px;
+  border-radius: 12px;
   font-size: 13px;
   line-height: 1.55;
   animation: messageIn 320ms var(--ease);
-  box-shadow: var(--shadow-sm);
 }
 
 .msgUser {
-  background: linear-gradient(135deg, var(--brand-strong), var(--brand), #b8892c);
+  background: var(--ink);
   color: #fff;
   align-self: flex-end;
-  border-bottom-right-radius: 6px;
+  border-bottom-right-radius: 5px;
 }
 
 .msgAssistant {
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--surface);
   align-self: flex-start;
   border: 1px solid var(--border);
   color: var(--ink);
-  border-bottom-left-radius: 6px;
+  border-bottom-left-radius: 5px;
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .msgAssistant::before {
@@ -30,12 +30,12 @@
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  background: linear-gradient(var(--brand), transparent);
+  background: linear-gradient(var(--border-strong), transparent);
 }
 .msgAssistant pre {
-  background: #f7faf8;
+  background: #f7f8f9;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 12px 14px;
   overflow-x: auto;
   font-size: 12px;
@@ -46,6 +46,52 @@
 }
 .msgAssistant p {
   margin: 4px 0;
+}
+
+.thinkingMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 780;
+  margin-bottom: 8px;
+}
+
+.thinkingDot,
+.thinkingPulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--teal);
+}
+
+.thinkingPulse {
+  animation: thinkingPulse 1.2s ease-in-out infinite;
+}
+
+.thinkingBody {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 20px;
+}
+
+.thinkingBody span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--muted);
+  opacity: 0.35;
+  animation: thinkingDot 1.15s ease-in-out infinite;
+}
+
+.thinkingBody span:nth-child(2) {
+  animation-delay: 140ms;
+}
+
+.thinkingBody span:nth-child(3) {
+  animation-delay: 280ms;
 }
 
 .pill {
@@ -61,7 +107,7 @@
 
 .tool {
   align-self: flex-start;
-  background: linear-gradient(135deg, #fff, #f5fbf8);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 15px;
   padding: 11px 13px;
@@ -133,7 +179,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 14px;
-  background: linear-gradient(135deg, var(--amber-soft), #fff);
+  background: var(--amber-soft);
   border: 1px solid #f4d58d;
   border-radius: 16px;
   font-size: 12px;
@@ -218,7 +264,7 @@
 }
 
 .btnAllow {
-  background: linear-gradient(135deg, var(--brand-strong), var(--brand));
+  background: var(--ink);
   color: #fff;
 }
 .btnAllow:hover {
@@ -284,7 +330,7 @@
 
 .copyBtnDone {
   background: var(--brand-soft);
-  border-color: rgba(122, 79, 19, 0.28);
+  border-color: rgba(17, 19, 20, 0.18);
   color: var(--brand);
 }
 
@@ -296,6 +342,26 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes thinkingPulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.82);
+  }
+}
+
+@keyframes thinkingDot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 0.9;
+    transform: translateY(-3px);
   }
 }
 

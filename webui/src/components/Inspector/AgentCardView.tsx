@@ -1,9 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import type { AgentDetail } from '../../api/types';
 import { useAppState } from '../../AppState';
+import AgentAvatar from '../AgentAvatar';
 import AgentCardEdit from './AgentCardEdit';
 import styles from './AgentCardView.module.css';
+import AgentImageGallery from './AgentImageGallery';
 
 interface Props {
   agentId: string;
@@ -45,15 +47,16 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
     return () => abortRef.current?.abort();
   }, [load]);
 
-  if (loading) return (
-    <div className={styles.container}>
-      <div className={styles.skeletonHeader} />
-      <div className={styles.skeletonLine} />
-      <div className={styles.skeletonLine} style={{ width: '70%' }} />
-      <div className={styles.skeletonLine} style={{ width: '50%' }} />
-      <div className={styles.skeletonLine} style={{ width: '80%' }} />
-    </div>
-  );
+  if (loading)
+    return (
+      <div className={styles.container}>
+        <div className={styles.skeletonHeader} />
+        <div className={styles.skeletonLine} />
+        <div className={styles.skeletonLine} style={{ width: '70%' }} />
+        <div className={styles.skeletonLine} style={{ width: '50%' }} />
+        <div className={styles.skeletonLine} style={{ width: '80%' }} />
+      </div>
+    );
   if (error) return <div className={styles.container}>Error: {error}</div>;
   if (!detail) return <div className={styles.container}>Agent not found</div>;
 
@@ -64,25 +67,70 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
         worldId={state.worldId}
         agentId={agentId}
         detail={detail}
-        onSave={(updated) => { setDetail(updated); setEditMode(false); }}
+        onSave={(updated) => {
+          setDetail(updated);
+          setEditMode(false);
+        }}
         onCancel={() => setEditMode(false)}
       />
     );
   }
 
   const cc = detail.character_card;
+  const displayName = detail.display_name || detail.name;
+  const images = detail.images ?? { avatar: [], design: [] };
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <button onClick={onClose} className={styles.backBtn}>← 返回</button>
-        <h3>{detail.display_name || detail.name}</h3>
+        <button onClick={onClose} className={styles.backBtn}>
+          ← 返回
+        </button>
         <div className={styles.headerActions}>
           {onViewPrompt && (
-            <button onClick={onViewPrompt} className={styles.promptBtn}>Prompt</button>
+            <button onClick={onViewPrompt} className={styles.promptBtn}>
+              Prompt
+            </button>
           )}
-          <button onClick={() => setEditMode(true)} className={styles.editBtn}>编辑</button>
+          <button onClick={() => setEditMode(true)} className={styles.editBtn}>
+            编辑
+          </button>
         </div>
       </div>
+
+      <section className={styles.profileHero}>
+        <AgentAvatar name={displayName} src={detail.avatar_url} size="lg" />
+        <div className={styles.profileText}>
+          <h3>{displayName}</h3>
+          <span>{detail.kind}</span>
+          <p>
+            {cc.identity || cc.appearance || 'Character profile ready for worldbuilding context.'}
+          </p>
+        </div>
+      </section>
+
+      {state.worldId && (
+        <section className={styles.section}>
+          <AgentImageGallery
+            worldId={state.worldId}
+            agentId={agentId}
+            imageType="avatar"
+            images={images.avatar}
+            onChanged={load}
+          />
+        </section>
+      )}
+
+      {state.worldId && (
+        <section className={styles.section}>
+          <AgentImageGallery
+            worldId={state.worldId}
+            agentId={agentId}
+            imageType="design"
+            images={images.design}
+            onChanged={load}
+          />
+        </section>
+      )}
 
       <section className={styles.section}>
         <h4>基础信息</h4>
@@ -97,7 +145,11 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
       <section className={styles.section}>
         <h4>性格特征</h4>
         <div className={styles.tags}>
-          {cc.core_traits?.map(t => <span key={t} className={styles.tag}>{t}</span>)}
+          {cc.core_traits?.map((t) => (
+            <span key={t} className={styles.tag}>
+              {t}
+            </span>
+          ))}
         </div>
       </section>
 
