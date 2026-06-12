@@ -22,6 +22,9 @@ public:
 
     // Add a skill directly (higher priority wins on name collision)
     void add(SkillDef skill);
+
+    std::vector<SkillDef> inline_skills() const;
+    std::vector<SkillDef> fork_skills() const;
 };
 
 } // namespace merak::skills

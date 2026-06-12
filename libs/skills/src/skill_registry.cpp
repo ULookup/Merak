@@ -42,4 +42,24 @@ void SkillRegistry::add(SkillDef skill) {
     skills_[skill.name] = std::move(skill);
 }
 
+std::vector<SkillDef> SkillRegistry::inline_skills() const {
+    std::vector<SkillDef> result;
+    for (const auto& [name, skill] : skills_) {
+        if (skill.context_mode.empty() || skill.context_mode == "inline") {
+            result.push_back(skill);
+        }
+    }
+    return result;
+}
+
+std::vector<SkillDef> SkillRegistry::fork_skills() const {
+    std::vector<SkillDef> result;
+    for (const auto& [name, skill] : skills_) {
+        if (skill.context_mode == "fork") {
+            result.push_back(skill);
+        }
+    }
+    return result;
+}
+
 } // namespace merak::skills
