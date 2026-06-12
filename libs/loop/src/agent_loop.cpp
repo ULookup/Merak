@@ -310,6 +310,10 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
     return response;
 }
 
+void AgentLoop::set_working_memory_provider(std::function<std::string()> provider) {
+    working_memory_provider_ = std::move(provider);
+}
+
 std::vector<Message> AgentLoop::build_context() {
     BindSources sources;
     sources.identity_text = [this]() {
@@ -324,7 +328,10 @@ std::vector<Message> AgentLoop::build_context() {
     sources.world_context_text = []() { return ""; };
     sources.skills_text = []() { return ""; };
     sources.tool_specs = tools_->pinned_schemas();
-    sources.working_memory_text = []() { return ""; };
+    sources.working_memory_text = [this]() -> std::string {
+        if (working_memory_provider_) return working_memory_provider_();
+        return "";
+    };
     sources.memory_store = memory_;
 
     for (int i = (int)session_history_.size() - 1; i >= 0; i--) {
