@@ -187,7 +187,6 @@ static int run_server(int argc,char**argv) {
     tools->register_tool(std::make_unique<tools::SymbolsTool>());
     tools->register_tool(std::make_unique<tools::MemoryTool>(memory));
     tools->register_tool(std::make_unique<tools::SessionTool>());
-    tools->register_tool(std::make_unique<tools::AgentTool>());
     tools->register_tool(std::make_unique<tools::TaskTool>());
     tools->register_tool(std::make_unique<tools::AskUserTool>());
     tools->register_tool(std::make_unique<tools::EnterPlanModeTool>());
@@ -241,6 +240,7 @@ auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
         auto loop=std::make_unique<AgentLoop>(c,llm,sub_tools,memory,sub_context,sub_compactor);
         return loop->run(task,control).get();
     };
+    tools->register_tool(std::make_unique<tools::AgentTool>(cfg.agent.sub_agents, sub_executor));
     auto runtime=std::make_shared<RuntimeService>(merak_home(),factory,cfg.agent.sub_agents,sub_executor);runtime->initialize();
     if (wb_service) runtime->set_worldbuilding_service(wb_service.get());
     // Initialize PipelineManager
