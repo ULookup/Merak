@@ -198,6 +198,10 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         auto tool_results = handle_tool_calls(accumulated_tool_calls, control);
 
+        if (auto token = control.cancellation_token(); token && token->should_stop()) {
+            throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
+        }
+
         for (auto& tr : tool_results) {
             response.tool_results.push_back(tr);
 

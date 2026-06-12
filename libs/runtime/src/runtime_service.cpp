@@ -279,13 +279,13 @@ public:
     const std::string& awaiting_creation_id() const { return awaiting_creation_id_; }
     void resolve(bool allowed){std::lock_guard lock(mutex_);decision_=allowed;changed_.notify_all();}
     void record_interruption(InterruptionRecord rec) override {
-        interruption_ = std::move(rec);
         service_.emit(run_.session_id, run_.id, "run_interrupted", base_payload({
             {"run_id", run_.id},
-            {"turns_completed", interruption_.turns_completed},
-            {"tools_completed", interruption_.tools_completed},
-            {"tools_remaining", interruption_.tools_remaining},
-            {"interrupted_tool_name", interruption_.interrupted_tool_name},
+            {"turns_completed", rec.turns_completed},
+            {"tools_completed", rec.tools_completed},
+            {"tools_remaining", rec.tools_remaining},
+            {"interrupted_tool_name", rec.interrupted_tool_name},
+            {"interrupted_tool_call_id", rec.interrupted_tool_call_id},
         }));
     }
     void cancel(){token_->cancel();std::lock_guard lock(mutex_);changed_.notify_all();{std::lock_guard lock2(creation_mutex_);creation_changed_.notify_all();}{std::lock_guard lock3(ask_user_mutex_);ask_user_changed_.notify_all();}}
@@ -298,7 +298,6 @@ private:
     RuntimeService&service_;RunRecord run_;std::shared_ptr<CancellationToken>token_;std::mutex mutex_;std::condition_variable changed_;std::optional<bool>decision_;
     std::mutex creation_mutex_;std::condition_variable creation_changed_;std::optional<nlohmann::json>creation_resolved_;std::string awaiting_creation_id_;
     std::mutex ask_user_mutex_;std::condition_variable ask_user_changed_;std::optional<std::string>ask_user_response_;std::string awaiting_ask_user_call_id_;
-    InterruptionRecord interruption_;
 };
 
 std::string RuntimeService::extract_title(const std::string& message, size_t max_len) {
