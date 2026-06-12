@@ -100,6 +100,7 @@ nlohmann::json chapter_json(const Chapter& chapter) {
                         {"title", chapter.title},
                         {"pitch", chapter.pitch},
                         {"notes", chapter.notes},
+                        {"content", chapter.content},
                         {"number", chapter.number},
                         {"status", to_string(chapter.status)},
                         {"emotional_curve", chapter.emotional_curve},
@@ -119,6 +120,7 @@ Chapter chapter_from_json(const nlohmann::json& json) {
     chapter.title = json.at("title").get<std::string>();
     chapter.pitch = json.at("pitch").get<std::string>();
     chapter.notes = json.at("notes").get<std::string>();
+    chapter.content = json.value("content", "");
     chapter.number = json.at("number").get<int>();
     if (!json.at("arc_id").is_null()) {
         chapter.arc_id = json.at("arc_id").get<std::string>();
@@ -248,9 +250,15 @@ void NarrativeStore::initialize() {
               "updated_at TIMESTAMPTZ DEFAULT now())");
     conn.exec("CREATE TABLE IF NOT EXISTS chapters("
               "id TEXT PRIMARY KEY, world_id TEXT NOT NULL, arc_id TEXT,"
-              "name TEXT, pitch TEXT, status TEXT, position INT DEFAULT 0,"
+              "name TEXT, pitch TEXT, content TEXT DEFAULT '', status TEXT, position INT DEFAULT 0,"
               "created_at TIMESTAMPTZ DEFAULT now(),"
               "updated_at TIMESTAMPTZ DEFAULT now())");
+    // 迁移：为已有数据库新增 content 列
+    try {
+        conn.exec("ALTER TABLE chapters ADD COLUMN content TEXT DEFAULT ''");
+    } catch (const std::exception&) {
+        // Column already exists — ignore
+    }
     conn.exec("CREATE TABLE IF NOT EXISTS sections("
               "id TEXT PRIMARY KEY, world_id TEXT NOT NULL, chapter_id TEXT NOT NULL,"
               "name TEXT, status TEXT, position INT DEFAULT 0,"
@@ -329,10 +337,11 @@ Chapter NarrativeStore::create_chapter(const std::string& world_id,
     conn.exec("BEGIN");
     try {
         conn.query(
-            "INSERT INTO chapters(id, world_id, arc_id, name, pitch, status, position)"
-            " VALUES($1, $2, $3, $4, $5, $6, $7)",
+            "INSERT INTO chapters(id, world_id, arc_id, name, pitch, content, status, position)"
+            " VALUES($1, $2, $3, $4, $5, $6, $7, $8)",
             {chapter.id, world_id, chapter.arc_id.value_or(""),
-             chapter.title, chapter.pitch, to_string(chapter.status),
+             chapter.title, chapter.pitch, chapter.content,
+             to_string(chapter.status),
              std::to_string(chapter.number)});
 
         if (chapter.arc_id.has_value()) {
@@ -630,6 +639,7 @@ bool NarrativeStore::patch_chapter(const std::string& world_id,
     if (fields.contains("title")) json["title"] = fields["title"];
     if (fields.contains("pitch")) json["pitch"] = fields["pitch"];
     if (fields.contains("notes")) json["notes"] = fields["notes"];
+    if (fields.contains("content")) json["content"] = fields["content"];
     if (fields.contains("number")) json["number"] = fields["number"];
     if (fields.contains("status")) json["status"] = fields["status"];
 
@@ -647,6 +657,10 @@ bool NarrativeStore::patch_chapter(const std::string& world_id,
     if (fields.contains("pitch")) {
         set_parts.push_back("pitch = $" + std::to_string(param_idx++));
         params.push_back(fields["pitch"].get<std::string>());
+    }
+    if (fields.contains("content")) {
+        set_parts.push_back("content = $" + std::to_string(param_idx++));
+        params.push_back(fields["content"].get<std::string>());
     }
     if (fields.contains("status")) {
         set_parts.push_back("status = $" + std::to_string(param_idx++));
@@ -730,6 +744,16 @@ NarrativeStore::chapter_context(const std::string& world_id,
     }
 
     return context;
+}
+
+std::optional<Chapter>
+NarrativeStore::get_chapter(const std::string& world_id,
+                            const std::string& chapter_id) const {
+    if (!worlds_.get_world(world_id).has_value()) return std::nullopt;
+    const auto path =
+        worlds_.world_path(world_id) / "chapters" / (chapter_id + ".json");
+    if (!std::filesystem::exists(path)) return std::nullopt;
+    return chapter_from_json(read_json(path));
 }
 
 std::optional<Scene> NarrativeStore::get_scene(const std::string& world_id,

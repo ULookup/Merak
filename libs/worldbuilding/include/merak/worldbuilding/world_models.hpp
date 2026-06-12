@@ -177,7 +177,7 @@ struct Arc {
 };
 
 struct Chapter {
-    std::string id, title, pitch, notes;
+    std::string id, title, pitch, notes, content;
     int number = 0;
     std::optional<std::string> arc_id;
     ChapterStatus status = ChapterStatus::Outline;
@@ -303,6 +303,14 @@ inline std::string to_string(ChapterStatus value) {
     return "outline";
 }
 
+inline std::optional<ChapterStatus> parse_chapter_status(std::string_view s) {
+    if (s == "outline") return ChapterStatus::Outline;
+    if (s == "drafting") return ChapterStatus::Drafting;
+    if (s == "completed") return ChapterStatus::Completed;
+    if (s == "revised") return ChapterStatus::Revised;
+    return std::nullopt;
+}
+
 inline std::string to_string(SceneStatus value) {
     switch (value) {
     case SceneStatus::Draft:
@@ -313,6 +321,13 @@ inline std::string to_string(SceneStatus value) {
         return "completed";
     }
     return "draft";
+}
+
+inline std::optional<SceneStatus> parse_scene_status(std::string_view s) {
+    if (s == "draft") return SceneStatus::Draft;
+    if (s == "writing") return SceneStatus::Writing;
+    if (s == "completed") return SceneStatus::Completed;
+    return std::nullopt;
 }
 
 inline std::string to_string(ForeshadowStatus value) {

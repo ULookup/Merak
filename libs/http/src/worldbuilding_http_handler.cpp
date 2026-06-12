@@ -250,6 +250,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_overview(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/chapters)",
         [this](const auto& req, auto& res) { handle_list_chapters(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+))",
+        [this](const auto& req, auto& res) { handle_get_chapter(req, res); });
     server.Patch(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+))",
         [this](const auto& req, auto& res) { handle_patch_chapter(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/scenes)",
@@ -763,6 +765,45 @@ void WorldbuildingHttpHandler::handle_list_chapters(const httplib::Request& req,
     }
 }
 
+void WorldbuildingHttpHandler::handle_get_chapter(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string cid = req.matches[2];
+
+        if (!service_->worlds().get_world(wid)) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+
+        auto chapter = service_->narrative().get_chapter(wid, cid);
+        if (!chapter) {
+            error_response(res, "Chapter not found", 404, "chapter_not_found");
+            return;
+        }
+
+        nlohmann::json response{
+            {"ok", true},
+            {"id", chapter->id},
+            {"title", chapter->title},
+            {"number", chapter->number},
+            {"status", worldbuilding::to_string(chapter->status)},
+            {"content", chapter->content},
+            {"pitch", chapter->pitch},
+            {"notes", chapter->notes},
+            {"scene_ids", chapter->scene_ids},
+            {"foreshadowing_planted", chapter->foreshadowing_planted},
+            {"foreshadowing_paid", chapter->foreshadowing_paid}
+        };
+        response["arc_id"] = chapter->arc_id.has_value()
+            ? nlohmann::json(*chapter->arc_id)
+            : nlohmann::json(nullptr);
+
+        json_response(res, response);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
 void WorldbuildingHttpHandler::handle_list_scenes(const httplib::Request& req, httplib::Response& res) {
     try {
         std::string wid = req.matches[1];
@@ -1118,9 +1159,9 @@ void WorldbuildingHttpHandler::handle_patch_scene(const httplib::Request& req, h
         auto body = nlohmann::json::parse(req.body);
         auto fields = body.at("fields");
         if (fields.contains("status")) {
-            std::string s = fields["status"].get<std::string>();
-            if (s != "drafting" && s != "writing" && s != "completed" && s != "archived") {
-                error_response(res, "Invalid scene status: " + s, 400);
+            auto parsed = worldbuilding::parse_scene_status(fields["status"].get<std::string>());
+            if (!parsed) {
+                error_response(res, "Invalid scene status", 400);
                 return;
             }
         }
@@ -1147,12 +1188,17 @@ void WorldbuildingHttpHandler::handle_patch_chapter(const httplib::Request& req,
     std::string wid = req.matches[1];
     std::string cid = req.matches[2];
     try {
+        auto chapter = service_->narrative().get_chapter(wid, cid);
+        if (!chapter) {
+            error_response(res, "Chapter not found", 404, "chapter_not_found");
+            return;
+        }
         auto body = nlohmann::json::parse(req.body);
         auto fields = body.at("fields");
         if (fields.contains("status")) {
-            std::string s = fields["status"].get<std::string>();
-            if (s != "drafting" && s != "writing" && s != "completed" && s != "archived") {
-                error_response(res, "Invalid chapter status: " + s, 400);
+            auto parsed = worldbuilding::parse_chapter_status(fields["status"].get<std::string>());
+            if (!parsed) {
+                error_response(res, "Invalid chapter status", 400);
                 return;
             }
         }
