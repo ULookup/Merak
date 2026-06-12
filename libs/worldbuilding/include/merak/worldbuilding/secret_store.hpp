@@ -17,6 +17,8 @@ struct KnowledgeView {
     std::string character_id;
     KnowledgeState state = KnowledgeState::Unknown;
     std::string context_snippet;
+    std::vector<Secret> visible_secrets;
+    std::vector<Secret> unknown_secrets;
 };
 
 struct LeakRisk {

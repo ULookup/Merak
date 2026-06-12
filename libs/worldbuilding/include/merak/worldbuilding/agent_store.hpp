@@ -52,6 +52,12 @@ public:
                                          int max_results = 5) const;
     std::optional<DiaryEntry> get_diary(const std::string& diary_id) const;
 
+    void update_diary_content(const std::string& diary_id, const std::string& content,
+                              const std::string& mood, int leak_risk_level, int tokens_used);
+    std::vector<MemorySummary> recent_summaries(const std::string& agent_id, int limit = 10) const;
+    int uncompressed_diary_count(const std::string& agent_id) const;
+    std::vector<DiaryEntry> uncompressed_diaries(const std::string& agent_id, int limit) const;
+
     std::vector<AgentRecord>
     search_agents_by_traits(const std::string& world_id,
                             const std::vector<std::string>& traits,

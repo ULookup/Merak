@@ -5,6 +5,7 @@
 #include <merak/http_server.hpp>
 #include <merak/mcp_client.hpp>
 #include <merak/openai_provider.hpp>
+#include <merak/openai_embedding_provider.hpp>
 #include <merak/portable_pg.hpp>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
@@ -168,6 +169,7 @@ static int run_server(int argc,char**argv) {
                 cfg.memory.db_connection, merak_home() / "worldbuilding",
                 std::move(kg_provider));
             wb_service->initialize();
+            wb_service->set_diary_context_limit(cfg.memory.diary_context_limit);
         } catch (const std::exception& e) {
             std::cerr << "Warning: WorldbuildingService not available: " << e.what() << "\n";
         }
@@ -184,19 +186,20 @@ static int run_server(int argc,char**argv) {
     tools->register_tool(std::make_unique<tools::WebSearchTool>());
     tools->register_tool(std::make_unique<tools::LspTool>());
     tools->register_tool(std::make_unique<tools::SymbolsTool>());
-    tools->register_tool(std::make_unique<tools::MemoryTool>());
-    tools->register_tool(std::make_unique<tools::SessionTool>());
-    tools->register_tool(std::make_unique<tools::AgentTool>());
+    tools->register_tool(std::make_unique<tools::MemoryTool>(memory));
     tools->register_tool(std::make_unique<tools::TaskTool>());
     tools->register_tool(std::make_unique<tools::AskUserTool>());
-    tools->register_tool(std::make_unique<tools::EnterPlanModeTool>());
-    tools->register_tool(std::make_unique<tools::ExitPlanModeTool>());
+    auto plan_mode = std::make_shared<std::atomic<bool>>(false);
+    tools->register_tool(std::make_unique<tools::EnterPlanModeTool>(plan_mode));
+    tools->register_tool(std::make_unique<tools::ExitPlanModeTool>(plan_mode));
     // Set default platform capabilities (empty = all non-gated tools visible)
     tools->set_capabilities(CapabilitySet::platform_default());
     // Register Worldbuilding tools if service is available
     if (wb_service) {
         tools->set_capabilities(tools->capabilities() | Capability::Worldbuilding);
-        worldbuilding::WorldbuildingTools wb_tools(*wb_service);
+        worldbuilding::WorldbuildingTools wb_tools(
+            *wb_service, llm, cfg.memory.diary_compression_threshold,
+            cfg.memory.diary_model);
         auto wb_ctx = worldbuilding::ToolContext{};
         auto god_tools = wb_tools.create_tools(worldbuilding::AgentKind::God, wb_ctx);
         for (auto& tool : god_tools) {
@@ -205,7 +208,22 @@ static int run_server(int argc,char**argv) {
     }
     std::vector<std::shared_ptr<McpClient>>mcp;std::vector<McpServerStatus>mcp_status;
     for(const auto& mc:cfg.mcp_servers){if(!mc.enabled)continue;auto c=std::make_shared<McpClient>(mc);auto connected=c->connect();mcp_status.push_back({mc.name,connected.has_value()});if(connected){tools->import_from_mcp(c).get();mcp.push_back(c);}}
-    auto memory_cfg=cfg.memory;if(memory_cfg.db_connection.empty())memory_cfg.enabled=false;auto memory=std::make_shared<MemoryStore>(memory_cfg,nullptr);
+    auto memory_cfg=cfg.memory;if(memory_cfg.db_connection.empty())memory_cfg.enabled=false;
+std::shared_ptr<EmbeddingProvider> embedder;
+if(memory_cfg.enabled&&!memory_cfg.embedding_api_key.empty()){
+    OpenAIEmbeddingProvider::Config embed_cfg;
+    embed_cfg.api_url=memory_cfg.embedding_api_url;
+    embed_cfg.api_key=memory_cfg.embedding_api_key;
+    embed_cfg.model=memory_cfg.embedding_model;
+    embed_cfg.cache_size=memory_cfg.embedding_cache_size;
+    embed_cfg.batch_size=memory_cfg.embedding_batch_size;
+    embed_cfg.timeout_ms=memory_cfg.embedding_timeout_ms;
+    embedder=std::make_shared<OpenAIEmbeddingProvider>(embed_cfg);
+    std::cout<<"Embedding: using "<<memory_cfg.embedding_model<<" via "<<memory_cfg.embedding_api_url<<"\n";
+}else if(memory_cfg.enabled&&memory_cfg.embedding_api_key.empty()){
+    std::cerr<<"Warning: Memory enabled but embedding_api_key not set, semantic search disabled\n";
+}
+auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
     if(memory_cfg.enabled)memory->init_db();
     auto make_context=[cfg](std::shared_ptr<LlmProvider> provider){
         auto counter=std::make_shared<TokenCounter>();
@@ -215,16 +233,20 @@ static int run_server(int argc,char**argv) {
         return std::pair{context,compactor};
     };
     auto [context,compactor]=make_context(llm);
-    auto factory=[cfg,llm,tools,memory,context,compactor](const std::string&model){AgentLoop::Config c;c.system_prompt=cfg.agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=model.empty()?cfg.llm.default_model:model;c.max_output_tokens=cfg.llm.max_output_tokens;return std::make_unique<AgentLoop>(c,llm,tools,memory,context,compactor);};
-    auto sub_executor=[cfg,llm,tools,memory,make_context](const SubAgentConfig&agent,const std::string&task,RunControl&control){
+    // Register SessionTool with real MemoryStore and Compactor references
+    tools->register_tool(std::make_unique<tools::SessionTool>(memory, compactor));
+    auto factory=[cfg,llm,tools,memory,context,compactor,plan_mode](const std::string&model){AgentLoop::Config c;c.system_prompt=cfg.agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=model.empty()?cfg.llm.default_model:model;c.max_output_tokens=cfg.llm.max_output_tokens;auto loop=std::make_unique<AgentLoop>(c,llm,tools,memory,context,compactor);loop->set_plan_mode_source(plan_mode);return loop;};
+    auto sub_executor=[cfg,llm,tools,memory,make_context,plan_mode](const SubAgentConfig&agent,const std::string&task,RunControl&control){
         auto sub_tools=std::make_shared<ToolRegistry>();sub_tools->set_permission_mode(cfg.agent.permission_mode);
         if(agent.tool_allowlist.empty()){for(const auto&spec:tools->all_tools()){if(auto*tool=tools->get_tool(spec.name))sub_tools->register_tool(tool->clone());}}
         else{for(const auto&name:agent.tool_allowlist){if(auto*tool=tools->get_tool(name))sub_tools->register_tool(tool->clone());}}
         auto [sub_context,sub_compactor]=make_context(llm);
         AgentLoop::Config c;c.system_prompt=agent.system_prompt.empty()?cfg.agent.system_prompt:agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=agent.model.empty()?cfg.llm.default_model:agent.model;c.max_output_tokens=cfg.llm.max_output_tokens;
         auto loop=std::make_unique<AgentLoop>(c,llm,sub_tools,memory,sub_context,sub_compactor);
+        loop->set_plan_mode_source(plan_mode);
         return loop->run(task,control).get();
     };
+    tools->register_tool(std::make_unique<tools::AgentTool>(cfg.agent.sub_agents, sub_executor));
     auto runtime=std::make_shared<RuntimeService>(merak_home(),factory,cfg.agent.sub_agents,sub_executor);runtime->initialize();
     if (wb_service) runtime->set_worldbuilding_service(wb_service.get());
     // Initialize PipelineManager

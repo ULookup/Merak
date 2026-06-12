@@ -34,7 +34,7 @@ struct ScenePreparation {
 };
 
 struct SceneWrapUp {
-    std::vector<DiaryEntry> diaries_written;
+    std::vector<std::string> pending_diary_agents;  // agent IDs that need to write diary
     std::vector<RelationEntry> relations_updated;
     std::vector<Foreshadowing> proposed_foreshadowing;
     std::vector<LeakRisk> leak_risks;

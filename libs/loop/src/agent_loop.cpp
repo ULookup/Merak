@@ -310,6 +310,10 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
     return response;
 }
 
+void AgentLoop::set_working_memory_provider(std::function<std::string()> provider) {
+    working_memory_provider_ = std::move(provider);
+}
+
 std::vector<Message> AgentLoop::build_context() {
     BindSources sources;
     sources.identity_text = [this]() {
@@ -324,7 +328,10 @@ std::vector<Message> AgentLoop::build_context() {
     sources.world_context_text = []() { return ""; };
     sources.skills_text = []() { return ""; };
     sources.tool_specs = tools_->pinned_schemas();
-    sources.working_memory_text = []() { return ""; };
+    sources.working_memory_text = [this]() -> std::string {
+        if (working_memory_provider_) return working_memory_provider_();
+        return "";
+    };
     sources.memory_store = memory_;
 
     for (int i = (int)session_history_.size() - 1; i >= 0; i--) {
@@ -349,6 +356,23 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
     std::vector<ToolResult> results;
 
     for (auto& call : calls) {
+        // Plan mode: deny mutating tools that require approval
+        if (plan_mode_) {
+            auto* tool = tools_->get_tool(call.name);
+            if (tool && tool->permission() == PermissionLevel::ask) {
+                auto spec = tool->spec();
+                if (spec.category == Category::Mutating) {
+                    ToolResult denied;
+                    denied.call_id = call.id;
+                    denied.is_error = true;
+                    denied.output = "Plan mode active — write operations restricted";
+                    results.push_back(denied);
+                    control.emit_tool_completed(call, denied);
+                    continue;
+                }
+            }
+        }
+
         if (control.cancelled()) break;
         control.emit_tool_started(call);
 
@@ -389,6 +413,15 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
         auto result_future = tools_->execute(
             call, ToolExecutionContext{control.cancellation_token()});
         auto result = result_future.get();
+
+        if (call.name == "ask_user") {
+            try {
+                auto result_json = nlohmann::json::parse(result.output);
+                if (result_json.value("status", "") == "pending") {
+                    result = control.await_ask_user(call, result);
+                }
+            } catch (...) {}
+        }
 
         if (tools_->requires_confirmation(call.name)) {
             try {

@@ -296,15 +296,25 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
             prompt << it->context_snippet << "\n";
         }
 
-        // Recent diary entries
+        // Recent diary entries (full content)
         try {
-            auto diary = agents_.recent_diary(pid, 5);
-            if (!diary.empty()) {
-                prompt << "\n## 近期记忆\n";
-                for (const auto& d : diary) {
-                    prompt << "- [" << d.world_time << "] " << d.content.substr(0, 100) << "\n";
+            auto diaries = agents_.recent_diary(pid, service.diary_context_limit());
+            if (!diaries.empty()) {
+                prompt << "\n## 你的近期记忆\n";
+
+                // Memory summaries first (compressed long-term memory)
+                auto summaries = agents_.recent_summaries(pid, 10);
+                if (!summaries.empty()) {
+                    prompt << "\n### 记忆摘要\n";
+                    for (const auto& s : summaries) {
+                        prompt << s.summary << "\n\n";
+                    }
                 }
-                for (const auto& d : diary) {
+
+                // Recent full diary entries
+                prompt << "\n### 最近经历\n";
+                for (const auto& d : diaries) {
+                    prompt << "- [" << d.world_time << "] " << d.content << "\n";
                     view.loaded_memory_refs.push_back(d.id);
                 }
             }
@@ -366,21 +376,9 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
     narrative_.append_scene_text(world_id, scene_id, final_markdown);
     narrative_.update_scene_status(world_id, scene_id, SceneStatus::Completed);
 
-    // Diaries for each participant
+    // Mark participants that should write diaries
     for (const auto& pid : scene.participant_ids) {
-        try {
-            DiaryEntry diary;
-            diary.id = make_id("diary");
-            diary.agent_id = pid;
-            diary.scene_id = scene_id;
-            diary.world_time = scene.world_time;
-            diary.created_at = now_iso_utc();
-            diary.content = "[场景: " + scene.title + "] " +
-                           (final_markdown.size() > 200 ? final_markdown.substr(0, 197) + "..." : final_markdown);
-            agents_.append_diary_entry(diary);
-            wrap.diaries_written.push_back(diary);
-        } catch (...) {
-        }
+        wrap.pending_diary_agents.push_back(pid);
     }
 
     // Voice fingerprint update from dialogue lines

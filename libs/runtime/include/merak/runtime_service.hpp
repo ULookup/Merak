@@ -105,6 +105,7 @@ public:
                                     const std::string& decision,
                                     const nlohmann::json& modifications);
     void cancel_run(const std::string& id);
+    void respond_to_ask_user(const std::string& run_id, const std::string& call_id, const std::string& response);
     std::vector<RuntimeEvent> events_after(const std::string& session_id, long long after) const;
     std::shared_ptr<EventSubscription> subscribe(const std::string& session_id);
     RuntimeEvent emit_event(const std::string& session_id, const std::string& run_id,

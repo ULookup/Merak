@@ -44,6 +44,19 @@ struct MemoryConfig {
     int top_k_retrieval = 5;     // 语义检索返回数量
     float confidence_decay = 0.01;   // 每次衰减的步长
     int decay_interval_days = 7;     // 衰减间隔
+
+    // ——— Embedding 配置 ———
+    std::string embedding_api_url = "https://api.openai.com/v1";
+    std::string embedding_api_key;
+    int embedding_cache_size = 512;
+    int embedding_batch_size = 20;
+    int embedding_timeout_ms = 10000;
+
+    // ——— Diary & memory compression ———
+    std::string diary_model;             // empty = fallback to llm.default_model
+    int diary_compression_threshold = 20;
+    int diary_context_limit = 5;
+    int diary_max_tokens = 500;
 };
 
 // ——— MCP Server 配置 ———

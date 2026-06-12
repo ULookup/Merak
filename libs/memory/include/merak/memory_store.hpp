@@ -34,6 +34,8 @@ public:
     virtual ~EmbeddingProvider() = default;
     virtual std::future<std::vector<float>> embed(const std::string& text) = 0;
     virtual int dimension() const = 0;
+    virtual std::future<std::vector<std::vector<float>>> embed_batch(
+        const std::vector<std::string>& texts) = 0;
 };
 
 class MemoryStore {

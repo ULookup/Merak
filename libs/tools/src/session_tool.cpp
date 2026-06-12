@@ -1,0 +1,129 @@
+#include <merak/session_tool.hpp>
+#include <merak/compactor.hpp>
+
+#include <nlohmann/json.hpp>
+
+#include <future>
+#include <memory>
+#include <string>
+
+namespace merak::tools {
+
+ToolSpec SessionTool::spec() const {
+    ToolSpec s;
+    s.name = "session";
+    s.description = "Session lifecycle: compact, rollback, config, history, summary, timeline";
+    s.source = "builtin";
+    s.category = Category::Mutating;
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["compact", "rollback", "config", "history", "summary", "timeline"],
+                "description": "Session action to perform"
+            }
+        },
+        "required": ["action"]
+    })";
+    return s;
+}
+
+PermissionLevel SessionTool::permission() const {
+    return PermissionLevel::safe;
+}
+
+std::future<ToolResult> SessionTool::execute(
+    ToolCall call, ToolExecutionContext /*context*/) {
+
+    return std::async(std::launch::async, [call = std::move(call), this]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = nlohmann::json::parse(call.arguments);
+            auto action = args.value("action", "");
+
+            nlohmann::json out;
+            out["status"] = "ok";
+
+            if (action == "compact") {
+                if (compactor_ && memory_) {
+                    auto history = memory_->recent_history(100);
+                    auto compact_result = compactor_->compact_history(history, 10).get();
+                    out["message"] = "Compaction completed";
+                    if (!compact_result.summary.empty()) {
+                        out["summary"] = compact_result.summary;
+                    }
+                    out["tokens_before"] = compact_result.tokens_before;
+                    out["tokens_after"] = compact_result.tokens_after;
+                } else {
+                    out["status"] = "error";
+                    out["message"] = "Compactor or MemoryStore not available";
+                    result.is_error = true;
+                }
+            } else if (action == "rollback") {
+                out["message"] = "Rollback not available (requires EditJournal from TurnIngestor)";
+                out["note"] = "Rollback would restore file modifications from the edit journal";
+            } else if (action == "config") {
+                out["message"] = "Session configuration";
+                nlohmann::json cfg;
+                if (memory_) {
+                    cfg["message_count"] = memory_->message_count();
+                }
+                out["config"] = cfg;
+            } else if (action == "history") {
+                if (memory_) {
+                    int n = args.value("n", 20);
+                    auto msgs = memory_->recent_history(n);
+                    auto arr = nlohmann::json::array();
+                    for (const auto& msg : msgs) {
+                        nlohmann::json item;
+                        item["role"] = msg.role;
+                        item["content"] = msg.content.substr(0, std::min<size_t>(200, msg.content.size()));
+                        arr.push_back(std::move(item));
+                    }
+                    out["messages"] = std::move(arr);
+                    out["count"] = out["messages"].size();
+                } else {
+                    out["message"] = "Memory store not available";
+                }
+            } else if (action == "summary") {
+                if (memory_) {
+                    int count = memory_->message_count();
+                    out["message"] = "Session summary";
+                    out["message_count"] = count;
+                    out["summary_text"] = "Session has " + std::to_string(count) + " messages in working memory";
+                } else {
+                    out["message"] = "Memory store not available";
+                }
+            } else if (action == "timeline") {
+                if (memory_) {
+                    int count = memory_->message_count();
+                    out["message"] = "Session timeline";
+                    out["total_messages"] = count;
+                    out["timeline_items"] = nlohmann::json::array();
+                } else {
+                    out["message"] = "Memory store not available";
+                }
+            } else {
+                out["status"] = "error";
+                out["message"] = "Unknown action: " + action;
+                result.is_error = true;
+            }
+
+            result.output = out.dump();
+        } catch (const std::exception& e) {
+            result.output = nlohmann::json{{"status", "error"}, {"message", std::string("Session tool error: ") + e.what()}}.dump();
+            result.is_error = true;
+        }
+
+        return result;
+    });
+}
+
+std::unique_ptr<Tool> SessionTool::clone() const {
+    return std::make_unique<SessionTool>(memory_, compactor_);
+}
+
+} // namespace merak::tools

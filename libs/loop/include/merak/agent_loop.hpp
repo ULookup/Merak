@@ -13,6 +13,8 @@
 #include <merak/turn_guard.hpp>
 #include <merak/turn_ingestor.hpp>
 #include <merak/execution.hpp>
+#include <atomic>
+#include <functional>
 #include <future>
 #include <memory>
 
@@ -44,6 +46,10 @@ public:
     // Replace or insert system message at position 0.
     void set_system_prompt(const std::string& prompt);
 
+    // Set a callback that provides narrative working memory context text.
+    // When not set (default), working_memory_text returns empty string.
+    void set_working_memory_provider(std::function<std::string()> provider);
+
     // Process a user message. Appends user msg to session_history_,
     // then enters the ReAct loop. Returns final response.
     std::future<AgentResponse> run(
@@ -59,6 +65,10 @@ public:
 
     ContextPipeline& pipeline() { return *pipeline_; }
 
+    void set_plan_mode_source(std::shared_ptr<std::atomic<bool>> source) { plan_mode_ = std::move(source); }
+    bool is_plan_mode() const { return plan_mode_ && plan_mode_->load(); }
+    TurnIngestor& turn_ingestor() { return turn_ingestor_; }
+
 private:
     Config config_;
     TurnState state_ = TurnState::Idle;
@@ -73,6 +83,8 @@ private:
     TurnIngestor turn_ingestor_;
 
     std::vector<Message> session_history_;
+    std::shared_ptr<std::atomic<bool>> plan_mode_;
+    std::function<std::string()> working_memory_provider_;
     std::map<std::string, int> tool_failure_streak_;
     static constexpr int kCircuitBreakerThreshold = 3;
 
