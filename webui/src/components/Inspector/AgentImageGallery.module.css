@@ -1,0 +1,207 @@
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.toolbarText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toolbarText strong {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.toolbarText span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.uploadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.uploadBtn input {
+  display: none;
+}
+
+.uploadBtn:hover {
+  background: var(--surface-muted);
+}
+
+.uploadBtnDisabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.progressHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.progressBar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-muted);
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink);
+  transition: width 160ms var(--ease);
+}
+
+.cancelBtn {
+  border: none;
+  background: transparent;
+  color: var(--ruby);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.error {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: var(--ruby);
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.imageCard {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+}
+
+.imageFrame {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--surface-muted);
+}
+
+.imageFrame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.primary {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  border-radius: 999px;
+  background: rgba(17, 19, 20, 0.82);
+  color: #fff;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+}
+
+.meta strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
+.actionBtn,
+.dangerBtn {
+  flex: 1;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+  border-radius: 6px;
+  padding: 5px 7px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.dangerBtn {
+  color: var(--ruby);
+}
+
+.actionBtn:disabled,
+.dangerBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.empty {
+  border: 1px dashed var(--border-strong);
+  background: rgba(255, 255, 255, 0.62);
+  border-radius: 8px;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}

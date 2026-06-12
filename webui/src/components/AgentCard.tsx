@@ -1,23 +1,14 @@
 import { useState } from 'react';
 import { api } from '../api/client';
-import { useAppState } from '../AppState';
 import type { WorldAgent } from '../api/types';
+import { useAppState } from '../AppState';
+import AgentAvatar from './AgentAvatar';
 import styles from './AgentCard.module.css';
 
 interface AgentCardProps {
   agent: WorldAgent;
   worldId: string;
 }
-
-const AGENT_ICONS: Record<string, string> = {
-  god: '👑',
-  map_manager: '🗺️',
-  history_manager: '📜',
-  magic_system_manager: '🔮',
-  faction_manager: '⚔️',
-  individual: '🧑',
-  group: '👥',
-};
 
 const AGENT_LABELS: Record<string, string> = {
   god: 'God (Omniscient)',
@@ -34,10 +25,8 @@ export default function AgentCard({ agent, worldId }: AgentCardProps) {
   const [entering, setEntering] = useState(false);
 
   const kind = agent.kind;
-  const icon = AGENT_ICONS[kind] ?? '🧑';
   const label = AGENT_LABELS[kind] ?? kind;
-  const toolCount =
-    kind === 'god' ? 20 : kind.includes('manager') ? 1 : 3;
+  const toolCount = kind === 'god' ? 20 : kind.includes('manager') ? 1 : 3;
 
   async function handleEnter() {
     setEntering(true);
@@ -48,15 +37,26 @@ export default function AgentCard({ agent, worldId }: AgentCardProps) {
         sessionId: res.session.id,
         agentId: agent.id,
       });
-    } catch (e) {
-      console.error('Failed to enter agent session:', e);
+    } catch {
       setEntering(false);
     }
   }
 
   return (
-    <div className={styles.card} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') handleEnter(); }}>
-      <div className={styles.icon}>{icon}</div>
+    <div
+      className={styles.card}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') handleEnter();
+      }}
+    >
+      <AgentAvatar
+        name={agent.display_name || agent.name}
+        src={agent.avatar_url}
+        size="md"
+        className={styles.icon}
+      />
       <div className={styles.info}>
         <p className={styles.name}>{agent.display_name || agent.name}</p>
         <p className={styles.detail}>{label}</p>

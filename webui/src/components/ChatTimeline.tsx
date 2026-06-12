@@ -16,7 +16,16 @@ function renderMessage(msg: Message) {
     case 'user':
       return <UserCell key={msg.id} text={msg.text ?? ''} />;
     case 'assistant':
-      return <AssistantCell key={msg.id} text={msg.text ?? ''} />;
+      return (
+        <AssistantCell
+          key={msg.id}
+          text={msg.text ?? ''}
+          status={msg.assistantStatus}
+          pending={msg.pending}
+          thinkingStartedAt={msg.thinkingStartedAt}
+          thinkingCompletedAt={msg.thinkingCompletedAt}
+        />
+      );
     case 'tool':
       return (
         <ToolCell
