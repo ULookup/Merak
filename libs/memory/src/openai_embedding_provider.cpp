@@ -17,12 +17,16 @@ OpenAIEmbeddingProvider::OpenAIEmbeddingProvider(const Config& config)
 
 // ——— helpers ———
 
+// Extract host[:port] from an API base URL, stripping scheme, path, query, fragment
 static std::string parse_host(const std::string& api_url) {
     std::string url = api_url;
-    while (!url.empty() && url.back() == '/') url.pop_back();
-    if (url.find("https://") == 0) return url.substr(8);
-    if (url.find("http://") == 0) return url.substr(7);
-    return url;
+    size_t start = 0;
+    if (url.find("https://") == 0) start = 8;
+    else if (url.find("http://") == 0) start = 7;
+
+    size_t end = url.find_first_of("/?#", start);
+    if (end == std::string::npos) end = url.size();
+    return url.substr(start, end - start);
 }
 
 static httplib::Client make_client(const std::string& host, int timeout_ms) {
@@ -58,8 +62,9 @@ std::vector<float> OpenAIEmbeddingProvider::get_or_cache(
     // Do I/O without holding the lock
     auto embedding = embed_single(text);
 
-    // Re-acquire lock, double-check another thread didn't insert first
-    {
+    // Re-acquire lock, double-check another thread didn't insert first.
+    // Only cache non-empty results (empty = API failure).
+    if (!embedding.empty()) {
         std::lock_guard<std::mutex> lock(cache_mutex_);
         auto it = cache_map_.find(cache_key);
         if (it != cache_map_.end()) {
@@ -81,9 +86,7 @@ std::vector<float> OpenAIEmbeddingProvider::get_or_cache(
 // ——— single embedding ———
 
 std::vector<float> OpenAIEmbeddingProvider::embed_single(const std::string& text) {
-    if (text.empty()) {
-        return std::vector<float>(1536, 0.0f);
-    }
+    if (text.empty()) return {};
 
     std::string host = parse_host(config_.api_url);
     auto cli = make_client(host, config_.timeout_ms);
@@ -105,7 +108,7 @@ std::vector<float> OpenAIEmbeddingProvider::embed_single(const std::string& text
 
     if (!res || res->status != 200) {
         spdlog::error("OpenAIEmbeddingProvider: API error after retry");
-        return std::vector<float>(1536, 0.0f);
+        return {};
     }
 
     try {
@@ -113,7 +116,7 @@ std::vector<float> OpenAIEmbeddingProvider::embed_single(const std::string& text
         return parse_embedding(json["data"][0]);
     } catch (const nlohmann::json::exception& e) {
         spdlog::error("OpenAIEmbeddingProvider: JSON parse error: {}", e.what());
-        return std::vector<float>(1536, 0.0f);
+        return {};
     }
 }
 
@@ -133,10 +136,7 @@ std::future<std::vector<std::vector<float>>> OpenAIEmbeddingProvider::embed_batc
         std::vector<std::vector<float>> results(texts.size());
 
         std::string host = parse_host(config_.api_url);
-        // Reuse client across batches to avoid repeated TLS handshakes
-        httplib::Client cli(host);
-        cli.set_connection_timeout(config_.timeout_ms / 1000, 0);
-        cli.set_read_timeout(config_.timeout_ms / 1000, 0);
+        auto cli = make_client(host, config_.timeout_ms);
 
         for (size_t i = 0; i < texts.size(); i += config_.batch_size) {
             size_t batch_end = std::min(i + config_.batch_size, texts.size());
@@ -188,6 +188,8 @@ std::future<std::vector<std::vector<float>>> OpenAIEmbeddingProvider::embed_batc
                             auto emb = parse_embedding(json["data"][k]);
                             results[uncached_idx[k]] = emb;
 
+                            if (emb.empty()) continue; // skip caching failures
+
                             std::string key = config_.model + ":" + uncached_texts[k];
                             // Double-check: another thread may have inserted while we were doing I/O
                             if (cache_map_.find(key) == cache_map_.end()) {
@@ -204,13 +206,13 @@ std::future<std::vector<std::vector<float>>> OpenAIEmbeddingProvider::embed_batc
                 } catch (const nlohmann::json::exception& e) {
                     spdlog::error("OpenAIEmbeddingProvider: batch JSON parse error: {}", e.what());
                     for (size_t k = 0; k < uncached_texts.size(); ++k) {
-                        results[uncached_idx[k]] = std::vector<float>(1536, 0.0f);
+                        results[uncached_idx[k]] = {};
                     }
                 }
             } else {
                 spdlog::error("OpenAIEmbeddingProvider: batch API error after retry");
                 for (size_t k = 0; k < uncached_texts.size(); ++k) {
-                    results[uncached_idx[k]] = std::vector<float>(1536, 0.0f);
+                    results[uncached_idx[k]] = {};
                 }
             }
         }
