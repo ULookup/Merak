@@ -36,6 +36,7 @@ void register_fork_skills(
     const SkillRegistry& registry,
     std::shared_ptr<ToolRegistry> tools,
     std::shared_ptr<LlmProvider> llm,
-    std::shared_ptr<MemoryStore> memory);
+    std::shared_ptr<MemoryStore> memory,
+    std::string default_model);
 
 } // namespace merak::skills

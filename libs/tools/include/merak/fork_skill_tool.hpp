@@ -17,7 +17,8 @@ public:
         skills::SkillDef def,
         std::shared_ptr<LlmProvider> llm,
         std::shared_ptr<ToolRegistry> tools,
-        std::shared_ptr<MemoryStore> memory);
+        std::shared_ptr<MemoryStore> memory,
+        std::string default_model);
 
     ToolSpec spec() const override;
     ToolMeta meta() const override;
@@ -31,6 +32,7 @@ private:
     std::shared_ptr<LlmProvider> llm_;
     std::shared_ptr<ToolRegistry> tools_;
     std::shared_ptr<MemoryStore> memory_;
+    std::string default_model_;
 };
 
 } // namespace tools

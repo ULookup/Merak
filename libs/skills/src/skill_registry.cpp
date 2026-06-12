@@ -71,11 +71,12 @@ void register_fork_skills(
     const SkillRegistry& registry,
     std::shared_ptr<ToolRegistry> tools,
     std::shared_ptr<LlmProvider> llm,
-    std::shared_ptr<MemoryStore> memory) {
+    std::shared_ptr<MemoryStore> memory,
+    std::string default_model) {
     auto forks = registry.fork_skills();
     for (auto& def : forks) {
         auto tool = std::make_unique<tools::ForkSkillTool>(
-            def, llm, tools, memory);
+            def, llm, tools, memory, default_model);
         tools->register_tool(std::move(tool));
         spdlog::info("Registered fork skill tool: skill:{}", def.name);
     }

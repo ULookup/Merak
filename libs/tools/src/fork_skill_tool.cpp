@@ -10,11 +10,13 @@ ForkSkillTool::ForkSkillTool(
     skills::SkillDef def,
     std::shared_ptr<LlmProvider> llm,
     std::shared_ptr<ToolRegistry> tools,
-    std::shared_ptr<MemoryStore> memory)
+    std::shared_ptr<MemoryStore> memory,
+    std::string default_model)
     : skill_(std::move(def))
     , llm_(std::move(llm))
     , tools_(std::move(tools))
     , memory_(std::move(memory))
+    , default_model_(std::move(default_model))
 {}
 
 ToolSpec ForkSkillTool::spec() const {
@@ -57,10 +59,10 @@ std::future<ToolResult> ForkSkillTool::execute(
 
         AgentLoop::Config cfg;
         cfg.system_prompt = skill_.body;
-        cfg.max_turns = 5;
-        cfg.default_model = "gpt-4o";
+        cfg.max_turns = skill_.fork_max_turns;
+        cfg.default_model = default_model_;
         cfg.max_output_tokens = 4096;
-        cfg.model_max_tokens = 16000;
+        cfg.model_max_tokens = skill_.fork_max_tokens;
         cfg.enable_compaction = false;
         cfg.enable_cache = true;
 
@@ -85,7 +87,7 @@ std::future<ToolResult> ForkSkillTool::execute(
 }
 
 std::unique_ptr<Tool> ForkSkillTool::clone() const {
-    return std::make_unique<ForkSkillTool>(skill_, llm_, tools_, memory_);
+    return std::make_unique<ForkSkillTool>(skill_, llm_, tools_, memory_, default_model_);
 }
 
 } // namespace merak::tools
