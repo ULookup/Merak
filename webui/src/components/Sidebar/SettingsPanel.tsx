@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../api/client';
+import { api, formatApiError } from '../../api/client';
 import styles from './SettingsPanel.module.css';
 
 interface ConfigState {
@@ -45,7 +45,7 @@ export default function SettingsPanel() {
       setApiKey('');
     } catch (e) {
       setStatus('error');
-      setErrorMsg(e instanceof Error ? e.message : 'Save failed');
+      setErrorMsg(formatApiError(e, 'Save failed'));
     } finally {
       setSaving(false);
     }
@@ -57,9 +57,9 @@ export default function SettingsPanel() {
     try {
       await api.testConfig();
       setStatus('test_ok');
-    } catch {
+    } catch (e) {
       setStatus('test_fail');
-      setErrorMsg('LLM connection test failed — check your API key and network.');
+      setErrorMsg(formatApiError(e, 'LLM connection test failed — check your API key and network.'));
     } finally {
       setTesting(false);
     }

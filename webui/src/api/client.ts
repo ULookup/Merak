@@ -20,6 +20,7 @@ import type {
   OkResponse,
   OpenWorkspacePathResponse,
   PatchAgentCardResponse,
+  PipelineHistoryResponse,
   RelationListResponse,
   ResolveCreationResponse,
   RunAuditResponse,
@@ -54,6 +55,18 @@ export class ApiError extends Error {
     this.status = status;
     this.code = code;
   }
+}
+
+export function formatApiError(error: unknown, fallback = '操作失败，请稍后重试。') {
+  if (error instanceof ApiError) {
+    if (error.code === 'version_conflict') return '内容已在后端更新，请刷新后再保存。';
+    if (error.code === 'file_conflict') return '文件已被其他操作修改，请刷新后再保存。';
+    if (error.code === 'pipeline_not_available') return 'Pipeline 暂不可用，请确认后端已启用 worldbuilding pipeline。';
+    if (error.code === 'test_failed') return `连接测试失败：${error.message}`;
+    if (error.code === 'test_unavailable') return '连接测试暂不可用，请检查后端配置。';
+    return error.message || fallback;
+  }
+  return error instanceof Error ? error.message : fallback;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -336,6 +349,9 @@ export const api = {
       description,
     }),
 
+  deleteWorld: () =>
+    Promise.reject(new ApiError('删除世界后端接口暂未实现。', 501, 'not_implemented')),
+
   listAgents: (worldId: string) =>
     request<AgentListResponse>('GET', `/api/worldbuilding/${worldId}/agents`),
 
@@ -347,6 +363,9 @@ export const api = {
 
   getWorldTime: (worldId: string) =>
     request<WorldTimeResponse>('GET', `/api/worldbuilding/${worldId}/time`),
+
+  advanceWorldTime: () =>
+    Promise.reject(new ApiError('推进世界时间后端接口暂未实现。', 501, 'not_implemented')),
 
   getStoryOverview: (worldId: string, sessionId = '') =>
     fallbackRequest<StoryOverviewResponse>(
@@ -590,5 +609,18 @@ export async function activatePipelineWorkflow(
     body: JSON.stringify({ workflow_name: workflowName }),
   });
   if (!res.ok) throw new Error(`Failed to activate workflow: ${res.status}`);
+}
+
+export async function listPipelineHistory(
+  worldId: string,
+  limit = 10,
+): Promise<PipelineHistoryResponse> {
+  const params = new URLSearchParams({
+    world_id: worldId,
+    limit: String(limit),
+  });
+  const res = await fetch(`/api/worldbuilding/pipeline/history?${params}`);
+  if (!res.ok) throw new Error(`Failed to list pipeline history: ${res.status}`);
+  return res.json();
 }
 

@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useAppState } from '../../AppState';
-import type { WorkflowSummary } from '../../api/types';
+import type { PipelineHistoryResponse, WorkflowSummary } from '../../api/types';
 import { activatePipelineWorkflow, listPipelineWorkflows } from '../../api/client';
 import styles from './WorkflowMonitor.module.css';
+
+async function fetchPipelineHistory(worldId: string, limit = 12): Promise<PipelineHistoryResponse | null> {
+  if (typeof fetch !== 'function') return null;
+  const params = new URLSearchParams({ world_id: worldId, limit: String(limit) });
+  const res = await fetch(`/api/worldbuilding/pipeline/history?${params}`);
+  if (!res.ok) throw new Error(`Failed to list pipeline history: ${res.status}`);
+  return res.json();
+}
 
 export default function WorkflowMonitor() {
   const { state, dispatch } = useAppState();
@@ -27,6 +35,27 @@ export default function WorkflowMonitor() {
       .finally(() => { if (!cancelled) setWorkflowsLoading(false); });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (!state.worldId) return;
+    let cancelled = false;
+    fetchPipelineHistory(state.worldId, 12)
+      .then((data) => {
+        if (!cancelled && data) {
+          dispatch({ type: 'SET_PIPELINE_VIEW', view: { recent_history: data.history } });
+        }
+      })
+      .catch(() => {
+        /* state endpoint may still provide recent_history; keep the panel usable */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [state.worldId, dispatch]);
+
+  useEffect(() => {
+    setSelectedWorkflow(state.pipelineActiveWorkflow || workflows[0]?.name || '');
+  }, [state.pipelineActiveWorkflow, workflows]);
 
   const handleWorkflowChange = async (name: string) => {
     const prev = selectedWorkflow;
@@ -87,7 +116,7 @@ export default function WorkflowMonitor() {
 
       {history.length > 0 && (
         <div className={styles.section}>
-          <div className={styles.sectionTitle}>最近转换</div>
+          <div className={styles.sectionTitle}>Pipeline History</div>
           {history.slice(0, 5).map((h) => (
             <div key={h.id} className={styles.historyItem}>
               <span className={styles.historyPhases}>

@@ -88,6 +88,16 @@ export default function StoryInspector() {
             </span>
           </div>
         )}
+        <div className={styles.timeUnavailable}>
+          <div>
+            <strong>世界时间控制</strong>
+            <span>{state.worldTime ? `当前：${state.worldTime}` : 'Time not set'}</span>
+          </div>
+          <button className={styles.ghostButton} disabled title="后端暂未实现 /time/advance">
+            <Clock3 size={14} aria-hidden="true" />
+            Advance unavailable
+          </button>
+        </div>
       </section>
 
       <section className={styles.section}>
