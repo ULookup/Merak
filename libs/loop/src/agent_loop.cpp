@@ -484,8 +484,9 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
             }
         }
 
-        auto result_future = tools_->execute(
-            call, ToolExecutionContext{control.cancellation_token()});
+        ToolExecutionContext ctx{control.cancellation_token()};
+        ctx.world_id = active_world_id_.value_or("");
+        auto result_future = tools_->execute(call, std::move(ctx));
         auto result = result_future.get();
 
         if (call.name == "ask_user") {

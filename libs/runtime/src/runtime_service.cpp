@@ -460,6 +460,9 @@ void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=
                 loop->set_system_prompt(composed);
             }
         }
+        if (session && !session->world_id.empty()) {
+            loop->set_active_world_id(session->world_id);
+        }
         loop->run(r.user_message,*control).get();if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed",{{"pipeline_snapshot",(session&&!session->world_id.empty()&&pipeline_mgr_)?pipeline_mgr_->snapshot_to_json(session->world_id):""}});}}catch(const std::exception&e){if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
 AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig& agent_, const std::string& task, const RunRecord& parent, const std::string& delegation_id, std::optional<std::string> previous_output) {
     // Enhance system_prompt with PromptCompositor output for platform agents
