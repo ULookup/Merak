@@ -6,12 +6,17 @@
 #include <vector>
 #include <string>
 #include <set>
+#include <memory>
 
 namespace merak {
+
+class Compactor;
 
 class ContextOptimizer {
 public:
   ContextOptimizer() = default;
+
+  void set_compactor(std::shared_ptr<Compactor> compactor) { compactor_ = compactor; }
 
   std::vector<ToolSpec> prune_schemas(const std::vector<ToolSpec>& specs,
                                        CompactionTier tier,
@@ -39,6 +44,9 @@ public:
 
   static bool is_non_compactable(const std::string& tool_name);
   static std::string truncate_to_first_sentence(const std::string& text);
+
+private:
+  std::shared_ptr<Compactor> compactor_;
 };
 
 } // namespace merak

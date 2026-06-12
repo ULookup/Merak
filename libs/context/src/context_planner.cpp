@@ -98,6 +98,9 @@ PlanOutput ContextPlanner::plan(const PlanInput& in, const PipelineStats& stats)
   double schema_reserve = in.schema_count * in.avg_schema_tokens;
   double predictive_pressure = (in.current_tokens + output_reserve + thinking_reserve + schema_reserve) / model_max;
   auto tier = select_tier(raw_pressure, predictive_pressure, stats.last_turn_context_window_error());
+  if (tier == CompactionTier::AggressivePrune && in.on_escalate) {
+    in.on_escalate();
+  }
   double reserve_ratio = (output_reserve + thinking_reserve) / model_max;
   int effective_budget = static_cast<int>(model_max * (1.0 - std::max(0.10, reserve_ratio)));
   auto manifest = build_manifest(effective_budget, tier, in.schema_count, in.avg_schema_tokens, stats);

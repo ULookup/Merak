@@ -1,7 +1,9 @@
 #include <merak/context_optimizer.hpp>
+#include <merak/compactor.hpp>
 #include <merak/spill_store.hpp>
 #include <algorithm>
 #include <set>
+#include <future>
 #include <spdlog/spdlog.h>
 
 namespace merak {
@@ -135,7 +137,30 @@ void ContextOptimizer::drop_rounds(std::vector<Message>& history,
   for (size_t i = 0; i < keep_from; i++) {
     dropped_chars += static_cast<int>(history[i].content.size());
   }
-  history.erase(history.begin(), history.begin() + static_cast<long>(keep_from));
+
+  if (compactor_ && drop_count > 0) {
+    std::vector<std::future<std::string>> futures;
+    for (size_t i = 0; i < static_cast<size_t>(drop_count); i++) {
+      size_t start = round_starts[i];
+      size_t end = (i + 1 < round_starts.size()) ? round_starts[i + 1] : keep_from;
+      std::vector<Message> round_msgs(history.begin() + start, history.begin() + end);
+      if (!round_msgs.empty()) {
+        futures.push_back(compactor_->compact_one_round(round_msgs));
+      }
+    }
+    // Collect summaries
+    std::vector<Message> summaries;
+    for (size_t i = 0; i < futures.size(); i++) {
+      auto summary = futures[i].get();
+      if (!summary.empty()) {
+        summaries.push_back({"system", "[Compacted round " + std::to_string(i + 1) + "]: " + summary, {}, "", ""});
+      }
+    }
+    history.erase(history.begin(), history.begin() + static_cast<long>(keep_from));
+    history.insert(history.begin(), summaries.begin(), summaries.end());
+  } else {
+    history.erase(history.begin(), history.begin() + static_cast<long>(keep_from));
+  }
 
   int tokens_saved = dropped_chars / 4;
   stats.tokens_saved += tokens_saved;

@@ -473,7 +473,13 @@ void WorldbuildingHttpHandler::handle_list_worlds(const httplib::Request&, httpl
         auto worlds = service_->list_worlds();
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& w : worlds) {
-            arr.push_back(world_json(w));
+            auto wj = world_json(w);
+            if (runtime_) {
+                wj["active_sessions"] = runtime_->world_session_count(w.id);
+            } else {
+                wj["active_sessions"] = 0;
+            }
+            arr.push_back(wj);
         }
         json_response(res, {{"ok", true}, {"worlds", arr}});
     } catch (const std::exception& e) {

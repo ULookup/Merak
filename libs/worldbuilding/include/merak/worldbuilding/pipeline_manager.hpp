@@ -35,6 +35,7 @@ public:
                                             const std::string& agent_id,
                                             const std::string& task_description)> invoke_agent;
         std::filesystem::path pipeline_config_dir;
+        std::filesystem::path worlds_base_dir;
         std::shared_ptr<ConditionEvaluator> condition_evaluator;
     };
 

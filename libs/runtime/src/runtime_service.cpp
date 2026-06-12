@@ -73,7 +73,18 @@ void EventBus::publish(const RuntimeEvent&e){std::lock_guard lock(mutex_);auto&v
 class RuntimeService::Control final : public RunControl {
 public:
     Control(RuntimeService& service, RunRecord run, std::shared_ptr<CancellationToken> token)
-        : service_(service), run_(std::move(run)), token_(std::move(token)) {}
+        : service_(service), run_(std::move(run)), token_(std::move(token)) {
+        save_checkpoint = [this](int turn_index, const std::string& turn_state_json,
+                                  int64_t input_tokens, int64_t output_tokens,
+                                  const std::string& pending_calls_json,
+                                  const std::string& compacted_summary,
+                                  const std::string& pipeline_snapshot_json) {
+            service_.store_->save_checkpoint(
+                make_runtime_id("ckpt"), run_.id, turn_index, turn_state_json,
+                input_tokens, output_tokens, pending_calls_json,
+                compacted_summary, pipeline_snapshot_json);
+        };
+    }
     nlohmann::json base_payload(nlohmann::json payload = {}) const {
         if (!run_.parent_run_id.empty()) payload["parent_run_id"] = run_.parent_run_id;
         if (!run_.delegation_id.empty()) payload["delegation_id"] = run_.delegation_id;
@@ -129,11 +140,11 @@ public:
     }
     bool await_approval(const ToolCall&c)override{
         ApprovalRecord a; a.run_id=run_.id;a.tool_name=c.name;a.arguments_json=c.arguments;a.tool_call_id=c.id;
-        a=service_.store_.create_approval(std::move(a));service_.store_.update_run_status(run_.id,RunStatus::WaitingApproval);
+        a=service_.store_->create_approval(std::move(a));service_.store_->update_run_status(run_.id,RunStatus::WaitingApproval);
         service_.emit(run_.session_id,run_.id,"approval_requested",base_payload({{"approval_id",a.id},{"tool",c.name},{"arguments",c.arguments},{"tool_call_id",c.id}}));
         service_.emit(run_.session_id,run_.id,"run_step_changed",base_payload({{"run_id",run_.id},{"step","waiting_approval"},{"label","Waiting approval"},{"detail",c.name}}));
         std::unique_lock lock(mutex_);changed_.wait(lock,[&]{return decision_.has_value()||token_->cancelled();});
-        if(token_->cancelled())return false;service_.store_.update_run_status(run_.id,RunStatus::Running);return *decision_;
+        if(token_->cancelled())return false;service_.store_->update_run_status(run_.id,RunStatus::Running);return *decision_;
     }
     ToolResult await_creation(const ToolCall& call, const ToolResult& preliminary_result) override {
         auto prelim_json = nlohmann::json::parse(preliminary_result.output);
@@ -157,7 +168,7 @@ public:
             return error_result;
         }
 
-        service_.store_.update_run_status(run_.id, RunStatus::WaitingApproval);
+        service_.store_->update_run_status(run_.id, RunStatus::WaitingApproval);
         service_.emit(run_.session_id, run_.id, "creation_requested", base_payload({
             {"creation_id", creation_id},
             {"tool", pending->tool_name},
@@ -189,7 +200,7 @@ public:
                 {"result", {{"ok", true}, {"decision", "deny"}, {"reason", "timeout"}}}
             });
 
-            service_.store_.update_run_status(run_.id, RunStatus::Running);
+            service_.store_->update_run_status(run_.id, RunStatus::Running);
 
             ToolResult timeout_result;
             timeout_result.call_id = call.id;
@@ -198,7 +209,7 @@ public:
             return timeout_result;
         }
 
-        service_.store_.update_run_status(run_.id, RunStatus::Running);
+        service_.store_->update_run_status(run_.id, RunStatus::Running);
 
         if (token_->cancelled()) {
             ToolResult cancelled;
@@ -222,7 +233,7 @@ public:
 
         awaiting_ask_user_call_id_ = call.id;
 
-        service_.store_.update_run_status(run_.id, RunStatus::WaitingApproval);
+        service_.store_->update_run_status(run_.id, RunStatus::WaitingApproval);
         service_.emit(run_.session_id, run_.id, "ask_user_requested", base_payload({
             {"call_id", call.id},
             {"question", question},
@@ -241,7 +252,7 @@ public:
             }
         }
 
-        service_.store_.update_run_status(run_.id, RunStatus::Running);
+        service_.store_->update_run_status(run_.id, RunStatus::Running);
 
         if (timed_out || token_->cancelled()) {
             ToolResult timeout_result;
@@ -320,11 +331,11 @@ std::string RuntimeService::extract_title(const std::string& message, size_t max
     return trimmed;
 }
 
-RuntimeService::RuntimeService(std::filesystem::path root,LoopFactory factory,std::map<std::string, SubAgentConfig> agents,SubRunExecutor sub_run_executor):store_(std::move(root)),loop_factory_(std::move(factory)),agents_(std::move(agents)),sub_run_executor_(std::move(sub_run_executor)){}
-void RuntimeService::initialize(){store_.initialize();for(const auto&r:store_.interrupt_running_runs())emit(r.session_id,r.id,"run_interrupted",{{"reason","server restarted"}});}
-RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const std::string&t,nlohmann::json p){RuntimeEvent e{0,"",s,r,t,std::move(p)};try{e=store_.append_event(e);}catch(const nlohmann::json::exception&ex){spdlog::warn("Failed to serialize event {}: {}",t,ex.what());}catch(const std::exception&){throw;}bus_.publish(e);return e;}
+RuntimeService::RuntimeService(std::shared_ptr<SessionStore> store,LoopFactory factory,std::map<std::string, SubAgentConfig> agents,SubRunExecutor sub_run_executor):store_(std::move(store)),loop_factory_(std::move(factory)),agents_(std::move(agents)),sub_run_executor_(std::move(sub_run_executor)){}
+void RuntimeService::initialize(){store_->initialize();for(const auto&r:store_->interrupt_running_runs())emit(r.session_id,r.id,"run_interrupted",{{"reason","server restarted"}});}
+RuntimeEvent RuntimeService::emit(const std::string&s,const std::string&r,const std::string&t,nlohmann::json p){RuntimeEvent e{0,"",s,r,t,std::move(p)};try{e=store_->append_event(e);}catch(const nlohmann::json::exception&ex){spdlog::warn("Failed to serialize event {}: {}",t,ex.what());}catch(const std::exception&){throw;}bus_.publish(e);return e;}
 SessionRecord RuntimeService::create_session(const std::string& title, const std::string& world_id, const std::string& agent_id) {
-    auto s = store_.create_session(title, world_id, agent_id);
+    auto s = store_->create_session(title, world_id, agent_id);
     emit(s.id, "", "session_created", {{"title", title}});
     if (!world_id.empty()) register_session_world(s.id, world_id);
     if (!world_id.empty() && pipeline_mgr_) {
@@ -332,12 +343,12 @@ SessionRecord RuntimeService::create_session(const std::string& title, const std
             pipeline_mgr_->init_state_for_world(world_id);
         }
     }
-    return *store_.get_session(s.id);
+    return *store_->get_session(s.id);
 }
-void RuntimeService::update_session(const std::string&id,const std::string&title){store_.update_session(id,title);emit(id,"","session_updated",{{"title",title}});}
-SessionRecord RuntimeService::archive_session(const std::string&id,bool archived){auto s=store_.archive_session(id,archived);emit(id,"","session_updated",{{"archived",archived},{"archived_at",s.archived_at}});return s;}
+void RuntimeService::update_session(const std::string&id,const std::string&title){store_->update_session(id,title);emit(id,"","session_updated",{{"title",title}});}
+SessionRecord RuntimeService::archive_session(const std::string&id,bool archived){auto s=store_->archive_session(id,archived);emit(id,"","session_updated",{{"archived",archived},{"archived_at",s.archived_at}});if(archived)unregister_session_world(id);return s;}
 std::string RuntimeService::generate_title(const std::string&session_id){
-    auto events=store_.events_after(session_id,0);
+    auto events=store_->events_after(session_id,0);
     std::string context;
     int user_msgs=0;
     for(auto it=events.rbegin();it!=events.rend()&&user_msgs<3;++it){
@@ -363,16 +374,16 @@ std::string RuntimeService::generate_title(const std::string&session_id){
     return result;
 }
 std::vector<SessionRecord> RuntimeService::list_sessions(const std::string& world_id) const {
-    return store_.list_sessions(world_id);
+    return store_->list_sessions(world_id);
 }
-std::optional<SessionRecord>RuntimeService::get_session(const std::string&id)const{return store_.get_session(id);}
-std::optional<RunRecord>RuntimeService::get_run(const std::string&id)const{return store_.get_run(id);}
-RunRecord RuntimeService::create_run_record(const std::string&s,const std::string&m){if(!store_.get_session(s))throw RuntimeError("session_not_found","Session does not exist");if(store_.has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");auto r=store_.create_run(s,m);emit(s,r.id,"run_started",{{"message",m}});
-    auto session = store_.get_session(s);
+std::optional<SessionRecord>RuntimeService::get_session(const std::string&id)const{return store_->get_session(id);}
+std::optional<RunRecord>RuntimeService::get_run(const std::string&id)const{return store_->get_run(id);}
+RunRecord RuntimeService::create_run_record(const std::string&s,const std::string&m){if(!store_->get_session(s))throw RuntimeError("session_not_found","Session does not exist");if(store_->has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");auto r=store_->create_run(s,m);emit(s,r.id,"run_started",{{"message",m}});
+    auto session = store_->get_session(s);
     if (session && session->last_seq == 0 && session->title.empty()) {
         std::string auto_title = extract_title(m);
         if (!auto_title.empty()) {
-            store_.update_session(s, auto_title);
+            store_->update_session(s, auto_title);
         }
     }
     return r;}
@@ -391,8 +402,8 @@ std::vector<AgentMetadata> RuntimeService::agents() const {
 	return out;
 }
 DelegationStart RuntimeService::start_delegation(const std::string&s,const DelegationRequest&request){
-    if(!store_.get_session(s))throw RuntimeError("session_not_found","Session does not exist");
-    if(store_.has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");
+    if(!store_->get_session(s))throw RuntimeError("session_not_found","Session does not exist");
+    if(store_->has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");
     if(request.task.empty())throw RuntimeError("invalid_request","Delegation task must not be empty");
     if(!valid_pattern(request.pattern))throw RuntimeError("invalid_pattern","Unsupported delegation pattern: "+request.pattern);
     if(!valid_aggregation(request.aggregation))throw RuntimeError("invalid_aggregation","Unsupported aggregation: "+request.aggregation);
@@ -400,7 +411,7 @@ DelegationStart RuntimeService::start_delegation(const std::string&s,const Deleg
     for(const auto&id:request.agent_ids)if(!agents_.contains(id))throw RuntimeError("agent_not_found","Agent not found: "+id);
     if(!sub_run_executor_)throw RuntimeError("runtime_unconfigured","Sub-agent executor is not configured");
     auto delegation_id=make_runtime_id("delegation");
-    auto parent=store_.create_run(s,request.task,"",delegation_id,"","delegation");
+    auto parent=store_->create_run(s,request.task,"",delegation_id,"","delegation");
     emit(s,parent.id,"run_started",{{"message",request.task},{"run_kind","delegation"},{"delegation_id",delegation_id}});
     std::thread([self=shared_from_this(),parent,request,delegation_id]{self->execute_delegation(parent,request,delegation_id);}).detach();
     return{delegation_id,parent.id,s};
@@ -442,8 +453,8 @@ prompts::PromptProfile RuntimeService::build_prompt_profile(
     return profile;
 }
 
-void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=store_.get_run(r.id);!current||current->status==RunStatus::Cancelled)return;auto token=std::make_shared<CancellationToken>();auto control=std::make_shared<Control>(*this,r,token);{std::lock_guard lock(mutex_);tokens_[r.id]=token;controls_[r.id]=control;}store_.update_run_status(r.id,RunStatus::Running);try{std::shared_ptr<AgentLoop> loop;{std::lock_guard lock(session_loops_mutex_);auto it=session_loops_.find(r.session_id);if(it!=session_loops_.end()){loop=it->second;}else{loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_(model)));session_loops_[r.session_id]=loop;auto history=restore_messages(r.session_id);if(!history.empty()){loop->restore_history(std::move(history));}}}        // Build dynamic system_prompt from WorldbuildingService when session is bound
-        auto session = store_.get_session(r.session_id);
+void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=store_->get_run(r.id);!current||current->status==RunStatus::Cancelled)return;auto token=std::make_shared<CancellationToken>();auto control=std::make_shared<Control>(*this,r,token);{std::lock_guard lock(mutex_);tokens_[r.id]=token;controls_[r.id]=control;}store_->update_run_status(r.id,RunStatus::Running);try{std::shared_ptr<AgentLoop> loop;{std::lock_guard lock(session_loops_mutex_);auto it=session_loops_.find(r.session_id);if(it!=session_loops_.end()){loop=it->second;}else{loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_(model)));session_loops_[r.session_id]=loop;auto history=restore_messages(r.session_id);if(!history.empty()){loop->restore_history(std::move(history));}}}        // Build dynamic system_prompt from WorldbuildingService when session is bound
+        auto session = store_->get_session(r.session_id);
         if (session && !session->world_id.empty() && !session->agent_id.empty() && wb_service_) {
             auto profile = build_prompt_profile(session->world_id, session->agent_id);
             // Inject pipeline phase context into system prompt
@@ -463,7 +474,7 @@ void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=
         if (session && !session->world_id.empty()) {
             loop->set_active_world_id(session->world_id);
         }
-        loop->run(r.user_message,*control).get();if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed",{{"pipeline_snapshot",(session&&!session->world_id.empty()&&pipeline_mgr_)?pipeline_mgr_->snapshot_to_json(session->world_id):""}});}}catch(const std::exception&e){if(token->cancelled()){if(store_.get_run(r.id)->status!=RunStatus::Cancelled){store_.update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_.update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
+        loop->run(r.user_message,*control).get();if(token->cancelled()){if(store_->get_run(r.id)->status!=RunStatus::Cancelled){store_->update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_->update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed",{{"pipeline_snapshot",(session&&!session->world_id.empty()&&pipeline_mgr_)?pipeline_mgr_->snapshot_to_json(session->world_id):""}});}}catch(const std::exception&e){if(token->cancelled()){if(store_->get_run(r.id)->status!=RunStatus::Cancelled){store_->update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_->update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
 AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig& agent_, const std::string& task, const RunRecord& parent, const std::string& delegation_id, std::optional<std::string> previous_output) {
     // Enhance system_prompt with PromptCompositor output for platform agents
     SubAgentConfig agent = agent_;
@@ -477,7 +488,7 @@ AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig& agent_, cons
     }
     auto prompt = task;
     if(previous_output&& !previous_output->empty())prompt+="\n\nPrevious stage output:\n"+*previous_output;
-    auto sub=store_.create_run(parent.session_id,prompt,parent.id,delegation_id,agent.id,"sub_run");
+    auto sub=store_->create_run(parent.session_id,prompt,parent.id,delegation_id,agent.id,"sub_run");
     std::shared_ptr<CancellationToken>token;
     {
         std::lock_guard lock(mutex_);
@@ -491,22 +502,22 @@ AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig& agent_, cons
         tokens_[sub.id]=token;
         controls_[sub.id]=control;
     }
-    store_.update_run_status(sub.id,RunStatus::Running);
+    store_->update_run_status(sub.id,RunStatus::Running);
     emit(parent.session_id,sub.id,"sub_run_started",{{"run_id",sub.id},{"parent_run_id",parent.id},{"delegation_id",delegation_id},{"agent_id",agent.id},{"task",prompt},{"status","running"}});
     try{
         if(token->cancelled())throw AgentError(ErrorType::INTERNAL_ERROR,"Run cancelled");
         auto response=sub_run_executor_(agent,prompt,*control);
         if(token->cancelled()){
-            store_.update_run_status(sub.id,RunStatus::Cancelled);
+            store_->update_run_status(sub.id,RunStatus::Cancelled);
             emit(parent.session_id,sub.id,"sub_run_completed",{{"run_id",sub.id},{"parent_run_id",parent.id},{"delegation_id",delegation_id},{"agent_id",agent.id},{"status","cancelled"}});
         }else{
-            store_.update_run_status(sub.id,RunStatus::Completed);
+            store_->update_run_status(sub.id,RunStatus::Completed);
             emit(parent.session_id,sub.id,"sub_run_completed",{{"run_id",sub.id},{"parent_run_id",parent.id},{"delegation_id",delegation_id},{"agent_id",agent.id},{"status","completed"},{"output_preview",response.text.substr(0,500)},{"input_tokens",response.total_input_tokens},{"output_tokens",response.total_output_tokens},{"tool_calls",response.tool_results.size()}});
         }
         std::lock_guard lock(mutex_);tokens_.erase(sub.id);controls_.erase(sub.id);
         return response;
     }catch(const std::exception&e){
-        store_.update_run_status(sub.id,token->cancelled()?RunStatus::Cancelled:RunStatus::Failed,e.what());
+        store_->update_run_status(sub.id,token->cancelled()?RunStatus::Cancelled:RunStatus::Failed,e.what());
         emit(parent.session_id,sub.id,"sub_run_completed",{{"run_id",sub.id},{"parent_run_id",parent.id},{"delegation_id",delegation_id},{"agent_id",agent.id},{"status",token->cancelled()?"cancelled":"failed"},{"error",e.what()}});
         std::lock_guard lock(mutex_);tokens_.erase(sub.id);controls_.erase(sub.id);
         AgentResponse response;response.text=e.what();return response;
@@ -520,7 +531,7 @@ void RuntimeService::execute_delegation(RunRecord parent,DelegationRequest reque
         tokens_[parent.id]=token;
         controls_[parent.id]=control;
     }
-    store_.update_run_status(parent.id,RunStatus::Running);
+    store_->update_run_status(parent.id,RunStatus::Running);
     emit(parent.session_id,parent.id,"delegation_started",{{"delegation_id",delegation_id},{"parent_run_id",parent.id},{"pattern",request.pattern},{"agent_ids",request.agent_ids},{"aggregation",request.aggregation},{"task",request.task}});
     std::vector<AgentResponse>responses;
     try{
@@ -545,15 +556,15 @@ void RuntimeService::execute_delegation(RunRecord parent,DelegationRequest reque
         int input=0,output_tokens=0,tool_calls=0;bool exact=true;
         for(const auto&r:responses){input+=r.total_input_tokens;output_tokens+=r.total_output_tokens;tool_calls+=static_cast<int>(r.tool_results.size());exact=exact&&r.has_usage;}
         emit(parent.session_id,parent.id,"delegation_completed",{{"delegation_id",delegation_id},{"parent_run_id",parent.id},{"pattern",request.pattern},{"status",token->cancelled()?"cancelled":"completed"},{"aggregated_output",output},{"input_tokens",input},{"output_tokens",output_tokens},{"tool_calls",tool_calls},{"exact_usage",exact}});
-        if(token->cancelled()){store_.update_run_status(parent.id,RunStatus::Cancelled);emit(parent.session_id,parent.id,"run_cancelled");}
-        else{store_.update_run_status(parent.id,RunStatus::Completed);emit(parent.session_id,parent.id,"run_completed");}
+        if(token->cancelled()){store_->update_run_status(parent.id,RunStatus::Cancelled);emit(parent.session_id,parent.id,"run_cancelled");}
+        else{store_->update_run_status(parent.id,RunStatus::Completed);emit(parent.session_id,parent.id,"run_completed");}
     }catch(const std::exception&e){
-        store_.update_run_status(parent.id,token->cancelled()?RunStatus::Cancelled:RunStatus::Failed,e.what());
+        store_->update_run_status(parent.id,token->cancelled()?RunStatus::Cancelled:RunStatus::Failed,e.what());
         emit(parent.session_id,parent.id,token->cancelled()?"run_cancelled":"run_failed",token->cancelled()?nlohmann::json::object():nlohmann::json{{"error",e.what()}});
     }
     std::lock_guard lock(mutex_);tokens_.erase(parent.id);controls_.erase(parent.id);child_runs_.erase(parent.id);
 }
-ApprovalRecord RuntimeService::resolve_approval(const std::string&id,ApprovalStatus status){auto a=store_.resolve_approval(id,status);auto run=store_.get_run(a.run_id);if(!run)throw RuntimeError("run_not_found","Run does not exist");emit(run->session_id,run->id,"approval_resolved",{{"approval_id",id},{"decision",to_string(a.status)}});std::shared_ptr<Control>control;{std::lock_guard lock(mutex_);auto it=controls_.find(run->id);if(it!=controls_.end())control=it->second;}if(control)control->resolve(a.status==ApprovalStatus::Allowed);else if(run->status==RunStatus::WaitingApproval)resume_after_restarted_approval(*run,a,a.status==ApprovalStatus::Allowed);return a;}
+ApprovalRecord RuntimeService::resolve_approval(const std::string&id,ApprovalStatus status){auto a=store_->resolve_approval(id,status);auto run=store_->get_run(a.run_id);if(!run)throw RuntimeError("run_not_found","Run does not exist");emit(run->session_id,run->id,"approval_resolved",{{"approval_id",id},{"decision",to_string(a.status)}});std::shared_ptr<Control>control;{std::lock_guard lock(mutex_);auto it=controls_.find(run->id);if(it!=controls_.end())control=it->second;}if(control)control->resolve(a.status==ApprovalStatus::Allowed);else if(run->status==RunStatus::WaitingApproval)resume_after_restarted_approval(*run,a,a.status==ApprovalStatus::Allowed);return a;}
 void RuntimeService::set_worldbuilding_service(worldbuilding::WorldbuildingService* wb_service) {
     wb_service_ = wb_service;
     if (wb_service_) {
@@ -621,7 +632,7 @@ nlohmann::json RuntimeService::resolve_creation(
         for (auto& [run_id, control] : controls_) {
             if (control->awaiting_creation_id() == creation_id) {
                 control->resolve_creation_result(error_result);
-                auto run = store_.get_run(run_id);
+                auto run = store_->get_run(run_id);
                 if (run) {
                     emit(run->session_id, run_id, "creation_resolved", {
                         {"creation_id", creation_id},
@@ -641,7 +652,7 @@ nlohmann::json RuntimeService::resolve_creation(
         for (auto& [run_id, control] : controls_) {
             if (control->awaiting_creation_id() == creation_id) {
                 control->resolve_creation_result(result);
-                auto run = store_.get_run(run_id);
+                auto run = store_->get_run(run_id);
                 if (run) {
                     emit(run->session_id, run_id, "creation_resolved", {
                         {"creation_id", creation_id},
@@ -705,16 +716,16 @@ nlohmann::json RuntimeService::resolve_creation(
 
     return result;
 }
-void RuntimeService::cancel_run(const std::string&id){auto r=store_.get_run(id);if(!r)throw RuntimeError("run_not_found","Run does not exist");if(r->status==RunStatus::Completed||r->status==RunStatus::Failed||r->status==RunStatus::Cancelled)return;std::vector<std::string>children;{std::lock_guard lock(mutex_);auto child_it=child_runs_.find(id);if(child_it!=child_runs_.end())children=child_it->second;auto control=controls_.find(id);if(control!=controls_.end())control->second->cancel();else{auto token=tokens_.find(id);if(token!=tokens_.end())token->second->cancel();}for(const auto&child:children){auto child_control=controls_.find(child);if(child_control!=controls_.end())child_control->second->cancel();}}for(const auto&child:children){if(auto sub=store_.get_run(child);sub&&sub->status!=RunStatus::Completed&&sub->status!=RunStatus::Failed&&sub->status!=RunStatus::Cancelled){store_.update_run_status(child,RunStatus::Cancelled);emit(sub->session_id,child,"sub_run_completed",{{"run_id",child},{"parent_run_id",id},{"delegation_id",sub->delegation_id},{"agent_id",sub->agent_id},{"status","cancelled"}});}}store_.update_run_status(id,RunStatus::Cancelled);emit(r->session_id,id,"run_cancelled");}
+void RuntimeService::cancel_run(const std::string&id){auto r=store_->get_run(id);if(!r)throw RuntimeError("run_not_found","Run does not exist");if(r->status==RunStatus::Completed||r->status==RunStatus::Failed||r->status==RunStatus::Cancelled)return;std::vector<std::string>children;{std::lock_guard lock(mutex_);auto child_it=child_runs_.find(id);if(child_it!=child_runs_.end())children=child_it->second;auto control=controls_.find(id);if(control!=controls_.end())control->second->cancel();else{auto token=tokens_.find(id);if(token!=tokens_.end())token->second->cancel();}for(const auto&child:children){auto child_control=controls_.find(child);if(child_control!=controls_.end())child_control->second->cancel();}}for(const auto&child:children){if(auto sub=store_->get_run(child);sub&&sub->status!=RunStatus::Completed&&sub->status!=RunStatus::Failed&&sub->status!=RunStatus::Cancelled){store_->update_run_status(child,RunStatus::Cancelled);emit(sub->session_id,child,"sub_run_completed",{{"run_id",child},{"parent_run_id",id},{"delegation_id",sub->delegation_id},{"agent_id",sub->agent_id},{"status","cancelled"}});}}store_->update_run_status(id,RunStatus::Cancelled);emit(r->session_id,id,"run_cancelled");}
 void RuntimeService::respond_to_ask_user(const std::string& run_id, const std::string& call_id, const std::string& response) {
     std::lock_guard lock(mutex_);
     auto it = controls_.find(run_id);
     if (it == controls_.end()) throw RuntimeError("run_not_found", "Run does not exist");
     it->second->resolve_ask_user(call_id, response);
 }
-std::vector<RuntimeEvent>RuntimeService::events_after(const std::string&id,long long after)const{if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return store_.events_after(id,after);}
-std::shared_ptr<EventSubscription>RuntimeService::subscribe(const std::string&id){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return bus_.subscribe(id);}
-RuntimeEvent RuntimeService::emit_event(const std::string&id,const std::string&run_id,const std::string&type,nlohmann::json payload){if(!store_.get_session(id))throw RuntimeError("session_not_found","Session does not exist");return emit(id,run_id,type,std::move(payload));}
+std::vector<RuntimeEvent>RuntimeService::events_after(const std::string&id,long long after)const{if(!store_->get_session(id))throw RuntimeError("session_not_found","Session does not exist");return store_->events_after(id,after);}
+std::shared_ptr<EventSubscription>RuntimeService::subscribe(const std::string&id){if(!store_->get_session(id))throw RuntimeError("session_not_found","Session does not exist");return bus_.subscribe(id);}
+RuntimeEvent RuntimeService::emit_event(const std::string&id,const std::string&run_id,const std::string&type,nlohmann::json payload){if(!store_->get_session(id))throw RuntimeError("session_not_found","Session does not exist");return emit(id,run_id,type,std::move(payload));}
 
 void RuntimeService::broadcast_to_world(const std::string& world_id, RuntimeEvent event) {
     std::lock_guard lock(world_sessions_mutex_);
@@ -756,17 +767,30 @@ size_t RuntimeService::world_session_count(const std::string& world_id) const {
     if (it == world_sessions_.end()) return 0;
     return it->second.size();
 }
-std::vector<Message>RuntimeService::restore_messages(const std::string&id)const{std::vector<Message>out;for(const auto&e:store_.events_after(id,0)){if(e.type=="message_appended")out.push_back(message_from_json(e.payload));else if(e.type=="compaction_applied"&&!out.empty()){auto summary=out.back();out.pop_back();auto count=std::min<size_t>(e.payload.value("replaced_count",0),out.size());out.erase(out.begin(),out.begin()+static_cast<long>(count));out.insert(out.begin(),std::move(summary));}}return out;}
+std::vector<Message>RuntimeService::restore_messages(const std::string&id)const{std::vector<Message>out;for(const auto&e:store_->events_after(id,0)){if(e.type=="message_appended")out.push_back(message_from_json(e.payload));else if(e.type=="compaction_applied"&&!out.empty()){auto summary=out.back();out.pop_back();auto count=std::min<size_t>(e.payload.value("replaced_count",0),out.size());out.erase(out.begin(),out.begin()+static_cast<long>(count));out.insert(out.begin(),std::move(summary));}}return out;}
 void RuntimeService::resume_after_restarted_approval(RunRecord run,ApprovalRecord approval,bool allowed){
     if(!loop_factory_)throw RuntimeError("runtime_unconfigured","Agent loop is not configured");
     auto token=std::make_shared<CancellationToken>();auto control=std::make_shared<Control>(*this,run,token);
     {std::lock_guard lock(mutex_);tokens_[run.id]=token;controls_[run.id]=control;}
-    store_.update_run_status(run.id,RunStatus::Running);auto history=restore_messages(run.session_id);
+    store_->update_run_status(run.id,RunStatus::Running);
+    // Try restoring from latest checkpoint for recovery context
+    auto ckpt_json = store_->load_latest_checkpoint_json(run.id);
+    if (ckpt_json.has_value()) {
+        spdlog::info("Resume: found checkpoint for run {}, using for recovery context", run.id);
+        try {
+            auto ckpt = nlohmann::json::parse(*ckpt_json);
+            spdlog::debug("Resume: checkpoint turn_index={}, turn_state={}",
+                          ckpt.value("turn_index", 0), ckpt.value("turn_state", ""));
+        } catch (const std::exception& e) {
+            spdlog::warn("Resume: failed to parse checkpoint json: {}", e.what());
+        }
+    }
+    auto history=restore_messages(run.session_id);
     ToolCall call{approval.tool_call_id,approval.tool_name,approval.arguments_json};ToolResult result;result.call_id=call.id;
     if(allowed){auto temp_loop=loop_factory_("");result=temp_loop->tools()->execute(call,ToolExecutionContext{token}).get();}
     else{result.is_error=true;result.output="User denied permission for tool: "+call.name;}
     control->emit_tool_completed(call,result);Message tool;tool.role="tool";tool.content=result.output;tool.tool_call_id=result.call_id;history.push_back(tool);control->append_message(tool);
     auto loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_("")));loop->restore_history(std::move(history));{std::lock_guard lock(session_loops_mutex_);if(session_loops_.count(run.session_id))spdlog::warn("Resume after restart: overwriting existing session loop for {}",run.session_id);session_loops_[run.session_id]=loop;}
-    std::thread([self=shared_from_this(),run,control,token,loop]()mutable{try{loop->resume(*control).get();if(token->cancelled()){self->store_.update_run_status(run.id,RunStatus::Cancelled);self->emit(run.session_id,run.id,"run_cancelled");}else{self->store_.update_run_status(run.id,RunStatus::Completed);self->emit(run.session_id,run.id,"run_completed");}}catch(const std::exception&e){self->store_.update_run_status(run.id,RunStatus::Failed,e.what());self->emit(run.session_id,run.id,"run_failed",{{"error",e.what()}});}std::lock_guard lock(self->mutex_);self->tokens_.erase(run.id);self->controls_.erase(run.id);}).detach();
+    std::thread([self=shared_from_this(),run,control,token,loop]()mutable{try{loop->resume(*control).get();if(token->cancelled()){self->store_->update_run_status(run.id,RunStatus::Cancelled);self->emit(run.session_id,run.id,"run_cancelled");}else{self->store_->update_run_status(run.id,RunStatus::Completed);self->emit(run.session_id,run.id,"run_completed");}}catch(const std::exception&e){self->store_->update_run_status(run.id,RunStatus::Failed,e.what());self->emit(run.session_id,run.id,"run_failed",{{"error",e.what()}});}std::lock_guard lock(self->mutex_);self->tokens_.erase(run.id);self->controls_.erase(run.id);}).detach();
 }
 } // namespace merak

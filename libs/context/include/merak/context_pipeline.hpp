@@ -1,4 +1,5 @@
 #pragma once
+#include <merak/cache_aware_context.hpp>
 #include <merak/context_planner.hpp>
 #include <merak/context_binder.hpp>
 #include <merak/context_optimizer.hpp>
@@ -7,13 +8,18 @@
 #include <merak/spill_store.hpp>
 #include <memory>
 #include <filesystem>
+#include <optional>
 
 namespace merak {
+
+class Compactor;
 
 class ContextPipeline {
 public:
   ContextPipeline();
   explicit ContextPipeline(const std::filesystem::path& spill_dir);
+
+  void set_compactor(std::shared_ptr<Compactor> compactor) { compactor_ = compactor; }
 
   SerializedPayload planned_assemble(const std::string& system_prompt,
                                       const std::string& model,
@@ -35,6 +41,8 @@ private:
   ContextSerializer serializer_;
   PipelineStats stats_;
   SpillStore spill_store_;
+  std::optional<CacheAwareContext::Split> prev_split_;
+  std::shared_ptr<Compactor> compactor_;
   int current_tokens_ = 0;
   int turn_index_ = 0;
 };

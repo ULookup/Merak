@@ -2,6 +2,7 @@
 #include <merak/section_kind.hpp>
 #include <merak/message.hpp>
 #include <merak/tool_spec.hpp>
+#include <functional>
 #include <string>
 #include <vector>
 #include <optional>
@@ -94,6 +95,7 @@ struct PlanInput {
   int model_max;
   int schema_count;
   double avg_schema_tokens;
+  std::function<void()> on_escalate;
 };
 
 struct BoundContext {

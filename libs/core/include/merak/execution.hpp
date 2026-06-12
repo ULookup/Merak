@@ -3,6 +3,7 @@
 #include <merak/interruption.hpp>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -56,6 +57,11 @@ public:
     virtual void record_compaction(int replaced_count) = 0;
     virtual bool cancelled() const = 0;
     virtual std::shared_ptr<CancellationToken> cancellation_token() const = 0;
+    std::function<void(int turn_index, const std::string& turn_state_json,
+                       int64_t input_tokens, int64_t output_tokens,
+                       const std::string& pending_calls_json,
+                       const std::string& compacted_summary,
+                       const std::string& pipeline_snapshot_json)> save_checkpoint;
 };
 
 class NullRunControl final : public RunControl {

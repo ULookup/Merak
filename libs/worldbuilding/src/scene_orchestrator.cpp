@@ -3,6 +3,10 @@
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
 #include <merak/kg/kg_provider.hpp>
 
+#include "prompts/character.hpp"
+#include "prompts/creative_director.hpp"
+#include "prompts/domain_manager.hpp"
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -268,6 +272,12 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
             }
         }
 
+        // Append creative director prompt
+        auto cd_prompt = prompts::load_creative_director(prompts_dir_);
+        if (!cd_prompt.empty()) {
+            god << "\n" << cd_prompt << "\n";
+        }
+
         prep.god_context = god.str();
     }
 
@@ -330,6 +340,12 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
         } catch (...) {
         }
 
+        // Append character behavior prompt
+        auto char_prompt = prompts::load_character_prompt(prompts_dir_);
+        if (!char_prompt.empty()) {
+            prompt << "\n" << char_prompt << "\n";
+        }
+
         view.system_prompt = prompt.str();
         prep.character_views.push_back(view);
     }
@@ -349,13 +365,17 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
         for (auto& t : instances) prep.tools_by_agent_id[cv.agent_id].push_back(t->spec());
     }
 
-    // Manager tools.
+    // Manager tools and behavior constraints.
+    auto dm_prompt = prompts::load_domain_manager_prompt(prompts_dir_);
     for (auto kind : {AgentKind::MapManager, AgentKind::HistoryManager,
                        AgentKind::MagicSystemManager, AgentKind::FactionManager,
                        AgentKind::RelationManager}) {
         auto instances = tools_factory.create_tools(kind);
         std::string key = to_string(kind);
         for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
+        if (!dm_prompt.empty()) {
+            prep.behavior_constraints[key] = dm_prompt;
+        }
     }
 
     return prep;
