@@ -54,10 +54,19 @@ std::vector<float> OpenAIEmbeddingProvider::embed_single(const std::string& text
     body["input"] = text;
 
     httplib::Headers headers = {{"Authorization", "Bearer " + config_.api_key}};
-    auto res = cli.Post("/v1/embeddings", headers, body.dump(), "application/json");
+
+    // Retry once on failure
+    httplib::Result res;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        res = cli.Post("/v1/embeddings", headers, body.dump(), "application/json");
+        if (res && res->status == 200) break;
+        if (attempt == 0) {
+            spdlog::warn("OpenAIEmbeddingProvider: retrying after API error");
+        }
+    }
 
     if (!res || res->status != 200) {
-        spdlog::error("OpenAIEmbeddingProvider: API error");
+        spdlog::error("OpenAIEmbeddingProvider: API error after retry");
         return std::vector<float>(1536, 0.0f);
     }
 
@@ -122,7 +131,16 @@ std::future<std::vector<std::vector<float>>> OpenAIEmbeddingProvider::embed_batc
             body["input"] = uncached_texts;
 
             httplib::Headers headers = {{"Authorization", "Bearer " + config_.api_key}};
-            auto res = cli.Post("/v1/embeddings", headers, body.dump(), "application/json");
+
+            // Retry once on failure
+            httplib::Result res;
+            for (int attempt = 0; attempt < 2; ++attempt) {
+                res = cli.Post("/v1/embeddings", headers, body.dump(), "application/json");
+                if (res && res->status == 200) break;
+                if (attempt == 0) {
+                    spdlog::warn("OpenAIEmbeddingProvider: retrying batch after API error");
+                }
+            }
 
             if (res && res->status == 200) {
                 auto json = nlohmann::json::parse(res->body);
