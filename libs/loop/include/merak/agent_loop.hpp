@@ -91,6 +91,7 @@ private:
     int consecutive_read_only_rounds_ = 0;
     int consecutive_world_query_rounds_ = 0;
     int consecutive_content_avoidance_ = 0;
+    int current_turn_ = 0;
 
     void transition_to(TurnState next, RunControl& control);
     std::vector<Message> build_context();

@@ -74,12 +74,13 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
     transition_to(TurnState::ContextReady, control);
     int turn_count = 0;
+    current_turn_ = 0;
 
     while (turn_count < config_.max_turns) {
         if (config_.enable_compaction) {
             maybe_compact(control);
         }
-        if (control.cancelled()) throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
+        if (auto token = control.cancellation_token(); token && token->should_stop()) throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
 
         auto context_messages = build_context();
 
@@ -91,6 +92,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         transition_to(TurnState::Thinking, control);
         turn_count++;
+        current_turn_ = turn_count;
 
         ChatRequest req;
         req.model = config_.default_model;
@@ -105,6 +107,8 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         auto llm_future = llm_->chat(req,
             [&](StreamChunk chunk) {
+                auto token = control.cancellation_token();
+                if (token && token->should_stop()) return;
                 if (chunk.is_final) return;
                 if (!chunk.is_tool_call) {
                     control.emit_text_delta(chunk.text);
@@ -119,7 +123,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         response.usage_missing = response.usage_missing || !llm_response.has_usage;
         control.emit_usage(llm_response.total_input_tokens,
             llm_response.total_output_tokens, llm_response.has_usage);
-        if (control.cancelled()) throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
+        if (auto token = control.cancellation_token(); token && token->should_stop()) throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
 
         accumulated_tool_calls = llm_response.tool_calls;
 
@@ -163,6 +167,8 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
             auto final_future = llm_->chat(final_req,
                 [&](StreamChunk chunk) {
+                    auto token = control.cancellation_token();
+                    if (token && token->should_stop()) return;
                     if (!chunk.is_final) control.emit_text_delta(chunk.text);
                     response.text += chunk.text;
                 }, control.cancellation_token());
@@ -294,6 +300,8 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
     auto final_future = llm_->chat(final_req,
         [&](StreamChunk chunk) {
+            auto token = control.cancellation_token();
+            if (token && token->should_stop()) return;
             if (!chunk.is_final) control.emit_text_delta(chunk.text);
             response.text += chunk.text;
         }, control.cancellation_token());
@@ -373,7 +381,17 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
             }
         }
 
-        if (control.cancelled()) break;
+        auto token = control.cancellation_token();
+        if (token && token->should_stop()) {
+            control.record_interruption(InterruptionRecord{
+                .turns_completed = current_turn_,
+                .tools_completed = static_cast<int>(results.size()),
+                .tools_remaining = static_cast<int>(calls.size()) - static_cast<int>(results.size()),
+                .interrupted_tool_name = call.name,
+                .interrupted_tool_call_id = call.id,
+            });
+            break;
+        }
         control.emit_tool_started(call);
 
         auto it = tool_failure_streak_.find(call.name);
