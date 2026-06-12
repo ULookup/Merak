@@ -371,13 +371,16 @@ SecretStore::scene_asymmetry(const std::string& world_id, const Scene& scene) co
 
             if (actor_knows_truth(secret, pid)) {
                 known_truths.push_back(secret.holder_id + "的秘密: " + secret.truth);
+                view.visible_secrets.push_back(secret);
             } else if (actor_is_suspicious(secret, pid)) {
                 auto it = secret.believed_truths.find(pid);
                 if (it != secret.believed_truths.end()) {
                     suspected_truths.push_back(secret.holder_id + "可能: " + it->get<std::string>());
                 }
+                view.unknown_secrets.push_back(secret);
             } else {
                 public_lies.push_back(secret.holder_id + ": " + secret.public_version);
+                view.unknown_secrets.push_back(secret);
             }
         }
 

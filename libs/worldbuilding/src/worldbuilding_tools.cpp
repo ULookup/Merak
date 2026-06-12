@@ -4,8 +4,11 @@
 #include <nlohmann/json.hpp>
 #include <future>
 #include <algorithm>
+#include <set>
 #include <sstream>
+#include <merak/llm_provider.hpp>
 #include <merak/worldbuilding/extraction_service.hpp>
+#include <merak/worldbuilding/ids.hpp>
 
 namespace merak::worldbuilding {
 
@@ -1471,7 +1474,7 @@ std::future<ToolResult> EndSceneTool::execute(ToolCall call, ToolExecutionContex
             }
 
             json data{
-                {"diaries_written", wrapup.diaries_written.size()},
+                {"pending_diary_agents", wrapup.pending_diary_agents.size()},
                 {"relations_updated", wrapup.relations_updated.size()},
                 {"foreshadow_proposals", foreshadow_proposals},
                 {"leak_risks", wrapup.leak_risks.size()},
@@ -1767,99 +1770,201 @@ std::future<ToolResult> UpdateCharacterCardTool::execute(ToolCall call, ToolExec
     });
 }
 
-// ========== AddCharacterDiaryTool ==========
+// ========== WriteMyDiaryTool ==========
 
-ToolSpec AddCharacterDiaryTool::spec() const {
+ToolSpec WriteMyDiaryTool::spec() const {
     ToolSpec s;
-    s.name = "add_character_diary";
-    s.description = R"(为角色添加一条日记条目。场景结束后记录角色内心变化。"
-                    "示例: add_character_diary(agent_id=\"agent_xxx\", content=\"今天遇到了一位神秘的老者...\", mood=\"喜悦\"))";
+    s.name = "write_my_diary";
+    s.description = R"(以第一人称记录你在刚结束的场景中的经历、感受和想法。只能写自己的日记，内容应基于你的角色视角。示例: write_my_diary(content="今天在旅店里遇到了一个可疑的陌生人...", mood="困惑"))";
     s.source = "builtin";
     s.parameters_json = R"({
         "type": "object",
         "properties": {
-            "agent_id": {"type": "string", "description": "角色的agent_id"},
-            "scene_id": {"type": "string", "description": "关联的场景ID，默认为当前场景"},
-            "content": {"type": "string", "description": "日记正文内容"},
-            "mood": {"type": "string", "description": "心情标签：喜悦/悲伤/愤怒/恐惧/期待/困惑/决心/平静"}
+            "content": {"type": "string", "description": "日记正文，第一人称"},
+            "mood": {"type": "string", "description": "心情标签：喜悦/悲伤/愤怒/恐惧/期待/困惑/决心/平静"},
+            "scene_id": {"type": "string", "description": "关联场景ID，默认为当前场景"}
         },
-        "required": ["agent_id", "content"]
+        "required": ["content", "mood"]
     })";
     return s;
 }
 
-std::future<ToolResult> AddCharacterDiaryTool::execute(ToolCall call, ToolExecutionContext) {
+std::future<ToolResult> WriteMyDiaryTool::execute(ToolCall call, ToolExecutionContext) {
     return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
         try {
-            auto args = json::parse(call.arguments);
-            std::string agent_id = args.value("agent_id", "");
+            auto args = nlohmann::json::parse(call.arguments);
             std::string content = args.value("content", "");
+            std::string mood = args.value("mood", "");
 
-            if (agent_id.empty()) {
+            if (content.empty() || mood.empty()) {
+                result.is_error = true;
                 result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
-                    "添加日记失败。缺少必填字段：agent_id。");
-                return result;
-            }
-            if (content.empty()) {
-                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
-                    "添加日记失败。缺少必填字段：content。");
+                    "缺少必填字段：content 或 mood。");
                 return result;
             }
 
-            auto& svc = *static_cast<AddCharacterDiaryTool&>(*self).svc_;
-            auto& ctx = static_cast<AddCharacterDiaryTool&>(*self).ctx_;
+            static const std::set<std::string> VALID_MOODS = {
+                "喜悦", "悲伤", "愤怒", "恐惧", "期待", "困惑", "决心", "平静"
+            };
+            if (!VALID_MOODS.count(mood)) {
+                result.is_error = true;
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "无效的心情标签。可选：喜悦/悲伤/愤怒/恐惧/期待/困惑/决心/平静");
+                return result;
+            }
+
+            auto& svc = *static_cast<WriteMyDiaryTool&>(*self).svc_;
+            auto& ctx = static_cast<WriteMyDiaryTool&>(*self).ctx_;
+
+            std::string agent_id = ctx.caller_agent_id;
+            std::string scene_id = args.value("scene_id", ctx.scene_id);
 
             auto agent_opt = svc.agents().get_agent(agent_id);
             if (!agent_opt) {
+                result.is_error = true;
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
-                    "角色 '" + agent_id + "' 不存在。");
+                    "角色不存在。");
                 return result;
             }
 
-            if (agent_opt->world_id != ctx.world_id) {
-                result.output = error_response(ToolErrorCode::NOT_FOUND,
-                    "角色 '" + agent_id + "' 不在当前世界中。");
-                return result;
-            }
-
-            std::string scene_id = args.value("scene_id", ctx.scene_id);
-
-            // Get world_time from scene if available
             std::string world_time;
             auto scene_opt = svc.narrative().get_scene(ctx.world_id, scene_id);
+            if (scene_opt) world_time = scene_opt->world_time;
+
+            // Check leak risk based on the diary content (spec step 2)
+            int leak_risk_level = 0;
             if (scene_opt) {
-                world_time = scene_opt->world_time;
+                auto risks = svc.secrets().check_leak_risk(ctx.world_id, *scene_opt, content);
+                if (!risks.empty()) leak_risk_level = 1;
             }
 
             DiaryEntry entry;
+            entry.id = make_id("diary");
             entry.agent_id = agent_id;
             entry.scene_id = scene_id;
             entry.world_time = world_time;
+            entry.content = content;
+            entry.mood = mood;
+            entry.status = "completed";
+            entry.leak_risk_level = leak_risk_level;
 
-            // Embed mood into content if provided
-            std::string mood = args.value("mood", "");
-            if (!mood.empty()) {
-                entry.content = "【" + mood + "】" + content;
-            } else {
-                entry.content = content;
-            }
+            svc.agents().append_diary_entry(entry);
 
-            svc.agents().append_diary_entry(std::move(entry));
+            // Emit diary_created SSE event (spec section 六)
+            svc.notify_diary_created(ctx.world_id, entry.id, agent_id, scene_id, mood, entry.leak_risk_level);
 
-            json data{
+            nlohmann::json out = {
                 {"agent_id", agent_id},
                 {"scene_id", scene_id},
-                {"mood", mood.empty() ? nullptr : json(mood)}
+                {"mood", mood},
+                {"leak_risk_level", entry.leak_risk_level}
             };
-            result.output = ok_response(data);
-
+            result.output = out.dump();
         } catch (const std::exception& e) {
             result.is_error = true;
-            result.output = error_response(ToolErrorCode::INTERNAL,
-                std::string("add_character_diary 内部错误: ") + e.what());
+            result.output = std::string(R"({"error": "write_my_diary 内部错误: )") + e.what() + "\"}";
+        }
+        return result;
+    });
+}
+
+// ========== CompressMyMemoryTool ==========
+
+ToolSpec CompressMyMemoryTool::spec() const {
+    ToolSpec s;
+    s.name = "compress_my_memory";
+    s.description = R"(回顾你最近未压缩的日记条目（不超过20条），将其压缩为一份记忆摘要。
+调用时机：当感觉需要整理近期记忆时，或被告知日记积累较多时。
+示例: compress_my_memory())";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {},
+        "required": []
+    })";
+    return s;
+}
+
+std::future<ToolResult> CompressMyMemoryTool::execute(ToolCall call, ToolExecutionContext) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto& svc = *static_cast<CompressMyMemoryTool&>(*self).svc_;
+            auto& ctx = static_cast<CompressMyMemoryTool&>(*self).ctx_;
+            int threshold = static_cast<CompressMyMemoryTool&>(*self).threshold_;
+            std::string model = static_cast<CompressMyMemoryTool&>(*self).model_;
+            auto& llm = *static_cast<CompressMyMemoryTool&>(*self).llm_;
+
+            std::string agent_id = ctx.caller_agent_id;
+            auto diaries = svc.agents().uncompressed_diaries(agent_id, threshold);
+
+            if (diaries.size() < 5) {
+                nlohmann::json out = {
+                    {"compressed", false},
+                    {"message", "最近的记忆还比较清晰，暂时不需要压缩。当前未压缩日记数: " +
+                        std::to_string(diaries.size())}
+                };
+                result.output = out.dump();
+                return result;
+            }
+
+            // Build compression prompt
+            std::ostringstream prompt;
+            prompt << "你是一个记忆管理助手。将以下" << diaries.size()
+                   << "条角色日记压缩为一份记忆摘要。\n\n";
+            for (const auto& d : diaries) {
+                prompt << "--- [" << d.world_time << "] 心情: " << d.mood << " ---\n";
+                prompt << d.content << "\n\n";
+            }
+            prompt << "请以JSON格式输出摘要：\n"
+                   << "{\"summary\":\"以第三人称概述这段时间内角色的经历、情感变化、关系发展和重要发现，300字以内\","
+                   << "\"key_events\":[\"事件1\",\"事件2\"],"
+                   << "\"emotional_arc\":\"从起始心情到结束心情的情感轨迹\","
+                   << "\"relationship_changes\":\"关系变化概述，无变化则写'无明显变化'\"}";
+
+            // Call LLM for compression
+            ChatRequest req;
+            req.model = model.empty() ? "gpt-4o-mini" : model;
+            req.max_output_tokens = 1024;
+            req.messages = {{"user", prompt.str()}};
+            req.tools = {};
+            req.enable_cache = false;
+
+            auto llm_future = llm.chat(req, [](StreamChunk){}, nullptr);
+            auto llm_response = llm_future.get();
+
+            // Parse LLM response as JSON
+            auto summary_json = nlohmann::json::parse(llm_response.text);
+
+            MemorySummary summary;
+            summary.agent_id = agent_id;
+            summary.summary = summary_json.value("summary", llm_response.text);
+            summary.period_start = diaries.front().world_time;
+            summary.period_end = diaries.back().world_time;
+            summary.created_at = now_iso_utc();
+            for (const auto& d : diaries) summary.source_diary_ids.push_back(d.id);
+
+            svc.agents().write_memory_summary(summary);
+
+            // Emit memory_summary_created SSE event (spec section 六)
+            svc.notify_memory_summary_created(ctx.world_id, summary.id, agent_id, summary.source_diary_ids);
+
+            nlohmann::json out = {
+                {"compressed", true},
+                {"summary_id", summary.id},
+                {"source_count", diaries.size()},
+                {"summary", summary.summary},
+                {"key_events", summary_json.value("key_events", nlohmann::json::array())}
+            };
+            result.output = out.dump();
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = std::string(R"({"error": "compress_my_memory 内部错误: )") + e.what() + "\"}";
         }
         return result;
     });
@@ -2498,8 +2603,6 @@ WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) const {
         tools.push_back(
             std::make_unique<UpdateCharacterCardTool>(*service_, ctx));
         tools.push_back(
-            std::make_unique<AddCharacterDiaryTool>(*service_, ctx));
-        tools.push_back(
             std::make_unique<AddRelationTool>(*service_, ctx));
         tools.push_back(
             std::make_unique<UpdateForeshadowTool>(*service_, ctx));
@@ -2508,6 +2611,8 @@ WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) const {
         tools.push_back(std::make_unique<DescribeCharacterTool>(*service_, ctx));
         tools.push_back(std::make_unique<SearchMyDiaryTool>(*service_, ctx));
         tools.push_back(std::make_unique<LookAroundTool>(*service_, ctx));
+        tools.push_back(std::make_unique<WriteMyDiaryTool>(*service_, ctx));
+        tools.push_back(std::make_unique<CompressMyMemoryTool>(*service_, llm_, ctx, compression_threshold_, diary_model_));
         break;
     case AgentKind::MapManager:
         tools.push_back(std::make_unique<QueryMapTool>(*service_, ctx));

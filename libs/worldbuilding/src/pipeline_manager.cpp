@@ -53,9 +53,10 @@ namespace {
 const std::set<std::string> PipelineManager::RELEVANT_EVENTS = {
     "agent_created", "agent_card_updated", "relation_updated",
     "scene_created", "scene_ended", "chapter_created",
-    "diary_written", "foreshadow_planted", "foreshadow_updated",
+    "foreshadow_planted", "foreshadow_updated",
     "secret_created", "location_created", "knowledge_added",
-    "world_time_advanced", "memory_summary_created"
+    "world_time_advanced", "memory_summary_created",
+    "diary_created"
 };
 
 PipelineManager::PipelineManager(Dependencies deps) : deps_(std::move(deps)) {

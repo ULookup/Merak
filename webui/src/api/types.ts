@@ -469,12 +469,31 @@ export interface DiaryEntry {
   scene_id?: string;
   content: string;
   world_time?: string;
+  mood: string;
+  leak_risk_level: number;
+  status: string;
+  tokens_used: number;
   created_at: string;
 }
 
 export interface DiaryListResponse {
   ok: boolean;
   diaries: DiaryEntry[];
+}
+
+export interface MemorySummary {
+  id: string;
+  agent_id: string;
+  period_start: string;
+  period_end: string;
+  summary: string;
+  source_diary_ids: string[];
+  created_at: string;
+}
+
+export interface MemorySummaryListResponse {
+  ok: boolean;
+  summaries: MemorySummary[];
 }
 
 export interface RelationEntry {

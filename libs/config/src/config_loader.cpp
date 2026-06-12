@@ -66,6 +66,14 @@ static std::optional<Config> parse_config_file(const std::string& filepath) {
             if (mem.contains("top_k_retrieval")) cfg.memory.top_k_retrieval = mem["top_k_retrieval"];
             if (mem.contains("confidence_decay")) cfg.memory.confidence_decay = mem["confidence_decay"];
             if (mem.contains("decay_interval_days")) cfg.memory.decay_interval_days = mem["decay_interval_days"];
+            if (mem.contains("diary_model"))
+                cfg.memory.diary_model = mem["diary_model"].get<std::string>();
+            if (mem.contains("diary_compression_threshold"))
+                cfg.memory.diary_compression_threshold = mem["diary_compression_threshold"].get<int>();
+            if (mem.contains("diary_context_limit"))
+                cfg.memory.diary_context_limit = mem["diary_context_limit"].get<int>();
+            if (mem.contains("diary_max_tokens"))
+                cfg.memory.diary_max_tokens = mem["diary_max_tokens"].get<int>();
         }
 
         if (j.contains("knowledge_graph")) {
@@ -171,6 +179,10 @@ void ConfigLoader::merge(Config& base, const Config& override_cfg) {
     if (override_cfg.memory.top_k_retrieval > 0) base.memory.top_k_retrieval = override_cfg.memory.top_k_retrieval;
     if (override_cfg.memory.confidence_decay != 0.0f) base.memory.confidence_decay = override_cfg.memory.confidence_decay;
     if (override_cfg.memory.decay_interval_days > 0) base.memory.decay_interval_days = override_cfg.memory.decay_interval_days;
+    if (!override_cfg.memory.diary_model.empty()) base.memory.diary_model = override_cfg.memory.diary_model;
+    if (override_cfg.memory.diary_compression_threshold > 0) base.memory.diary_compression_threshold = override_cfg.memory.diary_compression_threshold;
+    if (override_cfg.memory.diary_context_limit > 0) base.memory.diary_context_limit = override_cfg.memory.diary_context_limit;
+    if (override_cfg.memory.diary_max_tokens > 0) base.memory.diary_max_tokens = override_cfg.memory.diary_max_tokens;
 
     if (override_cfg.knowledge_graph.enabled) base.knowledge_graph.enabled = true;
     if (!override_cfg.knowledge_graph.neo4j_uri.empty()) base.knowledge_graph.neo4j_uri = override_cfg.knowledge_graph.neo4j_uri;
@@ -229,6 +241,7 @@ void ConfigLoader::apply_env_overrides(Config& cfg) {
         cfg.llm.thinking->budget_tokens = *v;
     }
 
+    if (auto* v = env_str("MERAK_DIARY_MODEL")) cfg.memory.diary_model = v;
     if (auto* v = env_str("MERAK_DB_CONNECTION")) cfg.memory.db_connection = v;
     if (auto* v = env_str("MERAK_KG_ENABLED")) cfg.knowledge_graph.enabled = (std::string(v) == "1" || std::string(v) == "true");
     if (auto* v = env_str("MERAK_KG_NEO4J_URI")) cfg.knowledge_graph.neo4j_uri = v;

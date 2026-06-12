@@ -51,6 +51,12 @@ struct MemoryConfig {
     int embedding_cache_size = 512;
     int embedding_batch_size = 20;
     int embedding_timeout_ms = 10000;
+
+    // ——— Diary & memory compression ———
+    std::string diary_model;             // empty = fallback to llm.default_model
+    int diary_compression_threshold = 20;
+    int diary_context_limit = 5;
+    int diary_max_tokens = 500;
 };
 
 // ——— MCP Server 配置 ———
