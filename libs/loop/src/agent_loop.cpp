@@ -428,6 +428,17 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
                 denied.output = "User denied permission for tool: " + call.name;
                 results.push_back(denied);
                 control.emit_tool_completed(call, denied);
+                auto tk = control.cancellation_token();
+                if (tk && tk->should_stop()) {
+                    control.record_interruption(InterruptionRecord{
+                        .turns_completed = current_turn_,
+                        .tools_completed = static_cast<int>(results.size()),
+                        .tools_remaining = static_cast<int>(calls.size()) - static_cast<int>(results.size()),
+                        .interrupted_tool_name = call.name,
+                        .interrupted_tool_call_id = call.id,
+                    });
+                    break;
+                }
                 continue;
             }
         }
@@ -452,6 +463,20 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
                     result = control.await_creation(call, result);
                 }
             } catch (...) {
+            }
+        }
+
+        {
+            auto tt = control.cancellation_token();
+            if (tt && tt->should_stop()) {
+                control.record_interruption(InterruptionRecord{
+                    .turns_completed = current_turn_,
+                    .tools_completed = static_cast<int>(results.size()),
+                    .tools_remaining = static_cast<int>(calls.size()) - static_cast<int>(results.size()),
+                    .interrupted_tool_name = call.name,
+                    .interrupted_tool_call_id = call.id,
+                });
+                break;
             }
         }
 
