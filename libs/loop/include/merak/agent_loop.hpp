@@ -64,6 +64,10 @@ public:
 
     ContextPipeline& pipeline() { return *pipeline_; }
 
+    void set_plan_mode(bool on) { plan_mode_ = on; }
+    bool is_plan_mode() const { return plan_mode_; }
+    TurnIngestor& turn_ingestor() { return turn_ingestor_; }
+
 private:
     Config config_;
     TurnState state_ = TurnState::Idle;
@@ -78,6 +82,7 @@ private:
     TurnIngestor turn_ingestor_;
 
     std::vector<Message> session_history_;
+    bool plan_mode_ = false;
     std::function<std::string()> working_memory_provider_;
     std::map<std::string, int> tool_failure_streak_;
     static constexpr int kCircuitBreakerThreshold = 3;

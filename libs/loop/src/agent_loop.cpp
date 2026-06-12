@@ -356,6 +356,23 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
     std::vector<ToolResult> results;
 
     for (auto& call : calls) {
+        // Plan mode: deny mutating tools that require approval
+        if (plan_mode_) {
+            auto* tool = tools_->get_tool(call.name);
+            if (tool && tool->permission() == PermissionLevel::ask) {
+                auto spec = tool->spec();
+                if (spec.category == Category::Mutating) {
+                    ToolResult denied;
+                    denied.call_id = call.id;
+                    denied.is_error = true;
+                    denied.output = "Plan mode active — write operations restricted";
+                    results.push_back(denied);
+                    control.emit_tool_completed(call, denied);
+                    continue;
+                }
+            }
+        }
+
         if (control.cancelled()) break;
         control.emit_tool_started(call);
 
