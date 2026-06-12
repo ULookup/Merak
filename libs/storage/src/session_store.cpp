@@ -243,6 +243,22 @@ std::optional<ApprovalRecord> SessionStore::get_approval(const std::string&id)co
 }
 ApprovalRecord SessionStore::resolve_approval(const std::string&id,ApprovalStatus status){auto existing=get_approval(id);if(!existing)throw std::runtime_error("approval not found");if(existing->status!=ApprovalStatus::Pending)return *existing;{std::lock_guard lock(mutex_);sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"UPDATE approvals SET status=?,resolved_at=? WHERE id=?",-1,&s,nullptr);bind_text(s,1,to_string(status));bind_text(s,2,now_iso());bind_text(s,3,id);sqlite3_step(s);sqlite3_finalize(s);}return *get_approval(id);}
 std::filesystem::path SessionStore::journal_path(const std::string&id)const{return root_/"sessions"/(id+".jsonl");}
+
+void SessionStore::set_plan(const std::string& plan_text) {
+	std::lock_guard lock(mutex_);
+	std::ofstream out(root_ / "current_plan", std::ios::trunc);
+	out << plan_text;
+	out.flush();
+}
+
+std::optional<std::string> SessionStore::get_plan() const {
+	std::lock_guard lock(mutex_);
+	std::ifstream in(root_ / "current_plan");
+	if (!in.is_open()) return std::nullopt;
+	std::string content((std::istreambuf_iterator<char>(in)),
+	                     std::istreambuf_iterator<char>());
+	return content;
+}
 RuntimeEvent SessionStore::append_event(RuntimeEvent e){std::lock_guard lock(mutex_);sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"SELECT last_seq FROM sessions WHERE id=?",-1,&s,nullptr);bind_text(s,1,e.session_id);if(sqlite3_step(s)!=SQLITE_ROW){sqlite3_finalize(s);throw std::runtime_error("session not found");}e.seq=sqlite3_column_int64(s,0)+1;sqlite3_finalize(s);e.timestamp=now_iso();std::ofstream out(journal_path(e.session_id),std::ios::app);out<<nlohmann::json(e).dump()<<'\n';out.flush();if(!out)throw std::runtime_error("journal append failed");sqlite3_prepare_v2(db_,"UPDATE sessions SET last_seq=?,updated_at=? WHERE id=?",-1,&s,nullptr);sqlite3_bind_int64(s,1,e.seq);bind_text(s,2,e.timestamp);bind_text(s,3,e.session_id);expect_done(s,"update journal index");sqlite3_finalize(s);return e;}
 std::vector<RuntimeEvent>SessionStore::events_after(const std::string&id,long long after)const{std::lock_guard lock(mutex_);std::vector<RuntimeEvent>out;std::ifstream in(journal_path(id));std::string line;while(std::getline(in,line)){try{auto e=nlohmann::json::parse(line).get<RuntimeEvent>();if(e.seq>after)out.push_back(std::move(e));}catch(...){continue;}}return out;}
 std::vector<RunRecord>SessionStore::interrupt_running_runs(){std::vector<RunRecord>out;std::lock_guard lock(mutex_);sqlite3_stmt*s=nullptr;sqlite3_prepare_v2(db_,"SELECT id,session_id,status,user_message,started_at,finished_at,error,parent_run_id,delegation_id,agent_id,run_kind FROM runs WHERE status='running'",-1,&s,nullptr);while(sqlite3_step(s)==SQLITE_ROW)out.push_back({col(s,0),col(s,1),RunStatus::Running,col(s,3),col(s,4),col(s,5),col(s,6),col(s,7),col(s,8),col(s,9),col(s,10)});sqlite3_finalize(s);for(auto&r:out){sqlite3_prepare_v2(db_,"UPDATE runs SET status='interrupted',finished_at=? WHERE id=?",-1,&s,nullptr);bind_text(s,1,now_iso());bind_text(s,2,r.id);sqlite3_step(s);sqlite3_finalize(s);}return out;}

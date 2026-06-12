@@ -142,6 +142,18 @@ ToolSpec LspTool::spec() const {
     return s;
 }
 
+ToolMeta LspTool::meta() const {
+    ToolMeta m;
+    m.name = "lsp";
+    m.description = "Language Server Protocol: go_to_definition, find_references, hover, rename, code_action, diagnostics, formatting";
+    m.triggers = {"lsp", "language server", "definition", "references", "hover", "rename", "diagnostics"};
+    m.pinned = false;
+    m.intents = {IntentType::CodeIntel};
+    m.scope = Scope::Local;
+    m.schema_tokens = 90;
+    return m;
+}
+
 // ---------------------------------------------------------------------------
 // Permission
 // ---------------------------------------------------------------------------

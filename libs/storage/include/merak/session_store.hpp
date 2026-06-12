@@ -86,6 +86,10 @@ public:
     std::vector<RunRecord> interrupt_running_runs();
     std::filesystem::path journal_path(const std::string& session_id) const;
 
+    // Plan storage
+    void set_plan(const std::string& plan_text);
+    std::optional<std::string> get_plan() const;
+
     // Checkpoint operations
     void save_checkpoint(const std::string& id, const std::string& run_id,
                          int turn_index, const std::string& turn_state,

@@ -17,7 +17,6 @@
 #include <merak/worldbuilding/ids.hpp>
 #include <pqxx/pqxx>
 #include <merak/worldbuilding_http_handler.hpp>
-#include <merak/tool_catalog.hpp>
 #include <merak/tool_search_tool.hpp>
 #include <merak/git_tool.hpp>
 #include <merak/web_fetch_tool.hpp>
@@ -30,6 +29,8 @@
 #include <merak/task_tool.hpp>
 #include <merak/ask_user_tool.hpp>
 #include <merak/plan_mode_tools.hpp>
+#include <merak/session_store.hpp>
+#include <merak/edit_journal.hpp>
 #include "client/runtime_client.hpp"
 #include "tui/persistence/transcript.hpp"
 #include "commands/worldbuilding_commands.hpp"
@@ -177,34 +178,35 @@ static int run_server(int argc,char**argv) {
     std::shared_ptr<LlmProvider>llm=cfg.llm.provider=="anthropic"
         ?std::static_pointer_cast<LlmProvider>(std::make_shared<AnthropicProvider>(cfg.llm))
         :std::static_pointer_cast<LlmProvider>(std::make_shared<OpenAIProvider>(cfg.llm));
-    auto tools=std::make_shared<ToolRegistry>();tools->register_tool(std::make_unique<tools::ReadFileTool>());tools->register_tool(std::make_unique<tools::WriteFileTool>());tools->register_tool(std::make_unique<tools::StrReplaceTool>());tools->register_tool(std::make_unique<tools::MultiEditTool>());tools->register_tool(std::make_unique<tools::DeleteFileTool>());tools->register_tool(std::make_unique<tools::ListDirTool>());tools->register_tool(std::make_unique<tools::GlobTool>());tools->register_tool(std::make_unique<tools::GrepTool>());tools->register_tool(std::make_unique<tools::BashTool>());tools->set_permission_mode(cfg.agent.permission_mode);
+    auto tools=std::make_shared<ToolRegistry>();
+    tools->register_platform_basics();
+    tools->register_tool(std::make_unique<tools::MultiEditTool>());
+    tools->register_tool(std::make_unique<tools::DeleteFileTool>());
+    tools->set_permission_mode(cfg.agent.permission_mode);
+
     // Pinned meta-tool: always available for tool discovery
     tools->register_tool(std::make_unique<tools::ToolSearchTool>(tools));
-    // Deferred platform tools (12)
+
+    // Deferred platform tools
     tools->register_tool(std::make_unique<tools::GitTool>());
     tools->register_tool(std::make_unique<tools::WebFetchTool>());
     tools->register_tool(std::make_unique<tools::WebSearchTool>());
     tools->register_tool(std::make_unique<tools::LspTool>());
     tools->register_tool(std::make_unique<tools::SymbolsTool>());
-    tools->register_tool(std::make_unique<tools::MemoryTool>(memory));
     tools->register_tool(std::make_unique<tools::TaskTool>());
     tools->register_tool(std::make_unique<tools::AskUserTool>());
     auto plan_mode = std::make_shared<std::atomic<bool>>(false);
+    auto session_store = std::make_shared<SessionStore>(merak_home());
     tools->register_tool(std::make_unique<tools::EnterPlanModeTool>(plan_mode));
-    tools->register_tool(std::make_unique<tools::ExitPlanModeTool>(plan_mode));
-    // Set default platform capabilities (empty = all non-gated tools visible)
-    tools->set_capabilities(CapabilitySet::platform_default());
+    tools->register_tool(std::make_unique<tools::ExitPlanModeTool>(plan_mode, session_store));
+
     // Register Worldbuilding tools if service is available
     if (wb_service) {
-        tools->set_capabilities(tools->capabilities() | Capability::Worldbuilding);
         worldbuilding::WorldbuildingTools wb_tools(
             *wb_service, llm, cfg.memory.diary_compression_threshold,
             cfg.memory.diary_model);
-        auto wb_ctx = worldbuilding::ToolContext{};
-        auto god_tools = wb_tools.create_tools(worldbuilding::AgentKind::God, wb_ctx);
-        for (auto& tool : god_tools) {
-            tools->register_tool(std::move(tool));
-        }
+        auto god_tools = wb_tools.create_tools(worldbuilding::AgentKind::God);
+        tools->register_all(std::move(god_tools));
     }
     std::vector<std::shared_ptr<McpClient>>mcp;std::vector<McpServerStatus>mcp_status;
     for(const auto& mc:cfg.mcp_servers){if(!mc.enabled)continue;auto c=std::make_shared<McpClient>(mc);auto connected=c->connect();mcp_status.push_back({mc.name,connected.has_value()});if(connected){tools->import_from_mcp(c).get();mcp.push_back(c);}}
@@ -233,8 +235,10 @@ auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
         return std::pair{context,compactor};
     };
     auto [context,compactor]=make_context(llm);
-    // Register SessionTool with real MemoryStore and Compactor references
-    tools->register_tool(std::make_unique<tools::SessionTool>(memory, compactor));
+    // Register MemoryTool and SessionTool now that memory store is available
+    tools->register_tool(std::make_unique<tools::MemoryTool>(memory));
+    auto edit_journal = std::make_shared<EditJournal>();
+    tools->register_tool(std::make_unique<tools::SessionTool>(memory, compactor, edit_journal.get()));
     auto factory=[cfg,llm,tools,memory,context,compactor,plan_mode](const std::string&model){AgentLoop::Config c;c.system_prompt=cfg.agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=model.empty()?cfg.llm.default_model:model;c.max_output_tokens=cfg.llm.max_output_tokens;auto loop=std::make_unique<AgentLoop>(c,llm,tools,memory,context,compactor);loop->set_plan_mode_source(plan_mode);return loop;};
     auto sub_executor=[cfg,llm,tools,memory,make_context,plan_mode](const SubAgentConfig&agent,const std::string&task,RunControl&control){
         auto sub_tools=std::make_shared<ToolRegistry>();sub_tools->set_permission_mode(cfg.agent.permission_mode);

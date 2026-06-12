@@ -2,6 +2,7 @@
 
 #include <merak/tool_base.hpp>
 #include <merak/tool_meta.hpp>
+#include <merak/session_store.hpp>
 
 #include <atomic>
 #include <future>
@@ -14,6 +15,7 @@ class EnterPlanModeTool : public Tool {
 public:
     explicit EnterPlanModeTool(std::shared_ptr<std::atomic<bool>> plan_mode);
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override;
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override;
@@ -25,8 +27,10 @@ private:
 
 class ExitPlanModeTool : public Tool {
 public:
-    explicit ExitPlanModeTool(std::shared_ptr<std::atomic<bool>> plan_mode);
+    ExitPlanModeTool(std::shared_ptr<std::atomic<bool>> plan_mode,
+                     std::shared_ptr<SessionStore> session_store = nullptr);
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override;
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override;
@@ -34,6 +38,7 @@ public:
 
 private:
     std::shared_ptr<std::atomic<bool>> plan_mode_;
+    std::shared_ptr<SessionStore> session_store_;
 };
 
 } // namespace merak::tools

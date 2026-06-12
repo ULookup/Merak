@@ -163,10 +163,6 @@ static std::string safety_check(const std::string& command) {
 
 // ---------- Read-only cache helpers ----------
 
-bool BashTool::check_dangerous(const std::string& command) {
-    return !safety_check(command).empty();
-}
-
 bool BashTool::is_safe_readonly(const std::string& command) {
     static const std::vector<std::string> safe_prefixes = {
         "ls ", "find ", "cat ", "head ", "tail ",
@@ -224,6 +220,18 @@ ToolSpec BashTool::spec() const {
         "required": ["command"]
     })JSON";
     return s;
+}
+
+ToolMeta BashTool::meta() const {
+    ToolMeta m;
+    m.name = "execute_bash";
+    m.description = "Execute shell commands for builds, tests, installs, git, CLI tasks";
+    m.triggers = {"run", "execute", "build", "test", "install", "command", "shell"};
+    m.pinned = true;
+    m.intents = {IntentType::CodeEdit, IntentType::CodeRead, IntentType::Git};
+    m.scope = Scope::Local;
+    m.schema_tokens = 35;
+    return m;
 }
 
 std::future<ToolResult> BashTool::execute(ToolCall call, ToolExecutionContext context) {

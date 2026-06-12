@@ -1,7 +1,9 @@
 #include <merak/web_search_tool.hpp>
 
 #include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 
+#include <curl/curl.h>
 #include <future>
 #include <memory>
 #include <sstream>
@@ -26,6 +28,35 @@ static std::string url_encode_query(const std::string& query) {
     }
     return encoded;
 }
+
+namespace {
+
+size_t curl_write_callback(void* contents, size_t size, size_t nmemb, std::string* output) {
+    size_t total = size * nmemb;
+    output->append(static_cast<char*>(contents), total);
+    return total;
+}
+
+std::string http_get(const std::string& url) {
+    std::string response;
+    CURL* curl = curl_easy_init();
+    if (!curl) return "";
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Merak/1.0");
+
+    CURLcode res = curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK) return "";
+    return response;
+}
+
+} // anonymous namespace
 
 ToolSpec WebSearchTool::spec() const {
     ToolSpec s;
@@ -57,6 +88,18 @@ ToolSpec WebSearchTool::spec() const {
     return s;
 }
 
+ToolMeta WebSearchTool::meta() const {
+    ToolMeta m;
+    m.name = "web_search";
+    m.description = "Search the web across multiple engines";
+    m.triggers = {"web search", "search web", "search online", "google"};
+    m.pinned = false;
+    m.intents = {IntentType::Network};
+    m.scope = Scope::External;
+    m.schema_tokens = 25;
+    return m;
+}
+
 PermissionLevel WebSearchTool::permission() const {
     return PermissionLevel::ask;
 }
@@ -71,31 +114,87 @@ std::future<ToolResult> WebSearchTool::execute(
         try {
             auto args = nlohmann::json::parse(call.arguments);
             auto query = args.value("query", "");
-            auto engine = args.value("engine", "duckduckgo");
-            auto encoded = url_encode_query(query);
+            auto max_results = args.value("max_results", 10);
 
-            std::string url;
-            std::string engine_name;
-            if (engine == "google") {
-                url = "https://www.google.com/search?q=" + encoded;
-                engine_name = "Google";
-            } else if (engine == "bing") {
-                url = "https://www.bing.com/search?q=" + encoded;
-                engine_name = "Bing";
-            } else {
-                url = "https://duckduckgo.com/?q=" + encoded;
-                engine_name = "DuckDuckGo";
+            if (query.empty()) {
+                result.output = R"({"error":"query is required"})";
+                result.is_error = true;
+                return result;
             }
 
-            std::ostringstream out;
-            out << "## " << engine_name << " Search\n\n"
-                << "**Query:** " << query << "\n\n"
-                << "Click to search: [" << query << "](" << url << ")\n\n"
-                << "> No live HTTP request performed. Open the link in your browser to see results.\n";
+            auto encoded = url_encode_query(query);
+            std::string url = "https://html.duckduckgo.com/html/?q=" + encoded;
+            auto html = http_get(url);
 
-            result.output = out.str();
+            if (html.empty()) {
+                result.output = R"({"error":"Search request failed. Check network connectivity."})";
+                result.is_error = true;
+                return result;
+            }
+
+            nlohmann::json results = nlohmann::json::array();
+            std::string::size_type pos = 0;
+            int count = 0;
+
+            while (count < max_results) {
+                auto snippet_start = html.find("class=\"result__snippet\"", pos);
+                if (snippet_start == std::string::npos) break;
+
+                auto content_start = html.find('>', snippet_start) + 1;
+                auto content_end = html.find("</", content_start);
+                if (content_start == std::string::npos || content_end == std::string::npos) break;
+
+                std::string snippet = html.substr(content_start, content_end - content_start);
+
+                auto link_start = html.rfind("class=\"result__url\"", snippet_start);
+                std::string link;
+                if (link_start != std::string::npos && link_start > pos) {
+                    auto href_start = html.find("href=\"", link_start);
+                    if (href_start != std::string::npos && href_start < snippet_start) {
+                        href_start += 6;
+                        auto href_end = html.find('"', href_start);
+                        if (href_end != std::string::npos) {
+                            link = html.substr(href_start, href_end - href_start);
+                        }
+                    }
+                }
+
+                auto title_start = html.rfind("class=\"result__title\"", snippet_start);
+                std::string title;
+                if (title_start != std::string::npos && title_start > pos) {
+                    auto title_content_start = html.find('>', html.find('>', title_start) + 1) + 1;
+                    auto title_content_end = html.find("</", title_content_start);
+                    if (title_content_start != std::string::npos && title_content_end != std::string::npos) {
+                        title = html.substr(title_content_start, title_content_end - title_content_start);
+                        while (true) {
+                            auto tag = title.find('<');
+                            if (tag == std::string::npos) break;
+                            auto tag_end = title.find('>', tag);
+                            if (tag_end == std::string::npos) break;
+                            title.erase(tag, tag_end - tag + 1);
+                        }
+                    }
+                }
+
+                nlohmann::json item;
+                item["title"] = title;
+                item["snippet"] = snippet;
+                item["url"] = link;
+                results.push_back(item);
+
+                pos = content_end;
+                count++;
+            }
+
+            nlohmann::json out;
+            out["query"] = query;
+            out["results"] = results;
+            out["count"] = results.size();
+            out["engine"] = "duckduckgo";
+            result.output = out.dump();
+
         } catch (const std::exception& e) {
-            result.output = std::string("Error: ") + e.what();
+            result.output = nlohmann::json{{"error", std::string("Search error: ") + e.what()}}.dump();
             result.is_error = true;
         }
 

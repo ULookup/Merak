@@ -9,6 +9,7 @@ namespace merak::tools {
 class ReadFileTool : public Tool {
 public:
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
@@ -20,6 +21,7 @@ public:
 class WriteFileTool : public Tool {
 public:
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
@@ -32,6 +34,7 @@ class StrReplaceTool : public Tool {
 public:
     explicit StrReplaceTool(EditJournal* journal = nullptr) : journal_(journal) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
@@ -42,12 +45,11 @@ private:
     EditJournal* journal_;
 };
 
-using EditFileTool = StrReplaceTool;
-
 class MultiEditTool : public Tool {
 public:
     explicit MultiEditTool(EditJournal* journal = nullptr) : journal_(journal) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
@@ -62,6 +64,7 @@ class DeleteFileTool : public Tool {
 public:
     explicit DeleteFileTool(EditJournal* journal = nullptr) : journal_(journal) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
@@ -75,6 +78,7 @@ private:
 class ListDirTool : public Tool {
 public:
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {

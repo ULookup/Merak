@@ -218,6 +218,18 @@ ToolSpec WebFetchTool::spec() const {
     return s;
 }
 
+ToolMeta WebFetchTool::meta() const {
+    ToolMeta m;
+    m.name = "web_fetch";
+    m.description = "Fetch URL content — web pages, APIs, documentation";
+    m.triggers = {"fetch", "url", "web", "http", "download", "api call", "curl"};
+    m.pinned = false;
+    m.intents = {IntentType::Network};
+    m.scope = Scope::External;
+    m.schema_tokens = 25;
+    return m;
+}
+
 PermissionLevel WebFetchTool::permission() const {
     return PermissionLevel::ask;
 }

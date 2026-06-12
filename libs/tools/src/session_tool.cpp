@@ -29,6 +29,18 @@ ToolSpec SessionTool::spec() const {
     return s;
 }
 
+ToolMeta SessionTool::meta() const {
+    ToolMeta m;
+    m.name = "session";
+    m.description = "Session lifecycle: compact, rollback, config, history, summary, timeline";
+    m.triggers = {"compact", "rollback", "config", "adjust"};
+    m.pinned = false;
+    m.intents = {IntentType::Introspect};
+    m.scope = Scope::Local;
+    m.schema_tokens = 60;
+    return m;
+}
+
 PermissionLevel SessionTool::permission() const {
     return PermissionLevel::safe;
 }
@@ -63,8 +75,22 @@ std::future<ToolResult> SessionTool::execute(
                     result.is_error = true;
                 }
             } else if (action == "rollback") {
-                out["message"] = "Rollback not available (requires EditJournal from TurnIngestor)";
-                out["note"] = "Rollback would restore file modifications from the edit journal";
+                if (edit_journal_) {
+                    int count = args.value("count", 1);
+                    bool ok = edit_journal_->rollback(static_cast<size_t>(count));
+                    if (ok) {
+                        out["message"] = "Rolled back " + std::to_string(count) + " file modification(s)";
+                        out["rolled_back"] = count;
+                    } else {
+                        out["status"] = "error";
+                        out["message"] = "Rollback failed: not enough entries in edit journal";
+                        result.is_error = true;
+                    }
+                } else {
+                    out["status"] = "error";
+                    out["message"] = "Rollback not available: no EditJournal connected";
+                    result.is_error = true;
+                }
             } else if (action == "config") {
                 out["message"] = "Session configuration";
                 nlohmann::json cfg;
@@ -99,10 +125,20 @@ std::future<ToolResult> SessionTool::execute(
                 }
             } else if (action == "timeline") {
                 if (memory_) {
-                    int count = memory_->message_count();
+                    int n = args.value("n", 20);
+                    auto msgs = memory_->recent_history(n);
+                    auto items = nlohmann::json::array();
+                    int idx = 0;
+                    for (const auto& msg : msgs) {
+                        nlohmann::json item;
+                        item["index"] = idx++;
+                        item["role"] = msg.role;
+                        item["content"] = msg.content.substr(0, std::min<size_t>(300, msg.content.size()));
+                        items.push_back(std::move(item));
+                    }
                     out["message"] = "Session timeline";
-                    out["total_messages"] = count;
-                    out["timeline_items"] = nlohmann::json::array();
+                    out["total_messages"] = msgs.size();
+                    out["timeline_items"] = std::move(items);
                 } else {
                     out["message"] = "Memory store not available";
                 }
@@ -123,7 +159,7 @@ std::future<ToolResult> SessionTool::execute(
 }
 
 std::unique_ptr<Tool> SessionTool::clone() const {
-    return std::make_unique<SessionTool>(memory_, compactor_);
+    return std::make_unique<SessionTool>(memory_, compactor_, edit_journal_);
 }
 
 } // namespace merak::tools

@@ -11,11 +11,6 @@ namespace merak { class LlmProvider; }
 
 namespace merak::worldbuilding {
 
-struct ToolContext {
-    std::string world_id;
-    std::string scene_id;
-    std::string caller_agent_id;
-};
 
 enum class ToolErrorCode {
     NOT_FOUND,
@@ -68,589 +63,589 @@ inline bool is_in_vector(const std::vector<std::string>& vec, const std::string&
 
 class DescribeCharacterTool : public Tool {
 public:
-    DescribeCharacterTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    DescribeCharacterTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<DescribeCharacterTool>(*svc_, ctx_);
+        return std::make_unique<DescribeCharacterTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class SearchMyDiaryTool : public Tool {
 public:
-    SearchMyDiaryTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    SearchMyDiaryTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<SearchMyDiaryTool>(*svc_, ctx_);
+        return std::make_unique<SearchMyDiaryTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class LookAroundTool : public Tool {
 public:
-    LookAroundTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    LookAroundTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<LookAroundTool>(*svc_, ctx_);
+        return std::make_unique<LookAroundTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 // ====== Manager Tools ======
 
 class QueryMapTool : public Tool {
 public:
-    QueryMapTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    QueryMapTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<QueryMapTool>(*svc_, ctx_);
+        return std::make_unique<QueryMapTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class QueryHistoryTool : public Tool {
 public:
-    QueryHistoryTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    QueryHistoryTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<QueryHistoryTool>(*svc_, ctx_);
+        return std::make_unique<QueryHistoryTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class QueryMagicTool : public Tool {
 public:
-    QueryMagicTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    QueryMagicTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<QueryMagicTool>(*svc_, ctx_);
+        return std::make_unique<QueryMagicTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class QueryFactionTool : public Tool {
 public:
-    QueryFactionTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    QueryFactionTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<QueryFactionTool>(*svc_, ctx_);
+        return std::make_unique<QueryFactionTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 // ====== God Read Tools ======
 
 class ReadCharacterCardTool : public Tool {
 public:
-    ReadCharacterCardTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ReadCharacterCardTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<ReadCharacterCardTool>(*svc_, ctx_);
+        return std::make_unique<ReadCharacterCardTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class ReadSecretTool : public Tool {
 public:
-    ReadSecretTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ReadSecretTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<ReadSecretTool>(*svc_, ctx_);
+        return std::make_unique<ReadSecretTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class ReadForeshadowingTool : public Tool {
 public:
-    ReadForeshadowingTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ReadForeshadowingTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<ReadForeshadowingTool>(*svc_, ctx_);
+        return std::make_unique<ReadForeshadowingTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class ListOpenForeshadowingTool : public Tool {
 public:
-    ListOpenForeshadowingTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ListOpenForeshadowingTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<ListOpenForeshadowingTool>(*svc_, ctx_);
+        return std::make_unique<ListOpenForeshadowingTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 // ====== God Mutation Tools ======
 
 class AdvanceWorldTimeTool : public Tool {
 public:
-    AdvanceWorldTimeTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    AdvanceWorldTimeTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<AdvanceWorldTimeTool>(*svc_, ctx_);
+        return std::make_unique<AdvanceWorldTimeTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class CreateCharacterTool : public Tool {
 public:
-    CreateCharacterTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    CreateCharacterTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<CreateCharacterTool>(*svc_, ctx_);
+        return std::make_unique<CreateCharacterTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class CreateSceneTool : public Tool {
 public:
-    CreateSceneTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    CreateSceneTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<CreateSceneTool>(*svc_, ctx_);
+        return std::make_unique<CreateSceneTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class CreateChapterTool : public Tool {
 public:
-    CreateChapterTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    CreateChapterTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<CreateChapterTool>(*svc_, ctx_);
+        return std::make_unique<CreateChapterTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class CreateArcTool : public Tool {
 public:
-    CreateArcTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    CreateArcTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<CreateArcTool>(*svc_, ctx_);
+        return std::make_unique<CreateArcTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class CreateSecretTool : public Tool {
 public:
-    CreateSecretTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    CreateSecretTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<CreateSecretTool>(*svc_, ctx_);
+        return std::make_unique<CreateSecretTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class AddWorldKnowledgeTool : public Tool {
 public:
-    AddWorldKnowledgeTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    AddWorldKnowledgeTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<AddWorldKnowledgeTool>(*svc_, ctx_);
+        return std::make_unique<AddWorldKnowledgeTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class CreateLocationTool : public Tool {
 public:
-    CreateLocationTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    CreateLocationTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<CreateLocationTool>(*svc_, ctx_);
+        return std::make_unique<CreateLocationTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class PlantForeshadowingTool : public Tool {
 public:
-    PlantForeshadowingTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    PlantForeshadowingTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<PlantForeshadowingTool>(*svc_, ctx_);
+        return std::make_unique<PlantForeshadowingTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class ExposeSecretTool : public Tool {
 public:
-    ExposeSecretTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ExposeSecretTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<ExposeSecretTool>(*svc_, ctx_);
+        return std::make_unique<ExposeSecretTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class SearchAgentTool : public Tool {
 public:
-    SearchAgentTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    SearchAgentTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<SearchAgentTool>(*svc_, ctx_);
+        return std::make_unique<SearchAgentTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class QueryWorldTool : public Tool {
 public:
-    QueryWorldTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    QueryWorldTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<QueryWorldTool>(*svc_, ctx_);
+        return std::make_unique<QueryWorldTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class EndSceneTool : public Tool {
 public:
-    EndSceneTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    EndSceneTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<EndSceneTool>(*svc_, ctx_);
+        return std::make_unique<EndSceneTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class UpdateAgentPromptTool : public Tool {
 public:
-    UpdateAgentPromptTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    UpdateAgentPromptTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<UpdateAgentPromptTool>(*svc_, ctx_);
+        return std::make_unique<UpdateAgentPromptTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class UpdateCharacterCardTool : public Tool {
 public:
-    UpdateCharacterCardTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    UpdateCharacterCardTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<UpdateCharacterCardTool>(*svc_, ctx_);
+        return std::make_unique<UpdateCharacterCardTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class WriteMyDiaryTool : public Tool {
 public:
-    WriteMyDiaryTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    WriteMyDiaryTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext) override;
+    ToolMeta meta() const override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<WriteMyDiaryTool>(*svc_, ctx_);
+        return std::make_unique<WriteMyDiaryTool>(*svc_);
     }
     PermissionLevel permission() const override { return PermissionLevel::safe; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class CompressMyMemoryTool : public Tool {
 public:
     CompressMyMemoryTool(WorldbuildingService& svc, std::shared_ptr<LlmProvider> llm,
-                         ToolContext ctx, int threshold, const std::string& model)
-        : svc_(&svc), llm_(std::move(llm)), ctx_(std::move(ctx)),
+                         int threshold, const std::string& model)
+        : svc_(&svc), llm_(std::move(llm)),
           threshold_(threshold), model_(model) {}
     ToolSpec spec() const override;
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext) override;
+    ToolMeta meta() const override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<CompressMyMemoryTool>(*svc_, llm_, ctx_, threshold_, model_);
+        return std::make_unique<CompressMyMemoryTool>(*svc_, llm_, threshold_, model_);
     }
     PermissionLevel permission() const override { return PermissionLevel::safe; }
 private:
     WorldbuildingService* svc_;
     std::shared_ptr<LlmProvider> llm_;
-    ToolContext ctx_;
     int threshold_;
     std::string model_;
 };
 
 class AddRelationTool : public Tool {
 public:
-    AddRelationTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    AddRelationTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<AddRelationTool>(*svc_, ctx_);
+        return std::make_unique<AddRelationTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class UpdateForeshadowTool : public Tool {
 public:
-    UpdateForeshadowTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    UpdateForeshadowTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<UpdateForeshadowTool>(*svc_, ctx_);
+        return std::make_unique<UpdateForeshadowTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 // ====== RelationManager Tools ======
 
 class QuerySubgraphTool : public Tool {
 public:
-    QuerySubgraphTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    QuerySubgraphTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<QuerySubgraphTool>(*svc_, ctx_);
+        return std::make_unique<QuerySubgraphTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class ExpandGraphTool : public Tool {
 public:
-    ExpandGraphTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ExpandGraphTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<ExpandGraphTool>(*svc_, ctx_);
+        return std::make_unique<ExpandGraphTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class FindPathTool : public Tool {
 public:
-    FindPathTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    FindPathTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<FindPathTool>(*svc_, ctx_);
+        return std::make_unique<FindPathTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class CheckConsistencyTool : public Tool {
 public:
-    CheckConsistencyTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    CheckConsistencyTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<CheckConsistencyTool>(*svc_, ctx_);
+        return std::make_unique<CheckConsistencyTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class ExtractSceneRelationsTool : public Tool {
 public:
-    ExtractSceneRelationsTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    ExtractSceneRelationsTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<ExtractSceneRelationsTool>(*svc_, ctx_);
+        return std::make_unique<ExtractSceneRelationsTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return true; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 class UpsertRelationTool : public Tool {
 public:
-    UpsertRelationTool(WorldbuildingService& svc, ToolContext ctx)
-        : svc_(&svc), ctx_(std::move(ctx)) {}
+    UpsertRelationTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
-    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext = {}) override;
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
     std::unique_ptr<Tool> clone() const override {
-        return std::make_unique<UpsertRelationTool>(*svc_, ctx_);
+        return std::make_unique<UpsertRelationTool>(*svc_);
     }
     bool is_concurrent_safe(const ToolCall&) const override { return false; }
 private:
     WorldbuildingService* svc_;
-    ToolContext ctx_;
 };
 
 // ====== WorldbuildingTools Factory ======
@@ -667,7 +662,7 @@ public:
 
     std::vector<ToolSpec> specs_for(AgentKind kind) const;
     std::vector<std::unique_ptr<Tool>>
-    create_tools(AgentKind kind, const ToolContext& ctx) const;
+    create_tools(AgentKind kind) const;
 
 private:
     WorldbuildingService* service_;

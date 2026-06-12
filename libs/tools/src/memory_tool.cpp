@@ -58,6 +58,18 @@ ToolSpec MemoryTool::spec() const {
     return s;
 }
 
+ToolMeta MemoryTool::meta() const {
+    ToolMeta m;
+    m.name = "memory";
+    m.description = "Memory operations: store, retrieve, forget, feedback, search, profile";
+    m.triggers = {"memory", "remember", "recall", "forget", "store", "retrieve"};
+    m.pinned = false;
+    m.intents = {IntentType::Memory};
+    m.scope = Scope::CrossSession;
+    m.schema_tokens = 40;
+    return m;
+}
+
 PermissionLevel MemoryTool::permission() const {
     return PermissionLevel::safe;
 }
@@ -211,7 +223,10 @@ std::future<ToolResult> MemoryTool::execute(ToolCall call, ToolExecutionContext 
                                      memory_id, signal, removed.error().what());
                     }
                 } else {
-                    spdlog::info("MemoryTool feedback: id={} signal={} weight={} — confidence boost noted",
+                    // TODO: MemoryStore has no method to update a single entry's confidence.
+                    // Available methods: store, search, remove, decay_confidence, purge_expired.
+                    // Adding a store->update(id, delta) method would allow boosting confidence here.
+                    spdlog::info("MemoryTool feedback: id={} signal={} weight=+{} — confidence boost noted (no update API)",
                                  memory_id, signal, weight);
                 }
 

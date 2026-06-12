@@ -24,6 +24,9 @@ private:
 
 struct ToolExecutionContext {
     std::shared_ptr<CancellationToken> cancellation;
+    std::string world_id;
+    std::string scene_id;
+    std::string caller_agent_id;
 };
 
 enum class LlmErrorClass : uint8_t {

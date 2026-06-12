@@ -14,6 +14,7 @@ public:
     AskUserTool() = default;
 
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override;
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override;
