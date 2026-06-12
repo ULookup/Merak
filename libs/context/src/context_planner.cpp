@@ -76,10 +76,6 @@ SectionManifest ContextPlanner::build_manifest(int effective_budget, CompactionT
 
   m.sections.push_back({SectionKind::Conversation, CacheScope::Turn, remaining});
 
-  m.sections.push_back({SectionKind::EmergentSkills, CacheScope::Turn, 0});
-  m.sections.push_back({SectionKind::EmergentMemory, CacheScope::Turn, 0});
-  m.sections.push_back({SectionKind::EmergentSummary, CacheScope::Turn, 0});
-
   m.total_budget = effective_budget;
   return m;
 }
