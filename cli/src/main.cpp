@@ -189,8 +189,9 @@ static int run_server(int argc,char**argv) {
     tools->register_tool(std::make_unique<tools::SessionTool>());
     tools->register_tool(std::make_unique<tools::TaskTool>());
     tools->register_tool(std::make_unique<tools::AskUserTool>());
-    tools->register_tool(std::make_unique<tools::EnterPlanModeTool>());
-    tools->register_tool(std::make_unique<tools::ExitPlanModeTool>());
+    auto plan_mode = std::make_shared<std::atomic<bool>>(false);
+    tools->register_tool(std::make_unique<tools::EnterPlanModeTool>(plan_mode));
+    tools->register_tool(std::make_unique<tools::ExitPlanModeTool>(plan_mode));
     // Set default platform capabilities (empty = all non-gated tools visible)
     tools->set_capabilities(CapabilitySet::platform_default());
     // Register Worldbuilding tools if service is available
