@@ -2,37 +2,39 @@
 
 > 状态：已确认
 > 日期：2026-06-12
-> 关联：code-audit-fake-implementations-and-dead-code.md
 
 ---
 
 ## 1. 设计目标
 
-消除 Tool 模块的三本账问题（Tool 子类、TOOL_CATALOG、main.cpp 注册互不校验），统一 Worldbuilding 工具和平台工具的注册与发现流程，补全所有假实现，清理死代码。
+消除 Tool 模块的三本账问题（Tool 子类、TOOL_CATALOG、main.cpp 注册互不校验），统一 Worldbuilding 工具和平台工具的注册与发现流程，补全所有假实现，清理模块内死代码。
 
 ## 2. 工具定义：从三本账到一本账
 
 ### 2.1 当前问题
 
-定义一个工具需要在三处分别声明：
+定义一个工具需要在三处分别声明，三者互不校验：
 
 ```
 Tool 子类 (.cpp)  →  ToolRegistry::register_tool()  →  TOOL_CATALOG[]
     实现                   运行时注册                      元数据/发现
 ```
 
-三者互不校验，导致：25 个目录条目无注册、2 个工具有注册无目录条目、目录和能力系统不一致。
+导致：
+- TOOL_CATALOG 中 25 个 Worldbuilding 工具有条目但从未注册进 Registry（注册走了独立工厂）
+- MultiEditTool / DeleteFileTool 已在 main.cpp 注册但 TOOL_CATALOG 中没有条目
+- TOOL_CATALOG 的能力过滤与 Registry 的能力过滤各自独立
 
 ### 2.2 新设计：工具自描述
 
-`Tool` 基类增加 `meta()` 虚方法：
+`Tool` 基类增加 `meta()` 虚方法，元数据内聚在工具实现中：
 
 ```cpp
 class Tool {
 public:
     virtual ~Tool() = default;
     virtual ToolSpec spec() const = 0;         // 名称、参数 schema
-    virtual ToolMeta meta() const = 0;         // 触发词、能力要求、是否 pin
+    virtual ToolMeta meta() const = 0;         // 触发词、是否 pin、意图类型、scope
     virtual PermissionLevel permission() const = 0;
     virtual std::future<ToolResult> execute(ToolCall call, ToolExecutionContext ctx = {}) = 0;
     virtual std::unique_ptr<Tool> clone() const = 0;
@@ -40,67 +42,75 @@ public:
 };
 ```
 
-- 删除全局 `TOOL_CATALOG` 数组
+- **删除 `TOOL_CATALOG` 全局数组** — 每个 Tool 子类通过 `meta()` 自带元数据
 - `ToolRegistry` 从已注册工具的 `meta()` 动态生成目录
-- `select_tool`、`search_tools`、`visible_metas`、`pinned_schemas` 全部从 Registry 内部数据生成
+- `search_tools`、`select_tool`、`pinned_schemas` 全部从 Registry 内部数据生成，不再查外部数组
 
-### 2.3 注册代码变化
+### 2.3 删除 Capability / CapabilitySet
 
-```cpp
-// 旧：元数据散落在 TOOL_CATALOG
-tools->register_tool(std::make_unique<ReadFileTool>());
+`tool_meta.hpp` 中的 `Capability` 枚举和 `CapabilitySet` 类删除。工具可用性不再靠静态能力过滤，改为：
 
-// 新：元数据内聚在工具类，一行注册
-tools->register_tool(std::make_unique<ReadFileTool>());
-// ReadFileTool::meta() 返回 ToolMeta{.name="read_file", .pinned=true, ...}
-```
+- Agent 创建时决定注册哪些工具 → 每个 Agent 持有独立的 `ToolRegistry`
+- 工具自身通过 `meta()` 声明所属意图类型（`IntentType`），由调用方决定是否展示
 
-## 3. 能力系统与 Worldbuilding 工具
+`ToolMeta` 中删除 `requires_caps` 字段。
+
+## 3. Worldbuilding 工具统一注册
 
 ### 3.1 当前问题
 
-- `CapabilitySet::platform_default()` 返回空集，LspTool/MemoryTool 等默认不可见
-- Worldbuilding 工具绕过 `ToolRegistry`，通过 `WorldbuildingTools::create_tools()` 工厂直接创建
-- `TOOL_CATALOG` 只收录了 Worldbuilding 工具的子集（25 个 vs 实际 36 个）
+Worldbuilding 工具在 `libs/worldbuilding/src/worldbuilding_tools.cpp` 中有 36 个完整的 `Tool` 子类实现，但：
 
-### 3.2 新设计：每 Agent 独立 Registry
+- 不通过 `ToolRegistry::register_tool()` 注册
+- 通过 `WorldbuildingTools::create_tools(AgentKind, ToolContext)` 工厂直接创建返回给调用方
+- `TOOL_CATALOG` 只收录其中 25 个，且与实现不一致
 
-不同 AgentKind 的 Agent 持有不同工具集：
+### 3.2 新设计：工厂保留，产物注入 Registry
 
-| AgentKind | 工具数量 | 包含 |
-|-----------|---------|------|
-| God | ~30 | 全部平台工具 + 全部 Worldbuilding 读写工具 |
-| Manager (4种) | ~5-8 | 只读平台工具 + 对应领域的 Worldbuilding 工具 |
-| Character | ~5 | `describe_character`, `search_my_diary`, `look_around`, `write_my_diary`, `compress_my_memory` |
-
-- 删除 `Capability` / `CapabilitySet` — 工具可用性由 Agent 创建时注册决定
-- `WorldbuildingTools` 工厂保留，生成的工具实例统一注册进 Agent 的 `ToolRegistry`
-- `ToolExecutionContext` 扩展 `world_id` / `scene_id` / `caller_agent_id` 字段
-- Worldbuilding 工具不再持有 `ToolContext` 成员，改为每次 `execute()` 从 `ToolExecutionContext` 读取
-
-### 3.3 Agent 创建流程
+`WorldbuildingTools` 工厂保留（它负责按 AgentKind 筛选和注入 `ToolContext`），但生成的工具实例统一注册进 Agent 的 `ToolRegistry`：
 
 ```cpp
-// 1. 创建共享的 WorldbuildingTools 工厂
-auto wb_factory = std::make_shared<WorldbuildingTools>(service, llm);
-
+// 为每个 Agent 创建独立的 ToolRegistry
 for (auto& agent_cfg : config.agents) {
     auto registry = std::make_shared<ToolRegistry>();
 
-    // 2. 平台基础工具
+    // 平台工具
     registry->register_platform_basics();
 
-    // 3. 领域工具（按 AgentKind 注入）
+    // Worldbuilding 工具
     auto ctx = ToolContext{wid, sid, agent_cfg.id};
     auto wb_tools = wb_factory->create_tools(agent_cfg.kind, ctx);
     registry->register_all(std::move(wb_tools));
 
-    // 4. 创建 AgentLoop
     auto loop = std::make_unique<AgentLoop>(cfg, llm, registry, memory);
 }
 ```
 
-## 4. ToolRegistry 最终接口
+不同 AgentKind 注册的工具集不同：
+
+| AgentKind | 平台工具 | Worldbuilding 工具 | 总计 |
+|-----------|---------|-------------------|------|
+| God | 全部 | 全部读写（~22个） | ~30 |
+| Manager | 只读 | 对应领域（~5个） | ~8 |
+| Character | 只读 | `describe_character`, `look_around`, `search_my_diary`, `write_my_diary`, `compress_my_memory` | ~5 |
+
+### 3.3 ToolExecutionContext 扩展
+
+Worldbuilding 工具每次 `execute()` 需要知道当前上下文。不再在工具构造时绑定 `ToolContext`，改为从 `ToolExecutionContext` 传入：
+
+```cpp
+struct ToolExecutionContext {
+    std::shared_ptr<CancellationToken> cancellation;
+    // 新增 — 由 AgentLoop 在每次 execute 前填充
+    std::string world_id;
+    std::string scene_id;
+    std::string caller_agent_id;
+};
+```
+
+Worldbuilding 工具实现中删除 `ToolContext ctx_` 成员，`clone()` 也不需传递 ctx。
+
+## 4. ToolRegistry 接口
 
 ```cpp
 class ToolRegistry {
@@ -108,16 +118,16 @@ public:
     // —— 注册 ——
     void register_tool(std::unique_ptr<Tool> tool);
     void register_all(std::vector<std::unique_ptr<Tool>> tools);
-    void register_platform_basics();  // 一次注册所有平台工具
+    void register_platform_basics();  // 一次注册 10 个平台基础工具
 
-    // —— Agent 调用 ——
+    // —— 执行 ——
     std::future<ToolResult> execute(const ToolCall& call, ToolExecutionContext ctx);
 
     // —— prompt 构建 ——
-    std::vector<ToolSpec> pinned_schemas() const;
-    nlohmann::json all_tools_json() const;
+    std::vector<ToolSpec> pinned_schemas() const;   // pin 工具的完整 schema
+    nlohmann::json all_tools_json() const;           // 所有工具的 LLM 格式
 
-    // —— 工具发现 ——
+    // —— 工具发现（Agent 通过 ToolSearchTool 调用） ——
     std::string search_tools(const std::string& query, size_t max = 5) const;
     std::string select_tool(const std::string& name) const;
 
@@ -129,150 +139,69 @@ public:
 
 ## 5. 假实现工具：全部完整实现
 
+仅列出 `libs/tools/` 范围内的假实现：
+
 | 工具 | 当前问题 | 实现内容 |
 |------|----------|---------|
-| `WebSearchTool` | 零 HTTP 请求 | 接入搜索 API（默认 Exa），解析标题+摘要+URL |
-| `ExitPlanModeTool` | plan 文本被丢弃 | 保存到 SessionStore，build_context 时注入 system prompt |
-| `MemoryTool feedback` | 正面信号不更新 | 补 `store->update()` 递增 weight/confidence |
-| `SessionTool timeline` | 返回空数组 | 从 SessionStore 读取历史 turns 生成结构化时间线 |
-| `SessionTool rollback` | 返回 "not available" | 接入 `EditJournal::rollback()` |
-| `handle_delete_world` | 返回 501 | 补 WorldStore::delete_world（含级联删除） |
-| `handle_time_advance` | 返回 501 | 更新 WorldModel 时间字段，广播事件 |
-| `handle_time_now` | 硬编码 day=1 | 从 WorldModel 读取实际 day/period |
-| `handle_overview world_time` | 硬编码 | 同上 |
-| `Emergent*` sections | 0 budget 空操作 | 删除枚举值和绑定代码 |
-| `SkillExecutor fork` | 标注 "future" | 实现 context_mode=fork 调用 SubAgentRunner |
-| `card_access.cpp` | 纯空壳 | 删除文件，VersionConflictError 移至 agent_store.hpp |
+| `WebSearchTool` | 零 HTTP 请求，返回链接让用户手动打开 | 接入搜索 API（默认 Exa，可配置），解析标题+摘要+URL |
+| `ExitPlanModeTool` | plan 文本被接受后丢弃 | 保存到 SessionStore，后续 build_context 时作为 plan 上下文注入 system prompt |
+| `MemoryTool feedback` action | 正面反馈只打日志不更新存储 | 补 `store->update()` 递增 weight/confidence |
+| `SessionTool timeline` action | 返回空数组 `timeline_items: []` | 从 SessionStore 读取历史 turns 生成结构化时间线 |
+| `SessionTool rollback` action | 返回 "not available" | 接入 `EditJournal::rollback()`，执行文件级回滚 |
 
-## 6. 死代码处理
+## 6. 模块内死代码处理
 
-### 直接删除（5 项）
+以下均在 `libs/tools/` 范围内：
 
-| 项 | 原因 |
-|----|------|
-| `OutputCap` struct | 输出截断已在 ContextOptimizer 中实现 |
-| `ExecutionPolicy` / `execute_all()` | Agent 一次只调一个工具 |
-| `EditFileTool` typedef | 无人使用的别名 |
-| `CacheAwareContext::append()` | 等价于 vector::push_back |
-| `db_conn_` 成员 | 从未初始化 |
+| 项 | 处理 | 原因 |
+|----|------|------|
+| `OutputCap` struct (`tool_registry.hpp`) | **删除** | 输出截断逻辑在 ContextOptimizer，此 struct 从未使用 |
+| `ExecutionPolicy` enum + `execute_all()` | **删除** | Agent 一次只执行一个工具，批量执行场景不存在 |
+| `EditFileTool` typedef (`fs_tools.hpp`) | **删除** | 从不使用的别名 |
+| `BashTool::check_dangerous()` | **删除** | `safety_check()` 已被直接调用，此包装函数零调用 |
+| `EditJournal::rollback()` | **接入** | 完整实现但从未调用，接入到 `SessionTool::execute("rollback")` |
+| `TOOL_CATALOG` 全局数组 | **删除** | 被 `Tool::meta()` 替代 |
+| `Capability` / `CapabilitySet` (`tool_meta.hpp`) | **删除** | 被 Agent 独立 Registry 替代 |
 
-### 被替代（2 项）
-
-| 项 | 替代方案 |
-|----|---------|
-| `Capability` / `CapabilitySet` | `Tool::meta()` + Agent 创建时决定工具集 |
-| `TOOL_CATALOG` 全局数组 | `ToolRegistry` 动态生成 |
-
-### 保留暂不动（2 项）
-
-| 项 | 原因 |
-|----|------|
-| `session_store_pg.hpp/cpp` (598行) | 完整 PG 实现，为未来迁移准备 |
-| `checkpoint.hpp/cpp` | 待评估与 SessionStore 内部实现的统一方案 |
-
-### 接入已有实现（8 项）
-
-| 项 | 接入位置 |
-|----|---------|
-| `EditJournal::rollback()` | `SessionTool::execute("rollback")` |
-| `TurnIngestor::classify_error()` | `AgentLoop::run_loop()` 收到 HTTP error 时 |
-| `LlmProvider::test_connection()` | `main.cpp` 启动时验证 API key |
-| `ContextPipeline::escalate_for_recovery()` | `AgentLoop` 收到 ContextWindow 错误时 |
-| `Compactor::compact_one_round()` | `ContextPipeline` context pressure 超阈值时 |
-| `unregister_session_world()` / `world_session_count()` | Session 关闭时 / WorldDashboard |
-| `NarrativeStore::create_story_structure()` | 创建世界后进入 Worldbuilding 阶段时 |
-| `load_*_prompt()` 三个函数 | Agent 创建时按 AgentKind 加载 |
-
-### 补 UI 接入（2 项）
-
-| 项 | 处理 |
-|----|------|
-| `Sidebar.tsx` | 确认 WorldSidebar 是否已替代，若是则删除 |
-| `ChapterEditor.tsx` | 接入 WorldDashboard 或 Inspector |
-
-### 补功能实现（6 项）
-
-| 项 | 实现内容 |
-|----|---------|
-| `BashTool::check_dangerous()` | 删除，safety_check 已直接调用 |
-| `ReviewIssue` / `ReviewSummary` 类型 | ReflectionPhase 生成审查报告，StoryInspector 展示 |
-| `MemorySummary` / `MemorySummaryListResponse` | AgentsInspector 中实现 per-agent memory 摘要 |
-| `pipeline_types.hpp` 12 个 struct | 确认是否有等效定义，有则删除 |
-| `RuntimeEvent` struct | 评估是否 SSE 事件流预留，否则删除 |
-| `LoopHost` 抽象接口 | 确认 CLI/HTTP 是否需要，否则删除 |
-
-## 7. 接口边界
-
-### Agent 视角
-
-```
-Agent (每个角色一个实例)
-  ├── 自己的 ToolRegistry（该角色能用的工具子集）
-  ├── AgentLoop 从 LLM 响应中提取 tool_calls
-  └── registry->execute(call, ctx)
-```
-
-### 工具调用流（以 Character Agent 为例）
-
-```
-1. AgentLoop 发送 turn → LLM，system prompt 含 registry->pinned_schemas()
-
-2. LLM 返回 tool_calls: [{"name": "look_around", "arguments": "{}"}]
-
-3. AgentLoop:
-   registry->execute(ToolCall{"look_around", "{}"}, ctx)
-   // ctx 携带 world_id, scene_id, caller_agent_id
-
-4. LookAroundTool::execute():
-   从 ctx 读取 scene_id → NarrativeStore::get_scene()
-   → 返回场景描述文本给 LLM
-
-5. LLM 阅读场景描述，继续写作/决策
-```
-
-### 工具发现（Agent 自行搜索）
-
-```
-Agent → tool_search("character")
-     → registry->search_tools("character")
-     → [{name: "describe_character", description: "...", score: 10}, ...]
-
-Agent → tool_search("select:describe_character")
-     → registry->select_tool("describe_character")
-     → {name, description, parameters: {...}}
-```
-
-## 8. 数据流总览
+## 7. 数据流
 
 ```
 启动时:
   main.cpp → registry->register_platform_basics()
-           → wb_factory->create_tools(kind, ctx)
-           → registry->register_all(wb_tools)
+           → wb_factory->create_tools(kind, ctx) → registry->register_all(...)
 
 每轮 turn:
-  AgentLoop → registry->pinned_schemas()     → system prompt
+  AgentLoop → registry->pinned_schemas()     → 注入 system prompt
             → LLM 返回 tool_calls
             → registry->execute(call, ctx)   → ToolResult
             → registry->requires_approval()  → 用户审批（如需要）
 
-错误恢复:
-  AgentLoop → classify_error(http_status)     → 决定策略
-            → escalate_for_recovery()         → ContextWindow 错误
-            → compact_one_round()             → 高 pressure 压缩
+工具发现:
+  Agent → tool_search("character")
+        → registry->search_tools("character")
+        → [{name:"describe_character", description:"...", score:10}, ...]
+  Agent → tool_search("select:describe_character")
+        → registry->select_tool("describe_character")
+        → {name, description, parameters:{...}}
 ```
 
-## 9. 改动范围
+## 8. 改动范围
 
-| 模块 | 改动文件数 | 主要变更 |
-|------|-----------|---------|
-| `libs/tools/` | ~25 | `Tool` 加 `meta()`，删 `TOOL_CATALOG`，补假实现，删死代码 |
-| `libs/worldbuilding/` | ~5 | 删 `card_access.cpp`，WorldbuildingTools 接入 Registry |
-| `libs/loop/` | ~3 | 接入 `classify_error`，Worldbuilding 上下文推送 |
-| `libs/context/` | ~4 | 接入 `escalate_for_recovery`、`compact_one_round` |
-| `libs/llm/` | ~2 | 补缓存实现，`test_connection` 接入 main.cpp |
-| `libs/http/` | ~1 | 补 delete_world、time_advance、time_now |
-| `libs/runtime/` | ~2 | 评估 checkpoint 去留 |
-| `libs/storage/` | 0 | `session_store_pg` 保留不动 |
-| `cli/` | ~3 | 重构工具注册流程，接入 test_connection |
-| `webui/` | ~5 | 接入 Sidebar/ChapterEditor，补类型使用 |
+| 文件 | 变更 |
+|------|------|
+| `libs/tools/include/merak/tool_base.hpp` | `Tool` 增加 `meta()` |
+| `libs/core/include/merak/tool_meta.hpp` | 删 `Capability`/`CapabilitySet`，`ToolMeta` 删 `requires_caps` |
+| `libs/tools/include/merak/tool_catalog.hpp` | **删除** |
+| `libs/tools/include/merak/tool_registry.hpp` | 删 `OutputCap`/`ExecutionPolicy`/`execute_all`/`set_capabilities`/`set_output_caps`，加 `register_all`/`register_platform_basics` |
+| `libs/tools/src/tool_registry.cpp` | `search_tools`/`select_tool`/`pinned_schemas` 改为从已注册工具动态生成 |
+| `libs/core/include/merak/execution.hpp` | `ToolExecutionContext` 加 `world_id`/`scene_id`/`caller_agent_id` |
+| 所有 `libs/tools/src/*.cpp` (Tool 子类) | 每个加 `meta()` 实现 |
+| `libs/tools/src/web_search_tool.cpp` | 补搜索 API 实现 |
+| `libs/tools/src/plan_mode_tools.cpp` | `ExitPlanModeTool` 保存 plan 到 SessionStore |
+| `libs/tools/src/memory_tool.cpp` | 补 feedback 正面信号更新 |
+| `libs/tools/src/session_tool.cpp` | 补 timeline + 接入 EditJournal::rollback |
+| `libs/tools/src/edit_journal.cpp` | rollback 接入 SessionTool |
+| `libs/tools/src/fs_tools.hpp` | 删 `EditFileTool` typedef |
+| `libs/tools/src/shell_tool.cpp` | 删 `check_dangerous` |
+| `libs/worldbuilding/src/worldbuilding_tools.cpp` | Worldbuilding 工具加 `meta()`，删 `ToolContext` 成员，从 `ToolExecutionContext` 读取上下文 |
+| `cli/src/main.cpp` | 重构为 `register_platform_basics()` + `register_all(wb_tools)` |
