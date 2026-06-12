@@ -110,7 +110,10 @@ std::future<ToolResult> MemoryTool::execute(ToolCall call, ToolExecutionContext 
                 if (expected.has_value()) {
                     result.output = R"({"status":"ok","message":"Memory stored"})";
                 } else {
-                    result.output = R"({"status":"error","message":")" + expected.error().what() + R"("})";
+                    nlohmann::json err;
+                    err["status"] = "error";
+                    err["message"] = expected.error().what();
+                    result.output = err.dump();
                     result.is_error = true;
                 }
 
@@ -127,7 +130,10 @@ std::future<ToolResult> MemoryTool::execute(ToolCall call, ToolExecutionContext 
                 auto future = store->search(query, top_k);
                 auto expected = future.get();
                 if (!expected.has_value()) {
-                    result.output = R"({"status":"error","message":")" + expected.error().what() + R"("})";
+                    nlohmann::json err;
+                    err["status"] = "error";
+                    err["message"] = expected.error().what();
+                    result.output = err.dump();
                     result.is_error = true;
                     return result;
                 }
@@ -166,7 +172,10 @@ std::future<ToolResult> MemoryTool::execute(ToolCall call, ToolExecutionContext 
                 if (expected.has_value()) {
                     result.output = R"({"status":"ok","message":"Memory forgotten"})";
                 } else {
-                    result.output = R"({"status":"error","message":")" + expected.error().what() + R"("})";
+                    nlohmann::json err;
+                    err["status"] = "error";
+                    err["message"] = expected.error().what();
+                    result.output = err.dump();
                     result.is_error = true;
                 }
 
@@ -210,15 +219,24 @@ std::future<ToolResult> MemoryTool::execute(ToolCall call, ToolExecutionContext 
                 result.output = out.dump();
 
             } else {
-                result.output = R"({"status":"error","message":"Unknown action: )" + action + R"("})";
+                nlohmann::json err;
+                err["status"] = "error";
+                err["message"] = "Unknown action: " + action;
+                result.output = err.dump();
                 result.is_error = true;
             }
 
         } catch (const nlohmann::json::parse_error& e) {
-            result.output = R"({"status":"error","message":"JSON parse error: )" + std::string(e.what()) + R"("})";
+            nlohmann::json err;
+            err["status"] = "error";
+            err["message"] = std::string("JSON parse error: ") + e.what();
+            result.output = err.dump();
             result.is_error = true;
         } catch (const std::exception& e) {
-            result.output = R"({"status":"error","message":")" + std::string(e.what()) + R"("})";
+            nlohmann::json err;
+            err["status"] = "error";
+            err["message"] = e.what();
+            result.output = err.dump();
             result.is_error = true;
         }
 
