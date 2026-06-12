@@ -331,10 +331,11 @@ Chapter NarrativeStore::create_chapter(const std::string& world_id,
     conn.exec("BEGIN");
     try {
         conn.query(
-            "INSERT INTO chapters(id, world_id, arc_id, name, pitch, status, position)"
-            " VALUES($1, $2, $3, $4, $5, $6, $7)",
+            "INSERT INTO chapters(id, world_id, arc_id, name, pitch, content, status, position)"
+            " VALUES($1, $2, $3, $4, $5, $6, $7, $8)",
             {chapter.id, world_id, chapter.arc_id.value_or(""),
-             chapter.title, chapter.pitch, to_string(chapter.status),
+             chapter.title, chapter.pitch, chapter.content,
+             to_string(chapter.status),
              std::to_string(chapter.number)});
 
         if (chapter.arc_id.has_value()) {
