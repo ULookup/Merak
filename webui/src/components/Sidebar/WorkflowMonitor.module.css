@@ -1,5 +1,5 @@
 .container {
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border, #333);
   font-size: 12px;
 }
@@ -7,7 +7,7 @@
 .title {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.04em;
   color: var(--muted, #888);
   margin-bottom: 8px;
 }
@@ -31,16 +31,16 @@
 
 .progressBar {
   height: 4px;
-  background: var(--border, #333);
-  border-radius: 2px;
+  background: var(--surface-muted, #eee);
+  border-radius: 4px;
   margin-bottom: 6px;
   overflow: hidden;
 }
 
 .progressFill {
   height: 100%;
-  background: var(--teal-soft, #4a8);
-  border-radius: 2px;
+  background: var(--muted-strong, #59616a);
+  border-radius: 4px;
   transition: width 300ms ease;
 }
 
@@ -57,7 +57,7 @@
 }
 
 .checkGreen {
-  color: var(--teal-soft, #4a8);
+  color: var(--green, #16a34a);
   font-size: 10px;
 }
 
@@ -96,10 +96,11 @@
   width: 100%;
   padding: 6px 8px;
   margin-bottom: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
   font-size: 13px;
-  background: #fff;
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .status {

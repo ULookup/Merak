@@ -1,5 +1,5 @@
 .list {
-  padding: 14px 16px;
+  padding: 11px 12px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -9,15 +9,16 @@
   justify-content: space-between;
   color: var(--muted);
   font-size: 10px;
-  font-weight: 850;
+  font-weight: 740;
   text-transform: uppercase;
-  margin-bottom: 8px;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
 }
 
 .list ul {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
   list-style: none;
   max-height: 220px;
   overflow-y: auto;
@@ -27,18 +28,35 @@
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--muted-strong);
   cursor: pointer;
-  padding: 7px 8px;
+  padding: 6px 7px;
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+
+.item:hover {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  transform: translateX(2px);
+}
+
+.item:active {
+  transform: translateX(1px) scale(0.995);
 }
 
 .itemActive {
-  border-color: rgba(122, 79, 19, 0.22);
-  background: linear-gradient(90deg, var(--brand-soft), var(--surface));
-  color: var(--brand);
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 2px 0 0 var(--ink);
 }
 
 .title {
@@ -53,7 +71,7 @@
   width: 100%;
   padding: 2px 4px;
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--surface-strong);
   color: var(--ink);
   font-size: inherit;
@@ -67,21 +85,28 @@
   height: 26px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--brand);
+  border-radius: 6px;
+  color: var(--muted-strong);
   cursor: pointer;
   opacity: 0.6;
   padding: 0;
   transition:
-    opacity 160ms ease,
-    transform 160ms ease,
-    border-color 160ms ease;
+    opacity var(--duration-fast) ease,
+    transform var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
 }
 .newBtn:hover,
 .generateBtn:hover {
   opacity: 1;
-  transform: translateY(-1px);
+  background: var(--surface-muted);
   border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.newBtn:active,
+.generateBtn:active {
+  transform: translateY(0) scale(0.97);
 }
 
 .newBtn svg,
@@ -98,7 +123,7 @@
 
 .badge {
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: 5px;
   color: var(--muted);
   font-size: 9px;
   font-weight: 850;

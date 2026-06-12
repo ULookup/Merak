@@ -1,8 +1,8 @@
 .selector {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px 34px;
-  gap: 8px;
-  padding: 16px;
+  grid-template-columns: minmax(0, 1fr) 30px 30px;
+  gap: 6px;
+  padding: 11px 12px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -10,33 +10,45 @@
   min-width: 0;
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--surface);
   color: var(--ink);
-  padding: 9px 11px;
+  padding: 7px 8px;
   font: inherit;
+  transition:
+    border-color var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease);
+}
+
+.selector select:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-strong);
 }
 
 .editBtn {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--surface);
-  color: var(--brand);
+  color: var(--muted-strong);
   cursor: pointer;
   transition:
-    transform 160ms var(--ease),
-    border-color 160ms var(--ease),
-    box-shadow 160ms var(--ease);
+    transform var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
 }
 
 .editBtn:hover {
-  transform: translateY(-1px);
+  background: var(--surface-muted);
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.editBtn:active {
+  transform: translateY(0) scale(0.97);
 }
 
 .editBtn svg {
@@ -59,11 +71,23 @@
   flex-direction: column;
   gap: 12px;
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
   padding: 18px;
   box-shadow: var(--shadow-md);
+  animation: modalIn 220ms var(--ease-spring);
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .modal h3 {
@@ -77,13 +101,13 @@
   gap: 6px;
   color: var(--muted-strong);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .modal input,
 .modal textarea {
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 6px;
   background: var(--surface-strong);
   color: var(--ink);
   padding: 10px 11px;
@@ -98,16 +122,29 @@
 
 .actions button {
   border: 1px solid var(--border);
-  border-radius: 11px;
+  border-radius: 6px;
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
-  font-weight: 850;
+  font-weight: 700;
   padding: 8px 12px;
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+
+.actions button:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.actions button:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .actions button:first-child {
-  border-color: rgba(122, 79, 19, 0.24);
-  background: var(--brand-soft);
-  color: var(--brand);
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
 }

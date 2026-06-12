@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "desktop:dev": "npm --prefix apps/desktop run dev",
+    "desktop:build": "npm --prefix apps/desktop run build",
+    "desktop:tauri": "npm --prefix apps/desktop run tauri"
+  },
   "devDependencies": {
     "jsdom": "^29.1.1"
   }

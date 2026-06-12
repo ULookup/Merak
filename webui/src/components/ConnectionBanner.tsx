@@ -1,15 +1,10 @@
+import { isDesktopApp } from '../desktop';
 import type { ConnectionState } from '../hooks/useSSE';
+import styles from './ConnectionBanner.module.css';
 
 interface Props {
   state: ConnectionState;
 }
-
-const styles: Record<ConnectionState, { bg: string; border: string; color: string }> = {
-  connecting: { bg: '#eef2ff', border: '#c7d2fe', color: '#4f46e5' },
-  connected: { bg: 'transparent', border: 'transparent', color: 'transparent' },
-  reconnecting: { bg: '#fff7ed', border: '#fed7aa', color: '#b7791f' },
-  disconnected: { bg: '#fff1f2', border: '#fecaca', color: '#be123c' },
-};
 
 const labels: Record<ConnectionState, string> = {
   connecting: 'Connecting...',
@@ -18,26 +13,28 @@ const labels: Record<ConnectionState, string> = {
   disconnected: 'Unable to connect. Check if the server is running.',
 };
 
+const desktopLabels: Record<ConnectionState, string> = {
+  connecting: 'Connecting to the local Merak runtime...',
+  connected: '',
+  reconnecting: 'Runtime connection was interrupted. Reconnecting...',
+  disconnected: 'Merak runtime is not reachable. Start the runtime service, then return here.',
+};
+
 export default function ConnectionBanner({ state }: Props) {
   if (state === 'connected') return null;
 
-  const s = styles[state];
+  const desktop = isDesktopApp();
+  const label = desktop ? desktopLabels[state] : labels[state];
 
   return (
     <div
       role="status"
       aria-live="polite"
-      style={{
-        background: s.bg,
-        borderBottom: `1px solid ${s.border}`,
-        color: s.color,
-        fontSize: 12,
-        padding: '6px 16px',
-        textAlign: 'center',
-      }}
+      className={`${styles.banner} ${styles[state]} ${desktop ? styles.desktop : ''}`}
       data-testid="connection-banner"
     >
-      {labels[state]}
+      <span className={styles.message}>{label}</span>
+      {desktop && <span className={styles.meta}>Desktop</span>}
     </div>
   );
 }
