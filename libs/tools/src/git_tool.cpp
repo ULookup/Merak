@@ -56,6 +56,18 @@ ToolSpec GitTool::spec() const {
     return s;
 }
 
+ToolMeta GitTool::meta() const {
+    ToolMeta m;
+    m.name = "git";
+    m.description = "Git operations: status, diff, log, show, blame, file_history, log_search, contributors, commit, revert_commit, stash";
+    m.triggers = {"git", "commit", "diff", "blame", "file_history", "log", "status", "branch", "stash"};
+    m.pinned = false;
+    m.intents = {IntentType::Git};
+    m.scope = Scope::LocalGit;
+    m.schema_tokens = 50;
+    return m;
+}
+
 PermissionLevel GitTool::permission() const {
     return PermissionLevel::ask;
 }

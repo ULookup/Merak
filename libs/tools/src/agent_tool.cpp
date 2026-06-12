@@ -35,6 +35,18 @@ ToolSpec AgentTool::spec() const {
     return s;
 }
 
+ToolMeta AgentTool::meta() const {
+    ToolMeta m;
+    m.name = "agent";
+    m.description = "Multi-agent: spawn (create sub-agent), get_result, send_message, list";
+    m.triggers = {"agent", "spawn", "orchestrate", "sub-agent"};
+    m.pinned = false;
+    m.intents = {IntentType::AgentOp};
+    m.scope = Scope::External;
+    m.schema_tokens = 40;
+    return m;
+}
+
 PermissionLevel AgentTool::permission() const { return PermissionLevel::ask; }
 
 std::unique_ptr<Tool> AgentTool::clone() const {

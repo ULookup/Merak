@@ -16,6 +16,7 @@ public:
         : registry_(std::move(registry)) {}
 
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override;
     std::future<ToolResult> execute(
         ToolCall call, ToolExecutionContext context = {}) override;

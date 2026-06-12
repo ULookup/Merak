@@ -90,6 +90,18 @@ ToolSpec TaskTool::spec() const {
     return s;
 }
 
+ToolMeta TaskTool::meta() const {
+    ToolMeta m;
+    m.name = "task";
+    m.description = "Durable task list: create, update, list, complete, archive";
+    m.triggers = {"task", "todo", "checklist", "track"};
+    m.pinned = false;
+    m.intents = {IntentType::TaskMgmt};
+    m.scope = Scope::CrossSession;
+    m.schema_tokens = 30;
+    return m;
+}
+
 PermissionLevel TaskTool::permission() const {
     return PermissionLevel::safe;
 }

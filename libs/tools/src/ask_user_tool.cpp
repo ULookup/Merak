@@ -39,6 +39,18 @@ ToolSpec AskUserTool::spec() const {
     return s;
 }
 
+ToolMeta AskUserTool::meta() const {
+    ToolMeta m;
+    m.name = "ask_user";
+    m.description = "Ask the user interactive questions for clarification or confirmation";
+    m.triggers = {"ask", "question", "confirm", "clarify"};
+    m.pinned = false;
+    m.intents = {IntentType::Introspect};
+    m.scope = Scope::Local;
+    m.schema_tokens = 20;
+    return m;
+}
+
 PermissionLevel AskUserTool::permission() const {
     return PermissionLevel::safe;
 }

@@ -7,6 +7,7 @@ namespace merak::tools {
 class GlobTool : public Tool {
 public:
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
@@ -18,6 +19,7 @@ public:
 class GrepTool : public Tool {
 public:
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::safe; }
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {

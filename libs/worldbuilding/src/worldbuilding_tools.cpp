@@ -31,8 +31,20 @@ ToolSpec DescribeCharacterTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> DescribeCharacterTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta DescribeCharacterTool::meta() const {
+    ToolMeta m;
+    m.name = "describe_character";
+    m.description = "Get detailed character profile by name";
+    m.triggers = {"character", "describe", "profile"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> DescribeCharacterTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -47,7 +59,7 @@ std::future<ToolResult> DescribeCharacterTool::execute(ToolCall call, ToolExecut
             }
 
             auto& svc = *static_cast<DescribeCharacterTool&>(*self).svc_;
-            auto& ctx = static_cast<DescribeCharacterTool&>(*self).ctx_;
+
 
             auto agent_opt = svc.agents().get_agent(target_id);
             if (!agent_opt) {
@@ -56,7 +68,7 @@ std::future<ToolResult> DescribeCharacterTool::execute(ToolCall call, ToolExecut
                 return result;
             }
 
-            auto scene_opt = svc.narrative().get_scene(ctx.world_id, ctx.scene_id);
+            auto scene_opt = svc.narrative().get_scene(exec_ctx.world_id, exec_ctx.scene_id);
             if (!scene_opt) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "当前场景未初始化。");
@@ -110,8 +122,20 @@ ToolSpec SearchMyDiaryTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> SearchMyDiaryTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta SearchMyDiaryTool::meta() const {
+    ToolMeta m;
+    m.name = "search_my_diary";
+    m.description = "Search your own diary entries by keyword";
+    m.triggers = {"diary", "memory", "search diary"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> SearchMyDiaryTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -126,9 +150,8 @@ std::future<ToolResult> SearchMyDiaryTool::execute(ToolCall call, ToolExecutionC
             }
 
             auto& svc = *static_cast<SearchMyDiaryTool&>(*self).svc_;
-            auto& ctx = static_cast<SearchMyDiaryTool&>(*self).ctx_;
 
-            auto entries = svc.agents().search_diary(ctx.caller_agent_id, query, 5);
+            auto entries = svc.agents().search_diary(exec_ctx.caller_agent_id, query, 5);
             if (entries.empty()) {
                 result.output = error_response(ToolErrorCode::EMPTY_RESULT,
                     "在你的日记中没有找到与 '" + query + "' 相关的内容。尝试更宽泛的词语。");
@@ -165,16 +188,27 @@ ToolSpec LookAroundTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> LookAroundTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta LookAroundTool::meta() const {
+    ToolMeta m;
+    m.name = "look_around";
+    m.description = "Observe current surroundings and characters present";
+    m.triggers = {"look", "observe", "surroundings", "where am i"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> LookAroundTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
         try {
             auto& svc = *static_cast<LookAroundTool&>(*self).svc_;
-            auto& ctx = static_cast<LookAroundTool&>(*self).ctx_;
 
-            auto scene_opt = svc.narrative().get_scene(ctx.world_id, ctx.scene_id);
+            auto scene_opt = svc.narrative().get_scene(exec_ctx.world_id, exec_ctx.scene_id);
             if (!scene_opt) {
                 result.is_error = true;
                 result.output = error_response(ToolErrorCode::INTERNAL,
@@ -222,8 +256,20 @@ ToolSpec QueryMapTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> QueryMapTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta QueryMapTool::meta() const {
+    ToolMeta m;
+    m.name = "query_map";
+    m.description = "Query geographic map data for a region";
+    m.triggers = {"geography", "map", "region", "terrain"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> QueryMapTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -238,15 +284,14 @@ std::future<ToolResult> QueryMapTool::execute(ToolCall call, ToolExecutionContex
             }
 
             auto& svc = *static_cast<QueryMapTool&>(*self).svc_;
-            auto& ctx = static_cast<QueryMapTool&>(*self).ctx_;
 
-            auto results = svc.worlds().search_world_knowledge(ctx.world_id, region, "map", 1);
+            auto results = svc.worlds().search_world_knowledge(exec_ctx.world_id, region, "map", 1);
             if (!results.empty()) {
                 result.output = ok_response({{"region", region}, {"data", results[0].content}});
                 return result;
             }
 
-            auto knowledge = svc.worlds().get_world_knowledge(ctx.world_id, "map");
+            auto knowledge = svc.worlds().get_world_knowledge(exec_ctx.world_id, "map");
             std::string known;
             for (auto& kw : knowledge) known += (known.empty() ? "" : "、") + kw.content;
 
@@ -280,8 +325,20 @@ ToolSpec QueryHistoryTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> QueryHistoryTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta QueryHistoryTool::meta() const {
+    ToolMeta m;
+    m.name = "query_history";
+    m.description = "Query historical timeline events by keyword";
+    m.triggers = {"events", "history", "past", "timeline"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> QueryHistoryTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -296,9 +353,8 @@ std::future<ToolResult> QueryHistoryTool::execute(ToolCall call, ToolExecutionCo
             }
 
             auto& svc = *static_cast<QueryHistoryTool&>(*self).svc_;
-            auto& ctx = static_cast<QueryHistoryTool&>(*self).ctx_;
 
-            auto knowledge = svc.worlds().search_world_knowledge(ctx.world_id, keyword, "history");
+            auto knowledge = svc.worlds().search_world_knowledge(exec_ctx.world_id, keyword, "history");
             json arr = json::array();
             for (auto& kw : knowledge) {
                 arr.push_back({
@@ -309,7 +365,7 @@ std::future<ToolResult> QueryHistoryTool::execute(ToolCall call, ToolExecutionCo
 
             if (arr.empty()) {
                 std::string hint;
-                auto all_history = svc.worlds().get_world_knowledge(ctx.world_id, "history");
+                auto all_history = svc.worlds().get_world_knowledge(exec_ctx.world_id, "history");
                 if (!all_history.empty()) {
                     hint = "最近事件：" + make_snippet(all_history.back().content, 80);
                 }
@@ -345,8 +401,20 @@ ToolSpec QueryMagicTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> QueryMagicTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta QueryMagicTool::meta() const {
+    ToolMeta m;
+    m.name = "query_magic";
+    m.description = "Query magic system rules by topic";
+    m.triggers = {"arcane", "enchantment", "magic", "spell"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> QueryMagicTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -361,9 +429,8 @@ std::future<ToolResult> QueryMagicTool::execute(ToolCall call, ToolExecutionCont
             }
 
             auto& svc = *static_cast<QueryMagicTool&>(*self).svc_;
-            auto& ctx = static_cast<QueryMagicTool&>(*self).ctx_;
 
-            auto results = svc.worlds().search_world_knowledge(ctx.world_id, topic, "magic", 1);
+            auto results = svc.worlds().search_world_knowledge(exec_ctx.world_id, topic, "magic", 1);
             if (!results.empty()) {
                 result.output = ok_response({{"topic", topic}, {"rule", results[0].content}});
                 return result;
@@ -398,8 +465,20 @@ ToolSpec QueryFactionTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> QueryFactionTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta QueryFactionTool::meta() const {
+    ToolMeta m;
+    m.name = "query_faction";
+    m.description = "Query faction information including members and rivalries";
+    m.triggers = {"clan", "faction", "group", "guild"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> QueryFactionTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -414,15 +493,14 @@ std::future<ToolResult> QueryFactionTool::execute(ToolCall call, ToolExecutionCo
             }
 
             auto& svc = *static_cast<QueryFactionTool&>(*self).svc_;
-            auto& ctx = static_cast<QueryFactionTool&>(*self).ctx_;
 
-            auto results = svc.worlds().search_world_knowledge(ctx.world_id, name, "faction", 1);
+            auto results = svc.worlds().search_world_knowledge(exec_ctx.world_id, name, "faction", 1);
             if (!results.empty()) {
                 result.output = ok_response({{"name", name}, {"info", results[0].content}});
                 return result;
             }
 
-            auto knowledge = svc.worlds().get_world_knowledge(ctx.world_id, "faction");
+            auto knowledge = svc.worlds().get_world_knowledge(exec_ctx.world_id, "faction");
             std::string known;
             for (auto& kw : knowledge) known += (known.empty() ? "" : "、") + kw.content;
             result.output = error_response(ToolErrorCode::EMPTY_RESULT,
@@ -455,8 +533,20 @@ ToolSpec ReadCharacterCardTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> ReadCharacterCardTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta ReadCharacterCardTool::meta() const {
+    ToolMeta m;
+    m.name = "read_character_card";
+    m.description = "Read the complete character card with all traits and background";
+    m.triggers = {"character card", "profile", "read card", "traits"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> ReadCharacterCardTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -550,8 +640,20 @@ ToolSpec ReadSecretTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> ReadSecretTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta ReadSecretTool::meta() const {
+    ToolMeta m;
+    m.name = "read_secret";
+    m.description = "Read the full details of a secret by its ID";
+    m.triggers = {"confidential", "read secret", "secret"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> ReadSecretTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -560,9 +662,8 @@ std::future<ToolResult> ReadSecretTool::execute(ToolCall call, ToolExecutionCont
             std::string secret_id = args.value("secret_id", "");
 
             auto& svc = *static_cast<ReadSecretTool&>(*self).svc_;
-            auto& ctx = static_cast<ReadSecretTool&>(*self).ctx_;
 
-            auto secret_opt = find_secret_by_id(svc.secrets(), ctx.world_id, secret_id);
+            auto secret_opt = find_secret_by_id(svc.secrets(), exec_ctx.world_id, secret_id);
             if (!secret_opt) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "秘密 '" + secret_id + "' 不存在。");
@@ -615,8 +716,20 @@ ToolSpec ReadForeshadowingTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> ReadForeshadowingTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta ReadForeshadowingTool::meta() const {
+    ToolMeta m;
+    m.name = "read_foreshadowing";
+    m.description = "Read full details of a foreshadowing item";
+    m.triggers = {"foreshadow", "hint", "read foreshadow"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> ReadForeshadowingTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -625,9 +738,8 @@ std::future<ToolResult> ReadForeshadowingTool::execute(ToolCall call, ToolExecut
             std::string foreshadowing_id = args.value("foreshadowing_id", "");
 
             auto& svc = *static_cast<ReadForeshadowingTool&>(*self).svc_;
-            auto& ctx = static_cast<ReadForeshadowingTool&>(*self).ctx_;
 
-            auto f_opt = find_foreshadowing_by_id(svc.foreshadowing(), ctx.world_id, foreshadowing_id);
+            auto f_opt = find_foreshadowing_by_id(svc.foreshadowing(), exec_ctx.world_id, foreshadowing_id);
             if (!f_opt) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "伏笔 '" + foreshadowing_id + "' 不存在。");
@@ -667,16 +779,27 @@ ToolSpec ListOpenForeshadowingTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> ListOpenForeshadowingTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta ListOpenForeshadowingTool::meta() const {
+    ToolMeta m;
+    m.name = "list_open_foreshadowing";
+    m.description = "List all currently open foreshadowing items";
+    m.triggers = {"foreshadow", "list foreshadow", "open foreshadow"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> ListOpenForeshadowingTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
         try {
             auto& svc = *static_cast<ListOpenForeshadowingTool&>(*self).svc_;
-            auto& ctx = static_cast<ListOpenForeshadowingTool&>(*self).ctx_;
 
-            auto items = svc.foreshadowing().list(ctx.world_id, ForeshadowStatus::Open);
+            auto items = svc.foreshadowing().list(exec_ctx.world_id, ForeshadowStatus::Open);
             if (items.empty()) {
                 result.output = error_response(ToolErrorCode::EMPTY_RESULT,
                     "当前世界没有未偿还的伏笔。");
@@ -721,8 +844,20 @@ ToolSpec AdvanceWorldTimeTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> AdvanceWorldTimeTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta AdvanceWorldTimeTool::meta() const {
+    ToolMeta m;
+    m.name = "advance_world_time";
+    m.description = "Advance the current world time forward";
+    m.triggers = {"advance", "forward", "skip time", "time"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> AdvanceWorldTimeTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -745,11 +880,10 @@ std::future<ToolResult> AdvanceWorldTimeTool::execute(ToolCall call, ToolExecuti
             }
 
             auto& svc = *static_cast<AdvanceWorldTimeTool&>(*self).svc_;
-            auto& ctx = static_cast<AdvanceWorldTimeTool&>(*self).ctx_;
 
             // Backward time travel check against current scene time
             {
-                auto scene_opt = svc.narrative().get_scene(ctx.world_id, ctx.scene_id);
+                auto scene_opt = svc.narrative().get_scene(exec_ctx.world_id, exec_ctx.scene_id);
                 if (scene_opt && !scene_opt->world_time.empty()) {
                     auto current_time = WorldTime::parse(scene_opt->world_time);
                     if (current_time.has_value() && *parsed_delta <= *current_time) {
@@ -765,7 +899,7 @@ std::future<ToolResult> AdvanceWorldTimeTool::execute(ToolCall call, ToolExecuti
             ev.world_time = delta;
             ev.description = "World time advanced by: " + delta;
             ev.recorded_by = "god_agent";
-            auto recorded = svc.narrative().record_timeline_event(ctx.world_id, std::move(ev));
+            auto recorded = svc.narrative().record_timeline_event(exec_ctx.world_id, std::move(ev));
 
             json data{
                 {"new_time", recorded.world_time},
@@ -809,8 +943,20 @@ ToolSpec CreateCharacterTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> CreateCharacterTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta CreateCharacterTool::meta() const {
+    ToolMeta m;
+    m.name = "create_character";
+    m.description = "Create a new character in the world";
+    m.triggers = {"add character", "create character", "new character"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> CreateCharacterTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -831,13 +977,12 @@ std::future<ToolResult> CreateCharacterTool::execute(ToolCall call, ToolExecutio
             }
 
             auto& svc = *static_cast<CreateCharacterTool&>(*self).svc_;
-            auto& ctx = static_cast<CreateCharacterTool&>(*self).ctx_;
 
-            auto existing = svc.agents().list_agents(ctx.world_id);
+            auto existing = svc.agents().list_agents(exec_ctx.world_id);
             for (auto& ag : existing) {
                 if (ag.name == name) {
                     result.output = error_response(ToolErrorCode::CONFLICT,
-                        "世界 '" + ctx.world_id + "' 中已存在名为 '" + name + "' 的角色。");
+                        "世界 '" + exec_ctx.world_id + "' 中已存在名为 '" + name + "' 的角色。");
                     return result;
                 }
             }
@@ -860,7 +1005,7 @@ std::future<ToolResult> CreateCharacterTool::execute(ToolCall call, ToolExecutio
                 }
             }
 
-            auto record = svc.agents().create_character(ctx.world_id, std::move(card));
+            auto record = svc.agents().create_character(exec_ctx.world_id, std::move(card));
             result.output = ok_response({{"agent_id", record.id}, {"name", record.name}});
 
         } catch (const std::exception& e) {
@@ -896,8 +1041,20 @@ ToolSpec CreateSceneTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> CreateSceneTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta CreateSceneTool::meta() const {
+    ToolMeta m;
+    m.name = "create_scene";
+    m.description = "Create a new scene in the current world";
+    m.triggers = {"add scene", "create scene", "new scene"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> CreateSceneTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -918,10 +1075,9 @@ std::future<ToolResult> CreateSceneTool::execute(ToolCall call, ToolExecutionCon
             }
 
             auto& svc = *static_cast<CreateSceneTool&>(*self).svc_;
-            auto& ctx = static_cast<CreateSceneTool&>(*self).ctx_;
 
-            auto preview = svc.build_scene_preview(ctx.world_id, args);
-            auto creation_id = svc.store_pending_creation(ctx.world_id, "create_scene", args, preview);
+            auto preview = svc.build_scene_preview(exec_ctx.world_id, args);
+            auto creation_id = svc.store_pending_creation(exec_ctx.world_id, "create_scene", args, preview);
 
             json output;
             output["ok"] = true;
@@ -963,8 +1119,20 @@ ToolSpec CreateChapterTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> CreateChapterTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta CreateChapterTool::meta() const {
+    ToolMeta m;
+    m.name = "create_chapter";
+    m.description = "Create a new chapter in the current world";
+    m.triggers = {"add chapter", "create chapter", "new chapter"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> CreateChapterTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -979,10 +1147,9 @@ std::future<ToolResult> CreateChapterTool::execute(ToolCall call, ToolExecutionC
             }
 
             auto& svc = *static_cast<CreateChapterTool&>(*self).svc_;
-            auto& ctx = static_cast<CreateChapterTool&>(*self).ctx_;
 
-            auto preview = svc.build_chapter_preview(ctx.world_id, args);
-            auto creation_id = svc.store_pending_creation(ctx.world_id, "create_chapter", args, preview);
+            auto preview = svc.build_chapter_preview(exec_ctx.world_id, args);
+            auto creation_id = svc.store_pending_creation(exec_ctx.world_id, "create_chapter", args, preview);
 
             json output;
             output["ok"] = true;
@@ -1024,8 +1191,20 @@ ToolSpec CreateArcTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> CreateArcTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta CreateArcTool::meta() const {
+    ToolMeta m;
+    m.name = "create_arc";
+    m.description = "Create a new story arc in the current world";
+    m.triggers = {"add arc", "create arc", "new arc", "story arc"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> CreateArcTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1041,10 +1220,9 @@ std::future<ToolResult> CreateArcTool::execute(ToolCall call, ToolExecutionConte
             }
 
             auto& svc = *static_cast<CreateArcTool&>(*self).svc_;
-            auto& ctx = static_cast<CreateArcTool&>(*self).ctx_;
 
-            auto preview = svc.build_arc_preview(ctx.world_id, args);
-            auto creation_id = svc.store_pending_creation(ctx.world_id, "create_arc", args, preview);
+            auto preview = svc.build_arc_preview(exec_ctx.world_id, args);
+            auto creation_id = svc.store_pending_creation(exec_ctx.world_id, "create_arc", args, preview);
 
             json output;
             output["ok"] = true;
@@ -1085,8 +1263,20 @@ ToolSpec CreateSecretTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> CreateSecretTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta CreateSecretTool::meta() const {
+    ToolMeta m;
+    m.name = "create_secret";
+    m.description = "Create a new secret in the current world";
+    m.triggers = {"add secret", "create secret", "new secret"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> CreateSecretTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1102,10 +1292,9 @@ std::future<ToolResult> CreateSecretTool::execute(ToolCall call, ToolExecutionCo
             }
 
             auto& svc = *static_cast<CreateSecretTool&>(*self).svc_;
-            auto& ctx = static_cast<CreateSecretTool&>(*self).ctx_;
 
-            auto preview = svc.build_secret_preview(ctx.world_id, args);
-            auto creation_id = svc.store_pending_creation(ctx.world_id, "create_secret", args, preview);
+            auto preview = svc.build_secret_preview(exec_ctx.world_id, args);
+            auto creation_id = svc.store_pending_creation(exec_ctx.world_id, "create_secret", args, preview);
 
             json output;
             output["ok"] = true;
@@ -1146,8 +1335,20 @@ ToolSpec AddWorldKnowledgeTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> AddWorldKnowledgeTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta AddWorldKnowledgeTool::meta() const {
+    ToolMeta m;
+    m.name = "add_world_knowledge";
+    m.description = "Add a new world knowledge entry";
+    m.triggers = {"add knowledge", "knowledge", "world knowledge"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> AddWorldKnowledgeTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1168,10 +1369,9 @@ std::future<ToolResult> AddWorldKnowledgeTool::execute(ToolCall call, ToolExecut
             }
 
             auto& svc = *static_cast<AddWorldKnowledgeTool&>(*self).svc_;
-            auto& ctx = static_cast<AddWorldKnowledgeTool&>(*self).ctx_;
 
-            auto preview = svc.build_world_knowledge_preview(ctx.world_id, args);
-            auto creation_id = svc.store_pending_creation(ctx.world_id, "add_world_knowledge", args, preview);
+            auto preview = svc.build_world_knowledge_preview(exec_ctx.world_id, args);
+            auto creation_id = svc.store_pending_creation(exec_ctx.world_id, "add_world_knowledge", args, preview);
 
             json output;
             output["ok"] = true;
@@ -1211,8 +1411,20 @@ ToolSpec CreateLocationTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> CreateLocationTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta CreateLocationTool::meta() const {
+    ToolMeta m;
+    m.name = "create_location";
+    m.description = "Create a new location in the current world";
+    m.triggers = {"add location", "add place", "create location", "new location"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> CreateLocationTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1227,10 +1439,9 @@ std::future<ToolResult> CreateLocationTool::execute(ToolCall call, ToolExecution
             }
 
             auto& svc = *static_cast<CreateLocationTool&>(*self).svc_;
-            auto& ctx = static_cast<CreateLocationTool&>(*self).ctx_;
 
-            auto preview = svc.build_location_preview(ctx.world_id, args);
-            auto creation_id = svc.store_pending_creation(ctx.world_id, "create_location", args, preview);
+            auto preview = svc.build_location_preview(exec_ctx.world_id, args);
+            auto creation_id = svc.store_pending_creation(exec_ctx.world_id, "create_location", args, preview);
 
             json output;
             output["ok"] = true;
@@ -1269,8 +1480,20 @@ ToolSpec PlantForeshadowingTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> PlantForeshadowingTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta PlantForeshadowingTool::meta() const {
+    ToolMeta m;
+    m.name = "plant_foreshadowing";
+    m.description = "Plant a new foreshadowing item for future payoff";
+    m.triggers = {"foreshadow", "hint", "plant", "setup"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> PlantForeshadowingTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1292,7 +1515,6 @@ std::future<ToolResult> PlantForeshadowingTool::execute(ToolCall call, ToolExecu
             }
 
             auto& svc = *static_cast<PlantForeshadowingTool&>(*self).svc_;
-            auto& ctx = static_cast<PlantForeshadowingTool&>(*self).ctx_;
 
             Foreshadowing f;
             f.content = content;
@@ -1308,7 +1530,7 @@ std::future<ToolResult> PlantForeshadowingTool::execute(ToolCall call, ToolExecu
                 for (auto& t : args["tags"]) f.tags.push_back(t.get<std::string>());
             }
 
-            auto planted = svc.foreshadowing().plant(ctx.world_id, std::move(f));
+            auto planted = svc.foreshadowing().plant(exec_ctx.world_id, std::move(f));
             result.output = ok_response({{"foreshadowing_id", planted.id}});
 
         } catch (const std::exception& e) {
@@ -1337,8 +1559,20 @@ ToolSpec ExposeSecretTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> ExposeSecretTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta ExposeSecretTool::meta() const {
+    ToolMeta m;
+    m.name = "expose_secret";
+    m.description = "Expose a secret in the current scene";
+    m.triggers = {"expose", "reveal", "secret", "uncover"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> ExposeSecretTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1347,9 +1581,8 @@ std::future<ToolResult> ExposeSecretTool::execute(ToolCall call, ToolExecutionCo
             std::string secret_id = args.value("secret_id", "");
 
             auto& svc = *static_cast<ExposeSecretTool&>(*self).svc_;
-            auto& ctx = static_cast<ExposeSecretTool&>(*self).ctx_;
 
-            auto secret_opt = find_secret_by_id(svc.secrets(), ctx.world_id, secret_id);
+            auto secret_opt = find_secret_by_id(svc.secrets(), exec_ctx.world_id, secret_id);
             if (!secret_opt) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "秘密 '" + secret_id + "' 不存在。");
@@ -1368,13 +1601,13 @@ std::future<ToolResult> ExposeSecretTool::execute(ToolCall call, ToolExecutionCo
                 return result;
             }
 
-            auto exposed = svc.secrets().expose(ctx.world_id, secret_id, ctx.scene_id);
+            auto exposed = svc.secrets().expose(exec_ctx.world_id, secret_id, exec_ctx.scene_id);
 
             json warnings = json::array();
             int repaid = 0;
             for (auto& f_id : exposed.related_foreshadowing_ids) {
                 try {
-                    svc.foreshadowing().pay(ctx.world_id, f_id, ctx.scene_id);
+                    svc.foreshadowing().pay(exec_ctx.world_id, f_id, exec_ctx.scene_id);
                     repaid++;
                 } catch (...) {
                     warnings.push_back({
@@ -1423,8 +1656,20 @@ ToolSpec EndSceneTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> EndSceneTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta EndSceneTool::meta() const {
+    ToolMeta m;
+    m.name = "end_scene";
+    m.description = "End the current scene and process its final draft";
+    m.triggers = {"close scene", "conclude", "end scene", "finish scene"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> EndSceneTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1439,9 +1684,8 @@ std::future<ToolResult> EndSceneTool::execute(ToolCall call, ToolExecutionContex
             }
 
             auto& svc = *static_cast<EndSceneTool&>(*self).svc_;
-            auto& ctx = static_cast<EndSceneTool&>(*self).ctx_;
 
-            auto scene_opt = svc.narrative().get_scene(ctx.world_id, ctx.scene_id);
+            auto scene_opt = svc.narrative().get_scene(exec_ctx.world_id, exec_ctx.scene_id);
             if (!scene_opt) {
                 result.is_error = true;
                 result.output = error_response(ToolErrorCode::INTERNAL,
@@ -1454,7 +1698,7 @@ std::future<ToolResult> EndSceneTool::execute(ToolCall call, ToolExecutionContex
                 return result;
             }
 
-            auto wrapup = svc.end_scene(ctx.world_id, ctx.scene_id, final_draft);
+            auto wrapup = svc.end_scene(exec_ctx.world_id, exec_ctx.scene_id, final_draft);
 
             json foreshadow_proposals = json::array();
             for (auto& fp : wrapup.proposed_foreshadowing) {
@@ -1518,8 +1762,20 @@ ToolSpec SearchAgentTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> SearchAgentTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta SearchAgentTool::meta() const {
+    ToolMeta m;
+    m.name = "search_agent";
+    m.description = "Search for characters by traits or identity";
+    m.triggers = {"agent lookup", "find character", "search"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> SearchAgentTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1538,9 +1794,8 @@ std::future<ToolResult> SearchAgentTool::execute(ToolCall call, ToolExecutionCon
             }
 
             auto& svc = *static_cast<SearchAgentTool&>(*self).svc_;
-            auto& ctx = static_cast<SearchAgentTool&>(*self).ctx_;
 
-            auto agents = svc.agents().search_agents_by_traits(ctx.world_id, traits, identity);
+            auto agents = svc.agents().search_agents_by_traits(exec_ctx.world_id, traits, identity);
 
             if (agents.empty()) {
                 result.output = error_response(ToolErrorCode::EMPTY_RESULT,
@@ -1592,8 +1847,20 @@ ToolSpec QueryWorldTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> QueryWorldTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta QueryWorldTool::meta() const {
+    ToolMeta m;
+    m.name = "query_world";
+    m.description = "Search all world knowledge categories at once";
+    m.triggers = {"knowledge", "query world", "search world", "world"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> QueryWorldTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1608,10 +1875,9 @@ std::future<ToolResult> QueryWorldTool::execute(ToolCall call, ToolExecutionCont
             }
 
             auto& svc = *static_cast<QueryWorldTool&>(*self).svc_;
-            auto& ctx = static_cast<QueryWorldTool&>(*self).ctx_;
 
             std::string category = args.value("category", "");
-            auto knowledge = svc.worlds().search_world_knowledge(ctx.world_id, query, category);
+            auto knowledge = svc.worlds().search_world_knowledge(exec_ctx.world_id, query, category);
 
             if (knowledge.empty()) {
                 result.output = error_response(ToolErrorCode::EMPTY_RESULT,
@@ -1659,9 +1925,21 @@ ToolSpec UpdateAgentPromptTool::spec() const {
     return s;
 }
 
+ToolMeta UpdateAgentPromptTool::meta() const {
+    ToolMeta m;
+    m.name = "update_agent_prompt";
+    m.description = "Update an agent's system prompt";
+    m.triggers = {"agent prompt", "set prompt", "system prompt", "update prompt"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
 std::future<ToolResult> UpdateAgentPromptTool::execute(
-    ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+    ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         auto& svc = *static_cast<UpdateAgentPromptTool&>(*self).svc_;
         try {
             auto args = json::parse(call.arguments);
@@ -1713,8 +1991,20 @@ ToolSpec UpdateCharacterCardTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> UpdateCharacterCardTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta UpdateCharacterCardTool::meta() const {
+    ToolMeta m;
+    m.name = "update_character_card";
+    m.description = "Update a character's card with new traits, appearance, or background";
+    m.triggers = {"edit card", "modify character", "update character"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> UpdateCharacterCardTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1742,8 +2032,7 @@ std::future<ToolResult> UpdateCharacterCardTool::execute(ToolCall call, ToolExec
                 return result;
             }
 
-            auto& ctx = static_cast<UpdateCharacterCardTool&>(*self).ctx_;
-            if (agent_opt->world_id != ctx.world_id) {
+            if (agent_opt->world_id != exec_ctx.world_id) {
                 result.output = error_response(ToolErrorCode::NO_PERMISSION,
                     "角色不属于当前世界，无法修改。");
                 return result;
@@ -1789,8 +2078,20 @@ ToolSpec WriteMyDiaryTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> WriteMyDiaryTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta WriteMyDiaryTool::meta() const {
+    ToolMeta m;
+    m.name = "write_my_diary";
+    m.description = "Write a new entry to the character's personal diary";
+    m.triggers = {"diary", "journal entry", "write diary"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> WriteMyDiaryTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -1817,10 +2118,9 @@ std::future<ToolResult> WriteMyDiaryTool::execute(ToolCall call, ToolExecutionCo
             }
 
             auto& svc = *static_cast<WriteMyDiaryTool&>(*self).svc_;
-            auto& ctx = static_cast<WriteMyDiaryTool&>(*self).ctx_;
 
-            std::string agent_id = ctx.caller_agent_id;
-            std::string scene_id = args.value("scene_id", ctx.scene_id);
+            std::string agent_id = exec_ctx.caller_agent_id;
+            std::string scene_id = args.value("scene_id", exec_ctx.scene_id);
 
             auto agent_opt = svc.agents().get_agent(agent_id);
             if (!agent_opt) {
@@ -1831,13 +2131,13 @@ std::future<ToolResult> WriteMyDiaryTool::execute(ToolCall call, ToolExecutionCo
             }
 
             std::string world_time;
-            auto scene_opt = svc.narrative().get_scene(ctx.world_id, scene_id);
+            auto scene_opt = svc.narrative().get_scene(exec_ctx.world_id, scene_id);
             if (scene_opt) world_time = scene_opt->world_time;
 
             // Check leak risk based on the diary content (spec step 2)
             int leak_risk_level = 0;
             if (scene_opt) {
-                auto risks = svc.secrets().check_leak_risk(ctx.world_id, *scene_opt, content);
+                auto risks = svc.secrets().check_leak_risk(exec_ctx.world_id, *scene_opt, content);
                 if (!risks.empty()) leak_risk_level = 1;
             }
 
@@ -1854,7 +2154,7 @@ std::future<ToolResult> WriteMyDiaryTool::execute(ToolCall call, ToolExecutionCo
             svc.agents().append_diary_entry(entry);
 
             // Emit diary_created SSE event (spec section 六)
-            svc.notify_diary_created(ctx.world_id, entry.id, agent_id, scene_id, mood, entry.leak_risk_level);
+            svc.notify_diary_created(exec_ctx.world_id, entry.id, agent_id, scene_id, mood, entry.leak_risk_level);
 
             nlohmann::json out = {
                 {"agent_id", agent_id},
@@ -1888,19 +2188,30 @@ ToolSpec CompressMyMemoryTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> CompressMyMemoryTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta CompressMyMemoryTool::meta() const {
+    ToolMeta m;
+    m.name = "compress_my_memory";
+    m.description = "Compress and summarize the character's memory diary entries";
+    m.triggers = {"compact diary", "compress", "summarize memory"};
+    m.pinned = false;
+    m.intents = {IntentType::Memory};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> CompressMyMemoryTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
         try {
             auto& svc = *static_cast<CompressMyMemoryTool&>(*self).svc_;
-            auto& ctx = static_cast<CompressMyMemoryTool&>(*self).ctx_;
             int threshold = static_cast<CompressMyMemoryTool&>(*self).threshold_;
             std::string model = static_cast<CompressMyMemoryTool&>(*self).model_;
             auto& llm = *static_cast<CompressMyMemoryTool&>(*self).llm_;
 
-            std::string agent_id = ctx.caller_agent_id;
+            std::string agent_id = exec_ctx.caller_agent_id;
             auto diaries = svc.agents().uncompressed_diaries(agent_id, threshold);
 
             if (diaries.size() < 5) {
@@ -1952,7 +2263,7 @@ std::future<ToolResult> CompressMyMemoryTool::execute(ToolCall call, ToolExecuti
             svc.agents().write_memory_summary(summary);
 
             // Emit memory_summary_created SSE event (spec section 六)
-            svc.notify_memory_summary_created(ctx.world_id, summary.id, agent_id, summary.source_diary_ids);
+            svc.notify_memory_summary_created(exec_ctx.world_id, summary.id, agent_id, summary.source_diary_ids);
 
             nlohmann::json out = {
                 {"compressed", true},
@@ -1991,8 +2302,20 @@ ToolSpec AddRelationTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> AddRelationTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta AddRelationTool::meta() const {
+    ToolMeta m;
+    m.name = "add_relation";
+    m.description = "Add a relationship between two characters or entities";
+    m.triggers = {"connect", "relation", "relationship"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> AddRelationTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -2019,7 +2342,6 @@ std::future<ToolResult> AddRelationTool::execute(ToolCall call, ToolExecutionCon
             }
 
             auto& svc = *static_cast<AddRelationTool&>(*self).svc_;
-            auto& ctx = static_cast<AddRelationTool&>(*self).ctx_;
 
             auto src_opt = svc.agents().get_agent(source_id);
             if (!src_opt) {
@@ -2033,12 +2355,12 @@ std::future<ToolResult> AddRelationTool::execute(ToolCall call, ToolExecutionCon
                     "角色 '" + target_id + "' 不存在。");
                 return result;
             }
-            if (src_opt->world_id != ctx.world_id) {
+            if (src_opt->world_id != exec_ctx.world_id) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "角色 '" + source_id + "' 不在当前世界中。");
                 return result;
             }
-            if (tgt_opt->world_id != ctx.world_id) {
+            if (tgt_opt->world_id != exec_ctx.world_id) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "角色 '" + target_id + "' 不在当前世界中。");
                 return result;
@@ -2089,8 +2411,20 @@ ToolSpec UpdateForeshadowTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> UpdateForeshadowTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta UpdateForeshadowTool::meta() const {
+    ToolMeta m;
+    m.name = "update_foreshadow";
+    m.description = "Update a foreshadowing entry status or payoff";
+    m.triggers = {"foreshadow", "payoff", "update foreshadow"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> UpdateForeshadowTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
 
@@ -2105,7 +2439,6 @@ std::future<ToolResult> UpdateForeshadowTool::execute(ToolCall call, ToolExecuti
             }
 
             auto& svc = *static_cast<UpdateForeshadowTool&>(*self).svc_;
-            auto& ctx = static_cast<UpdateForeshadowTool&>(*self).ctx_;
 
             json fields;
             if (args.contains("status")) {
@@ -2130,7 +2463,7 @@ std::future<ToolResult> UpdateForeshadowTool::execute(ToolCall call, ToolExecuti
                 return result;
             }
 
-            bool ok = svc.foreshadowing().patch(ctx.world_id, id, fields);
+            bool ok = svc.foreshadowing().patch(exec_ctx.world_id, id, fields);
             if (!ok) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "伏笔 '" + id + "' 不存在或更新失败。");
@@ -2168,8 +2501,20 @@ ToolSpec QuerySubgraphTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> QuerySubgraphTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta QuerySubgraphTool::meta() const {
+    ToolMeta m;
+    m.name = "query_subgraph";
+    m.description = "Query the knowledge graph subgraph around specified nodes";
+    m.triggers = {"graph query", "query graph", "subgraph"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> QuerySubgraphTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
         try {
@@ -2182,14 +2527,13 @@ std::future<ToolResult> QuerySubgraphTool::execute(ToolCall call, ToolExecutionC
             for (auto& n : args["entity_names"]) names.push_back(n.get<std::string>());
 
             auto& svc = *static_cast<QuerySubgraphTool&>(*self).svc_;
-            auto& ctx = static_cast<QuerySubgraphTool&>(*self).ctx_;
             auto* kg = svc.kg_provider();
             if (!kg) {
                 result.output = error_response(ToolErrorCode::INTERNAL, "Knowledge Graph provider not available");
                 return result;
             }
             merak::kg::QueryFilters filters;
-            auto sg = kg->query_subgraph(ctx.world_id, names, filters);
+            auto sg = kg->query_subgraph(exec_ctx.world_id, names, filters);
             auto md = merak::kg::KnowledgeGraphProvider::subgraph_to_markdown(sg);
             result.output = ok_response({{"markdown", md.empty() ? "*No relations found*" : md}, {"relation_count", sg.relations.size()}});
         } catch (const std::exception& e) {
@@ -2216,8 +2560,20 @@ ToolSpec ExpandGraphTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> ExpandGraphTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta ExpandGraphTool::meta() const {
+    ToolMeta m;
+    m.name = "expand_graph";
+    m.description = "Expand the knowledge graph by adding inferred relations";
+    m.triggers = {"expand", "graph expand", "infer relations"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> ExpandGraphTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
         try {
@@ -2230,14 +2586,13 @@ std::future<ToolResult> ExpandGraphTool::execute(ToolCall call, ToolExecutionCon
             int radius = args.value("radius", 1);
 
             auto& svc = *static_cast<ExpandGraphTool&>(*self).svc_;
-            auto& ctx = static_cast<ExpandGraphTool&>(*self).ctx_;
             auto* kg = svc.kg_provider();
             if (!kg) {
                 result.output = error_response(ToolErrorCode::INTERNAL, "Knowledge Graph provider not available");
                 return result;
             }
             merak::kg::QueryFilters filters;
-            auto ng = kg->expand(ctx.world_id, entity_name, radius, filters);
+            auto ng = kg->expand(exec_ctx.world_id, entity_name, radius, filters);
             auto md = merak::kg::KnowledgeGraphProvider::neighbor_graph_to_markdown(ng);
             result.output = ok_response({
                 {"markdown", md.empty() ? "*No neighbors found*" : md},
@@ -2270,8 +2625,20 @@ ToolSpec FindPathTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> FindPathTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta FindPathTool::meta() const {
+    ToolMeta m;
+    m.name = "find_path";
+    m.description = "Find paths between nodes in the knowledge graph";
+    m.triggers = {"find path", "path", "shortest path"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> FindPathTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
         try {
@@ -2285,14 +2652,13 @@ std::future<ToolResult> FindPathTool::execute(ToolCall call, ToolExecutionContex
             int max_depth = args.value("max_depth", 4);
 
             auto& svc = *static_cast<FindPathTool&>(*self).svc_;
-            auto& ctx = static_cast<FindPathTool&>(*self).ctx_;
             auto* kg = svc.kg_provider();
             if (!kg) {
                 result.output = error_response(ToolErrorCode::INTERNAL, "Knowledge Graph provider not available");
                 return result;
             }
             merak::kg::QueryFilters filters;
-            auto pr = kg->find_paths(ctx.world_id, source, target, max_depth, filters);
+            auto pr = kg->find_paths(exec_ctx.world_id, source, target, max_depth, filters);
             auto md = merak::kg::KnowledgeGraphProvider::path_result_to_markdown(pr);
             result.output = ok_response({
                 {"markdown", md},
@@ -2322,8 +2688,20 @@ ToolSpec CheckConsistencyTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> CheckConsistencyTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta CheckConsistencyTool::meta() const {
+    ToolMeta m;
+    m.name = "check_consistency";
+    m.description = "Check consistency of worldbuilding data and relationships";
+    m.triggers = {"check", "consistency", "validate"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> CheckConsistencyTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
         try {
@@ -2335,14 +2713,13 @@ std::future<ToolResult> CheckConsistencyTool::execute(ToolCall call, ToolExecuti
             }
 
             auto& svc = *static_cast<CheckConsistencyTool&>(*self).svc_;
-            auto& ctx = static_cast<CheckConsistencyTool&>(*self).ctx_;
             auto* kg = svc.kg_provider();
             if (!kg) {
                 result.output = error_response(ToolErrorCode::INTERNAL, "Knowledge Graph provider not available");
                 return result;
             }
             merak::kg::QueryFilters filters;
-            auto ng = kg->expand(ctx.world_id, entity_name, 1, filters);
+            auto ng = kg->expand(exec_ctx.world_id, entity_name, 1, filters);
             auto ng_md = merak::kg::KnowledgeGraphProvider::neighbor_graph_to_markdown(ng);
 
             std::ostringstream report;
@@ -2392,8 +2769,20 @@ ToolSpec ExtractSceneRelationsTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> ExtractSceneRelationsTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta ExtractSceneRelationsTool::meta() const {
+    ToolMeta m;
+    m.name = "extract_scene_relations";
+    m.description = "Extract character and entity relations from scene narrative";
+    m.triggers = {"extract relations", "parse relations", "scene relations"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> ExtractSceneRelationsTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
         try {
@@ -2406,11 +2795,10 @@ std::future<ToolResult> ExtractSceneRelationsTool::execute(ToolCall call, ToolEx
             bool include_existing = args.value("include_existing", true);
 
             auto& svc = *static_cast<ExtractSceneRelationsTool&>(*self).svc_;
-            auto& ctx = static_cast<ExtractSceneRelationsTool&>(*self).ctx_;
             auto* kg = svc.kg_provider();
 
             // 1. Load scene from NarrativeStore
-            auto scene_opt = svc.narrative().get_scene(ctx.world_id, scene_id);
+            auto scene_opt = svc.narrative().get_scene(exec_ctx.world_id, scene_id);
             if (!scene_opt) {
                 result.output = error_response(ToolErrorCode::NOT_FOUND,
                     "Scene not found: " + scene_id);
@@ -2443,7 +2831,7 @@ std::future<ToolResult> ExtractSceneRelationsTool::execute(ToolCall call, ToolEx
             if (include_existing && kg && !participant_names.empty()) {
                 try {
                     merak::kg::QueryFilters filters;
-                    auto sg = kg->query_subgraph(ctx.world_id, participant_names, filters);
+                    auto sg = kg->query_subgraph(exec_ctx.world_id, participant_names, filters);
                     existing_count = static_cast<int>(sg.relations.size());
                     if (existing_count > 0) {
                         report << "## Existing Relations\n\n";
@@ -2507,8 +2895,20 @@ ToolSpec UpsertRelationTool::spec() const {
     return s;
 }
 
-std::future<ToolResult> UpsertRelationTool::execute(ToolCall call, ToolExecutionContext) {
-    return std::async(std::launch::async, [self = this->clone(), call = std::move(call)]() -> ToolResult {
+ToolMeta UpsertRelationTool::meta() const {
+    ToolMeta m;
+    m.name = "upsert_relation";
+    m.description = "Create or update a relation in the knowledge graph";
+    m.triggers = {"create relation", "update relation", "upsert"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainWrite};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> UpsertRelationTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
         ToolResult result;
         result.call_id = call.id;
         try {
@@ -2521,7 +2921,6 @@ std::future<ToolResult> UpsertRelationTool::execute(ToolCall call, ToolExecution
             }
 
             auto& svc = *static_cast<UpsertRelationTool&>(*self).svc_;
-            auto& ctx = static_cast<UpsertRelationTool&>(*self).ctx_;
             auto* kg = svc.kg_provider();
             if (!kg) {
                 result.output = error_response(ToolErrorCode::INTERNAL, "Knowledge Graph provider not available");
@@ -2529,7 +2928,7 @@ std::future<ToolResult> UpsertRelationTool::execute(ToolCall call, ToolExecution
             }
 
             // Resolve entity names to agent IDs to avoid phantom entity nodes
-            auto agents = svc.agents().list_agents(ctx.world_id);
+            auto agents = svc.agents().list_agents(exec_ctx.world_id);
             auto resolve_id = [&agents](const std::string& name) -> std::string {
                 for (const auto& a : agents) {
                     if (a.name == name || a.display_name == name) return a.id;
@@ -2548,7 +2947,7 @@ std::future<ToolResult> UpsertRelationTool::execute(ToolCall call, ToolExecution
             rel.b_to_a_stance = merak::kg::stance_from_string(args.value("b_to_a_stance", "Neutral"));
             rel.fact = args.value("fact", "");
             rel.description = args.value("description", "");
-            rel.world_id = ctx.world_id;
+            rel.world_id = exec_ctx.world_id;
 
             kg->upsert_relation(rel);
             result.output = ok_response({
@@ -2568,71 +2967,70 @@ std::future<ToolResult> UpsertRelationTool::execute(ToolCall call, ToolExecution
 // ========== WorldbuildingTools Factory ==========
 
 std::vector<ToolSpec> WorldbuildingTools::specs_for(AgentKind kind) const {
-    ToolContext empty_ctx;
-    auto tools = create_tools(kind, empty_ctx);
+    auto tools = create_tools(kind);
     std::vector<ToolSpec> specs;
     for (auto& t : tools) specs.push_back(t->spec());
     return specs;
 }
 
 std::vector<std::unique_ptr<Tool>>
-WorldbuildingTools::create_tools(AgentKind kind, const ToolContext& ctx) const {
+WorldbuildingTools::create_tools(AgentKind kind) const {
     std::vector<std::unique_ptr<Tool>> tools;
 
     switch (kind) {
     case AgentKind::God:
-        tools.push_back(std::make_unique<ReadCharacterCardTool>(*service_, ctx));
-        tools.push_back(std::make_unique<ReadSecretTool>(*service_, ctx));
-        tools.push_back(std::make_unique<ReadForeshadowingTool>(*service_, ctx));
-        tools.push_back(std::make_unique<ListOpenForeshadowingTool>(*service_, ctx));
-        tools.push_back(std::make_unique<SearchAgentTool>(*service_, ctx));
-        tools.push_back(std::make_unique<QueryWorldTool>(*service_, ctx));
-        tools.push_back(std::make_unique<AdvanceWorldTimeTool>(*service_, ctx));
-        tools.push_back(std::make_unique<CreateCharacterTool>(*service_, ctx));
-        tools.push_back(std::make_unique<CreateSceneTool>(*service_, ctx));
-        tools.push_back(std::make_unique<CreateChapterTool>(*service_, ctx));
-        tools.push_back(std::make_unique<PlantForeshadowingTool>(*service_, ctx));
-        tools.push_back(std::make_unique<ExposeSecretTool>(*service_, ctx));
-        tools.push_back(std::make_unique<EndSceneTool>(*service_, ctx));
-        tools.push_back(std::make_unique<CreateArcTool>(*service_, ctx));
-        tools.push_back(std::make_unique<CreateSecretTool>(*service_, ctx));
-        tools.push_back(std::make_unique<AddWorldKnowledgeTool>(*service_, ctx));
-        tools.push_back(std::make_unique<CreateLocationTool>(*service_, ctx));
+        tools.push_back(std::make_unique<ReadCharacterCardTool>(*service_));
+        tools.push_back(std::make_unique<ReadSecretTool>(*service_));
+        tools.push_back(std::make_unique<ReadForeshadowingTool>(*service_));
+        tools.push_back(std::make_unique<ListOpenForeshadowingTool>(*service_));
+        tools.push_back(std::make_unique<SearchAgentTool>(*service_));
+        tools.push_back(std::make_unique<QueryWorldTool>(*service_));
+        tools.push_back(std::make_unique<AdvanceWorldTimeTool>(*service_));
+        tools.push_back(std::make_unique<CreateCharacterTool>(*service_));
+        tools.push_back(std::make_unique<CreateSceneTool>(*service_));
+        tools.push_back(std::make_unique<CreateChapterTool>(*service_));
+        tools.push_back(std::make_unique<PlantForeshadowingTool>(*service_));
+        tools.push_back(std::make_unique<ExposeSecretTool>(*service_));
+        tools.push_back(std::make_unique<EndSceneTool>(*service_));
+        tools.push_back(std::make_unique<CreateArcTool>(*service_));
+        tools.push_back(std::make_unique<CreateSecretTool>(*service_));
+        tools.push_back(std::make_unique<AddWorldKnowledgeTool>(*service_));
+        tools.push_back(std::make_unique<CreateLocationTool>(*service_));
         tools.push_back(
-            std::make_unique<UpdateAgentPromptTool>(*service_, ctx));
+            std::make_unique<UpdateAgentPromptTool>(*service_));
         tools.push_back(
-            std::make_unique<UpdateCharacterCardTool>(*service_, ctx));
+            std::make_unique<UpdateCharacterCardTool>(*service_));
         tools.push_back(
-            std::make_unique<AddRelationTool>(*service_, ctx));
+            std::make_unique<AddRelationTool>(*service_));
         tools.push_back(
-            std::make_unique<UpdateForeshadowTool>(*service_, ctx));
+            std::make_unique<UpdateForeshadowTool>(*service_));
         break;
     case AgentKind::Individual:
-        tools.push_back(std::make_unique<DescribeCharacterTool>(*service_, ctx));
-        tools.push_back(std::make_unique<SearchMyDiaryTool>(*service_, ctx));
-        tools.push_back(std::make_unique<LookAroundTool>(*service_, ctx));
-        tools.push_back(std::make_unique<WriteMyDiaryTool>(*service_, ctx));
-        tools.push_back(std::make_unique<CompressMyMemoryTool>(*service_, llm_, ctx, compression_threshold_, diary_model_));
+        tools.push_back(std::make_unique<DescribeCharacterTool>(*service_));
+        tools.push_back(std::make_unique<SearchMyDiaryTool>(*service_));
+        tools.push_back(std::make_unique<LookAroundTool>(*service_));
+        tools.push_back(std::make_unique<WriteMyDiaryTool>(*service_));
+        tools.push_back(std::make_unique<CompressMyMemoryTool>(*service_, llm_, compression_threshold_, diary_model_));
         break;
     case AgentKind::MapManager:
-        tools.push_back(std::make_unique<QueryMapTool>(*service_, ctx));
+        tools.push_back(std::make_unique<QueryMapTool>(*service_));
         break;
     case AgentKind::HistoryManager:
-        tools.push_back(std::make_unique<QueryHistoryTool>(*service_, ctx));
+        tools.push_back(std::make_unique<QueryHistoryTool>(*service_));
         break;
     case AgentKind::MagicSystemManager:
-        tools.push_back(std::make_unique<QueryMagicTool>(*service_, ctx));
+        tools.push_back(std::make_unique<QueryMagicTool>(*service_));
         break;
     case AgentKind::FactionManager:
-        tools.push_back(std::make_unique<QueryFactionTool>(*service_, ctx));
+        tools.push_back(std::make_unique<QueryFactionTool>(*service_));
         break;
     case AgentKind::RelationManager:
-        tools.push_back(std::make_unique<QuerySubgraphTool>(*service_, ctx));
-        tools.push_back(std::make_unique<ExpandGraphTool>(*service_, ctx));
-        tools.push_back(std::make_unique<FindPathTool>(*service_, ctx));
-        tools.push_back(std::make_unique<CheckConsistencyTool>(*service_, ctx));
-        tools.push_back(std::make_unique<ExtractSceneRelationsTool>(*service_, ctx));
-        tools.push_back(std::make_unique<UpsertRelationTool>(*service_, ctx));
+        tools.push_back(std::make_unique<QuerySubgraphTool>(*service_));
+        tools.push_back(std::make_unique<ExpandGraphTool>(*service_));
+        tools.push_back(std::make_unique<FindPathTool>(*service_));
+        tools.push_back(std::make_unique<CheckConsistencyTool>(*service_));
+        tools.push_back(std::make_unique<ExtractSceneRelationsTool>(*service_));
+        tools.push_back(std::make_unique<UpsertRelationTool>(*service_));
         break;
     case AgentKind::Group:
         break;

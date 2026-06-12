@@ -1,5 +1,6 @@
 #pragma once
 #include <merak/tool_spec.hpp>
+#include <merak/tool_meta.hpp>
 #include <merak/message.hpp>
 #include <merak/error.hpp>
 #include <merak/execution.hpp>
@@ -15,6 +16,7 @@ class Tool {
 public:
     virtual ~Tool() = default;
     virtual ToolSpec spec() const = 0;
+    virtual ToolMeta meta() const = 0;
     virtual PermissionLevel permission() const = 0;
     virtual std::future<ToolResult> execute(
         ToolCall call, ToolExecutionContext context = {}) = 0;

@@ -62,6 +62,18 @@ ToolSpec ReadFileTool::spec() const {
     return s;
 }
 
+ToolMeta ReadFileTool::meta() const {
+    ToolMeta m;
+    m.name = "read_file";
+    m.description = "Read file contents with optional line range and outline mode";
+    m.triggers = {"read", "view", "show", "inspect", "open", "cat"};
+    m.pinned = true;
+    m.intents = {IntentType::CodeRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 35;
+    return m;
+}
+
 std::future<ToolResult> ReadFileTool::execute(ToolCall call, ToolExecutionContext) {
     return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
@@ -235,6 +247,18 @@ ToolSpec WriteFileTool::spec() const {
     return s;
 }
 
+ToolMeta WriteFileTool::meta() const {
+    ToolMeta m;
+    m.name = "write_file";
+    m.description = "Create or overwrite a file";
+    m.triggers = {"write", "create file", "save", "output", "new file"};
+    m.pinned = true;
+    m.intents = {IntentType::CodeEdit};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
 std::future<ToolResult> WriteFileTool::execute(ToolCall call, ToolExecutionContext) {
     return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
@@ -316,6 +340,18 @@ ToolSpec StrReplaceTool::spec() const {
         "required": ["path", "old_str", "new_str"]
     })JSON";
     return s;
+}
+
+ToolMeta StrReplaceTool::meta() const {
+    ToolMeta m;
+    m.name = "str_replace";
+    m.description = "Replace text in files with exact string matching";
+    m.triggers = {"replace", "edit", "modify", "update", "fix", "refactor"};
+    m.pinned = true;
+    m.intents = {IntentType::CodeEdit};
+    m.scope = Scope::Local;
+    m.schema_tokens = 40;
+    return m;
 }
 
 std::future<ToolResult> StrReplaceTool::execute(ToolCall call, ToolExecutionContext) {
@@ -441,6 +477,18 @@ ToolSpec MultiEditTool::spec() const {
         "required": ["path", "edits"]
     })JSON";
     return s;
+}
+
+ToolMeta MultiEditTool::meta() const {
+    ToolMeta m;
+    m.name = "multi_edit";
+    m.description = "Apply multiple string replacements in a single file atomically";
+    m.triggers = {"multi edit", "batch edit", "multiple changes"};
+    m.pinned = false;
+    m.intents = {IntentType::CodeEdit};
+    m.scope = Scope::Local;
+    m.schema_tokens = 30;
+    return m;
 }
 
 std::future<ToolResult> MultiEditTool::execute(ToolCall call, ToolExecutionContext) {
@@ -579,6 +627,18 @@ ToolSpec DeleteFileTool::spec() const {
     return s;
 }
 
+ToolMeta DeleteFileTool::meta() const {
+    ToolMeta m;
+    m.name = "delete_file";
+    m.description = "Delete a file at the specified path";
+    m.triggers = {"delete", "remove", "rm"};
+    m.pinned = false;
+    m.intents = {IntentType::CodeEdit};
+    m.scope = Scope::Local;
+    m.schema_tokens = 15;
+    return m;
+}
+
 std::future<ToolResult> DeleteFileTool::execute(ToolCall call, ToolExecutionContext) {
     return std::async(std::launch::async, [call = std::move(call), journal = journal_]() -> ToolResult {
         ToolResult result;
@@ -684,6 +744,18 @@ ToolSpec ListDirTool::spec() const {
         "required": []
     })JSON";
     return s;
+}
+
+ToolMeta ListDirTool::meta() const {
+    ToolMeta m;
+    m.name = "list_dir";
+    m.description = "List directory structure and files";
+    m.triggers = {"list directory", "directory", "files", "tree", "dir"};
+    m.pinned = true;
+    m.intents = {IntentType::CodeRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
 }
 
 // Directories to skip during listing

@@ -35,6 +35,18 @@ ToolSpec GlobTool::spec() const {
     return s;
 }
 
+ToolMeta GlobTool::meta() const {
+    ToolMeta m;
+    m.name = "glob";
+    m.description = "Find files by name pattern";
+    m.triggers = {"find files", "glob", "locate", "file pattern"};
+    m.pinned = true;
+    m.intents = {IntentType::CodeRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
 std::future<ToolResult> GlobTool::execute(ToolCall call, ToolExecutionContext) {
     return std::async(std::launch::async, [call = std::move(call)]() -> ToolResult {
         ToolResult result;
@@ -133,6 +145,18 @@ ToolSpec GrepTool::spec() const {
         "required": ["pattern"]
     })JSON";
     return s;
+}
+
+ToolMeta GrepTool::meta() const {
+    ToolMeta m;
+    m.name = "grep";
+    m.description = "Search file contents with regex patterns";
+    m.triggers = {"grep", "regex", "find in files", "text search"};
+    m.pinned = true;
+    m.intents = {IntentType::CodeRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 40;
+    return m;
 }
 
 std::future<ToolResult> GrepTool::execute(ToolCall call, ToolExecutionContext) {

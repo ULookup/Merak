@@ -3,6 +3,7 @@
 #include <merak/tool_base.hpp>
 #include <merak/tool_meta.hpp>
 #include <merak/memory_store.hpp>
+#include <merak/edit_journal.hpp>
 
 #include <future>
 #include <memory>
@@ -17,12 +18,15 @@ namespace merak::tools {
 
 class SessionTool : public Tool {
 public:
-    explicit SessionTool(
+    SessionTool(
         std::shared_ptr<MemoryStore> memory,
-        std::shared_ptr<merak::Compactor> compactor)
-        : memory_(std::move(memory)), compactor_(std::move(compactor)) {}
+        std::shared_ptr<merak::Compactor> compactor,
+        merak::EditJournal* edit_journal = nullptr)
+        : memory_(std::move(memory)), compactor_(std::move(compactor)),
+          edit_journal_(edit_journal) {}
 
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override;
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override;
@@ -31,6 +35,7 @@ public:
 private:
     std::shared_ptr<MemoryStore> memory_;
     std::shared_ptr<merak::Compactor> compactor_;
+    merak::EditJournal* edit_journal_ = nullptr;
 };
 
 } // namespace merak::tools

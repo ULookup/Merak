@@ -35,6 +35,18 @@ ToolSpec ToolSearchTool::spec() const {
     return s;
 }
 
+ToolMeta ToolSearchTool::meta() const {
+    ToolMeta m;
+    m.name = "tool_search";
+    m.description = "Search and activate deferred tools. Use select:NAME to get full schema.";
+    m.triggers = {"tool_search", "find tool", "which tool", "available tools"};
+    m.pinned = true;
+    m.intents = {IntentType::CodeRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
 PermissionLevel ToolSearchTool::permission() const {
     return PermissionLevel::safe;
 }

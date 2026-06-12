@@ -1,3 +1,5 @@
+find_package(CURL REQUIRED)
+
 add_library(merak-tools STATIC
     src/edit_journal.cpp
     src/tool_registry.cpp
@@ -24,4 +26,5 @@ target_link_libraries(merak-tools PUBLIC
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     httplib::httplib
+    CURL::libcurl
 )

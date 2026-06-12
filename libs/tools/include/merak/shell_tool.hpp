@@ -7,6 +7,7 @@ namespace merak::tools {
 class BashTool : public Tool {
 public:
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override { return PermissionLevel::ask; }
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override;
     std::unique_ptr<Tool> clone() const override {
@@ -15,7 +16,6 @@ public:
     bool is_concurrent_safe(const ToolCall& call) const override;
 
 private:
-    static bool check_dangerous(const std::string& command);
     static bool is_safe_readonly(const std::string& command);
 };
 

@@ -12,6 +12,7 @@ namespace merak::tools {
 class GitTool : public Tool {
 public:
     ToolSpec spec() const override;
+    ToolMeta meta() const override;
     PermissionLevel permission() const override;
     std::future<ToolResult> execute(
         ToolCall call, ToolExecutionContext context = {}) override;

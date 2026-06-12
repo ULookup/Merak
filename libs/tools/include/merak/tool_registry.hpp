@@ -14,26 +14,13 @@ namespace merak {
 
 class McpClient;
 
-enum class ExecutionPolicy {
-    Sequential,
-    Parallel,
-    FailFast
-};
-
-struct OutputCap {
-    size_t per_tool   = 50000;
-    size_t grep       = 10000;
-    size_t glob       = 100000;
-    size_t aggregate  = 200000;
-    size_t soft       = 120000;
-    size_t persist_threshold = 50000;
-};
-
 class ToolRegistry {
 public:
     ToolRegistry() = default;
 
     void register_tool(std::unique_ptr<Tool> tool);
+    void register_all(std::vector<std::unique_ptr<Tool>> tools);
+    void register_platform_basics();
     std::future<std::expected<int, AgentError>> import_from_mcp(
         std::shared_ptr<McpClient> client
     );
@@ -48,11 +35,6 @@ public:
     size_t size() const { return tools_.size(); }
 
     std::future<ToolResult> execute(const ToolCall& call, ToolExecutionContext context = {});
-    std::future<std::vector<ToolResult>> execute_all(
-        const std::vector<ToolCall>& calls,
-        ExecutionPolicy policy = ExecutionPolicy::Sequential,
-        ToolExecutionContext context = {}
-    );
 
     bool check_permission(const std::string& tool_name,
         const std::string& permission_mode) const;
@@ -62,20 +44,10 @@ public:
         permission_mode_ = mode;
     }
 
-    void set_output_caps(const OutputCap& caps) { caps_ = caps; }
-    const OutputCap& caps() const { return caps_; }
-
-    /// Set the capability set for this registry (filters which tools are visible).
-    void set_capabilities(const CapabilitySet& caps) { capabilities_ = caps; }
-    const CapabilitySet& capabilities() const { return capabilities_; }
-
-    /// ToolMeta entries visible to the current capability set.
-    std::vector<ToolMeta> visible_metas() const;
-
-    /// Full ToolSpecs for all pinned tools visible under current caps.
+    /// Full ToolSpecs for all pinned tools in this registry.
     std::vector<ToolSpec> pinned_schemas() const;
 
-    /// Keyword search over visible deferred tools' name + description.
+    /// Keyword search over non-pinned tools' meta name + description.
     std::string search_tools(const std::string& query, size_t max_results = 5) const;
 
     /// Select a specific tool by name, returning its full ToolSpec as JSON.
@@ -85,8 +57,6 @@ private:
     std::map<std::string, std::unique_ptr<Tool>> tools_;
     std::map<std::string, std::string> source_;
     std::string permission_mode_ = "ask";
-    OutputCap caps_;
-    CapabilitySet capabilities_;
 };
 
 } // namespace merak

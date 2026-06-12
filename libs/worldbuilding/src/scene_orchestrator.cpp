@@ -339,15 +339,13 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
 
     // God agent.
     {
-        ToolContext ctx{world_id, scene_id, ""};
-        auto instances = tools_factory.create_tools(AgentKind::God, ctx);
+        auto instances = tools_factory.create_tools(AgentKind::God);
         for (auto& t : instances) prep.tools_by_agent_id["god"].push_back(t->spec());
     }
 
     // Character tools per participant.
     for (auto& cv : prep.character_views) {
-        ToolContext ctx{world_id, scene_id, cv.agent_id};
-        auto instances = tools_factory.create_tools(AgentKind::Individual, ctx);
+        auto instances = tools_factory.create_tools(AgentKind::Individual);
         for (auto& t : instances) prep.tools_by_agent_id[cv.agent_id].push_back(t->spec());
     }
 
@@ -355,8 +353,7 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
     for (auto kind : {AgentKind::MapManager, AgentKind::HistoryManager,
                        AgentKind::MagicSystemManager, AgentKind::FactionManager,
                        AgentKind::RelationManager}) {
-        ToolContext ctx{world_id, scene_id, ""};
-        auto instances = tools_factory.create_tools(kind, ctx);
+        auto instances = tools_factory.create_tools(kind);
         std::string key = to_string(kind);
         for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
     }

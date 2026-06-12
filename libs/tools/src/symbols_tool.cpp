@@ -246,6 +246,18 @@ ToolSpec SymbolsTool::spec() const {
     return s;
 }
 
+ToolMeta SymbolsTool::meta() const {
+    ToolMeta m;
+    m.name = "symbols";
+    m.description = "Extract function/class/struct signatures from a file using tree-sitter";
+    m.triggers = {"symbols", "functions", "classes", "signatures", "outline"};
+    m.pinned = false;
+    m.intents = {IntentType::CodeIntel};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
 PermissionLevel SymbolsTool::permission() const {
     return PermissionLevel::safe;
 }
