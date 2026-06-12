@@ -57,10 +57,6 @@ BoundSection ContextBinder::bind_section(const PlannedSection& planned,
     }
     case SectionKind::Conversation:
       break;
-    case SectionKind::EmergentSkills:
-    case SectionKind::EmergentMemory:
-    case SectionKind::EmergentSummary:
-      break;
   }
 
   text = truncate_to_budget(text, planned.token_budget);

@@ -14,7 +14,7 @@ int ToolResultCompactor::compact(std::vector<Message>& history, double context_p
   ContextOptimizer opt;
   OptimizeStats stats;
   opt.microcompact(history, lim, stats);
-  return 1;
+  return static_cast<int>(stats.actions.size());
 }
 
 } // namespace merak

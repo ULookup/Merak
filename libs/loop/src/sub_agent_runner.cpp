@@ -111,7 +111,7 @@ std::unique_ptr<AgentLoop> SubAgentRunner::create_sub_agent(
 
     auto comp = std::make_shared<Compactor>(llm_, counter);
 
-    return std::make_unique<AgentLoop>(cfg, llm_, sub_tools, memory_, comp);
+    return std::make_unique<AgentLoop>(cfg, llm_, sub_tools, memory_, comp, nullptr, nullptr);
 }
 
 } // namespace merak

@@ -13,9 +13,6 @@ enum class SectionKind {
   WorkingMemory,
   Memory,
   Conversation,
-  EmergentSkills,
-  EmergentMemory,
-  EmergentSummary,
 };
 
 inline const char* section_kind_name(SectionKind k) {
@@ -28,9 +25,6 @@ inline const char* section_kind_name(SectionKind k) {
     case SectionKind::WorkingMemory: return "WorkingMemory";
     case SectionKind::Memory: return "Memory";
     case SectionKind::Conversation: return "Conversation";
-    case SectionKind::EmergentSkills: return "EmergentSkills";
-    case SectionKind::EmergentMemory: return "EmergentMemory";
-    case SectionKind::EmergentSummary: return "EmergentSummary";
   }
   return "Unknown";
 }
