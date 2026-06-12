@@ -15,6 +15,7 @@ add_library(merak-tools STATIC
     src/session_tool.cpp
     src/task_tool.cpp
     src/plan_mode_tools.cpp
+    src/lsp_tool.cpp
 )
 target_include_directories(merak-tools PUBLIC include)
 target_link_libraries(merak-tools PUBLIC
