@@ -323,6 +323,13 @@ inline std::string to_string(SceneStatus value) {
     return "draft";
 }
 
+inline std::optional<SceneStatus> parse_scene_status(std::string_view s) {
+    if (s == "draft") return SceneStatus::Draft;
+    if (s == "writing") return SceneStatus::Writing;
+    if (s == "completed") return SceneStatus::Completed;
+    return std::nullopt;
+}
+
 inline std::string to_string(ForeshadowStatus value) {
     switch (value) {
     case ForeshadowStatus::Open:
