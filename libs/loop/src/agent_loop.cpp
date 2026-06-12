@@ -9,12 +9,16 @@ AgentLoop::AgentLoop(
     std::shared_ptr<LlmProvider> llm,
     std::shared_ptr<ToolRegistry> tools,
     std::shared_ptr<MemoryStore> memory,
-    std::shared_ptr<Compactor> compactor)
+    std::shared_ptr<Compactor> compactor,
+    std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding,
+    std::shared_ptr<skills::SkillRegistry> skills)
     : config_(std::move(config))
     , llm_(std::move(llm))
     , tools_(std::move(tools))
     , memory_(std::move(memory))
     , compactor_(std::move(compactor))
+    , worldbuilding_(std::move(worldbuilding))
+    , skills_(std::move(skills))
     , pipeline_(std::make_unique<ContextPipeline>())
 {
 }
@@ -326,6 +330,10 @@ void AgentLoop::set_working_memory_provider(std::function<std::string()> provide
     working_memory_provider_ = std::move(provider);
 }
 
+void AgentLoop::set_active_world_id(std::optional<std::string> world_id) {
+    active_world_id_ = std::move(world_id);
+}
+
 std::vector<Message> AgentLoop::build_context() {
     BindSources sources;
     sources.identity_text = [this]() {
@@ -337,8 +345,19 @@ std::vector<Message> AgentLoop::build_context() {
         }
         return std::string("");
     };
-    sources.world_context_text = []() { return ""; };
-    sources.skills_text = []() { return ""; };
+    sources.world_context_text = [this]() -> std::string {
+        if (!worldbuilding_ || !active_world_id_.has_value()) return "";
+        return worldbuilding_->build_world_context(*active_world_id_);
+    };
+    sources.skills_text = [this]() -> std::string {
+        if (!skills_) return "";
+        auto defs = skills_->inline_skills();
+        std::string text;
+        for (auto& def : defs) {
+            text += def.body + "\n";
+        }
+        return text;
+    };
     sources.tool_specs = tools_->pinned_schemas();
     sources.working_memory_text = [this]() -> std::string {
         if (working_memory_provider_) return working_memory_provider_();

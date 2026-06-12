@@ -1,5 +1,6 @@
 #pragma once
 #include <merak/agent_loop.hpp>
+#include <merak/skills/skill_registry.hpp>
 #include <merak/runtime_event.hpp>
 #include <merak/session_store.hpp>
 #include <merak/prompts/types.hpp>
@@ -99,6 +100,7 @@ public:
     std::vector<AgentMetadata> agents() const;
     ApprovalRecord resolve_approval(const std::string& id, ApprovalStatus status);
     void set_worldbuilding_service(merak::worldbuilding::WorldbuildingService* wb_service);
+    void set_skill_registry(std::shared_ptr<skills::SkillRegistry> reg);
     void set_pipeline_manager(std::shared_ptr<merak::worldbuilding::PipelineManager> mgr);
     merak::worldbuilding::PipelineManager* pipeline_manager() { return pipeline_mgr_.get(); }
     nlohmann::json resolve_creation(const std::string& creation_id,
@@ -132,6 +134,7 @@ private:
     std::map<std::string, std::shared_ptr<AgentLoop>> session_loops_;
     std::mutex session_loops_mutex_;
     merak::worldbuilding::WorldbuildingService* wb_service_ = nullptr;
+    std::shared_ptr<skills::SkillRegistry> skill_registry_;
     std::shared_ptr<merak::worldbuilding::PipelineManager> pipeline_mgr_;
     RuntimeEvent emit(const std::string& session_id, const std::string& run_id,
                       const std::string& type, nlohmann::json payload = {});

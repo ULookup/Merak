@@ -562,6 +562,10 @@ void RuntimeService::set_worldbuilding_service(worldbuilding::WorldbuildingServi
     }
 }
 
+void RuntimeService::set_skill_registry(std::shared_ptr<skills::SkillRegistry> reg) {
+    skill_registry_ = std::move(reg);
+}
+
 void RuntimeService::set_pipeline_manager(
     std::shared_ptr<merak::worldbuilding::PipelineManager> mgr) {
     pipeline_mgr_ = std::move(mgr);
