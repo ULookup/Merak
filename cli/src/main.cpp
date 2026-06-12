@@ -185,7 +185,7 @@ static int run_server(int argc,char**argv) {
     tools->register_tool(std::make_unique<tools::WebSearchTool>());
     tools->register_tool(std::make_unique<tools::LspTool>());
     tools->register_tool(std::make_unique<tools::SymbolsTool>());
-    tools->register_tool(std::make_unique<tools::MemoryTool>());
+    tools->register_tool(std::make_unique<tools::MemoryTool>(memory));
     tools->register_tool(std::make_unique<tools::SessionTool>());
     tools->register_tool(std::make_unique<tools::AgentTool>());
     tools->register_tool(std::make_unique<tools::TaskTool>());
