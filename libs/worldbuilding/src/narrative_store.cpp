@@ -100,6 +100,7 @@ nlohmann::json chapter_json(const Chapter& chapter) {
                         {"title", chapter.title},
                         {"pitch", chapter.pitch},
                         {"notes", chapter.notes},
+                        {"content", chapter.content},
                         {"number", chapter.number},
                         {"status", to_string(chapter.status)},
                         {"emotional_curve", chapter.emotional_curve},
@@ -119,6 +120,7 @@ Chapter chapter_from_json(const nlohmann::json& json) {
     chapter.title = json.at("title").get<std::string>();
     chapter.pitch = json.at("pitch").get<std::string>();
     chapter.notes = json.at("notes").get<std::string>();
+    chapter.content = json.value("content", "");
     chapter.number = json.at("number").get<int>();
     if (!json.at("arc_id").is_null()) {
         chapter.arc_id = json.at("arc_id").get<std::string>();
