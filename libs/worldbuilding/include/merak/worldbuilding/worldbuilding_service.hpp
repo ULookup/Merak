@@ -13,6 +13,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -111,6 +112,24 @@ public:
                                     const std::string& decision,
                                     const nlohmann::json& modifications);
 
+    // Entity event callback (set by RuntimeService for SSE emission)
+    void set_entity_event_handler(
+        std::function<void(std::string, std::string, nlohmann::json)> handler) {
+        entity_event_handler_ = std::move(handler);
+    }
+
+    // SSE event helpers
+    void notify_diary_created(const std::string& world_id, const std::string& diary_id,
+                               const std::string& agent_id, const std::string& scene_id,
+                               const std::string& mood, int leak_risk_level);
+    void notify_memory_summary_created(const std::string& world_id, const std::string& summary_id,
+                                        const std::string& agent_id,
+                                        const std::vector<std::string>& source_diary_ids);
+
+    // Diary context limit config
+    int diary_context_limit() const { return diary_context_limit_; }
+    void set_diary_context_limit(int limit) { diary_context_limit_ = limit; }
+
 private:
     std::filesystem::path root_;
     WorldStore worlds_;
@@ -128,6 +147,9 @@ private:
     // TODO: persist pending creations to SessionStore for restart recovery.
     std::map<std::string, PendingCreation> pending_creations_;
     mutable std::mutex pending_mutex_;
+
+    std::function<void(std::string, std::string, nlohmann::json)> entity_event_handler_;
+    int diary_context_limit_ = 5;
 };
 
 } // namespace merak::worldbuilding

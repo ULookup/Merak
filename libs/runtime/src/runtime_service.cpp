@@ -484,6 +484,13 @@ void RuntimeService::execute_delegation(RunRecord parent,DelegationRequest reque
 ApprovalRecord RuntimeService::resolve_approval(const std::string&id,ApprovalStatus status){auto a=store_.resolve_approval(id,status);auto run=store_.get_run(a.run_id);if(!run)throw RuntimeError("run_not_found","Run does not exist");emit(run->session_id,run->id,"approval_resolved",{{"approval_id",id},{"decision",to_string(a.status)}});std::shared_ptr<Control>control;{std::lock_guard lock(mutex_);auto it=controls_.find(run->id);if(it!=controls_.end())control=it->second;}if(control)control->resolve(a.status==ApprovalStatus::Allowed);else if(run->status==RunStatus::WaitingApproval)resume_after_restarted_approval(*run,a,a.status==ApprovalStatus::Allowed);return a;}
 void RuntimeService::set_worldbuilding_service(worldbuilding::WorldbuildingService* wb_service) {
     wb_service_ = wb_service;
+    if (wb_service_) {
+        wb_service_->set_entity_event_handler(
+            [this](const std::string& event_type, const std::string& world_id,
+                   const nlohmann::json& payload) {
+                after_entity_event(world_id, event_type, payload);
+            });
+    }
 }
 
 void RuntimeService::set_pipeline_manager(
@@ -496,6 +503,21 @@ void RuntimeService::after_entity_event(const std::string& world_id,
                                          const nlohmann::json& payload) {
     if (pipeline_mgr_) {
         pipeline_mgr_->on_world_event(world_id, event_type, payload);
+    }
+
+    // Handle scene_ended: prompt character agents to write diaries
+    if (event_type == "scene_ended" && wb_service_) {
+        auto scene_id = payload.value("scene_id", "");
+        auto pending_agents = payload.value("pending_diary_agents",
+            std::vector<std::string>{});
+
+        for (const auto& agent_id : pending_agents) {
+            auto event = emit("", "", "diary_pending", {
+                {"agent_id", agent_id},
+                {"scene_id", scene_id}
+            });
+            broadcast_to_world(world_id, event);
+        }
     }
 }
 

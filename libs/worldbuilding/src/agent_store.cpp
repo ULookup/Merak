@@ -644,10 +644,12 @@ void AgentStore::append_diary_entry(DiaryEntry entry) {
 
     PgConn conn(*pool_);
     conn.execute(
-        "INSERT INTO agent_diaries(id, agent_id, scene_id, world_time, content, created_at) "
-        "VALUES($1, $2, $3, $4, $5, $6)",
+        "INSERT INTO agent_diaries(id, agent_id, scene_id, world_time, content, "
+        "mood, leak_risk_level, status, tokens_used, created_at) "
+        "VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         {entry.id, entry.agent_id, entry.scene_id, entry.world_time,
-         entry.content, entry.created_at});
+         entry.content, entry.mood, std::to_string(entry.leak_risk_level),
+         entry.status, std::to_string(entry.tokens_used), entry.created_at});
     // content_tsv updated by trigger
 
     const auto root = agent_path(entry.agent_id);
@@ -906,6 +908,82 @@ AgentStore::get_diary(const std::string& diary_id) const {
         .content = res.get(0, 4),
         .created_at = res.get(0, 5),
     };
+}
+
+void AgentStore::update_diary_content(const std::string& diary_id,
+                                       const std::string& content,
+                                       const std::string& mood,
+                                       int leak_risk_level, int tokens_used) {
+    PgConn conn(*pool_);
+    conn.execute(
+        "UPDATE agent_diaries SET content = $1, mood = $2, leak_risk_level = $3, "
+        "status = 'completed', tokens_used = $4 WHERE id = $5",
+        {content, mood, std::to_string(leak_risk_level),
+         std::to_string(tokens_used), diary_id});
+}
+
+std::vector<MemorySummary>
+AgentStore::recent_summaries(const std::string& agent_id, int limit) const {
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, agent_id, period_start, period_end, summary, source_diary_ids, created_at "
+        "FROM memory_summaries WHERE agent_id = $1 "
+        "ORDER BY created_at DESC LIMIT $2",
+        {agent_id, std::to_string(std::max(0, limit))});
+
+    std::vector<MemorySummary> results;
+    for (int i = 0; i < res.ntuples(); i++) {
+        auto source_ids_json = nlohmann::json::parse(res.get(i, 5));
+        results.push_back(MemorySummary{
+            .id = res.get(i, 0),
+            .agent_id = res.get(i, 1),
+            .period_start = res.get(i, 2),
+            .period_end = res.get(i, 3),
+            .summary = res.get(i, 4),
+            .source_diary_ids = source_ids_json.get<std::vector<std::string>>(),
+            .created_at = res.get(i, 6),
+        });
+    }
+    return results;
+}
+
+int AgentStore::uncompressed_diary_count(const std::string& agent_id) const {
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT COUNT(*) FROM agent_diaries ad "
+        "WHERE ad.agent_id = $1 AND ad.status = 'completed' "
+        "AND ad.id NOT IN ("
+        "  SELECT unnest(ms.source_diary_ids) FROM memory_summaries ms WHERE ms.agent_id = $1"
+        ")",
+        {agent_id});
+    return res.ntuples() > 0 ? std::stoi(res.get(0, 0)) : 0;
+}
+
+std::vector<DiaryEntry>
+AgentStore::uncompressed_diaries(const std::string& agent_id, int limit) const {
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT ad.id, ad.agent_id, ad.scene_id, ad.world_time, ad.content, ad.created_at, "
+        "       ad.mood, ad.status, ad.leak_risk_level, ad.tokens_used "
+        "FROM agent_diaries ad "
+        "WHERE ad.agent_id = $1 AND ad.status = 'completed' "
+        "AND ad.id NOT IN ("
+        "  SELECT unnest(ms.source_diary_ids) FROM memory_summaries ms WHERE ms.agent_id = $1"
+        ") "
+        "ORDER BY ad.created_at ASC LIMIT $2",
+        {agent_id, std::to_string(limit)});
+
+    std::vector<DiaryEntry> entries;
+    for (int i = 0; i < res.ntuples(); i++) {
+        entries.push_back(DiaryEntry{
+            .id = res.get(i, 0), .agent_id = res.get(i, 1), .scene_id = res.get(i, 2),
+            .world_time = res.get(i, 3), .content = res.get(i, 4), .created_at = res.get(i, 5),
+            .mood = res.get(i, 6), .status = res.get(i, 7),
+            .leak_risk_level = std::stoi(res.get(i, 8)),
+            .tokens_used = std::stoi(res.get(i, 9)),
+        });
+    }
+    return entries;
 }
 
 std::vector<AgentRecord>

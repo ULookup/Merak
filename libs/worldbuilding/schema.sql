@@ -150,12 +150,16 @@ CREATE INDEX IF NOT EXISTS idx_character_cards_identity
 -- ─── Agent Diaries ─────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS agent_diaries (
-    id          TEXT PRIMARY KEY,
-    agent_id    TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-    scene_id    TEXT NOT NULL,
-    world_time  TEXT NOT NULL,
-    content     TEXT NOT NULL,
-    created_at  TEXT NOT NULL
+    id               TEXT PRIMARY KEY,
+    agent_id         TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    scene_id         TEXT NOT NULL,
+    world_time       TEXT NOT NULL DEFAULT '',
+    content          TEXT NOT NULL DEFAULT '',
+    mood             TEXT NOT NULL DEFAULT '',
+    leak_risk_level  INTEGER NOT NULL DEFAULT 0,
+    status           TEXT NOT NULL DEFAULT 'completed',
+    tokens_used      INTEGER NOT NULL DEFAULT 0,
+    created_at       TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_diaries_agent ON agent_diaries(agent_id, created_at DESC);
