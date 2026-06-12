@@ -1083,9 +1083,9 @@ void WorldbuildingHttpHandler::handle_patch_scene(const httplib::Request& req, h
         auto body = nlohmann::json::parse(req.body);
         auto fields = body.at("fields");
         if (fields.contains("status")) {
-            std::string s = fields["status"].get<std::string>();
-            if (s != "drafting" && s != "writing" && s != "completed" && s != "archived") {
-                error_response(res, "Invalid scene status: " + s, 400);
+            auto parsed = worldbuilding::parse_scene_status(fields["status"].get<std::string>());
+            if (!parsed) {
+                error_response(res, "Invalid scene status", 400);
                 return;
             }
         }
