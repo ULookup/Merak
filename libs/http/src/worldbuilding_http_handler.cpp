@@ -205,6 +205,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_overview(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/chapters)",
         [this](const auto& req, auto& res) { handle_list_chapters(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+))",
+        [this](const auto& req, auto& res) { handle_get_chapter(req, res); });
     server.Patch(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+))",
         [this](const auto& req, auto& res) { handle_patch_chapter(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/scenes)",
@@ -684,6 +686,45 @@ void WorldbuildingHttpHandler::handle_list_chapters(const httplib::Request& req,
         json_response(res, {{"ok", true}, {"chapters", arr}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400, "invalid_request");
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_chapter(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string cid = req.matches[2];
+
+        if (!service_->worlds().get_world(wid)) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+
+        auto chapter = service_->narrative().get_chapter(wid, cid);
+        if (!chapter) {
+            error_response(res, "Chapter not found", 404, "chapter_not_found");
+            return;
+        }
+
+        nlohmann::json response{
+            {"ok", true},
+            {"id", chapter->id},
+            {"title", chapter->title},
+            {"number", chapter->number},
+            {"status", worldbuilding::to_string(chapter->status)},
+            {"content", chapter->content},
+            {"pitch", chapter->pitch},
+            {"notes", chapter->notes},
+            {"scene_ids", chapter->scene_ids},
+            {"foreshadowing_planted", chapter->foreshadowing_planted},
+            {"foreshadowing_paid", chapter->foreshadowing_paid}
+        };
+        response["arc_id"] = chapter->arc_id.has_value()
+            ? nlohmann::json(*chapter->arc_id)
+            : nlohmann::json(nullptr);
+
+        json_response(res, response);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
     }
 }
 
