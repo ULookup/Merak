@@ -250,9 +250,15 @@ void NarrativeStore::initialize() {
               "updated_at TIMESTAMPTZ DEFAULT now())");
     conn.exec("CREATE TABLE IF NOT EXISTS chapters("
               "id TEXT PRIMARY KEY, world_id TEXT NOT NULL, arc_id TEXT,"
-              "name TEXT, pitch TEXT, status TEXT, position INT DEFAULT 0,"
+              "name TEXT, pitch TEXT, content TEXT DEFAULT '', status TEXT, position INT DEFAULT 0,"
               "created_at TIMESTAMPTZ DEFAULT now(),"
               "updated_at TIMESTAMPTZ DEFAULT now())");
+    // 迁移：为已有数据库新增 content 列
+    try {
+        conn.exec("ALTER TABLE chapters ADD COLUMN content TEXT DEFAULT ''");
+    } catch (const std::exception&) {
+        // Column already exists — ignore
+    }
     conn.exec("CREATE TABLE IF NOT EXISTS sections("
               "id TEXT PRIMARY KEY, world_id TEXT NOT NULL, chapter_id TEXT NOT NULL,"
               "name TEXT, status TEXT, position INT DEFAULT 0,"
