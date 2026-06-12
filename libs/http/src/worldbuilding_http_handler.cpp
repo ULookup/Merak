@@ -1112,12 +1112,17 @@ void WorldbuildingHttpHandler::handle_patch_chapter(const httplib::Request& req,
     std::string wid = req.matches[1];
     std::string cid = req.matches[2];
     try {
+        auto chapter = service_->narrative().get_chapter(wid, cid);
+        if (!chapter) {
+            error_response(res, "Chapter not found", 404, "chapter_not_found");
+            return;
+        }
         auto body = nlohmann::json::parse(req.body);
         auto fields = body.at("fields");
         if (fields.contains("status")) {
-            std::string s = fields["status"].get<std::string>();
-            if (s != "drafting" && s != "writing" && s != "completed" && s != "archived") {
-                error_response(res, "Invalid chapter status: " + s, 400);
+            auto parsed = worldbuilding::parse_chapter_status(fields["status"].get<std::string>());
+            if (!parsed) {
+                error_response(res, "Invalid chapter status", 400);
                 return;
             }
         }
