@@ -749,7 +749,7 @@ NarrativeStore::chapter_context(const std::string& world_id,
 std::optional<Chapter>
 NarrativeStore::get_chapter(const std::string& world_id,
                             const std::string& chapter_id) const {
-    ensure_world_exists(worlds_, world_id);
+    if (!worlds_.get_world(world_id).has_value()) return std::nullopt;
     const auto path =
         worlds_.world_path(world_id) / "chapters" / (chapter_id + ".json");
     if (!std::filesystem::exists(path)) return std::nullopt;
