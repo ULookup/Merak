@@ -5,6 +5,7 @@
 #include <merak/http_server.hpp>
 #include <merak/mcp_client.hpp>
 #include <merak/openai_provider.hpp>
+#include <merak/openai_embedding_provider.hpp>
 #include <merak/portable_pg.hpp>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
@@ -205,7 +206,22 @@ static int run_server(int argc,char**argv) {
     }
     std::vector<std::shared_ptr<McpClient>>mcp;std::vector<McpServerStatus>mcp_status;
     for(const auto& mc:cfg.mcp_servers){if(!mc.enabled)continue;auto c=std::make_shared<McpClient>(mc);auto connected=c->connect();mcp_status.push_back({mc.name,connected.has_value()});if(connected){tools->import_from_mcp(c).get();mcp.push_back(c);}}
-    auto memory_cfg=cfg.memory;if(memory_cfg.db_connection.empty())memory_cfg.enabled=false;auto memory=std::make_shared<MemoryStore>(memory_cfg,nullptr);
+    auto memory_cfg=cfg.memory;if(memory_cfg.db_connection.empty())memory_cfg.enabled=false;
+std::shared_ptr<EmbeddingProvider> embedder;
+if(memory_cfg.enabled&&!memory_cfg.embedding_api_key.empty()){
+    OpenAIEmbeddingProvider::Config embed_cfg;
+    embed_cfg.api_url=memory_cfg.embedding_api_url;
+    embed_cfg.api_key=memory_cfg.embedding_api_key;
+    embed_cfg.model=memory_cfg.embedding_model;
+    embed_cfg.cache_size=memory_cfg.embedding_cache_size;
+    embed_cfg.batch_size=memory_cfg.embedding_batch_size;
+    embed_cfg.timeout_ms=memory_cfg.embedding_timeout_ms;
+    embedder=std::make_shared<OpenAIEmbeddingProvider>(embed_cfg);
+    std::cout<<"Embedding: using "<<memory_cfg.embedding_model<<" via "<<memory_cfg.embedding_api_url<<"\n";
+}else if(memory_cfg.enabled&&memory_cfg.embedding_api_key.empty()){
+    std::cerr<<"Warning: Memory enabled but embedding_api_key not set, semantic search disabled\n";
+}
+auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
     if(memory_cfg.enabled)memory->init_db();
     auto make_context=[cfg](std::shared_ptr<LlmProvider> provider){
         auto counter=std::make_shared<TokenCounter>();
