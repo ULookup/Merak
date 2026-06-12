@@ -1,5 +1,6 @@
 #pragma once
 #include <merak/prompts/types.hpp>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -9,6 +10,11 @@ namespace merak::prompts {
 
 class PromptCompositor {
 public:
+    PromptCompositor() = default;
+    explicit PromptCompositor(
+        std::shared_ptr<worldbuilding::WorldbuildingService> wb_service)
+        : worldbuilding_service_(std::move(wb_service)) {}
+
     // 主入口：根据 profile 组装完整 system prompt
     std::string assemble(const PromptProfile& profile);
 
@@ -25,6 +31,8 @@ private:
     void add_team(std::vector<PromptSection>& sections, const PromptProfile& profile);
     void add_scene(std::vector<PromptSection>& sections, const PromptProfile& profile);
     void add_budget(std::vector<PromptSection>& sections, const PromptProfile& profile);
+
+    std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding_service_;
 
     // 按 CacheScope 排序（Global < Session < None）
 public:

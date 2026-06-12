@@ -112,7 +112,17 @@ std::string PromptCompositor::assemble(const PromptProfile& profile) {
         oss << sections[i].text;
     }
 
-    return oss.str();
+    std::string result = oss.str();
+
+    // Resolve DSL references if worldbuilding service is available
+    if (worldbuilding_service_ && !profile.world_id.empty()) {
+        result = resolve_dsl_references(
+            result, *worldbuilding_service_,
+            profile.world_id,
+            profile.agent_id);
+    }
+
+    return result;
 }
 
 std::string PromptCompositor::resolve_dsl_references(
