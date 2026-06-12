@@ -2,6 +2,7 @@
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <unordered_set>
+#include <merak/skills/skill_executor.hpp>
 
 namespace merak {
 
@@ -375,7 +376,7 @@ std::vector<Message> AgentLoop::build_context() {
         auto defs = skills_->inline_skills();
         std::ostringstream oss;
         for (auto& def : defs) {
-            oss << def.body << '\n';
+            oss << skills::SkillExecutor::expand(def) << '\n';
         }
         return oss.str();
     };
