@@ -1,6 +1,7 @@
 #include <merak/agent_loop.hpp>
 #include <spdlog/spdlog.h>
 #include <sstream>
+#include <unordered_set>
 
 namespace merak {
 
@@ -105,7 +106,18 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         req.enable_cache = config_.enable_cache;
 
         auto tool_specs = tools_->pinned_schemas();
-        req.tools = tool_specs;
+        if (!restricted_tools_.empty()) {
+            std::unordered_set<std::string> blocked(
+                restricted_tools_.begin(), restricted_tools_.end());
+            std::vector<ToolSpec> filtered;
+            for (auto& ts : tool_specs) {
+                if (!blocked.count(ts.name)) filtered.push_back(ts);
+            }
+            req.tools = std::move(filtered);
+            restricted_tools_.clear();
+        } else {
+            req.tools = tool_specs;
+        }
 
         std::vector<ToolCall> accumulated_tool_calls;
 
@@ -282,6 +294,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         }
 
         auto verdict = turn_guard_.evaluate(guard_in);
+        restricted_tools_ = verdict.restricted_tools;
 
         if (verdict.turn_penalty) {
             config_.max_turns = std::max(1, config_.max_turns + *verdict.turn_penalty);

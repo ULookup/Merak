@@ -103,6 +103,8 @@ private:
     int consecutive_content_avoidance_ = 0;
     int current_turn_ = 0;
 
+    std::vector<std::string> restricted_tools_;
+
     void transition_to(TurnState next, RunControl& control);
     std::vector<Message> build_context();
     std::vector<ToolResult> handle_tool_calls(
