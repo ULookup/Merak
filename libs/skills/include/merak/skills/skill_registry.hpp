@@ -1,5 +1,6 @@
 #pragma once
 #include <merak/skills/skill_types.hpp>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -22,6 +23,20 @@ public:
 
     // Add a skill directly (higher priority wins on name collision)
     void add(SkillDef skill);
+
+    std::vector<SkillDef> inline_skills() const;
+    std::vector<SkillDef> fork_skills() const;
 };
+
+class ToolRegistry;
+class LlmProvider;
+class MemoryStore;
+
+void register_fork_skills(
+    const SkillRegistry& registry,
+    std::shared_ptr<ToolRegistry> tools,
+    std::shared_ptr<LlmProvider> llm,
+    std::shared_ptr<MemoryStore> memory,
+    std::string default_model);
 
 } // namespace merak::skills

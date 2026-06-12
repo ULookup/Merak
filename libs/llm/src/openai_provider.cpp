@@ -120,6 +120,14 @@ std::future<AgentResponse> OpenAIProvider::chat(
                         input_tokens = j["usage"].value("prompt_tokens", 0);
                         output_tokens = j["usage"].value("completion_tokens", 0);
                         has_usage = true;
+                        auto& details = j["usage"]["prompt_tokens_details"];
+                        if (!details.is_null()) {
+                            int cached = details.value("cached_tokens", 0);
+                            if (cached > 0) {
+                                stats_.cache_hits++;
+                                stats_.cache_read_tokens += cached;
+                            }
+                        }
                     }
                 } catch (const nlohmann::json::exception& e) {
                     spdlog::warn("SSE parse error: {}", e.what());

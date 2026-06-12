@@ -12,11 +12,15 @@
 #include <merak/stall_detector.hpp>
 #include <merak/turn_guard.hpp>
 #include <merak/turn_ingestor.hpp>
+#include <merak/skills/skill_registry.hpp>
 #include <merak/execution.hpp>
+#include <optional>
 #include <atomic>
 #include <functional>
 #include <future>
 #include <memory>
+
+namespace merak::worldbuilding { class WorldbuildingService; }
 
 namespace merak {
 
@@ -37,7 +41,9 @@ public:
         std::shared_ptr<LlmProvider> llm,
         std::shared_ptr<ToolRegistry> tools,
         std::shared_ptr<MemoryStore> memory,
-        std::shared_ptr<Compactor> compactor
+        std::shared_ptr<Compactor> compactor,
+        std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding,
+        std::shared_ptr<skills::SkillRegistry> skills
     );
 
     // Load history from persistent storage (journal restore).
@@ -66,6 +72,7 @@ public:
     ContextPipeline& pipeline() { return *pipeline_; }
 
     void set_plan_mode_source(std::shared_ptr<std::atomic<bool>> source) { plan_mode_ = std::move(source); }
+    void set_active_world_id(std::optional<std::string> world_id);
     bool is_plan_mode() const { return plan_mode_ && plan_mode_->load(); }
     TurnIngestor& turn_ingestor() { return turn_ingestor_; }
 
@@ -85,6 +92,9 @@ private:
     std::vector<Message> session_history_;
     std::shared_ptr<std::atomic<bool>> plan_mode_;
     std::function<std::string()> working_memory_provider_;
+    std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding_;
+    std::shared_ptr<skills::SkillRegistry> skills_;
+    std::optional<std::string> active_world_id_;
     std::map<std::string, int> tool_failure_streak_;
     static constexpr int kCircuitBreakerThreshold = 3;
 
@@ -92,6 +102,8 @@ private:
     int consecutive_world_query_rounds_ = 0;
     int consecutive_content_avoidance_ = 0;
     int current_turn_ = 0;
+
+    std::vector<std::string> restricted_tools_;
 
     void transition_to(TurnState next, RunControl& control);
     std::vector<Message> build_context();

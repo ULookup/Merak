@@ -1,5 +1,8 @@
 #include <merak/skills/skill_registry.hpp>
 #include <merak/skills/skill_loader.hpp>
+#include <merak/tool_registry.hpp>
+#include <merak/fork_skill_tool.hpp>
+#include <spdlog/spdlog.h>
 
 namespace merak::skills {
 
@@ -40,6 +43,43 @@ std::vector<SkillDef> SkillRegistry::list() const {
 
 void SkillRegistry::add(SkillDef skill) {
     skills_[skill.name] = std::move(skill);
+}
+
+std::vector<SkillDef> SkillRegistry::inline_skills() const {
+    std::vector<SkillDef> result;
+    result.reserve(skills_.size());
+    for (const auto& [name, skill] : skills_) {
+        if (skill.context_mode.empty() || skill.context_mode == "inline") {
+            result.push_back(skill);
+        }
+    }
+    return result;
+}
+
+std::vector<SkillDef> SkillRegistry::fork_skills() const {
+    std::vector<SkillDef> result;
+    result.reserve(skills_.size());
+    for (const auto& [name, skill] : skills_) {
+        if (skill.context_mode == "fork") {
+            result.push_back(skill);
+        }
+    }
+    return result;
+}
+
+void register_fork_skills(
+    const SkillRegistry& registry,
+    std::shared_ptr<ToolRegistry> tools,
+    std::shared_ptr<LlmProvider> llm,
+    std::shared_ptr<MemoryStore> memory,
+    std::string default_model) {
+    auto forks = registry.fork_skills();
+    for (auto& def : forks) {
+        auto tool = std::make_unique<tools::ForkSkillTool>(
+            def, llm, tools, memory, default_model);
+        tools->register_tool(std::move(tool));
+        spdlog::info("Registered fork skill tool: skill:{}", def.name);
+    }
 }
 
 } // namespace merak::skills

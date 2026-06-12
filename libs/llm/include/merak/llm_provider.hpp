@@ -46,6 +46,8 @@ public:
 struct CacheStats {
     int total_requests = 0;
     int cache_hits = 0;
+    int cache_read_tokens = 0;
+    int cache_write_tokens = 0;
     int input_tokens_saved = 0;
     double hit_rate() const {
         return total_requests > 0 ? (double)cache_hits / total_requests : 0.0;

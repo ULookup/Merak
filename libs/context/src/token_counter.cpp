@@ -29,6 +29,8 @@ int TokenCounter::count(const std::vector<Message>& messages) const {
     return total;
 }
 
+// Heuristic fallback for budget planning before API calls.
+// Use provider-reported usage.prompt_tokens as the authoritative count when available.
 int TokenCounter::count(const std::string& text) const {
     if (text.empty()) return 0;
     return std::max(1, (int)(text.size() / chars_per_token_));
