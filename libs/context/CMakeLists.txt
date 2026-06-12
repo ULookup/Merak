@@ -4,7 +4,6 @@ add_library(merak-context STATIC
     src/context_assembler.cpp
     src/compactor.cpp
     src/cache_aware_context.cpp
-    src/tool_result_compactor.cpp
     src/context_optimizer.cpp
     src/context_planner.cpp
     src/context_binder.cpp

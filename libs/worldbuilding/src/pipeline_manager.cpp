@@ -235,6 +235,19 @@ void PipelineManager::init_state_for_world(const std::string& world_id) {
         worlds_[world_id] = WorldEntry{state, wf->name};
     }
 
+    // Auto-create default story structure if not present
+    auto story_path = deps_.worlds_base_dir / world_id / "story_structure.json";
+    if (!std::filesystem::exists(story_path)) {
+        std::filesystem::create_directories(story_path.parent_path());
+        nlohmann::json structure;
+        structure["template_type"] = "three_act";
+        structure["name"] = "Three Act Structure";
+        structure["stages"] = {"建立", "对抗", "解决"};
+        std::ofstream out(story_path);
+        out << structure.dump(2);
+        spdlog::info("PipelineManager: created default story structure for world '{}'", world_id);
+    }
+
     persist_state(state);
 
     if (deps_.event_emitter) {

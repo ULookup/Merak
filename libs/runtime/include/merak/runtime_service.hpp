@@ -76,7 +76,7 @@ public:
     using SubRunExecutor = std::function<AgentResponse(
         const SubAgentConfig& agent, const std::string& task, RunControl& control)>;
     explicit RuntimeService(
-        std::filesystem::path root,
+        std::shared_ptr<SessionStore> store,
         LoopFactory factory = {},
         std::map<std::string, SubAgentConfig> agents = {},
         SubRunExecutor sub_run_executor = {});
@@ -117,7 +117,7 @@ public:
 
 private:
     class Control;
-    SessionStore store_;
+    std::shared_ptr<SessionStore> store_;
     EventBus bus_;
     LoopFactory loop_factory_;
     std::map<std::string, SubAgentConfig> agents_;

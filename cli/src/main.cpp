@@ -196,7 +196,10 @@ static int run_server(int argc,char**argv) {
     tools->register_tool(std::make_unique<tools::TaskTool>());
     tools->register_tool(std::make_unique<tools::AskUserTool>());
     auto plan_mode = std::make_shared<std::atomic<bool>>(false);
-    auto session_store = std::make_shared<SessionStore>(merak_home());
+    auto pg_conn = std::make_shared<pqxx::connection>(cfg.memory.db_connection);
+    auto session_store = std::make_shared<SessionStore>(pg_conn);
+    session_store->set_root(merak_home());
+    session_store->initialize();
     tools->register_tool(std::make_unique<tools::EnterPlanModeTool>(plan_mode));
     tools->register_tool(std::make_unique<tools::ExitPlanModeTool>(plan_mode, session_store));
 
@@ -251,7 +254,7 @@ auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
         return loop->run(task,control).get();
     };
     tools->register_tool(std::make_unique<tools::AgentTool>(cfg.agent.sub_agents, sub_executor));
-    auto runtime=std::make_shared<RuntimeService>(merak_home(),factory,cfg.agent.sub_agents,sub_executor);runtime->initialize();
+    auto runtime=std::make_shared<RuntimeService>(session_store,factory,cfg.agent.sub_agents,sub_executor);runtime->initialize();
     if (wb_service) runtime->set_worldbuilding_service(wb_service.get());
     // Initialize PipelineManager
     std::shared_ptr<merak::worldbuilding::PipelineManager> pipeline_mgr;
@@ -279,6 +282,7 @@ auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
                     if (!exe.empty() && std::filesystem::exists(primary)) return primary;
                     return exe / ".." / "config" / "pipelines";
                 }(),
+                .worlds_base_dir = merak_home() / "worldbuilding",
                 .condition_evaluator = condition_evaluator,
             }
         );

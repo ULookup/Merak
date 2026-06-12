@@ -27,12 +27,15 @@ SerializedPayload ContextPipeline::planned_assemble(
   if (avg_schema <= 0) avg_schema = 100.0;
 
   PlanInput pin{current_tokens_, model_max_tokens, schema_count, avg_schema};
+  pin.on_escalate = [this]() { escalate_for_recovery(); };
   auto plan = planner_.plan(pin, stats_);
 
   auto bound = binder_.bind(plan.manifest, sources);
 
   OptimizeStats opt_stats;
   opt_stats.tokens_before = current_tokens_;
+
+  optimizer_.set_compactor(compactor_);
 
   if (plan.limits.allow_schema_pruning) {
     bound.tool_schemas = optimizer_.prune_schemas(bound.tool_schemas, plan.tier, opt_stats);
@@ -55,6 +58,14 @@ SerializedPayload ContextPipeline::planned_assemble(
   if (plan.limits.allow_spill) {
     optimizer_.spill_sections(bound, spill_store_, turn_index_, plan.limits, opt_stats);
   }
+
+  auto split = CacheAwareContext::split(bound.provider_messages);
+  spdlog::debug("split: {}", CacheAwareContext::info(split));
+  if (prev_split_.has_value()) {
+    bool hit = CacheAwareContext::will_cache_hit(*prev_split_, split);
+    stats_.record_cache_hit(hit);
+  }
+  prev_split_ = split;
 
   auto payload = serializer_.serialize(bound, model, system_prompt);
 
@@ -79,6 +90,7 @@ SerializedPayload ContextPipeline::planned_assemble(
 }
 
 void ContextPipeline::escalate_for_recovery() {
+  spill_store_.purge_before(turn_index_ + 1);
   stats_.record(ContextFeedback{0, 0, 0, 0, 0, true, false, true, 0}, OptimizeStats{});
 }
 

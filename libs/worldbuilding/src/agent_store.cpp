@@ -97,13 +97,6 @@ std::string read_text(const std::filesystem::path& path) {
             std::istreambuf_iterator<char>()};
 }
 
-void remove_all_no_throw(const std::filesystem::path& path) noexcept {
-    try {
-        std::filesystem::remove_all(path);
-    } catch (...) {
-    }
-}
-
 std::string join_zh(const std::vector<std::string>& values) {
     std::ostringstream output;
     for (std::size_t i = 0; i < values.size(); ++i) {

@@ -519,18 +519,6 @@ export type CreativePhase =
   | 'scene_writing'
   | 'reflection';
 
-export interface PipelineState {
-  world_id: string;
-  current_phase: CreativePhase;
-  active_arc_id?: string;
-  active_chapter_id?: string;
-  active_scene_id?: string;
-  scene_count_in_chapter: number;
-  total_scenes_target: number;
-  needs_diary_update: boolean;
-  needs_character_update: boolean;
-}
-
 // === Pipeline (extended) ===
 
 export interface ConditionState {
@@ -570,21 +558,6 @@ export interface WorkflowSummary {
   description: string;
   version: number;
   phase_count: number;
-}
-
-// === Review ===
-export interface ReviewIssue {
-  severity: 'error' | 'warning' | 'info';
-  category: 'consistency' | 'pacing' | 'foreshadow' | 'character' | 'style';
-  location: string;
-  description: string;
-  suggestion: string;
-}
-
-export interface ReviewSummary {
-  pass: boolean;
-  issue_count: number;
-  suggestion: string;
 }
 
 // === Audit ===

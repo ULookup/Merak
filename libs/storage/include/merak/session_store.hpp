@@ -6,8 +6,8 @@
 #include <optional>
 #include <string>
 #include <vector>
-
-struct sqlite3;
+#include <memory>
+#include <pqxx/pqxx>
 
 namespace merak {
 
@@ -57,17 +57,18 @@ struct ApprovalRecord {
 
 class SessionStore {
 public:
-    explicit SessionStore(std::filesystem::path root);
+    explicit SessionStore(std::shared_ptr<pqxx::connection> conn);
     ~SessionStore();
     void initialize();
 
     SessionRecord create_session(const std::string& title = "",
-                              const std::string& world_id = "",
-                              const std::string& agent_id = "");
+                                  const std::string& world_id = "",
+                                  const std::string& agent_id = "");
     void update_session(const std::string& id, const std::string& title);
     SessionRecord archive_session(const std::string& id, bool archived);
     std::optional<SessionRecord> get_session(const std::string& id) const;
     std::vector<SessionRecord> list_sessions(const std::string& world_id = "") const;
+
     RunRecord create_run(
         const std::string& session_id,
         const std::string& message,
@@ -78,19 +79,20 @@ public:
     std::optional<RunRecord> get_run(const std::string& id) const;
     bool has_unfinished_run(const std::string& session_id) const;
     void update_run_status(const std::string& id, RunStatus status, const std::string& error = "");
+
     ApprovalRecord create_approval(ApprovalRecord approval);
     std::optional<ApprovalRecord> get_approval(const std::string& id) const;
     ApprovalRecord resolve_approval(const std::string& id, ApprovalStatus status);
+
     RuntimeEvent append_event(RuntimeEvent event);
     std::vector<RuntimeEvent> events_after(const std::string& session_id, long long after) const;
     std::vector<RunRecord> interrupt_running_runs();
-    std::filesystem::path journal_path(const std::string& session_id) const;
 
-    // Plan storage
+    void set_root(std::filesystem::path root);
+    std::filesystem::path journal_path(const std::string& session_id) const;
     void set_plan(const std::string& plan_text);
     std::optional<std::string> get_plan() const;
 
-    // Checkpoint operations
     void save_checkpoint(const std::string& id, const std::string& run_id,
                          int turn_index, const std::string& turn_state,
                          int64_t input_tokens, int64_t output_tokens,
@@ -102,10 +104,12 @@ public:
     void prune_checkpoints(const std::string& run_id, int keep_latest_n);
 
 private:
+    std::shared_ptr<pqxx::connection> conn_;
     std::filesystem::path root_;
-    sqlite3* db_ = nullptr;
     mutable std::mutex mutex_;
-    void exec(const std::string& sql) const;
+    mutable std::mutex plan_mutex_;
+    std::string plan_text_;
+    void exec(const std::string& sql);
 };
 
 } // namespace merak

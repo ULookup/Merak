@@ -1,6 +1,7 @@
 #include <merak/agent_loop.hpp>
 #include <spdlog/spdlog.h>
 #include <sstream>
+#include <thread>
 
 namespace merak {
 
@@ -17,6 +18,7 @@ AgentLoop::AgentLoop(
     , compactor_(std::move(compactor))
     , pipeline_(std::make_unique<ContextPipeline>())
 {
+    pipeline_->set_compactor(compactor_);
 }
 
 void AgentLoop::restore_history(std::vector<Message> history) {
@@ -116,7 +118,49 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
                 }
             }, control.cancellation_token());
 
-        auto llm_response = llm_future.get();
+        AgentResponse llm_response;
+        try {
+            llm_response = llm_future.get();
+        } catch (const std::exception& e) {
+            auto error_class = turn_ingestor_.classify_error(0, e.what());
+            switch (error_class) {
+            case LlmErrorClass::Auth:
+                throw AgentError(ErrorType::LLM_ERROR, "LLM authentication failed. Check your API key.");
+            case LlmErrorClass::RateLimit:
+                spdlog::warn("Loop: rate limited, retrying after backoff");
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                llm_future = llm_->chat(req,
+                    [&](StreamChunk chunk) {
+                        auto token = control.cancellation_token();
+                        if (token && token->should_stop()) return;
+                        if (chunk.is_final) return;
+                        if (!chunk.is_tool_call) {
+                            control.emit_text_delta(chunk.text);
+                            response.text += chunk.text;
+                        }
+                    }, control.cancellation_token());
+                llm_response = llm_future.get();
+                break;
+            case LlmErrorClass::ContextWindow:
+                spdlog::warn("Loop: context window error, triggering compaction and retry");
+                maybe_compact(control);
+                llm_future = llm_->chat(req,
+                    [&](StreamChunk chunk) {
+                        auto token = control.cancellation_token();
+                        if (token && token->should_stop()) return;
+                        if (chunk.is_final) return;
+                        if (!chunk.is_tool_call) {
+                            control.emit_text_delta(chunk.text);
+                            response.text += chunk.text;
+                        }
+                    }, control.cancellation_token());
+                llm_response = llm_future.get();
+                break;
+            case LlmErrorClass::Unknown:
+            default:
+                throw;
+            }
+        }
         response.total_input_tokens += llm_response.total_input_tokens;
         response.total_output_tokens += llm_response.total_output_tokens;
         response.has_usage = response.has_usage || llm_response.has_usage;
@@ -215,6 +259,20 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         }
 
         transition_to(TurnState::Observing, control);
+
+        if (control.save_checkpoint) {
+            nlohmann::json ts;
+            ts["state"] = state_name(state_);
+            ts["turn_count"] = turn_count;
+            control.save_checkpoint(
+                current_turn_,
+                ts.dump(),
+                llm_response.total_input_tokens,
+                llm_response.total_output_tokens,
+                "[]",
+                "",
+                "");
+        }
 
         // Set total tool output chars after knowing actual results
         {

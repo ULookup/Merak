@@ -1,14 +1,27 @@
 #include <merak/session_store.hpp>
+#include <pqxx/pqxx>
 #include <cassert>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <memory>
 
 using namespace merak;
 
 int main() {
     auto root = std::filesystem::temp_directory_path() / "merak-storage-test";
     std::filesystem::remove_all(root);
-    SessionStore store(root);
+
+    const char* conn_str = std::getenv("MERAK_TEST_DB");
+    if (!conn_str) {
+        std::cerr << "SKIP: MERAK_TEST_DB not set (requires PostgreSQL)\n";
+        return 0;
+    }
+
+    auto conn = std::make_shared<pqxx::connection>(conn_str);
+    SessionStore store(conn);
+    store.set_root(root);
     store.initialize();
 
     auto session = store.create_session("storage test");

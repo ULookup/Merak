@@ -34,13 +34,6 @@ bool CacheAwareContext::will_cache_hit(
     return true;
 }
 
-void CacheAwareContext::append(
-    std::vector<Message>& messages,
-    const Message& new_msg
-) {
-    messages.push_back(new_msg);
-}
-
 std::string CacheAwareContext::info(const Split& s) {
     std::ostringstream oss;
     oss << "Static prefix: " << s.static_prefix.size() << " messages, "

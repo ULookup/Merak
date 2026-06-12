@@ -31,6 +31,7 @@ struct ScenePreparation {
     std::vector<Foreshadowing> relevant_foreshadowing;
     std::vector<KnowledgeView> secret_views;
     std::map<std::string, std::vector<ToolSpec>> tools_by_agent_id;
+    std::map<std::string, std::string> behavior_constraints;  // agent_id / kind_name -> prompt
 };
 
 struct SceneWrapUp {
@@ -51,6 +52,8 @@ public:
                       VoiceAnalyzer& voice,
                       merak::kg::KnowledgeGraphProvider* kg_provider = nullptr);
 
+    void set_prompts_dir(std::filesystem::path path) { prompts_dir_ = std::move(path); }
+
     ScenePreparation prepare_scene(const std::string& world_id,
                                     const std::string& scene_id,
                                     WorldbuildingService& service) const;
@@ -70,6 +73,7 @@ private:
     SecretStore& secrets_;
     VoiceAnalyzer& voice_;
     merak::kg::KnowledgeGraphProvider* kg_provider_ = nullptr;
+    std::filesystem::path prompts_dir_ = "config/prompts";
 };
 
 } // namespace merak::worldbuilding

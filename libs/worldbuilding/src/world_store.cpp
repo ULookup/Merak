@@ -67,10 +67,6 @@ WorldKnowledge world_knowledge_from_row(const PgResult& res, int row) {
     return wk;
 }
 
-void remove_all_no_throw(const std::filesystem::path& path) noexcept {
-    try { std::filesystem::remove_all(path); } catch (...) {}
-}
-
 Location location_from_row(const PgResult& res, int row) {
     Location loc;
     loc.id = res.get(row, 0);

@@ -22,6 +22,10 @@ struct PercentileEstimate {
 class PipelineStats {
 public:
   void record(const ContextFeedback& feedback, const OptimizeStats& opt_stats);
+  void record_cache_hit(bool hit) {
+    if (hit) cache_hits_++;
+    cache_checks_++;
+  }
 
   double response_tokens_p50() const { return response_tokens_.percentile(0.5); }
   double response_tokens_p90() const { return response_tokens_.percentile(0.9); }
@@ -44,6 +48,8 @@ private:
   int schema_count_ = 0;
   bool last_context_window_error_ = false;
   int turn_count_ = 0;
+  int cache_hits_ = 0;
+  int cache_checks_ = 0;
 };
 
 } // namespace merak
