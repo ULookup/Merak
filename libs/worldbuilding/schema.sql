@@ -101,6 +101,23 @@ CREATE TABLE IF NOT EXISTS agent_metadata (
     can_speak_directly INTEGER NOT NULL
 );
 
+-- ─── Agent Images ───────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS agent_images (
+    id               TEXT PRIMARY KEY,
+    agent_id         TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    image_type       TEXT NOT NULL CHECK (image_type IN ('avatar', 'design')),
+    storage_key      TEXT NOT NULL,
+    mime_type        TEXT NOT NULL DEFAULT 'image/png',
+    original_name    TEXT,
+    file_size_bytes  INTEGER NOT NULL DEFAULT 0,
+    is_primary       BOOLEAN NOT NULL DEFAULT false,
+    sort_order       INTEGER NOT NULL DEFAULT 0,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_images_agent ON agent_images(agent_id, image_type);
+
 -- ─── Character Cards (latest version for search) ───────────────────
 
 CREATE TABLE IF NOT EXISTS character_cards (

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <unordered_map>
 
 namespace merak {
 namespace {
@@ -157,6 +158,21 @@ void emit_story_update(const std::shared_ptr<RuntimeService>& runtime,
     }
 }
 
+nlohmann::json image_json(const ImageRecord& img) {
+    return {
+        {"id", img.id},
+        {"agent_id", img.agent_id},
+        {"image_type", img.image_type},
+        {"storage_key", img.storage_key},
+        {"mime_type", img.mime_type},
+        {"original_name", img.original_name},
+        {"file_size_bytes", img.file_size_bytes},
+        {"is_primary", img.is_primary},
+        {"sort_order", img.sort_order},
+        {"created_at", img.created_at}
+    };
+}
+
 } // namespace
 
 WorldbuildingHttpHandler::WorldbuildingHttpHandler(
@@ -167,6 +183,11 @@ WorldbuildingHttpHandler::WorldbuildingHttpHandler(
 void WorldbuildingHttpHandler::set_pipeline_manager(
     std::shared_ptr<worldbuilding::PipelineManager> mgr) {
     pipeline_mgr_ = std::move(mgr);
+}
+
+void WorldbuildingHttpHandler::set_image_service(
+    std::shared_ptr<ImageService> img_svc) {
+    image_service_ = std::move(img_svc);
 }
 
 void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
@@ -199,6 +220,30 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_agent_relations(req, res); });
     server.Get(R"(/api/worldbuilding/agents/([^/]+)/prompt)",
         [this](const auto& req, auto& res) { handle_load_agent_prompt(req, res); });
+
+    // Image routes
+    server.Get(R"(/api/worldbuilding/images/([^/]+))",
+        [this](const auto& req, auto& res) { handle_serve_image(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/images)",
+        [this](const auto& req, auto& res) { handle_list_images(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/images)",
+        [this](const auto& req, auto& res) { handle_upload_image(req, res); });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/images/([^/]+))",
+        [this](const auto& req, auto& res) { handle_delete_image(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/images/([^/]+))",
+        [this](const auto& req, auto& res) { handle_patch_image(req, res); });
+
+    // Chunked upload
+    server.Post(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/images/chunked)",
+        [this](const auto& req, auto& res) { handle_init_chunked(req, res); });
+    server.Put(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/images/chunked/([^/]+))",
+        [this](const auto& req, auto& res) { handle_upload_chunk(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/images/chunked/([^/]+))",
+        [this](const auto& req, auto& res) { handle_chunked_status(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/images/chunked/([^/]+)/complete)",
+        [this](const auto& req, auto& res) { handle_complete_chunked(req, res); });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/images/chunked/([^/]+))",
+        [this](const auto& req, auto& res) { handle_cancel_chunked(req, res); });
 
     // Narrative
     server.Get(R"(/api/worldbuilding/([^/]+)/overview)",
@@ -510,14 +555,27 @@ void WorldbuildingHttpHandler::handle_list_agents(const httplib::Request& req, h
             return;
         }
         auto agents = service_->agents().list_agents(wid);
+        // Batch-fetch primary avatars to avoid N+1 queries
+        std::unordered_map<std::string, ImageRecord> primary_avatars;
+        if (image_service_) {
+            std::vector<std::string> agent_ids;
+            agent_ids.reserve(agents.size());
+            for (const auto& a : agents) agent_ids.push_back(a.id);
+            primary_avatars = image_service_->list_primary_avatars(agent_ids);
+        }
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& a : agents) {
-            arr.push_back({
+            nlohmann::json agent_obj = {
                 {"id", a.id},
                 {"name", a.name},
                 {"display_name", a.display_name},
                 {"kind", worldbuilding::to_string(a.kind)}
-            });
+            };
+            auto it = primary_avatars.find(a.id);
+            if (it != primary_avatars.end()) {
+                agent_obj["avatar_url"] = "/api/worldbuilding/images/" + it->second.id;
+            }
+            arr.push_back(agent_obj);
         }
         json_response(res, {{"ok", true}, {"agents", arr}});
     } catch (const std::exception& e) {
@@ -601,6 +659,24 @@ void WorldbuildingHttpHandler::handle_get_agent(const httplib::Request& req, htt
             {"appearance", card.appearance},
             {"taboo_topics", card.taboo_topics}
         };
+        if (image_service_) {
+            auto imgs = image_service_->list_images(agent_id);
+            nlohmann::json avatars = nlohmann::json::array();
+            nlohmann::json designs = nlohmann::json::array();
+            for (const auto& img : imgs) {
+                auto img_j = image_json(img);
+                img_j["url"] = "/api/worldbuilding/images/" + img.id;
+                if (img.image_type == "avatar") {
+                    avatars.push_back(img_j);
+                    if (img.is_primary) {
+                        j["avatar_url"] = "/api/worldbuilding/images/" + img.id;
+                    }
+                } else if (img.image_type == "design") {
+                    designs.push_back(img_j);
+                }
+            }
+            j["images"] = {{"avatar", avatars}, {"design", designs}};
+        }
         json_response(res, {{"ok", true}, {"agent", j}});
     } catch (const std::exception& e) {
         error_response(res, e.what());
@@ -1168,6 +1244,240 @@ void WorldbuildingHttpHandler::handle_patch_secret(const httplib::Request& req, 
         };
         res.status = 409;
         res.set_content(j.dump(), "application/json");
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Image handlers ---
+
+void WorldbuildingHttpHandler::handle_list_images(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        if (!image_service_) {
+            res.status = 503;
+            res.set_content(R"({"error":"image_service_not_available"})", "application/json");
+            return;
+        }
+        auto images = image_service_->list_images(aid);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& img : images) {
+            auto j = image_json(img);
+            j["url"] = "/api/worldbuilding/images/" + img.id;
+            arr.push_back(j);
+        }
+        json_response(res, {{"ok", true}, {"images", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_upload_image(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        if (!image_service_) {
+            res.status = 503;
+            res.set_content(R"({"error":"image_service_not_available"})", "application/json");
+            return;
+        }
+
+        auto file = req.get_file_value("file");
+        if (file.content.empty()) {
+            error_response(res, "No file uploaded", 400, "missing_file");
+            return;
+        }
+
+        std::string image_type;
+        auto ft = req.get_file_value("image_type");
+        if (!ft.content.empty()) {
+            image_type = ft.content;
+        } else if (req.has_param("image_type")) {
+            image_type = req.get_param_value("image_type");
+        }
+        if (image_type != "avatar" && image_type != "design") {
+            error_response(res, "Invalid image_type. Must be 'avatar' or 'design'", 400, "invalid_image_type");
+            return;
+        }
+
+        if (file.content.size() > 10 * 1024 * 1024) {
+            error_response(res, "File size exceeds 10MB limit", 400, "file_too_large");
+            return;
+        }
+
+        std::vector<unsigned char> bytes(file.content.begin(), file.content.end());
+        auto img = image_service_->upload(wid, aid, image_type, file.filename, file.content_type, bytes);
+
+        auto j = image_json(img);
+        j["url"] = "/api/worldbuilding/images/" + img.id;
+        json_response(res, {{"ok", true}, {"image", j}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_delete_image(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string img_id = req.matches[3];
+        if (!image_service_) {
+            res.status = 503;
+            res.set_content(R"({"error":"image_service_not_available"})", "application/json");
+            return;
+        }
+        image_service_->delete_image(img_id);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_patch_image(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string img_id = req.matches[3];
+        if (!image_service_) {
+            res.status = 503;
+            res.set_content(R"({"error":"image_service_not_available"})", "application/json");
+            return;
+        }
+        auto body = nlohmann::json::parse(req.body);
+        std::optional<bool> is_primary;
+        std::optional<int> sort_order;
+        if (body.contains("is_primary")) is_primary = body["is_primary"].get<bool>();
+        if (body.contains("sort_order")) sort_order = body["sort_order"].get<int>();
+        image_service_->update_image(img_id, is_primary, sort_order);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_serve_image(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string img_id = req.matches[1];
+        if (!image_service_) {
+            res.status = 503;
+            res.set_content(R"({"error":"image_service_not_available"})", "application/json");
+            return;
+        }
+        auto rec = image_service_->get_image(img_id);
+        if (!rec) {
+            error_response(res, "Image not found", 404, "image_not_found");
+            return;
+        }
+        auto img_data = image_service_->load_image_data(rec->storage_key);
+        res.set_content(
+            std::string(reinterpret_cast<const char*>(img_data.bytes.data()), img_data.bytes.size()),
+            img_data.mime_type);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Chunked upload handlers ---
+
+void WorldbuildingHttpHandler::handle_init_chunked(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        if (!image_service_) {
+            res.status = 503;
+            res.set_content(R"({"error":"image_service_not_available"})", "application/json");
+            return;
+        }
+        auto body = nlohmann::json::parse(req.body);
+        std::string image_type = body.at("image_type").get<std::string>();
+        if (image_type != "avatar" && image_type != "design") {
+            error_response(res, "Invalid image_type. Must be 'avatar' or 'design'", 400, "invalid_image_type");
+            return;
+        }
+        std::string file_name = body.at("file_name").get<std::string>();
+        std::string mime_type = body.at("mime_type").get<std::string>();
+        int64_t total_size = body.at("total_size").get<int64_t>();
+        int64_t chunk_size = body.value("chunk_size", int64_t(5 * 1024 * 1024));
+
+        auto state = image_service_->init_chunked(wid, aid, image_type, file_name, mime_type, total_size, chunk_size);
+
+        json_response(res, {
+            {"ok", true},
+            {"upload_id", state.upload_id},
+            {"chunks_total", state.chunks_total},
+            {"chunk_size", state.chunk_size}
+        }, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_upload_chunk(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string upload_id = req.matches[3];
+        if (!image_service_) {
+            res.status = 503;
+            res.set_content(R"({"error":"image_service_not_available"})", "application/json");
+            return;
+        }
+        if (!req.has_param("chunk_idx")) {
+            error_response(res, "Missing required query parameter: chunk_idx", 400, "missing_param");
+            return;
+        }
+        int chunk_idx = std::stoi(req.get_param_value("chunk_idx"));
+        std::vector<unsigned char> data(req.body.begin(), req.body.end());
+        image_service_->upload_chunk(upload_id, chunk_idx, data);
+
+        auto uploaded = image_service_->uploaded_chunks(upload_id);
+        nlohmann::json arr = nlohmann::json::array();
+        for (auto idx : uploaded) arr.push_back(idx);
+        json_response(res, {{"ok", true}, {"uploaded_chunks", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_chunked_status(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string upload_id = req.matches[3];
+        if (!image_service_) {
+            res.status = 503;
+            res.set_content(R"({"error":"image_service_not_available"})", "application/json");
+            return;
+        }
+        auto uploaded = image_service_->uploaded_chunks(upload_id);
+        nlohmann::json arr = nlohmann::json::array();
+        for (auto idx : uploaded) arr.push_back(idx);
+        json_response(res, {{"ok", true}, {"uploaded_chunks", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_complete_chunked(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string upload_id = req.matches[3];
+        if (!image_service_) {
+            res.status = 503;
+            res.set_content(R"({"error":"image_service_not_available"})", "application/json");
+            return;
+        }
+        auto img = image_service_->complete_chunked(upload_id);
+        auto j = image_json(img);
+        j["url"] = "/api/worldbuilding/images/" + img.id;
+        json_response(res, {{"ok", true}, {"image", j}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_cancel_chunked(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string upload_id = req.matches[3];
+        if (!image_service_) {
+            res.status = 503;
+            res.set_content(R"({"error":"image_service_not_available"})", "application/json");
+            return;
+        }
+        image_service_->cancel_chunked(upload_id);
+        json_response(res, {{"ok", true}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }

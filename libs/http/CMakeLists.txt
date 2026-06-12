@@ -8,6 +8,7 @@ target_link_libraries(merak-http PUBLIC
     merak-config
     merak-runtime
     merak-worldbuilding
+    merak-storage
     httplib::httplib
     nlohmann_json::nlohmann_json
 )
