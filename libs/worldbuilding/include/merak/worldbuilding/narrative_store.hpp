@@ -70,6 +70,8 @@ public:
 
     ChapterContext chapter_context(const std::string& world_id,
                                    const std::string& chapter_id) const;
+    std::optional<Chapter> get_chapter(const std::string& world_id,
+                                       const std::string& chapter_id) const;
     std::optional<Scene> get_scene(const std::string& world_id,
                                     const std::string& scene_id) const;
     std::vector<ArcSummary> list_arcs(const std::string& world_id) const;
