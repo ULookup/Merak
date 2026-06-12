@@ -144,6 +144,20 @@ function AppInner() {
     };
   }, [state.worldId, state.sessionId, state.storyVersion, dispatch]);
 
+  // Esc key → cancel current run
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (state.currentRun && state.status !== 'idle') {
+          api.cancelRun(state.currentRun).catch(() => {});
+        }
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [state.currentRun, state.status]);
+
   // SSE connection: only in 'ready' phase
   const sseUrl = state.appPhase === 'ready' && state.sessionId
     ? api.sseUrl(state.sessionId)
