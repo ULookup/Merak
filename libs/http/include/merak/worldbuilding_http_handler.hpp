@@ -3,6 +3,7 @@
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <httplib.h>
 #include <nlohmann/json.hpp>
+#include <merak/storage/image_service.hpp>
 #include <memory>
 #include <string>
 
@@ -18,11 +19,13 @@ public:
 
     void install_routes(httplib::Server& server);
     void set_pipeline_manager(std::shared_ptr<worldbuilding::PipelineManager> mgr);
+    void set_image_service(std::shared_ptr<ImageService> img_svc);
 
 private:
     std::shared_ptr<worldbuilding::WorldbuildingService> service_;
     std::shared_ptr<RuntimeService> runtime_;
     std::shared_ptr<worldbuilding::PipelineManager> pipeline_mgr_;
+    std::shared_ptr<ImageService> image_service_;
 
     // World
     void handle_list_worlds(const httplib::Request&, httplib::Response&);
@@ -71,6 +74,19 @@ private:
     // PATCH routes for world entities
     void handle_patch_foreshadow(const httplib::Request&, httplib::Response&);
     void handle_patch_secret(const httplib::Request&, httplib::Response&);
+
+    // Image routes
+    void handle_list_images(const httplib::Request&, httplib::Response&);
+    void handle_upload_image(const httplib::Request&, httplib::Response&);
+    void handle_delete_image(const httplib::Request&, httplib::Response&);
+    void handle_patch_image(const httplib::Request&, httplib::Response&);
+    void handle_serve_image(const httplib::Request&, httplib::Response&);
+    // Chunked upload
+    void handle_init_chunked(const httplib::Request&, httplib::Response&);
+    void handle_upload_chunk(const httplib::Request&, httplib::Response&);
+    void handle_chunked_status(const httplib::Request&, httplib::Response&);
+    void handle_complete_chunked(const httplib::Request&, httplib::Response&);
+    void handle_cancel_chunked(const httplib::Request&, httplib::Response&);
 };
 
 } // namespace merak
