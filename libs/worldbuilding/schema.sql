@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS agent_images (
     file_size_bytes  INTEGER NOT NULL DEFAULT 0,
     is_primary       BOOLEAN NOT NULL DEFAULT false,
     sort_order       INTEGER NOT NULL DEFAULT 0,
-    created_at       TEXT NOT NULL
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_images_agent ON agent_images(agent_id, image_type);
