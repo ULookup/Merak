@@ -177,7 +177,7 @@ struct Arc {
 };
 
 struct Chapter {
-    std::string id, title, pitch, notes;
+    std::string id, title, pitch, notes, content;
     int number = 0;
     std::optional<std::string> arc_id;
     ChapterStatus status = ChapterStatus::Outline;
