@@ -633,6 +633,7 @@ bool NarrativeStore::patch_chapter(const std::string& world_id,
     if (fields.contains("title")) json["title"] = fields["title"];
     if (fields.contains("pitch")) json["pitch"] = fields["pitch"];
     if (fields.contains("notes")) json["notes"] = fields["notes"];
+    if (fields.contains("content")) json["content"] = fields["content"];
     if (fields.contains("number")) json["number"] = fields["number"];
     if (fields.contains("status")) json["status"] = fields["status"];
 
@@ -650,6 +651,10 @@ bool NarrativeStore::patch_chapter(const std::string& world_id,
     if (fields.contains("pitch")) {
         set_parts.push_back("pitch = $" + std::to_string(param_idx++));
         params.push_back(fields["pitch"].get<std::string>());
+    }
+    if (fields.contains("content")) {
+        set_parts.push_back("content = $" + std::to_string(param_idx++));
+        params.push_back(fields["content"].get<std::string>());
     }
     if (fields.contains("status")) {
         set_parts.push_back("status = $" + std::to_string(param_idx++));
