@@ -6,4 +6,5 @@ add_library(merak-skills STATIC
 target_include_directories(merak-skills PUBLIC include)
 target_link_libraries(merak-skills PUBLIC
     merak-core
+    merak-tools
 )

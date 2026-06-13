@@ -25,14 +25,19 @@ target_include_directories(merak-worldbuilding PUBLIC
     include
     ${PostgreSQL_INCLUDE_DIRS}
     ${LIBPQ_INCLUDE_DIR}
+    ${CMAKE_SOURCE_DIR}/libs/knowledge_graph/include
 )
 target_link_libraries(merak-worldbuilding PUBLIC
     merak-tools
     merak-llm
-    merak-knowledge-graph
     nlohmann_json::nlohmann_json
     ${PostgreSQL_LIBRARIES}
 )
+
+if(TARGET merak-knowledge-graph)
+    target_link_libraries(merak-worldbuilding PUBLIC merak-knowledge-graph)
+    target_compile_definitions(merak-worldbuilding PUBLIC MERAK_HAS_KG)
+endif()
 
 add_executable(worldbuilding_tests
     tests/test_agent_store.cpp

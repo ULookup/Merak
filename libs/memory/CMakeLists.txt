@@ -12,4 +12,7 @@ target_link_libraries(merak-memory PUBLIC
     merak-llm
     libpqxx::pqxx
     spdlog::spdlog
+    httplib::httplib
+    CURL::libcurl
+    OpenSSL::SSL
 )

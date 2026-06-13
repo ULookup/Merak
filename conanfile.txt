@@ -9,9 +9,8 @@ gtest/1.14.0
 ftxui/5.0.0
 cpp-httplib/0.45.0
 sqlite3/3.53.1
-# neo4j-client may need system install if not in conancenter:
+# neo4j-client not in conancenter — install via system package manager:
 # sudo apt install libneo4j-client-dev
-neo4j-client/2.5.0
 
 [generators]
 CMakeDeps
