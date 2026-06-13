@@ -146,6 +146,10 @@ std::future<AgentResponse> OpenAIProvider::chat(
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &write_callback);
 
         CURLcode res = curl_easy_perform(curl);
+
+        long http_code = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
         if (res != CURLE_OK) {
             spdlog::error("curl error: {}", curl_easy_strerror(res));
             curl_easy_cleanup(curl);
@@ -155,6 +159,21 @@ std::future<AgentResponse> OpenAIProvider::chat(
                     ? ErrorType::LLM_TIMEOUT : ErrorType::LLM_ERROR,
                 cancellation && cancellation->cancelled()
                     ? "LLM request cancelled" : curl_easy_strerror(res));
+        }
+
+        if (http_code >= 400) {
+            curl_easy_cleanup(curl);
+            curl_slist_free_all(headers);
+            if (http_code == 401 || http_code == 403) {
+                throw AgentError(ErrorType::LLM_ERROR,
+                    "LLM authentication failed (HTTP " + std::to_string(http_code) + ")");
+            }
+            if (http_code == 429) {
+                throw AgentError(ErrorType::LLM_ERROR,
+                    "Rate limited (HTTP 429)");
+            }
+            throw AgentError(ErrorType::LLM_ERROR,
+                "LLM API error (HTTP " + std::to_string(http_code) + ")");
         }
 
         curl_easy_cleanup(curl);
