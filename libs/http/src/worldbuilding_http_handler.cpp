@@ -5,6 +5,8 @@
 #include <merak/worldbuilding/pipeline_manager.hpp>
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <unordered_map>
 
@@ -936,6 +938,38 @@ void WorldbuildingHttpHandler::handle_time_advance(const httplib::Request& req, 
         if (!world) {
             error_response(res, "World not found", 404, "world_not_found");
             return;
+        }
+
+        // Parse and validate the new time format
+        auto parsed_new = worldbuilding::WorldTime::parse(new_time);
+        if (!parsed_new.has_value()) {
+            error_response(res, "Invalid world_time format: " + new_time, 400, "invalid_time_format");
+            return;
+        }
+
+        // Forward-only validation: new_time must be strictly after current world time.
+        // The current world time is the world_time of the most recent timeline event.
+        auto world_path = service_->worlds().world_path(world_id);
+        auto timeline_path = world_path / "timeline.json";
+        if (std::filesystem::exists(timeline_path)) {
+            std::ifstream input(timeline_path);
+            if (input) {
+                auto timeline = nlohmann::json::parse(input);
+                if (timeline.contains("events") && timeline["events"].is_array() &&
+                    !timeline["events"].empty()) {
+                    const auto& events = timeline["events"];
+                    const auto& last_event = events.back();
+                    std::string current_time_str = last_event.at("world_time").get<std::string>();
+                    auto parsed_current = worldbuilding::WorldTime::parse(current_time_str);
+                    if (parsed_current.has_value() && *parsed_new <= *parsed_current) {
+                        error_response(res,
+                            "Time can only advance forward. Current world time: " +
+                                current_time_str + ", requested: " + new_time,
+                            400, "time_not_forward");
+                        return;
+                    }
+                }
+            }
         }
 
         worldbuilding::TimelineEvent event;
