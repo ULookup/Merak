@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 jobs:
   build-linux:
@@ -125,6 +126,7 @@ jobs:
           mkdir -p merak-pkg/webui merak-pkg/config
           cp build/cli/Release/merak.exe merak-pkg/ || cp build/cli/merak.exe merak-pkg/
           cp build/cli/Release/merak-launcher.exe merak-pkg/ 2>/dev/null || true
+          find build -type f -name '*.dll' -exec cp -n {} merak-pkg/ \; 2>/dev/null || true
           cp -r webui/dist/* merak-pkg/webui/
           cp config/prompts merak-pkg/config/ -r 2>/dev/null || true
 
@@ -143,8 +145,19 @@ jobs:
           rm -rf apps/desktop/resources
           mkdir -p apps/desktop/resources
           cp build/cli/Release/merak.exe apps/desktop/resources/ || cp build/cli/merak.exe apps/desktop/resources/
+          find build -type f -name '*.dll' -exec cp -n {} apps/desktop/resources/ \; 2>/dev/null || true
           cp -r merak-pkg/pg apps/desktop/resources/pg
           cp -r config apps/desktop/resources/config
+
+      - name: Verify Windows desktop resources
+        shell: bash
+        run: |
+          test -f apps/desktop/resources/merak.exe
+          test -f apps/desktop/resources/pg/bin/postgres.exe
+          test -f apps/desktop/resources/pg/bin/pg_ctl.exe
+          test -f apps/desktop/resources/pg/bin/initdb.exe
+          test -f apps/desktop/resources/pg/bin/psql.exe
+          ls -la apps/desktop/resources
 
       - name: Package
         shell: bash
