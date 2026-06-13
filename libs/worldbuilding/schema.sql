@@ -402,3 +402,16 @@ CREATE TABLE IF NOT EXISTS agent_prompts (
     prompt       TEXT NOT NULL,
     updated_at   TEXT NOT NULL
 );
+
+-- Pending creations awaiting user confirmation from Runtime creation flow.
+CREATE TABLE IF NOT EXISTS pending_creations (
+    creation_id TEXT PRIMARY KEY,
+    world_id    TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+    tool_name   TEXT NOT NULL,
+    params      JSONB NOT NULL DEFAULT '{}',
+    preview     JSONB NOT NULL DEFAULT '{}',
+    created_at  TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_creations_world
+    ON pending_creations(world_id);

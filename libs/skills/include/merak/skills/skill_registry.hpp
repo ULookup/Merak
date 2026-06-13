@@ -35,6 +35,7 @@ namespace merak {
 class ToolRegistry;
 class LlmProvider;
 class MemoryStore;
+namespace worldbuilding { class WorldbuildingService; }
 } // namespace merak
 
 namespace merak::skills {
@@ -44,6 +45,8 @@ void register_fork_skills(
     std::shared_ptr<merak::ToolRegistry> tools,
     std::shared_ptr<merak::LlmProvider> llm,
     std::shared_ptr<merak::MemoryStore> memory,
-    std::string default_model);
+    std::string default_model,
+    std::shared_ptr<merak::worldbuilding::WorldbuildingService> worldbuilding = nullptr,
+    std::shared_ptr<SkillRegistry> skill_registry = nullptr);
 
 } // namespace merak::skills

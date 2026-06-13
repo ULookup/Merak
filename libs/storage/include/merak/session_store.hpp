@@ -110,6 +110,7 @@ private:
     mutable std::mutex plan_mutex_;
     std::string plan_text_;
     void exec(const std::string& sql);
+    pqxx::connection& require_connection() const;
 };
 
 } // namespace merak

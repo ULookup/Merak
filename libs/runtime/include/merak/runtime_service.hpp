@@ -39,6 +39,12 @@ struct DelegationStart {
     std::string session_id;
 };
 
+struct AgentRunContext {
+    std::string world_id;
+    std::string scene_id;
+    std::string caller_agent_id;
+};
+
 class RuntimeError : public std::runtime_error {
 public:
     RuntimeError(std::string code, std::string message, bool retryable = false)
@@ -75,7 +81,10 @@ class RuntimeService : public std::enable_shared_from_this<RuntimeService> {
 public:
     using LoopFactory = std::function<std::unique_ptr<AgentLoop>(const std::string& model)>;
     using SubRunExecutor = std::function<AgentResponse(
-        const SubAgentConfig& agent, const std::string& task, RunControl& control)>;
+        const SubAgentConfig& agent,
+        const std::string& task,
+        RunControl& control,
+        const AgentRunContext& context)>;
     explicit RuntimeService(
         std::shared_ptr<SessionStore> store,
         LoopFactory factory = {},
@@ -99,7 +108,7 @@ public:
         const DelegationRequest& request);
     std::vector<AgentMetadata> agents() const;
     ApprovalRecord resolve_approval(const std::string& id, ApprovalStatus status);
-    void set_worldbuilding_service(merak::worldbuilding::WorldbuildingService* wb_service);
+    void set_worldbuilding_service(std::shared_ptr<merak::worldbuilding::WorldbuildingService> wb_service);
     void set_skill_registry(std::shared_ptr<skills::SkillRegistry> reg);
     void set_pipeline_manager(std::shared_ptr<merak::worldbuilding::PipelineManager> mgr);
     merak::worldbuilding::PipelineManager* pipeline_manager() { return pipeline_mgr_.get(); }
@@ -133,12 +142,14 @@ private:
     std::map<std::string, std::vector<std::string>> child_runs_;
     std::map<std::string, std::shared_ptr<AgentLoop>> session_loops_;
     std::mutex session_loops_mutex_;
-    merak::worldbuilding::WorldbuildingService* wb_service_ = nullptr;
+    std::shared_ptr<merak::worldbuilding::WorldbuildingService> wb_service_;
     std::shared_ptr<skills::SkillRegistry> skill_registry_;
     std::shared_ptr<merak::worldbuilding::PipelineManager> pipeline_mgr_;
     RuntimeEvent emit(const std::string& session_id, const std::string& run_id,
                       const std::string& type, nlohmann::json payload = {});
     void execute_run(RunRecord run, std::string model);
+    void configure_loop_for_run(AgentLoop& loop, const RunRecord& run);
+    std::optional<std::string> active_scene_for_session(const SessionRecord& session);
     prompts::PromptProfile build_prompt_profile(
         const std::string& world_id, const std::string& agent_id);
     void after_entity_event(const std::string& world_id,

@@ -11,6 +11,7 @@
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
 #include <merak/worldbuilding/pipeline_manager.hpp>
 #include <merak/worldbuilding/condition_evaluator.hpp>
+#include <merak/skills/skill_registry.hpp>
 #ifdef MERAK_HAS_KG
 #include <merak/kg/neo4j_provider.hpp>
 #endif
@@ -135,6 +136,23 @@ static std::filesystem::path exe_dir_path() {
 #endif
 }
 
+static std::vector<std::filesystem::path> skill_search_dirs() {
+    std::vector<std::filesystem::path> dirs;
+    if (auto* resource_dir = std::getenv("MERAK_RESOURCE_DIR")) {
+        dirs.emplace_back(std::filesystem::path(resource_dir) / "skills");
+        dirs.emplace_back(std::filesystem::path(resource_dir) / "config" / "skills");
+    }
+    auto exe = exe_dir_path();
+    if (!exe.empty()) {
+        dirs.emplace_back(exe / "skills");
+        dirs.emplace_back(exe / "config" / "skills");
+        dirs.emplace_back(exe / ".." / "config" / "skills");
+    }
+    dirs.emplace_back(std::filesystem::current_path() / "config" / "skills");
+    dirs.emplace_back(merak_home() / "skills");
+    return dirs;
+}
+
 static int run_server(int argc,char**argv) {
     auto cfg=load_config();
     // --- Portable PostgreSQL ---
@@ -241,6 +259,7 @@ if(memory_cfg.enabled&&!memory_cfg.embedding_api_key.empty()){
     std::cout<<"Embedding: using "<<memory_cfg.embedding_model<<" via "<<memory_cfg.embedding_api_url<<"\n";
 }else if(memory_cfg.enabled&&memory_cfg.embedding_api_key.empty()){
     std::cerr<<"Warning: Memory enabled but embedding_api_key not set, semantic search disabled\n";
+    memory_cfg.enabled=false;
 }
 auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
     if(memory_cfg.enabled)memory->init_db();
@@ -256,24 +275,35 @@ auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
     tools->register_tool(std::make_unique<tools::MemoryTool>(memory));
     auto edit_journal = std::make_shared<EditJournal>();
     tools->register_tool(std::make_unique<tools::SessionTool>(memory, compactor, edit_journal.get()));
-    auto factory=[cfg,llm,tools,memory,compactor,plan_mode](const std::string&model){AgentLoop::Config c;c.system_prompt=cfg.agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=model.empty()?cfg.llm.default_model:model;c.max_output_tokens=cfg.llm.max_output_tokens;auto loop=std::make_unique<AgentLoop>(c,llm,tools,memory,compactor,nullptr,nullptr);loop->set_plan_mode_source(plan_mode);return loop;};
-    auto sub_executor=[cfg,llm,tools,memory,make_context,plan_mode](const SubAgentConfig&agent,const std::string&task,RunControl&control){
+    auto skill_registry = std::make_shared<skills::SkillRegistry>();
+    for (const auto& dir : skill_search_dirs()) {
+        skill_registry->discover_from(dir);
+    }
+    skills::register_fork_skills(*skill_registry, tools, llm, memory, cfg.llm.default_model, wb_service, skill_registry);
+    auto factory=[cfg,llm,tools,memory,compactor,plan_mode,wb_service,skill_registry](const std::string&model){AgentLoop::Config c;c.system_prompt=cfg.agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=model.empty()?cfg.llm.default_model:model;c.max_output_tokens=cfg.llm.max_output_tokens;auto loop=std::make_unique<AgentLoop>(c,llm,tools,memory,compactor,wb_service,skill_registry);loop->set_plan_mode_source(plan_mode);return loop;};
+    auto sub_executor=[cfg,llm,tools,memory,make_context,plan_mode,wb_service,skill_registry](const SubAgentConfig&agent,const std::string&task,RunControl&control,const AgentRunContext& context){
         auto sub_tools=std::make_shared<ToolRegistry>();sub_tools->set_permission_mode(cfg.agent.permission_mode);
         if(agent.tool_allowlist.empty()){for(const auto&spec:tools->all_tools()){if(auto*tool=tools->get_tool(spec.name))sub_tools->register_tool(tool->clone());}}
         else{for(const auto&name:agent.tool_allowlist){if(auto*tool=tools->get_tool(name))sub_tools->register_tool(tool->clone());}}
         auto [sub_context,sub_compactor]=make_context(llm);
         AgentLoop::Config c;c.system_prompt=agent.system_prompt.empty()?cfg.agent.system_prompt:agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=agent.model.empty()?cfg.llm.default_model:agent.model;c.max_output_tokens=cfg.llm.max_output_tokens;
-        auto loop=std::make_unique<AgentLoop>(c,llm,sub_tools,memory,sub_compactor,nullptr,nullptr);
+        auto loop=std::make_unique<AgentLoop>(c,llm,sub_tools,memory,sub_compactor,wb_service,skill_registry);
         loop->set_plan_mode_source(plan_mode);
+        if(!context.world_id.empty())loop->set_active_world_id(context.world_id);
+        if(!context.scene_id.empty())loop->set_active_scene_id(context.scene_id);
+        if(!context.caller_agent_id.empty())loop->set_caller_agent_id(context.caller_agent_id);
         return loop->run(task,control).get();
     };
     tools->register_tool(std::make_unique<tools::AgentTool>(cfg.agent.sub_agents,
         [sub_executor](const SubAgentConfig& agent, const std::string& task, RunControl& control) -> std::string {
-            return sub_executor(agent, task, control).text;
+            AgentRunContext context;
+            context.caller_agent_id = agent.id;
+            return sub_executor(agent, task, control, context).text;
         }));
     auto runtime=std::make_shared<RuntimeService>(session_store,factory,cfg.agent.sub_agents,sub_executor);
     runtime->initialize();
-    if (wb_service) runtime->set_worldbuilding_service(wb_service.get());
+    if (wb_service) runtime->set_worldbuilding_service(wb_service);
+    runtime->set_skill_registry(skill_registry);
     // Initialize PipelineManager
     std::shared_ptr<merak::worldbuilding::PipelineManager> pipeline_mgr;
     if (wb_service && !cfg.memory.db_connection.empty()) {
@@ -293,6 +323,21 @@ auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
                     } else if (!e.session_id.empty()) {
                         runtime->emit_event(e.session_id, e.run_id, e.type, e.payload);
                     }
+                },
+                .invoke_agent = [&runtime](const std::string& world_id,
+                                           const std::string& agent_id,
+                                           const std::string& task) {
+                    merak::worldbuilding::PipelineManager::AgentInvocationResult out;
+                    try {
+                        auto session = runtime->create_session("pipeline:" + agent_id, world_id, agent_id);
+                        auto run = runtime->start_run(session.id, task);
+                        out.success = true;
+                        out.output = run.id;
+                    } catch (const std::exception& e) {
+                        out.success = false;
+                        out.error = e.what();
+                    }
+                    return out;
                 },
                 .pipeline_config_dir = [] {
                     auto exe = exe_dir_path();

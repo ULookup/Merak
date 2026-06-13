@@ -1,11 +1,13 @@
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <merak/worldbuilding/ids.hpp>
+#include <merak/worldbuilding/pg_helpers.hpp>
 
 #include <spdlog/spdlog.h>
 
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 
 namespace merak::worldbuilding {
 
@@ -19,11 +21,71 @@ WorldbuildingService::WorldbuildingService(std::string_view pg_conninfo,
       foreshadowing_(worlds_, narrative_, pg_conninfo, root_),
       secrets_(worlds_, foreshadowing_, pg_conninfo, root_),
       voice_(),
+      kg_provider_(std::move(kg_provider)),
       orchestrator_(worlds_, agents_, narrative_, foreshadowing_, secrets_, voice_, kg_provider_.get()),
-      kg_provider_(std::move(kg_provider)) {}
+      pending_pool_(std::make_unique<PgPool>(pg_conninfo, 2)) {}
+
+WorldbuildingService::~WorldbuildingService() = default;
 
 void WorldbuildingService::initialize() {
     worlds_.initialize();
+    ensure_pending_creation_table();
+}
+
+void WorldbuildingService::ensure_pending_creation_table() {
+    PgConn conn(*pending_pool_);
+    conn.exec(R"(
+        CREATE TABLE IF NOT EXISTS pending_creations (
+            creation_id TEXT PRIMARY KEY,
+            world_id TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+            tool_name TEXT NOT NULL,
+            params JSONB NOT NULL DEFAULT '{}',
+            preview JSONB NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        )
+    )");
+    conn.exec("CREATE INDEX IF NOT EXISTS idx_pending_creations_world ON pending_creations(world_id)");
+}
+
+void WorldbuildingService::persist_pending_creation(const PendingCreation& pc) {
+    PgConn conn(*pending_pool_);
+    conn.execute(R"(
+        INSERT INTO pending_creations (creation_id, world_id, tool_name, params, preview, created_at)
+        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)
+        ON CONFLICT (creation_id) DO UPDATE SET
+            world_id = EXCLUDED.world_id,
+            tool_name = EXCLUDED.tool_name,
+            params = EXCLUDED.params,
+            preview = EXCLUDED.preview,
+            created_at = EXCLUDED.created_at
+    )", {pc.creation_id, pc.world_id, pc.tool_name, pc.params.dump(),
+          pc.preview.dump(), now_iso_utc()});
+}
+
+std::optional<PendingCreation> WorldbuildingService::load_pending_creation(
+        const std::string& creation_id) const {
+    PgConn conn(*pending_pool_);
+    auto rows = conn.query(R"(
+        SELECT creation_id, world_id, tool_name, params::text, preview::text
+        FROM pending_creations WHERE creation_id = $1
+    )", {creation_id});
+    if (rows.ntuples() == 0) return std::nullopt;
+
+    PendingCreation pc;
+    pc.creation_id = rows.get(0, 0);
+    pc.world_id = rows.get(0, 1);
+    pc.tool_name = rows.get(0, 2);
+    pc.params = nlohmann::json::parse(rows.get(0, 3), nullptr, false);
+    if (pc.params.is_discarded()) pc.params = nlohmann::json::object();
+    pc.preview = nlohmann::json::parse(rows.get(0, 4), nullptr, false);
+    if (pc.preview.is_discarded()) pc.preview = nlohmann::json::object();
+    pc.created_at = std::chrono::steady_clock::now();
+    return pc;
+}
+
+void WorldbuildingService::delete_pending_creation(const std::string& creation_id) {
+    PgConn conn(*pending_pool_);
+    conn.execute("DELETE FROM pending_creations WHERE creation_id = $1", {creation_id});
 }
 
 WorldMeta WorldbuildingService::create_world(std::string name,
@@ -149,10 +211,21 @@ Secret WorldbuildingService::create_secret(const std::string& world_id,
 
 std::vector<VoiceComparison>
 WorldbuildingService::voice_check(const std::string& world_id) const {
-    return voice_.check_all(voice_.list_fingerprints());
+    std::unordered_set<std::string> world_agent_ids;
+    for (const auto& agent : worlds_.list_agents(world_id)) {
+        world_agent_ids.insert(agent.id);
+    }
+
+    std::vector<VoiceFingerprint> scoped;
+    for (const auto& fp : voice_.list_fingerprints()) {
+        if (world_agent_ids.contains(fp.agent_id)) {
+            scoped.push_back(fp);
+        }
+    }
+    return voice_.check_all(scoped);
 }
 
-// ── Preview builders (no DB write) ──────────────────────────────────────────
+// Preview builders (no DB write)
 
 nlohmann::json WorldbuildingService::build_scene_preview(const std::string& world_id,
                                                          const nlohmann::json& params) {
@@ -224,12 +297,11 @@ nlohmann::json WorldbuildingService::build_location_preview(const std::string& w
     return preview;
 }
 
-// ── Store and retrieve pending creations ───────────────────────────────────
+// Store and retrieve pending creations
 
 std::string WorldbuildingService::store_pending_creation(
         const std::string& world_id, const std::string& tool_name,
         const nlohmann::json& params, const nlohmann::json& preview) {
-    std::lock_guard lock(pending_mutex_);
     PendingCreation pc;
     pc.creation_id = "creation_" + make_id("c");
     pc.tool_name = tool_name;
@@ -237,45 +309,61 @@ std::string WorldbuildingService::store_pending_creation(
     pc.params = params;
     pc.preview = preview;
     pc.created_at = std::chrono::steady_clock::now();
-    pending_creations_[pc.creation_id] = pc;
+    persist_pending_creation(pc);
+    {
+        std::lock_guard lock(pending_mutex_);
+        pending_creations_[pc.creation_id] = pc;
+    }
     return pc.creation_id;
 }
 
 std::optional<PendingCreation> WorldbuildingService::get_pending_creation(
         const std::string& creation_id) const {
-    std::lock_guard lock(pending_mutex_);
-    auto it = pending_creations_.find(creation_id);
-    if (it == pending_creations_.end()) return std::nullopt;
-    return it->second;
+    {
+        std::lock_guard lock(pending_mutex_);
+        auto it = pending_creations_.find(creation_id);
+        if (it != pending_creations_.end()) return it->second;
+    }
+
+    auto loaded = load_pending_creation(creation_id);
+    if (loaded) {
+        std::lock_guard lock(pending_mutex_);
+        pending_creations_[creation_id] = *loaded;
+    }
+    return loaded;
 }
 
-// ── Resolution (writes to DB on allow/modify) ──────────────────────────────
+// Resolution (writes to DB on allow/modify)
 
 nlohmann::json WorldbuildingService::resolve_creation(
         const std::string& creation_id,
         const std::string& decision,
         const nlohmann::json& modifications) {
 
-    // Step 1: Under lock, find and copy, erase for non-deny
     PendingCreation pc;
     {
         std::lock_guard lock(pending_mutex_);
         auto it = pending_creations_.find(creation_id);
-        if (it == pending_creations_.end()) {
+        if (it != pending_creations_.end()) {
+            pc = std::move(it->second);
+            pending_creations_.erase(it);
+        }
+    }
+
+    if (pc.creation_id.empty()) {
+        auto loaded = load_pending_creation(creation_id);
+        if (!loaded) {
             throw std::runtime_error("Pending creation not found: " + creation_id);
         }
-        pc = std::move(it->second);
-
-        if (decision == "deny") {
-            pending_creations_.erase(it);
-            return {{"ok", true}, {"decision", "deny"}, {"creation_id", creation_id}};
-        }
-
-        // For allow/modify: erase from map BEFORE DB write
-        pending_creations_.erase(it);
+        pc = std::move(*loaded);
     }
-    // Lock released here — DB work happens without holding mutex
 
+    if (decision == "deny") {
+        delete_pending_creation(creation_id);
+        return {{"ok", true}, {"decision", "deny"}, {"creation_id", creation_id}};
+    }
+
+    delete_pending_creation(creation_id);
     // Step 2: Merge modifications for "modify"
     nlohmann::json final_params = pc.params;
     if (decision == "modify" && !modifications.is_null()) {
@@ -397,7 +485,8 @@ nlohmann::json WorldbuildingService::resolve_creation(
             throw std::runtime_error("Unknown tool_name: " + pc.tool_name);
         }
     } catch (...) {
-        // Step 4: On failure, re-insert pc into map for retry
+        // Step 4: On failure, re-insert pc into map and PostgreSQL for retry.
+        persist_pending_creation(pc);
         std::lock_guard lock(pending_mutex_);
         pending_creations_[creation_id] = std::move(pc);
         throw;

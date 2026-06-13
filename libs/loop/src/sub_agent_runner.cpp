@@ -7,11 +7,37 @@ namespace merak {
 SubAgentRunner::SubAgentRunner(
     std::shared_ptr<LlmProvider> llm,
     std::shared_ptr<MemoryStore> memory,
-    std::shared_ptr<ToolRegistry> parent_tools)
+    std::shared_ptr<ToolRegistry> parent_tools,
+    std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding,
+    std::shared_ptr<skills::SkillRegistry> skill_registry)
     : llm_(std::move(llm))
     , memory_(std::move(memory))
     , parent_tools_(std::move(parent_tools))
+    , worldbuilding_(std::move(worldbuilding))
+    , skill_registry_(std::move(skill_registry))
 {
+}
+
+void SubAgentRunner::set_worldbuilding_service(
+    std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding) {
+    worldbuilding_ = std::move(worldbuilding);
+}
+
+void SubAgentRunner::set_skill_registry(
+    std::shared_ptr<skills::SkillRegistry> skill_registry) {
+    skill_registry_ = std::move(skill_registry);
+}
+
+void SubAgentRunner::set_active_world_id(std::optional<std::string> world_id) {
+    active_world_id_ = std::move(world_id);
+}
+
+void SubAgentRunner::set_active_scene_id(std::optional<std::string> scene_id) {
+    active_scene_id_ = std::move(scene_id);
+}
+
+void SubAgentRunner::set_caller_agent_id(std::optional<std::string> caller_agent_id) {
+    caller_agent_id_ = std::move(caller_agent_id);
 }
 
 void SubAgentRunner::register_profile(const SubAgentConfig& config) {
@@ -111,7 +137,12 @@ std::unique_ptr<AgentLoop> SubAgentRunner::create_sub_agent(
 
     auto comp = std::make_shared<Compactor>(llm_, counter);
 
-    return std::make_unique<AgentLoop>(cfg, llm_, sub_tools, memory_, comp, nullptr, nullptr);
+    auto loop = std::make_unique<AgentLoop>(
+        cfg, llm_, sub_tools, memory_, comp, worldbuilding_, skill_registry_);
+    loop->set_active_world_id(active_world_id_);
+    loop->set_active_scene_id(active_scene_id_);
+    loop->set_caller_agent_id(caller_agent_id_.value_or(profile.id));
+    return loop;
 }
 
 } // namespace merak
