@@ -11,12 +11,24 @@ LocalFileImageStore::LocalFileImageStore(std::string base_dir, std::string url_p
     : base_dir_(std::move(base_dir)), url_prefix_(std::move(url_prefix)) {}
 
 std::string LocalFileImageStore::save(const std::string& key, const ImageData& data) {
-    fs::path file_path = fs::path(base_dir_) / key;
-    fs::create_directories(file_path.parent_path());
+    // Ensure base_dir_ exists for canonical resolution
+    fs::create_directories(base_dir_);
 
-    std::ofstream out(file_path, std::ios::binary);
+    // Path traversal guard
+    fs::path target = fs::weakly_canonical(fs::path(base_dir_) / key);
+    fs::path base = fs::weakly_canonical(fs::path(base_dir_));
+    std::string target_str = target.string();
+    std::string base_str = base.string();
+    if (target_str.size() < base_str.size() ||
+        target_str.compare(0, base_str.size(), base_str) != 0) {
+        throw std::runtime_error("Path traversal rejected: " + key);
+    }
+
+    fs::create_directories(target.parent_path());
+
+    std::ofstream out(target, std::ios::binary);
     if (!out) {
-        throw std::runtime_error("Failed to write file: " + file_path.string());
+        throw std::runtime_error("Failed to write file: " + target.string());
     }
     out.write(reinterpret_cast<const char*>(data.bytes.data()),
               static_cast<std::streamsize>(data.bytes.size()));
@@ -24,10 +36,19 @@ std::string LocalFileImageStore::save(const std::string& key, const ImageData& d
 }
 
 ImageData LocalFileImageStore::load(const std::string& key) {
-    fs::path file_path = fs::path(base_dir_) / key;
-    std::ifstream in(file_path, std::ios::binary | std::ios::ate);
+    // Path traversal guard
+    fs::path target = fs::weakly_canonical(fs::path(base_dir_) / key);
+    fs::path base = fs::weakly_canonical(fs::path(base_dir_));
+    std::string target_str = target.string();
+    std::string base_str = base.string();
+    if (target_str.size() < base_str.size() ||
+        target_str.compare(0, base_str.size(), base_str) != 0) {
+        throw std::runtime_error("Path traversal rejected: " + key);
+    }
+
+    std::ifstream in(target, std::ios::binary | std::ios::ate);
     if (!in) {
-        throw std::runtime_error("File not found: " + file_path.string());
+        throw std::runtime_error("File not found: " + target.string());
     }
 
     auto size = static_cast<size_t>(in.tellg());
@@ -38,7 +59,7 @@ ImageData LocalFileImageStore::load(const std::string& key) {
     in.read(reinterpret_cast<char*>(data.bytes.data()), static_cast<std::streamsize>(size));
 
     // Detect mime type from extension
-    std::string ext = file_path.extension().string();
+    std::string ext = target.extension().string();
     if (ext == ".png") data.mime_type = "image/png";
     else if (ext == ".jpg" || ext == ".jpeg") data.mime_type = "image/jpeg";
     else if (ext == ".webp") data.mime_type = "image/webp";
@@ -49,9 +70,18 @@ ImageData LocalFileImageStore::load(const std::string& key) {
 }
 
 void LocalFileImageStore::remove(const std::string& key) {
-    fs::path file_path = fs::path(base_dir_) / key;
+    // Path traversal guard
+    fs::path target = fs::weakly_canonical(fs::path(base_dir_) / key);
+    fs::path base = fs::weakly_canonical(fs::path(base_dir_));
+    std::string target_str = target.string();
+    std::string base_str = base.string();
+    if (target_str.size() < base_str.size() ||
+        target_str.compare(0, base_str.size(), base_str) != 0) {
+        throw std::runtime_error("Path traversal rejected: " + key);
+    }
+
     std::error_code ec;
-    fs::remove(file_path, ec);
+    fs::remove(target, ec);
 }
 
 std::string LocalFileImageStore::public_url(const std::string& key) const {
