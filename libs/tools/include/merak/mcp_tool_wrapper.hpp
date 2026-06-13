@@ -16,6 +16,9 @@ public:
     {}
 
     ToolSpec spec() const override { return spec_; }
+    ToolMeta meta() const override {
+        return ToolMeta{.name = spec_.name, .description = spec_.description};
+    }
     PermissionLevel permission() const override { return permission_; }
 
     std::future<ToolResult> execute(ToolCall call, ToolExecutionContext context = {}) override {
