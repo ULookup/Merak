@@ -61,17 +61,19 @@ std::expected<void, AgentError> MemoryStore::create_tables() {
         txn.exec("CREATE EXTENSION IF NOT EXISTS vector");
         txn.exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"");
 
-        txn.exec(R"(
+        auto dim = embedder_->dimension();
+        auto create_sql = std::string(R"(
             CREATE TABLE IF NOT EXISTS memory_entries (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 content TEXT NOT NULL,
                 type VARCHAR(32) NOT NULL DEFAULT 'semantic',
-                embedding VECTOR(1536),
+                embedding VECTOR()") + std::to_string(dim) + R"(),
                 confidence DOUBLE PRECISION DEFAULT 1.0,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 last_accessed TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )
         )");
+        txn.exec(create_sql);
 
         txn.exec(R"(
             CREATE INDEX IF NOT EXISTS idx_memory_embedding
