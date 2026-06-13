@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { useEffect } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppStateProvider, useAppState } from '../AppState';
@@ -26,9 +26,7 @@ function TimelineHarness() {
       metadata: {
         provider: 'anthropic',
         model: 'claude-sonnet-4-6',
-        models: [
-          { name: 'claude-sonnet-4-6', provider: 'anthropic', max_context_tokens: 200000 },
-        ],
+        models: [{ name: 'claude-sonnet-4-6', provider: 'anthropic', max_context_tokens: 200000 }],
         permission_mode: 'default',
         memory: { enabled: true },
         tools: [],
@@ -186,7 +184,9 @@ describe('Cell components', () => {
     );
 
     expect(screen.getByRole('button', { name: 'New session' }).querySelector('svg')).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Generate title' }).querySelector('svg')).toBeDefined();
+    expect(
+      screen.getByRole('button', { name: 'Generate title' }).querySelector('svg'),
+    ).toBeDefined();
     expect(screen.getByRole('button', { name: 'Edit world' }).querySelector('svg')).toBeDefined();
     expect(screen.queryByText('+')).toBeNull();
   });
@@ -199,6 +199,26 @@ describe('Cell components', () => {
   it('AssistantCell renders markdown', () => {
     render(<AssistantCell text="**bold**" />);
     expect(screen.getByText('bold')).toBeDefined();
+  });
+
+  it('AssistantCell renders GFM tables and task lists', () => {
+    render(
+      <AssistantCell
+        text={[
+          '| File | Status |',
+          '| --- | --- |',
+          '| `App.tsx` | Done |',
+          '',
+          '- [x] Render table',
+          '- [ ] Verify mobile wrapping',
+        ].join('\n')}
+      />,
+    );
+
+    expect(screen.getByRole('table')).toBeDefined();
+    expect(screen.getByText('App.tsx')).toBeDefined();
+    expect(screen.getByText('Render table')).toBeDefined();
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2);
   });
 
   it('SystemCell renders text', () => {
@@ -233,9 +253,7 @@ describe('Icon source hygiene', () => {
       'src/components/Sidebar/WorldSelector.tsx',
       'src/components/Sidebar.tsx',
     ];
-    const source = files
-      .map((file) => readFileSync(join(process.cwd(), file), 'utf8'))
-      .join('\n');
+    const source = files.map((file) => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
 
     expect(source).not.toMatch(/[☰◫✎⧉✓]/);
     expect(source).not.toContain('鉁?');

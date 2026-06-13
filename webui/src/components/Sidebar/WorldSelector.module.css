@@ -2,7 +2,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px 30px;
   gap: 6px;
-  padding: 11px 12px;
+  padding: 10px 12px 12px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -13,7 +13,7 @@
   border-radius: 6px;
   background: var(--surface);
   color: var(--ink);
-  padding: 7px 8px;
+  padding: 7px 9px;
   font: inherit;
   transition:
     border-color var(--duration-fast) var(--ease),
