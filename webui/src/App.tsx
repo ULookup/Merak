@@ -11,6 +11,7 @@ import WorldOnboarding from './components/WorldOnboarding';
 import WorldDashboard from './components/WorldDashboard';
 import WorldSidebar from './components/WorldSidebar';
 import { ToastProvider } from './components/Toast';
+import DesktopBoot from './DesktopBoot';
 import { useSSE } from './hooks/useSSE';
 
 function AppInner() {
@@ -215,8 +216,10 @@ function AppInner() {
 
 export default function App() {
   return (
-    <AppStateProvider>
-      <AppInner />
-    </AppStateProvider>
+    <DesktopBoot>
+      <AppStateProvider>
+        <AppInner />
+      </AppStateProvider>
+    </DesktopBoot>
   );
 }

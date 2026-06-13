@@ -49,11 +49,19 @@ import type {
   WorldTimeResponse,
 } from './types';
 
-const BASE = import.meta.env.VITE_API_BASE ?? '';
+let apiBase = import.meta.env.VITE_API_BASE ?? '';
+
+export function setApiBase(base: string) {
+  apiBase = base.replace(/\/$/, '');
+}
+
+export function getApiBase() {
+  return apiBase;
+}
 
 export function apiUrl(path: string) {
   if (/^https?:\/\//i.test(path)) return path;
-  return `${BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  return `${apiBase}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
 export class ApiError extends Error {
@@ -476,7 +484,7 @@ export const api = {
       },
     ),
 
-  sseUrl: (id: string) => `${BASE}/v1/sessions/${id}/events/stream`,
+  sseUrl: (id: string) => `${apiBase}/v1/sessions/${id}/events/stream`,
 
   getConfig: () => request<LlmConfig>('GET', '/api/config/llm'),
 
@@ -731,7 +739,7 @@ export const api = {
 };
 
 export async function getPipelineState(worldId: string): Promise<PipelineViewData> {
-  const res = await fetch(`/api/worldbuilding/${worldId}/pipeline/state`);
+  const res = await fetch(apiUrl(`/api/worldbuilding/${worldId}/pipeline/state`));
   if (!res.ok) throw new Error(`Failed to get pipeline state: ${res.status}`);
   return res.json();
 }
@@ -740,7 +748,7 @@ export async function advancePipeline(
   worldId: string,
   body: { target_phase?: string; force?: boolean },
 ): Promise<void> {
-  const res = await fetch(`/api/worldbuilding/${worldId}/pipeline/advance`, {
+  const res = await fetch(apiUrl(`/api/worldbuilding/${worldId}/pipeline/advance`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -752,7 +760,7 @@ export async function advancePipeline(
 }
 
 export async function listPipelineWorkflows(): Promise<WorkflowSummary[]> {
-  const res = await fetch('/api/worldbuilding/pipeline/workflows');
+  const res = await fetch(apiUrl('/api/worldbuilding/pipeline/workflows'));
   if (!res.ok) throw new Error(`Failed to list workflows: ${res.status}`);
   const data = await res.json();
   return data.workflows;
@@ -762,7 +770,7 @@ export async function activatePipelineWorkflow(
   worldId: string,
   workflowName: string,
 ): Promise<void> {
-  const res = await fetch(`/api/worldbuilding/${worldId}/pipeline/activate`, {
+  const res = await fetch(apiUrl(`/api/worldbuilding/${worldId}/pipeline/activate`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workflow_name: workflowName }),
@@ -778,7 +786,7 @@ export async function listPipelineHistory(
     world_id: worldId,
     limit: String(limit),
   });
-  const res = await fetch(`/api/worldbuilding/pipeline/history?${params}`);
+  const res = await fetch(apiUrl(`/api/worldbuilding/pipeline/history?${params}`));
   if (!res.ok) throw new Error(`Failed to list pipeline history: ${res.status}`);
   return res.json();
 }

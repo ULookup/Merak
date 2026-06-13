@@ -319,6 +319,16 @@ Result<Config, AgentError> ConfigLoader::load() {
         try_load(user_local, "user local (" + user_local + ")");
     }
 
+#ifdef _WIN32
+    if (const char* appdata = std::getenv("APPDATA")) {
+        std::filesystem::path user_dir = std::filesystem::path(appdata) / "Merak";
+        auto user_json = user_dir / "settings.json";
+        auto user_local = user_dir / "settings.local.json";
+        try_load(user_json.string(), "Windows AppData (" + user_json.string() + ")");
+        try_load(user_local.string(), "Windows AppData local (" + user_local.string() + ")");
+    }
+#endif
+
     // 2. 项目级：从当前目录向上搜索 .merak/（先找到的优先）
     namespace fs = std::filesystem;
     fs::path search_dir = fs::current_path();
@@ -339,6 +349,14 @@ Result<Config, AgentError> ConfigLoader::load() {
         auto parent = search_dir.parent_path();
         if (parent == search_dir) break;
         search_dir = parent;
+    }
+
+    if (const char* merak_home = std::getenv("MERAK_HOME")) {
+        std::filesystem::path user_dir = merak_home;
+        auto user_json = user_dir / "settings.json";
+        auto user_local = user_dir / "settings.local.json";
+        try_load(user_json.string(), "MERAK_HOME override (" + user_json.string() + ")");
+        try_load(user_local.string(), "MERAK_HOME local override (" + user_local.string() + ")");
     }
 
     // 3. 环境变量（最高优先级）

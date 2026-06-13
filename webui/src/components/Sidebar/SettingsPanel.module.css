@@ -83,3 +83,30 @@
   font-size: 12px;
   color: var(--color-error, #dc2626);
 }
+
+.runtimePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--color-border);
+  margin-top: 8px;
+  padding-top: 14px;
+}
+
+.runtimeGrid {
+  display: grid;
+  grid-template-columns: minmax(64px, max-content) minmax(0, 1fr);
+  gap: 7px 10px;
+  font-size: 12px;
+}
+
+.runtimeGrid span {
+  color: var(--color-text-secondary);
+}
+
+.runtimeGrid strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-weight: 600;
+}
