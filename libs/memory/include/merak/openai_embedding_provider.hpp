@@ -26,7 +26,12 @@ public:
     std::future<std::vector<float>> embed(const std::string& text) override;
     std::future<std::vector<std::vector<float>>> embed_batch(
         const std::vector<std::string>& texts) override;
-    int dimension() const override { return 1536; }
+    int dimension() const override {
+        if (config_.model.find("large") != std::string::npos) {
+            return 3072;
+        }
+        return 1536; // text-embedding-3-small, text-embedding-ada-002
+    }
 
 private:
     Config config_;

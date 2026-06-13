@@ -31,6 +31,7 @@ public:
         std::string system_prompt;
         std::string default_model = "gpt-4o";
         int max_output_tokens = 4096;
+        int max_retries = 3;
         int model_max_tokens = 128000;
         bool enable_compaction = true;
         bool enable_cache = true;

@@ -69,7 +69,7 @@ static std::string find_project_root(const std::string& file_path, const std::st
     auto it = markers.find(lang);
     if (it == markers.end()) return dir.string();
 
-    while (!dir.empty() && dir != dir.root_parent()) {
+    while (!dir.empty() && dir.has_parent_path()) {
         for (const auto& marker : it->second) {
             if (fs::exists(dir / marker)) {
                 return dir.string();

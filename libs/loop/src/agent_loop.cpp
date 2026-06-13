@@ -1,4 +1,5 @@
 #include <merak/agent_loop.hpp>
+#include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <thread>
@@ -138,16 +139,50 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
             }, control.cancellation_token());
 
         AgentResponse llm_response;
-        try {
-            llm_response = llm_future.get();
-        } catch (const std::exception& e) {
-            auto error_class = turn_ingestor_.classify_error(0, e.what());
-            switch (error_class) {
-            case LlmErrorClass::Auth:
-                throw AgentError(ErrorType::LLM_ERROR, "LLM authentication failed. Check your API key.");
-            case LlmErrorClass::RateLimit:
-                spdlog::warn("Loop: rate limited, retrying after backoff");
-                std::this_thread::sleep_for(std::chrono::seconds(2));
+        int attempt = 0;
+        while (true) {
+            try {
+                llm_response = llm_future.get();
+                break;
+            } catch (const std::exception& e) {
+                attempt++;
+                int http_status = 0;
+                std::string msg = e.what();
+                auto pos = msg.rfind("(HTTP ");
+                if (pos != std::string::npos) {
+                    http_status = std::stoi(msg.substr(pos + 6));
+                }
+                auto error_class = turn_ingestor_.classify_error(http_status, msg);
+
+                if (attempt > config_.max_retries) {
+                    spdlog::error("Loop: max retries ({}) exceeded", config_.max_retries);
+                    throw;
+                }
+
+                switch (error_class) {
+                case LlmErrorClass::Auth:
+                case LlmErrorClass::Cancelled:
+                    throw; // never retry these
+                case LlmErrorClass::ContextWindow:
+                    spdlog::warn("Loop: context window error, triggering compaction");
+                    maybe_compact(control);
+                    break;
+                case LlmErrorClass::RateLimit:
+                case LlmErrorClass::StreamTransport:
+                case LlmErrorClass::StreamIdle:
+                case LlmErrorClass::Unknown:
+                default: {
+                    int delay_ms = std::min(2000 * (1 << (attempt - 1)), 30000);
+                    spdlog::warn("Loop: retry {}/{} after {}ms ({}: {})",
+                        attempt, config_.max_retries, delay_ms,
+                        (int)error_class, e.what());
+                    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+                    break;
+                }
+                case LlmErrorClass::None:
+                    break;
+                }
+
                 llm_future = llm_->chat(req,
                     [&](StreamChunk chunk) {
                         auto token = control.cancellation_token();
@@ -158,26 +193,6 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
                             response.text += chunk.text;
                         }
                     }, control.cancellation_token());
-                llm_response = llm_future.get();
-                break;
-            case LlmErrorClass::ContextWindow:
-                spdlog::warn("Loop: context window error, triggering compaction and retry");
-                maybe_compact(control);
-                llm_future = llm_->chat(req,
-                    [&](StreamChunk chunk) {
-                        auto token = control.cancellation_token();
-                        if (token && token->should_stop()) return;
-                        if (chunk.is_final) return;
-                        if (!chunk.is_tool_call) {
-                            control.emit_text_delta(chunk.text);
-                            response.text += chunk.text;
-                        }
-                    }, control.cancellation_token());
-                llm_response = llm_future.get();
-                break;
-            case LlmErrorClass::Unknown:
-            default:
-                throw;
             }
         }
         response.total_input_tokens += llm_response.total_input_tokens;

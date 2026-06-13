@@ -50,13 +50,13 @@ std::vector<PromptSection> build_core_sections(const PromptProfile& profile) {
     if (profile.category == AgentCategory::Platform) {
         std::string core = load_file("config/prompts/merak_core.md");
         if (!core.empty()) {
-            sections.push_back({core, CacheScope::Global});
+            sections.push_back({core, PromptCachePolicy::Global});
         }
 
         std::string addendum = platform_role_addendum(
             profile.platform_role.value_or(PlatformRole::Core));
         if (!addendum.empty()) {
-            sections.push_back({addendum, CacheScope::Global});
+            sections.push_back({addendum, PromptCachePolicy::Global});
         }
     }
 
@@ -64,12 +64,12 @@ std::vector<PromptSection> build_core_sections(const PromptProfile& profile) {
     if (profile.category == AgentCategory::Platform) {
         std::string behavior = load_file("config/prompts/rules/behavior.md");
         if (!behavior.empty()) {
-            sections.push_back({behavior, CacheScope::Session});
+            sections.push_back({behavior, PromptCachePolicy::Session});
         }
 
         std::string interaction = load_file("config/prompts/rules/interaction.md");
         if (!interaction.empty()) {
-            sections.push_back({interaction, CacheScope::Session});
+            sections.push_back({interaction, PromptCachePolicy::Session});
         }
     }
 

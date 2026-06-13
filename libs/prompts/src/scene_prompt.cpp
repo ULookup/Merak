@@ -69,7 +69,7 @@ PromptSection build_god_scene_context(const SceneContext& ctx) {
     std::string secrets = build_secrets_list(ctx.known_secrets);
     if (!secrets.empty()) oss << secrets << "\n";
 
-    return {oss.str(), CacheScope::None};
+    return {oss.str(), PromptCachePolicy::None};
 }
 
 PromptSection build_character_scene_context(const SceneContext& ctx) {
@@ -98,7 +98,7 @@ PromptSection build_character_scene_context(const SceneContext& ctx) {
     std::string tools = build_tools_list(ctx.tool_names);
     if (!tools.empty()) oss << tools << "\n";
 
-    return {oss.str(), CacheScope::None};
+    return {oss.str(), PromptCachePolicy::None};
 }
 
 PromptSection build_manager_scene_context(const SceneContext& ctx) {
@@ -113,7 +113,7 @@ PromptSection build_manager_scene_context(const SceneContext& ctx) {
     std::string secrets = build_secrets_list(ctx.known_secrets);
     if (!secrets.empty()) oss << secrets << "\n";
 
-    return {oss.str(), CacheScope::None};
+    return {oss.str(), PromptCachePolicy::None};
 }
 
 } // namespace merak::prompts

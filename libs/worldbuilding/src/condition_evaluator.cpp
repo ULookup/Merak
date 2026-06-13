@@ -208,18 +208,21 @@ ConditionResult ConditionEvaluator::evaluate(const ConditionDef& cond,
         for (auto& check_name : *cond.checks) {
             auto it = check_registry_.find(check_name);
             if (it == check_registry_.end()) {
-                check_results.push_back({
-                    {"name", check_name}, {"passed", false},
-                    {"error", "unknown check: " + check_name}
-                });
+                nlohmann::json entry;
+                entry["name"] = check_name;
+                entry["passed"] = false;
+                entry["error"] = "unknown check: " + check_name;
+                check_results.push_back(std::move(entry));
                 result.met = false;
                 continue;
             }
             auto sub_result = it->second(cond, state, conn);
-            check_results.push_back({
-                {"name", check_name}, {"passed", sub_result.met},
-                {"current", sub_result.current}, {"target", sub_result.target}
-            });
+            nlohmann::json entry;
+            entry["name"] = check_name;
+            entry["passed"] = sub_result.met;
+            if (sub_result.current) entry["current"] = *sub_result.current;
+            if (sub_result.target) entry["target"] = *sub_result.target;
+            check_results.push_back(std::move(entry));
             if (!sub_result.met) result.met = false;
         }
 
@@ -691,7 +694,7 @@ ConditionResult eval_character_consistency(const ConditionDef& cond,
               AND NOT (a.id = ANY(s.aware_character_ids))
         )", state.world_id);
 
-        for (auto& row : rows) {
+        for (auto const& row : rows) {
             auto truth = row["truth"].as<std::string>();
             auto diary = row["diary_content"].as<std::string>();
             if (diary.empty()) continue;

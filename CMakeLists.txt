@@ -49,8 +49,9 @@ add_subdirectory(libs/portable_pg)
 add_subdirectory(libs/runtime)
 add_subdirectory(libs/skills)
 add_subdirectory(libs/http)
-add_subdirectory(cli)
-add_subdirectory(tests)
+# TEMP: disabled — tree-sitter FetchContent requires github.com access
+# add_subdirectory(cli)
+# add_subdirectory(tests)
 
 # Install pipeline configuration files
 install(DIRECTORY config/pipelines/

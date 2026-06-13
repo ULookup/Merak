@@ -14,7 +14,10 @@ MemoryStore::MemoryStore(const MemoryConfig& config,
 {
 }
 
-MemoryStore::~MemoryStore() {
+MemoryStore::~MemoryStore() = default;
+
+pqxx::connection MemoryStore::open_conn() const {
+    return pqxx::connection(config_.db_connection);
 }
 
 void MemoryStore::append_message(const Message& msg) {
@@ -47,23 +50,24 @@ std::expected<void, AgentError> MemoryStore::init_db() {
 
 std::expected<void, AgentError> MemoryStore::create_tables() {
     try {
-        auto conn = std::make_unique<pqxx::connection>(config_.db_connection);
-
-        pqxx::work txn(*conn);
+        auto conn = open_conn();
+        pqxx::work txn(conn);
         txn.exec("CREATE EXTENSION IF NOT EXISTS vector");
         txn.exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"");
 
-        txn.exec(R"(
+        auto dim = embedder_->dimension();
+        auto create_sql = std::format(R"(
             CREATE TABLE IF NOT EXISTS memory_entries (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 content TEXT NOT NULL,
                 type VARCHAR(32) NOT NULL DEFAULT 'semantic',
-                embedding VECTOR(1536),
+                embedding VECTOR({}),
                 confidence DOUBLE PRECISION DEFAULT 1.0,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 last_accessed TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )
-        )");
+        )", dim);
+        txn.exec(create_sql);
 
         txn.exec(R"(
             CREATE INDEX IF NOT EXISTS idx_memory_embedding
@@ -111,8 +115,8 @@ std::future<std::expected<void, AgentError>> MemoryStore::store(
         auto embedding = emb_future.get();
 
         try {
-            auto conn = std::make_unique<pqxx::connection>(config_.db_connection);
-            pqxx::work txn(*conn);
+            auto conn = open_conn();
+            pqxx::work txn(conn);
 
             std::ostringstream oss;
             oss << "[";
@@ -172,8 +176,8 @@ std::future<std::expected<std::vector<MemorySnippet>, AgentError>> MemoryStore::
         std::string emb_str = oss.str();
 
         try {
-            auto conn = std::make_unique<pqxx::connection>(config_.db_connection);
-            pqxx::work txn(*conn);
+            auto conn = open_conn();
+            pqxx::work txn(conn);
 
             auto result = txn.exec_params(
                 R"(
@@ -219,8 +223,8 @@ std::future<std::expected<std::vector<MemorySnippet>, AgentError>> MemoryStore::
 std::expected<void, AgentError> MemoryStore::remove(const std::string& id) {
     if (!config_.enabled) return {};
     try {
-        auto conn = std::make_unique<pqxx::connection>(config_.db_connection);
-        pqxx::work txn(*conn);
+        auto conn = open_conn();
+        pqxx::work txn(conn);
         txn.exec_params("DELETE FROM memory_entries WHERE id = $1", id);
         txn.commit();
         return {};
@@ -235,8 +239,8 @@ std::expected<void, AgentError> MemoryStore::remove(const std::string& id) {
 std::expected<int, AgentError> MemoryStore::decay_confidence() {
     if (!config_.enabled) return 0;
     try {
-        auto conn = std::make_unique<pqxx::connection>(config_.db_connection);
-        pqxx::work txn(*conn);
+        auto conn = open_conn();
+        pqxx::work txn(conn);
         auto result = txn.exec_params(
             R"(
                 UPDATE memory_entries
@@ -261,8 +265,8 @@ std::expected<int, AgentError> MemoryStore::decay_confidence() {
 std::expected<int, AgentError> MemoryStore::purge_expired(double threshold) {
     if (!config_.enabled) return 0;
     try {
-        auto conn = std::make_unique<pqxx::connection>(config_.db_connection);
-        pqxx::work txn(*conn);
+        auto conn = open_conn();
+        pqxx::work txn(conn);
         auto result = txn.exec_params(
             "DELETE FROM memory_entries WHERE confidence < $1 RETURNING id",
             threshold
@@ -276,6 +280,20 @@ std::expected<int, AgentError> MemoryStore::purge_expired(double threshold) {
             ErrorType::MEMORY_ERROR,
             std::string("Purge failed: ") + e.what()
         ));
+    }
+}
+
+void MemoryStore::update_confidence(const std::string& id, double delta) {
+    if (!config_.enabled) return;
+    try {
+        auto conn = open_conn();
+        pqxx::work txn(conn);
+        txn.exec_params(
+            "UPDATE memory_entries SET confidence = confidence + $1 WHERE id = $2",
+            delta, id);
+        txn.commit();
+    } catch (const pqxx::failure& e) {
+        spdlog::warn("MemoryStore: update_confidence failed: {}", e.what());
     }
 }
 

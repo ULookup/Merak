@@ -28,15 +28,22 @@ public:
     std::vector<SkillDef> fork_skills() const;
 };
 
+} // namespace merak::skills
+
+// These types live in merak, not merak::skills
+namespace merak {
 class ToolRegistry;
 class LlmProvider;
 class MemoryStore;
+} // namespace merak
+
+namespace merak::skills {
 
 void register_fork_skills(
     const SkillRegistry& registry,
-    std::shared_ptr<ToolRegistry> tools,
-    std::shared_ptr<LlmProvider> llm,
-    std::shared_ptr<MemoryStore> memory,
+    std::shared_ptr<merak::ToolRegistry> tools,
+    std::shared_ptr<merak::LlmProvider> llm,
+    std::shared_ptr<merak::MemoryStore> memory,
     std::string default_model);
 
 } // namespace merak::skills

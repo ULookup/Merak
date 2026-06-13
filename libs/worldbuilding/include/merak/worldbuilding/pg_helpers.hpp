@@ -1,4 +1,9 @@
 #pragma once
+// Architecture note: This module uses raw libpq via PgPool (connection pool)
+// for high-frequency CRUD operations in Store layer (WorldStore, AgentStore,
+// NarrativeStore, etc.). PipelineManager and ConditionEvaluator use libpqxx
+// for type-safe parameterized queries. Both connect to the same PostgreSQL
+// instance; connection pools are separate by design.
 
 #include <libpq-fe.h>
 

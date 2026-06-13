@@ -2549,14 +2549,14 @@ ToolSpec ExpandGraphTool::spec() const {
     s.name = "expand_graph";
     s.description = R"(Expand from an entity to find its N-hop neighbor graph. Returns neighbors and relations. Example: expand_graph(entity_name="艾琳", radius=2))";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"json({
         "type": "object",
         "properties": {
             "entity_name": {"type": "string", "description": "Center entity name"},
             "radius": {"type": "integer", "description": "Hop count (default: 1)", "default": 1}
         },
         "required": ["entity_name"]
-    })";
+    })json";
     return s;
 }
 
@@ -2613,7 +2613,7 @@ ToolSpec FindPathTool::spec() const {
     s.name = "find_path";
     s.description = R"(Find indirect connection paths between two entities. Returns up to 10 shortest paths ordered by hop count. Example: find_path(source="王五", target="艾琳", max_depth=4))";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"json({
         "type": "object",
         "properties": {
             "source": {"type": "string", "description": "Source entity name"},
@@ -2621,7 +2621,7 @@ ToolSpec FindPathTool::spec() const {
             "max_depth": {"type": "integer", "description": "Max hop depth (default: 4)", "default": 4}
         },
         "required": ["source", "target"]
-    })";
+    })json";
     return s;
 }
 
@@ -2758,14 +2758,14 @@ ToolSpec ExtractSceneRelationsTool::spec() const {
     s.name = "extract_scene_relations";
     s.description = R"(Load a scene's full text and participant list, and return a structured extraction prompt plus existing KG context. Use this to prepare for relation extraction — the returned prompt guides you through identifying character relationships from the scene narrative. After analysis, write each relation via upsert_relation. Example: extract_scene_relations(scene_id="scene-42"))";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"json({
         "type": "object",
         "properties": {
             "scene_id": {"type": "string", "description": "Scene ID to extract relations from"},
             "include_existing": {"type": "boolean", "description": "Pre-query existing KG relations among participants (default: true)", "default": true}
         },
         "required": ["scene_id"]
-    })";
+    })json";
     return s;
 }
 
@@ -2878,7 +2878,7 @@ ToolSpec UpsertRelationTool::spec() const {
     s.name = "upsert_relation";
     s.description = R"(Create or update a relation in the knowledge graph. Relations are bidirectional with stances. Example: upsert_relation(source_name="艾琳", target_name="卡伦", kind_en="MasterApprentice", kind_cn="师徒", a_to_b_stance="Friendly", b_to_a_stance="Admiring", fact="艾琳是卡伦的武艺师父"))";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"json({
         "type": "object",
         "properties": {
             "source_name": {"type": "string", "description": "Source entity name"},
@@ -2891,7 +2891,7 @@ ToolSpec UpsertRelationTool::spec() const {
             "description": {"type": "string", "description": "Detailed description of the relation"}
         },
         "required": ["source_name", "target_name", "kind_en"]
-    })";
+    })json";
     return s;
 }
 

@@ -24,7 +24,7 @@ const char* SKILLS_BLOCK = R"(
 )";
 
 PromptSection build_skill_section() {
-    return {SKILLS_BLOCK, CacheScope::Global};
+    return {SKILLS_BLOCK, PromptCachePolicy::Global};
 }
 
 } // namespace merak::prompts

@@ -1,7 +1,7 @@
 #include <merak/worldbuilding/sqlite_helpers.hpp>
 
-#include <exception>
 #include <stdexcept>
+#include <string>
 
 namespace merak::worldbuilding {
 namespace {
@@ -21,7 +21,6 @@ void check(sqlite3* db, int rc, std::string_view operation) {
 
 void close_deferred(sqlite3*& db) noexcept {
     if (db != nullptr) {
-        // close_v2 defers final handle cleanup until live statements finish.
         if (sqlite3_close_v2(db) != SQLITE_OK) {
             std::terminate();
         }

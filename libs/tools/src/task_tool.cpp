@@ -56,7 +56,7 @@ ToolSpec TaskTool::spec() const {
     s.description = "Durable task list: create, update, list, complete, archive";
     s.source = "builtin";
     s.category = Category::Mutating;
-    s.parameters_json = R"({
+    s.parameters_json = R"json({
         "type": "object",
         "properties": {
             "action": {
@@ -86,7 +86,7 @@ ToolSpec TaskTool::spec() const {
             }
         },
         "required": ["action"]
-    })";
+    })json";
     return s;
 }
 

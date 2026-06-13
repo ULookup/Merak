@@ -126,6 +126,9 @@ public:
                                         const std::string& agent_id,
                                         const std::vector<std::string>& source_diary_ids);
 
+    // Build world context text for agent prompts
+    std::string build_world_context(const std::string& world_id) const;
+
     // Diary context limit config
     int diary_context_limit() const { return diary_context_limit_; }
     void set_diary_context_limit(int limit) { diary_context_limit_ = limit; }

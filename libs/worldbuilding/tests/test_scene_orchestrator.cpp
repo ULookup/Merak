@@ -220,7 +220,7 @@ TEST(SceneOrchestrator, FinishSceneWritesDiariesAndRelationUpdates) {
         f.world.id, sc.id,
         "林霜望向窗外。\n'你终于来了。'\n玛莎放下酒杯。\n'我一直在等你。'");
 
-    EXPECT_EQ(wrap.diaries_written.size(), 2);
+    EXPECT_EQ(wrap.pending_diary_agents.size(), 2);
     EXPECT_EQ(wrap.relations_updated.size(), 1); // one pair
 }
 

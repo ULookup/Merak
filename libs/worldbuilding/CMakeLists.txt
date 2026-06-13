@@ -14,7 +14,6 @@ add_library(merak-worldbuilding STATIC
     src/narrative_store.cpp
     src/secret_store.cpp
     src/pg_helpers.cpp
-    src/sqlite_helpers.cpp
     src/world_store.cpp
     src/voice_analyzer.cpp
     src/scene_orchestrator.cpp
@@ -26,15 +25,19 @@ target_include_directories(merak-worldbuilding PUBLIC
     include
     ${PostgreSQL_INCLUDE_DIRS}
     ${LIBPQ_INCLUDE_DIR}
+    ${CMAKE_SOURCE_DIR}/libs/knowledge_graph/include
 )
 target_link_libraries(merak-worldbuilding PUBLIC
     merak-tools
     merak-llm
-    merak-knowledge-graph
     nlohmann_json::nlohmann_json
     ${PostgreSQL_LIBRARIES}
-    SQLite::SQLite3
 )
+
+if(TARGET merak-knowledge-graph)
+    target_link_libraries(merak-worldbuilding PUBLIC merak-knowledge-graph)
+    target_compile_definitions(merak-worldbuilding PUBLIC MERAK_HAS_KG)
+endif()
 
 add_executable(worldbuilding_tests
     tests/test_agent_store.cpp
@@ -44,6 +47,7 @@ add_executable(worldbuilding_tests
     tests/test_voice_analyzer.cpp
     tests/test_world_store.cpp
     tests/test_worldbuilding_e2e.cpp
+    tests/support/sqlite_helpers.cpp
 )
 target_link_libraries(worldbuilding_tests PRIVATE
     merak-worldbuilding

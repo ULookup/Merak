@@ -69,9 +69,9 @@ std::vector<SkillDef> SkillRegistry::fork_skills() const {
 
 void register_fork_skills(
     const SkillRegistry& registry,
-    std::shared_ptr<ToolRegistry> tools,
-    std::shared_ptr<LlmProvider> llm,
-    std::shared_ptr<MemoryStore> memory,
+    std::shared_ptr<merak::ToolRegistry> tools,
+    std::shared_ptr<merak::LlmProvider> llm,
+    std::shared_ptr<merak::MemoryStore> memory,
     std::string default_model) {
     auto forks = registry.fork_skills();
     for (auto& def : forks) {

@@ -1,4 +1,7 @@
 #pragma once
+// Architecture note: PipelineManager uses libpqxx for type-safe query building.
+// Store layer (WorldStore, AgentStore, etc.) uses raw libpq via PgPool for
+// connection pooling on high-frequency CRUD. See pg_helpers.hpp.
 #include <merak/worldbuilding/pipeline_workflow_def.hpp>
 #include <merak/worldbuilding/condition_evaluator.hpp>
 #include <merak/runtime_event.hpp>

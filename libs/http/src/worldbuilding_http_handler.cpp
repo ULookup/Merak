@@ -5,6 +5,8 @@
 #include <merak/worldbuilding/pipeline_manager.hpp>
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <unordered_map>
 
@@ -349,7 +351,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
             worldbuilding::PipelineManager::AdvanceRequest areq;
             areq.world_id = world_id;
             if (body.contains("target_phase")) {
-                areq.target_phase = worldbuilding::creative_phase_from_string(body["target_phase"].get<std::string>());
+                std::string phase_str = body["target_phase"];
+                areq.target_phase = worldbuilding::creative_phase_from_string(phase_str);
             }
             areq.trigger = "manual";
             areq.triggered_by = "user_click";
@@ -532,8 +535,14 @@ void WorldbuildingHttpHandler::handle_create_world(const httplib::Request& req, 
     }
 }
 
-void WorldbuildingHttpHandler::handle_delete_world(const httplib::Request&, httplib::Response& res) {
-    error_response(res, "Not yet implemented", 501);
+void WorldbuildingHttpHandler::handle_delete_world(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string world_id = req.matches[1];
+        service_->worlds().delete_world(world_id);
+        json_response(res, {{"deleted", world_id}}, 200);
+    } catch (const std::exception& e) {
+        error_response(res, e.what());
+    }
 }
 
 void WorldbuildingHttpHandler::handle_update_world(const httplib::Request& req, httplib::Response& res) {
@@ -871,13 +880,12 @@ void WorldbuildingHttpHandler::handle_scene_end(const httplib::Request& req, htt
         auto wrapup = service_->end_scene(wid, sid, markdown);
         emit_story_update(runtime_, body.value("session_id", ""), wid, "scene", sid);
 
-        nlohmann::json diaries = nlohmann::json::array();
-        for (const auto& d : wrapup.diaries_written) {
-            diaries.push_back({
-                {"id", d.id},
-                {"agent_id", d.agent_id},
-                {"scene_id", d.scene_id}
-            });
+        auto scene = service_->narrative().get_scene(wid, sid);
+        std::string world_time = scene ? scene->world_time : "";
+
+        nlohmann::json pending = nlohmann::json::array();
+        for (const auto& agent_id : wrapup.pending_diary_agents) {
+            pending.push_back(agent_id);
         }
 
         nlohmann::json foreshadowing = nlohmann::json::array();
@@ -888,13 +896,14 @@ void WorldbuildingHttpHandler::handle_scene_end(const httplib::Request& req, htt
             });
         }
 
-        json_response(res, {
-            {"ok", true},
-            {"diaries_written", diaries},
-            {"diary_count", wrapup.diaries_written.size()},
+        json_response(res, nlohmann::json{
+            {"scene_id", sid},
+            {"status", "completed"},
+            {"world_time", world_time},
             {"relations_updated", wrapup.relations_updated.size()},
-            {"proposed_foreshadowing", foreshadowing},
-            {"leak_risks", wrapup.leak_risks.size()}
+            {"foreshadowing_proposed", foreshadowing},
+            {"pending_diary_agents", pending},
+            {"pending_diary_count", wrapup.pending_diary_agents.size()}
         });
     } catch (const std::exception& e) {
         error_response(res, e.what());
@@ -922,8 +931,68 @@ void WorldbuildingHttpHandler::handle_time_now(const httplib::Request& req, http
     }
 }
 
-void WorldbuildingHttpHandler::handle_time_advance(const httplib::Request&, httplib::Response& res) {
-    error_response(res, "Not yet implemented", 501);
+void WorldbuildingHttpHandler::handle_time_advance(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string world_id = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        std::string new_time = body.at("world_time");
+
+        // Validate world exists
+        auto world = service_->worlds().get_world(world_id);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+
+        // Parse and validate the new time format
+        auto parsed_new = worldbuilding::WorldTime::parse(new_time);
+        if (!parsed_new.has_value()) {
+            error_response(res, "Invalid world_time format: " + new_time, 400, "invalid_time_format");
+            return;
+        }
+
+        // Forward-only validation: new_time must be strictly after current world time.
+        // The current world time is the world_time of the most recent timeline event.
+        auto world_path = service_->worlds().world_path(world_id);
+        auto timeline_path = world_path / "timeline.json";
+        if (std::filesystem::exists(timeline_path)) {
+            std::ifstream input(timeline_path);
+            if (input) {
+                auto timeline = nlohmann::json::parse(input);
+                if (timeline.contains("events") && timeline["events"].is_array() &&
+                    !timeline["events"].empty()) {
+                    const auto& events = timeline["events"];
+                    const auto& last_event = events.back();
+                    std::string current_time_str = last_event.at("world_time").get<std::string>();
+                    auto parsed_current = worldbuilding::WorldTime::parse(current_time_str);
+                    if (parsed_current.has_value() && *parsed_new <= *parsed_current) {
+                        error_response(res,
+                            "Time can only advance forward. Current world time: " +
+                                current_time_str + ", requested: " + new_time,
+                            400, "time_not_forward");
+                        return;
+                    }
+                }
+            }
+        }
+
+        worldbuilding::TimelineEvent event;
+        event.world_time = new_time;
+        event.description = body.value("description", "Time advanced");
+        event.recorded_by = body.value("recorded_by", "user");
+
+        auto recorded = service_->narrative().advance_time(world_id, std::move(event));
+
+        json_response(res, {
+            {"ok", true},
+            {"world_id", world_id},
+            {"world_time", recorded.world_time},
+            {"event_id", recorded.id},
+            {"description", recorded.description}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what());
+    }
 }
 
 // --- Foreshadowing handlers ---
@@ -1335,14 +1404,14 @@ void WorldbuildingHttpHandler::handle_upload_image(const httplib::Request& req, 
             return;
         }
 
-        auto file = req.get_file_value("file");
+        auto file = req.form.get_file("file");
         if (file.content.empty()) {
             error_response(res, "No file uploaded", 400, "missing_file");
             return;
         }
 
         std::string image_type;
-        auto ft = req.get_file_value("image_type");
+        auto ft = req.form.get_file("image_type");
         if (!ft.content.empty()) {
             image_type = ft.content;
         } else if (req.has_param("image_type")) {
@@ -1363,7 +1432,7 @@ void WorldbuildingHttpHandler::handle_upload_image(const httplib::Request& req, 
 
         auto j = image_json(img);
         j["url"] = "/api/worldbuilding/images/" + img.id;
-        json_response(res, {{"ok", true}, {"image", j}}, 201);
+        json_response(res, nlohmann::json{{"ok", true}, {"image", j}}, 201);
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
@@ -1514,7 +1583,7 @@ void WorldbuildingHttpHandler::handle_complete_chunked(const httplib::Request& r
         auto img = image_service_->complete_chunked(upload_id);
         auto j = image_json(img);
         j["url"] = "/api/worldbuilding/images/" + img.id;
-        json_response(res, {{"ok", true}, {"image", j}}, 201);
+        json_response(res, nlohmann::json{{"ok", true}, {"image", j}}, 201);
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }

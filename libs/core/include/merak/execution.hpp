@@ -81,7 +81,7 @@ public:
     ToolResult await_ask_user(const ToolCall& call, const ToolResult& pending) override {
         ToolResult r;
         r.call_id = call.id;
-        r.output = R"({"status":"ok","answer":""})";
+        r.output = R"({"status":"pending","answer":""})";
         return r;
     }
     void emit_usage(int, int, bool) override {}

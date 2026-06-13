@@ -933,8 +933,8 @@ AgentStore::recent_summaries(const std::string& agent_id, int limit) const {
             .period_start = res.get(i, 2),
             .period_end = res.get(i, 3),
             .summary = res.get(i, 4),
-            .source_diary_ids = source_ids_json.get<std::vector<std::string>>(),
             .created_at = res.get(i, 6),
+            .source_diary_ids = source_ids_json.get<std::vector<std::string>>(),
         });
     }
     return results;

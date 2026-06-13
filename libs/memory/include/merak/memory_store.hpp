@@ -10,6 +10,8 @@
 #include <expected>
 #include <mutex>
 
+namespace pqxx { class connection; }
+
 namespace merak {
 
 struct MemoryEntry {
@@ -60,6 +62,7 @@ public:
     std::expected<void, AgentError> remove(const std::string& id);
     std::expected<int, AgentError> decay_confidence();
     std::expected<int, AgentError> purge_expired(double threshold = 0.1);
+    void update_confidence(const std::string& id, double delta);
 
 private:
     MemoryConfig config_;
@@ -67,6 +70,7 @@ private:
     std::vector<Message> working_memory_;
     mutable std::mutex working_memory_mutex_;
 
+    pqxx::connection open_conn() const;
     std::expected<void, AgentError> create_tables();
 };
 

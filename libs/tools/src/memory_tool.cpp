@@ -15,7 +15,7 @@ ToolSpec MemoryTool::spec() const {
     s.description = "Memory operations: store, retrieve, forget, feedback, search, profile";
     s.source = "builtin";
     s.category = Category::Mutating;
-    s.parameters_json = R"({
+    s.parameters_json = R"json({
   "type": "object",
   "properties": {
     "action": {
@@ -54,7 +54,7 @@ ToolSpec MemoryTool::spec() const {
     }
   },
   "required": ["action"]
-})";
+})json";
     return s;
 }
 
@@ -223,11 +223,12 @@ std::future<ToolResult> MemoryTool::execute(ToolCall call, ToolExecutionContext 
                                      memory_id, signal, removed.error().what());
                     }
                 } else {
-                    // TODO: MemoryStore has no method to update a single entry's confidence.
-                    // Available methods: store, search, remove, decay_confidence, purge_expired.
-                    // Adding a store->update(id, delta) method would allow boosting confidence here.
-                    spdlog::info("MemoryTool feedback: id={} signal={} weight=+{} — confidence boost noted (no update API)",
-                                 memory_id, signal, weight);
+                    if (signal == "useful") {
+                        store->update_confidence(memory_id, 0.1);
+                        spdlog::debug("MemoryTool: boosted confidence for {}", memory_id);
+                    } else if (signal == "misleading") {
+                        store->update_confidence(memory_id, -0.1);
+                    }
                 }
 
                 nlohmann::json out;

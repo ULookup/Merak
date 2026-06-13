@@ -187,7 +187,7 @@ ExtractionResult ExtractionService::process_llm_response(
     const std::string& llm_response,
     const std::string& world_id,
     const std::vector<std::string>& participant_agent_ids,
-    const std::vector<std::string>& participant_names) {
+    const std::vector<std::string>& participant_names) const {
 
     // Build name → agent_id map
     std::unordered_map<std::string, std::string> name_to_id;
