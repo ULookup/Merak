@@ -145,7 +145,13 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
                 break;
             } catch (const std::exception& e) {
                 attempt++;
-                auto error_class = turn_ingestor_.classify_error(0, e.what());
+                int http_status = 0;
+                std::string msg = e.what();
+                auto pos = msg.rfind("(HTTP ");
+                if (pos != std::string::npos) {
+                    http_status = std::stoi(msg.substr(pos + 6));
+                }
+                auto error_class = turn_ingestor_.classify_error(http_status, msg);
 
                 if (attempt > config_.max_retries) {
                     spdlog::error("Loop: max retries ({}) exceeded", config_.max_retries);
