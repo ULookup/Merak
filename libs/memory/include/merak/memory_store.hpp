@@ -10,6 +10,8 @@
 #include <expected>
 #include <mutex>
 
+namespace pqxx { class connection; }
+
 namespace merak {
 
 struct MemoryEntry {
@@ -66,7 +68,10 @@ private:
     std::shared_ptr<EmbeddingProvider> embedder_;
     std::vector<Message> working_memory_;
     mutable std::mutex working_memory_mutex_;
+    mutable std::mutex conn_mutex_;
+    std::unique_ptr<pqxx::connection> conn_;
 
+    pqxx::connection& get_conn();
     std::expected<void, AgentError> create_tables();
 };
 
