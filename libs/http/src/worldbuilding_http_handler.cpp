@@ -925,8 +925,36 @@ void WorldbuildingHttpHandler::handle_time_now(const httplib::Request& req, http
     }
 }
 
-void WorldbuildingHttpHandler::handle_time_advance(const httplib::Request&, httplib::Response& res) {
-    error_response(res, "Not yet implemented", 501);
+void WorldbuildingHttpHandler::handle_time_advance(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string world_id = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        std::string new_time = body.at("world_time");
+
+        // Validate world exists
+        auto world = service_->worlds().get_world(world_id);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+
+        worldbuilding::TimelineEvent event;
+        event.world_time = new_time;
+        event.description = body.value("description", "Time advanced");
+        event.recorded_by = body.value("recorded_by", "user");
+
+        auto recorded = service_->narrative().advance_time(world_id, std::move(event));
+
+        json_response(res, {
+            {"ok", true},
+            {"world_id", world_id},
+            {"world_time", recorded.world_time},
+            {"event_id", recorded.id},
+            {"description", recorded.description}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what());
+    }
 }
 
 // --- Foreshadowing handlers ---
