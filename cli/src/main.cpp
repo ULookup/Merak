@@ -11,7 +11,9 @@
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
 #include <merak/worldbuilding/pipeline_manager.hpp>
 #include <merak/worldbuilding/condition_evaluator.hpp>
+#ifdef MERAK_HAS_KG
 #include <merak/kg/neo4j_provider.hpp>
+#endif
 #include <merak/storage/image_service.hpp>
 #include <merak/storage/local_file_image_store.hpp>
 #include <merak/worldbuilding/ids.hpp>
@@ -157,6 +159,7 @@ static int run_server(int argc,char**argv) {
     std::unique_ptr<merak::kg::KnowledgeGraphProvider> kg_provider;
     if (!cfg.memory.db_connection.empty()) {
         if (cfg.knowledge_graph.enabled) {
+#ifdef MERAK_HAS_KG
             try {
                 kg_provider = std::make_unique<merak::kg::Neo4jKGProvider>(
                     cfg.knowledge_graph.neo4j_uri,
@@ -169,6 +172,9 @@ static int run_server(int argc,char**argv) {
                 std::cerr << "Warning: Knowledge Graph unavailable: " << e.what() << "\n";
                 kg_provider.reset();
             }
+#else
+            std::cerr << "Warning: Knowledge Graph not compiled in (libneo4j-client missing)\n";
+#endif
         }
         try {
             wb_service = std::make_shared<worldbuilding::WorldbuildingService>(
@@ -201,7 +207,10 @@ static int run_server(int argc,char**argv) {
     tools->register_tool(std::make_unique<tools::TaskTool>());
     tools->register_tool(std::make_unique<tools::AskUserTool>());
     auto plan_mode = std::make_shared<std::atomic<bool>>(false);
-    auto pg_conn = std::make_shared<pqxx::connection>(cfg.memory.db_connection);
+    std::shared_ptr<pqxx::connection> pg_conn;
+    if (!cfg.memory.db_connection.empty()) {
+        pg_conn = std::make_shared<pqxx::connection>(cfg.memory.db_connection);
+    }
     auto session_store = std::make_shared<SessionStore>(pg_conn);
     session_store->set_root(merak_home());
     session_store->initialize();
@@ -247,19 +256,23 @@ auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
     tools->register_tool(std::make_unique<tools::MemoryTool>(memory));
     auto edit_journal = std::make_shared<EditJournal>();
     tools->register_tool(std::make_unique<tools::SessionTool>(memory, compactor, edit_journal.get()));
-    auto factory=[cfg,llm,tools,memory,context,compactor,plan_mode](const std::string&model){AgentLoop::Config c;c.system_prompt=cfg.agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=model.empty()?cfg.llm.default_model:model;c.max_output_tokens=cfg.llm.max_output_tokens;auto loop=std::make_unique<AgentLoop>(c,llm,tools,memory,context,compactor,nullptr,nullptr);loop->set_plan_mode_source(plan_mode);return loop;};
+    auto factory=[cfg,llm,tools,memory,compactor,plan_mode](const std::string&model){AgentLoop::Config c;c.system_prompt=cfg.agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=model.empty()?cfg.llm.default_model:model;c.max_output_tokens=cfg.llm.max_output_tokens;auto loop=std::make_unique<AgentLoop>(c,llm,tools,memory,compactor,nullptr,nullptr);loop->set_plan_mode_source(plan_mode);return loop;};
     auto sub_executor=[cfg,llm,tools,memory,make_context,plan_mode](const SubAgentConfig&agent,const std::string&task,RunControl&control){
         auto sub_tools=std::make_shared<ToolRegistry>();sub_tools->set_permission_mode(cfg.agent.permission_mode);
         if(agent.tool_allowlist.empty()){for(const auto&spec:tools->all_tools()){if(auto*tool=tools->get_tool(spec.name))sub_tools->register_tool(tool->clone());}}
         else{for(const auto&name:agent.tool_allowlist){if(auto*tool=tools->get_tool(name))sub_tools->register_tool(tool->clone());}}
         auto [sub_context,sub_compactor]=make_context(llm);
         AgentLoop::Config c;c.system_prompt=agent.system_prompt.empty()?cfg.agent.system_prompt:agent.system_prompt;c.max_turns=cfg.agent.max_tool_turns;c.default_model=agent.model.empty()?cfg.llm.default_model:agent.model;c.max_output_tokens=cfg.llm.max_output_tokens;
-        auto loop=std::make_unique<AgentLoop>(c,llm,sub_tools,memory,sub_context,sub_compactor,nullptr,nullptr);
+        auto loop=std::make_unique<AgentLoop>(c,llm,sub_tools,memory,sub_compactor,nullptr,nullptr);
         loop->set_plan_mode_source(plan_mode);
         return loop->run(task,control).get();
     };
-    tools->register_tool(std::make_unique<tools::AgentTool>(cfg.agent.sub_agents, sub_executor));
-    auto runtime=std::make_shared<RuntimeService>(session_store,factory,cfg.agent.sub_agents,sub_executor);runtime->initialize();
+    tools->register_tool(std::make_unique<tools::AgentTool>(cfg.agent.sub_agents,
+        [sub_executor](const SubAgentConfig& agent, const std::string& task, RunControl& control) -> std::string {
+            return sub_executor(agent, task, control).text;
+        }));
+    auto runtime=std::make_shared<RuntimeService>(session_store,factory,cfg.agent.sub_agents,sub_executor);
+    runtime->initialize();
     if (wb_service) runtime->set_worldbuilding_service(wb_service.get());
     // Initialize PipelineManager
     std::shared_ptr<merak::worldbuilding::PipelineManager> pipeline_mgr;
@@ -324,8 +337,8 @@ auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
         {
             auto images_dir = (merak_home() / "data" / "images").string();
             auto uploads_dir = (merak_home() / "data" / "uploads" / "chunks").string();
-            fs::create_directories(images_dir);
-            fs::create_directories(uploads_dir);
+            std::filesystem::create_directories(images_dir);
+            std::filesystem::create_directories(uploads_dir);
 
             auto image_store = std::make_shared<merak::LocalFileImageStore>(
                 images_dir, "/api/worldbuilding/images");
@@ -394,29 +407,29 @@ auto memory=std::make_shared<MemoryStore>(memory_cfg,embedder);
                 nlohmann::json result = nlohmann::json::array();
                 for (const auto& row : res) {
                     nlohmann::json obj;
-                    for (int i = 0; i < static_cast<int>(row.columns()); ++i) {
+                    for (int i = 0; i < static_cast<int>(res.columns()); ++i) {
                         if (row[i].is_null()) {
-                            obj[row.column_name(i)] = nullptr;
+                            obj[res.column_name(i)] = nullptr;
                             continue;
                         }
                         // Use column OID to preserve the correct JSON type
                         auto oid = row.column_type(i);
                         switch (oid) {
                         case 16:   // bool
-                            obj[row.column_name(i)] = row[i].as<bool>();
+                            obj[res.column_name(i)] = row[i].as<bool>();
                             break;
                         case 20:   // int8
                         case 21:   // int2
                         case 23:   // int4
-                            obj[row.column_name(i)] = row[i].as<long long>();
+                            obj[res.column_name(i)] = row[i].as<long long>();
                             break;
                         case 700:  // float4
                         case 701:  // float8
                         case 1700: // numeric
-                            obj[row.column_name(i)] = row[i].as<double>();
+                            obj[res.column_name(i)] = row[i].as<double>();
                             break;
                         default:
-                            obj[row.column_name(i)] = row[i].c_str();
+                            obj[res.column_name(i)] = row[i].c_str();
                             break;
                         }
                     }

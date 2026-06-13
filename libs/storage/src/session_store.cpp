@@ -117,12 +117,14 @@ SessionStore::SessionStore(std::shared_ptr<pqxx::connection> conn)
 SessionStore::~SessionStore() = default;
 
 void SessionStore::exec(const std::string& sql) {
+    if (!conn_) return;
     pqxx::work txn(*conn_);
     txn.exec(sql);
     txn.commit();
 }
 
 void SessionStore::initialize() {
+    if (!conn_) return;
     std::lock_guard lock(mutex_);
 
     exec(R"(
@@ -211,6 +213,7 @@ SessionRecord SessionStore::create_session(const std::string& title,
     auto id = make_id("session");
     auto ts = now_iso();
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     txn.exec_params(
         "INSERT INTO sessions (id, title, world_id, agent_id, last_seq, created_at, updated_at) "
@@ -225,6 +228,7 @@ void SessionStore::update_session(const std::string& id, const std::string& titl
     std::lock_guard lock(mutex_);
     auto ts = now_iso();
 
+    if (!conn_) return;
     pqxx::work txn(*conn_);
     auto r = txn.exec_params(
         "UPDATE sessions SET title = $1, updated_at = $2 WHERE id = $3",
@@ -240,6 +244,7 @@ SessionRecord SessionStore::archive_session(const std::string& id, bool archived
     std::lock_guard lock(mutex_);
     auto ts = now_iso();
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     if (archived) {
         txn.exec_params(
@@ -262,6 +267,7 @@ SessionRecord SessionStore::archive_session(const std::string& id, bool archived
 std::optional<SessionRecord> SessionStore::get_session(const std::string& id) const {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     auto r = txn.exec_params(
         "SELECT id, title, world_id, agent_id, last_seq, created_at, updated_at, archived_at "
@@ -276,6 +282,7 @@ std::optional<SessionRecord> SessionStore::get_session(const std::string& id) co
 std::vector<SessionRecord> SessionStore::list_sessions(const std::string& world_id) const {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     pqxx::result r;
     if (world_id.empty()) {
@@ -311,6 +318,7 @@ RunRecord SessionStore::create_run(
     auto id = make_id("run");
     auto ts = now_iso();
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     txn.exec_params(
         "INSERT INTO runs (id, session_id, status, user_message, started_at, finished_at, error, "
@@ -326,6 +334,7 @@ RunRecord SessionStore::create_run(
 std::optional<RunRecord> SessionStore::get_run(const std::string& id) const {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     auto r = txn.exec_params(
         "SELECT id, session_id, status, user_message, started_at, finished_at, error, "
@@ -341,6 +350,7 @@ std::optional<RunRecord> SessionStore::get_run(const std::string& id) const {
 bool SessionStore::has_unfinished_run(const std::string& session_id) const {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return false;
     pqxx::work txn(*conn_);
     auto r = txn.exec_params(
         "SELECT status FROM runs WHERE session_id = $1 AND parent_run_id = ''",
@@ -366,6 +376,7 @@ void SessionStore::update_run_status(const std::string& id, RunStatus status,
         finished_at_val = now_iso();
     }
 
+    if (!conn_) return;
     pqxx::work txn(*conn_);
     auto r = txn.exec_params(
         "UPDATE runs SET status = $1, finished_at = $2, error = $3 WHERE id = $4",
@@ -387,6 +398,7 @@ ApprovalRecord SessionStore::create_approval(ApprovalRecord approval) {
     }
     approval.created_at = now_iso();
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     txn.exec_params(
         "INSERT INTO approvals (id, run_id, tool_name, arguments_json, tool_call_id, "
@@ -402,6 +414,7 @@ ApprovalRecord SessionStore::create_approval(ApprovalRecord approval) {
 std::optional<ApprovalRecord> SessionStore::get_approval(const std::string& id) const {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     auto r = txn.exec_params(
         "SELECT id, run_id, tool_name, arguments_json, tool_call_id, status, created_at, resolved_at "
@@ -425,7 +438,8 @@ ApprovalRecord SessionStore::resolve_approval(const std::string& id, ApprovalSta
     {
         std::lock_guard lock(mutex_);
         auto ts = now_iso();
-        pqxx::work txn(*conn_);
+        if (!conn_) return {};
+    pqxx::work txn(*conn_);
         txn.exec_params(
             "UPDATE approvals SET status = $1, resolved_at = $2 WHERE id = $3",
             to_string(status), ts, id);
@@ -440,6 +454,7 @@ ApprovalRecord SessionStore::resolve_approval(const std::string& id, ApprovalSta
 RuntimeEvent SessionStore::append_event(RuntimeEvent event) {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     auto r = txn.exec_params(
         "SELECT last_seq FROM sessions WHERE id = $1 FOR UPDATE",
@@ -469,6 +484,7 @@ std::vector<RuntimeEvent> SessionStore::events_after(const std::string& session_
                                                        long long after) const {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     auto r = txn.exec_params(
         "SELECT seq, created_at, session_id, run_id, type, payload FROM runtime_events "
@@ -499,6 +515,7 @@ std::vector<RuntimeEvent> SessionStore::events_after(const std::string& session_
 std::vector<RunRecord> SessionStore::interrupt_running_runs() {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     auto ts = now_iso();
 
@@ -533,6 +550,7 @@ void SessionStore::save_checkpoint(const std::string& id, const std::string& run
                                      const std::string& pipeline_snapshot_json) {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return;
     pqxx::work txn(*conn_);
     txn.exec_params(
         "INSERT INTO run_checkpoints (id, run_id, turn_index, turn_state, "
@@ -558,6 +576,7 @@ void SessionStore::save_checkpoint(const std::string& id, const std::string& run
 std::optional<std::string> SessionStore::load_latest_checkpoint_json(const std::string& run_id) {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     auto r = txn.exec_params(
         "SELECT id, run_id, turn_index, turn_state, input_tokens_used, output_tokens_used, "
@@ -587,6 +606,7 @@ std::optional<std::string> SessionStore::load_latest_checkpoint_json(const std::
 std::vector<std::string> SessionStore::list_checkpoints_json(const std::string& run_id) {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return {};
     pqxx::work txn(*conn_);
     auto r = txn.exec_params(
         "SELECT id, run_id, turn_index, turn_state, input_tokens_used, output_tokens_used, "
@@ -617,6 +637,7 @@ std::vector<std::string> SessionStore::list_checkpoints_json(const std::string& 
 void SessionStore::prune_checkpoints(const std::string& run_id, int keep_latest_n) {
     std::lock_guard lock(mutex_);
 
+    if (!conn_) return;
     pqxx::work txn(*conn_);
     if (keep_latest_n <= 0) {
         txn.exec_params("DELETE FROM run_checkpoints WHERE run_id = $1", run_id);
