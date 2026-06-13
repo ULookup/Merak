@@ -11,12 +11,16 @@ ForkSkillTool::ForkSkillTool(
     std::shared_ptr<LlmProvider> llm,
     std::shared_ptr<ToolRegistry> tools,
     std::shared_ptr<MemoryStore> memory,
-    std::string default_model)
+    std::string default_model,
+    std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding,
+    std::shared_ptr<skills::SkillRegistry> skill_registry)
     : skill_(std::move(def))
     , llm_(std::move(llm))
     , tools_(std::move(tools))
     , memory_(std::move(memory))
     , default_model_(std::move(default_model))
+    , worldbuilding_(std::move(worldbuilding))
+    , skill_registry_(std::move(skill_registry))
 {}
 
 ToolSpec ForkSkillTool::spec() const {
@@ -66,7 +70,10 @@ std::future<ToolResult> ForkSkillTool::execute(
         cfg.enable_compaction = false;
         cfg.enable_cache = true;
 
-        AgentLoop sub_loop(cfg, llm_, sub_tools, memory_, comp, nullptr, nullptr);
+        AgentLoop sub_loop(cfg, llm_, sub_tools, memory_, comp, worldbuilding_, skill_registry_);
+        if (!context.world_id.empty()) sub_loop.set_active_world_id(context.world_id);
+        if (!context.scene_id.empty()) sub_loop.set_active_scene_id(context.scene_id);
+        if (!context.caller_agent_id.empty()) sub_loop.set_caller_agent_id(context.caller_agent_id);
 
         NullRunControl control;
         try {
@@ -87,7 +94,8 @@ std::future<ToolResult> ForkSkillTool::execute(
 }
 
 std::unique_ptr<Tool> ForkSkillTool::clone() const {
-    return std::make_unique<ForkSkillTool>(skill_, llm_, tools_, memory_, default_model_);
+    return std::make_unique<ForkSkillTool>(
+        skill_, llm_, tools_, memory_, default_model_, worldbuilding_, skill_registry_);
 }
 
 } // namespace merak::tools

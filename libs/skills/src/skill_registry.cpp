@@ -72,11 +72,13 @@ void register_fork_skills(
     std::shared_ptr<merak::ToolRegistry> tools,
     std::shared_ptr<merak::LlmProvider> llm,
     std::shared_ptr<merak::MemoryStore> memory,
-    std::string default_model) {
+    std::string default_model,
+    std::shared_ptr<merak::worldbuilding::WorldbuildingService> worldbuilding,
+    std::shared_ptr<SkillRegistry> skill_registry) {
     auto forks = registry.fork_skills();
     for (auto& def : forks) {
         auto tool = std::make_unique<tools::ForkSkillTool>(
-            def, llm, tools, memory, default_model);
+            def, llm, tools, memory, default_model, worldbuilding, skill_registry);
         tools->register_tool(std::move(tool));
         spdlog::info("Registered fork skill tool: skill:{}", def.name);
     }

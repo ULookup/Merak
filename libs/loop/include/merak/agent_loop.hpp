@@ -74,6 +74,10 @@ public:
 
     void set_plan_mode_source(std::shared_ptr<std::atomic<bool>> source) { plan_mode_ = std::move(source); }
     void set_active_world_id(std::optional<std::string> world_id);
+    void set_active_scene_id(std::optional<std::string> scene_id);
+    void set_caller_agent_id(std::optional<std::string> agent_id);
+    void set_worldbuilding_service(std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding);
+    void set_skill_registry(std::shared_ptr<skills::SkillRegistry> skills);
     bool is_plan_mode() const { return plan_mode_ && plan_mode_->load(); }
     TurnIngestor& turn_ingestor() { return turn_ingestor_; }
 
@@ -96,6 +100,8 @@ private:
     std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding_;
     std::shared_ptr<skills::SkillRegistry> skills_;
     std::optional<std::string> active_world_id_;
+    std::optional<std::string> active_scene_id_;
+    std::optional<std::string> caller_agent_id_;
     std::map<std::string, int> tool_failure_streak_;
     static constexpr int kCircuitBreakerThreshold = 3;
 
