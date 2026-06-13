@@ -289,4 +289,18 @@ std::expected<int, AgentError> MemoryStore::purge_expired(double threshold) {
     }
 }
 
+void MemoryStore::update_confidence(const std::string& id, double delta) {
+    if (!config_.enabled) return;
+    try {
+        auto& conn = get_conn();
+        pqxx::work txn(conn);
+        txn.exec_params(
+            "UPDATE memory_entries SET confidence = confidence + $1 WHERE id = $2",
+            delta, id);
+        txn.commit();
+    } catch (const pqxx::failure& e) {
+        spdlog::warn("MemoryStore: update_confidence failed: {}", e.what());
+    }
+}
+
 } // namespace merak

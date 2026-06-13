@@ -62,6 +62,7 @@ public:
     std::expected<void, AgentError> remove(const std::string& id);
     std::expected<int, AgentError> decay_confidence();
     std::expected<int, AgentError> purge_expired(double threshold = 0.1);
+    void update_confidence(const std::string& id, double delta);
 
 private:
     MemoryConfig config_;
