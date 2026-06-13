@@ -30,16 +30,16 @@ const char* MINIMAL_RULES = R"(
 
 PromptSection build_memory_section(MemoryPromptMode mode) {
     if (mode == MemoryPromptMode::None) {
-        return {"", CacheScope::Session};
+        return {"", PromptCachePolicy::Session};
     }
 
     if (mode == MemoryPromptMode::Minimal) {
-        return {std::string("## Memory 管理规则\n") + MINIMAL_RULES, CacheScope::Session};
+        return {std::string("## Memory 管理规则\n") + MINIMAL_RULES, PromptCachePolicy::Session};
     }
 
     // Full 模式：加载文件
     std::string content = load_file("config/prompts/memory/memory.md");
-    return {content, CacheScope::Session};
+    return {content, PromptCachePolicy::Session};
 }
 
 } // namespace merak::prompts

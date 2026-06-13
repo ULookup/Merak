@@ -6,11 +6,13 @@
 
 namespace merak::prompts {
 
-// ─── Cache 层级（对标 astra CacheScope）───
-enum class CacheScope {
-    Global,   // L1：跨会话稳定，可缓存
-    Session,  // L2：会话内稳定
-    None      // L3：每回合变化
+// PromptCachePolicy controls whether Anthropic cache breakpoints are emitted
+// for a prompt section. Distinct from merak::CacheScope (lifecycle of content
+// in the context assembly pipeline).
+enum class PromptCachePolicy {
+    Global,
+    Session,
+    None
 };
 
 // ─── Agent 大类 ───
@@ -101,7 +103,7 @@ struct PromptProfile {
 // ─── PromptSection（对标 astra PromptSection）───
 struct PromptSection {
     std::string text;
-    CacheScope scope = CacheScope::None;
+    PromptCachePolicy cache_policy = PromptCachePolicy::None;
 };
 
 } // namespace merak::prompts

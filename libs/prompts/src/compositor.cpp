@@ -16,7 +16,7 @@ namespace merak::prompts {
 void PromptCompositor::sort_by_scope(std::vector<PromptSection>& sections) {
     std::stable_sort(sections.begin(), sections.end(),
         [](const PromptSection& a, const PromptSection& b) {
-            return static_cast<int>(a.scope) < static_cast<int>(b.scope);
+            return static_cast<int>(a.cache_policy) < static_cast<int>(b.cache_policy);
         });
 }
 
@@ -53,7 +53,7 @@ void PromptCompositor::add_team(std::vector<PromptSection>& sections,
 
     std::string coord = build_team_coordination(*profile.team_ctx);
     if (!coord.empty()) {
-        sections.push_back({coord, CacheScope::None});
+        sections.push_back({coord, PromptCachePolicy::None});
     }
 }
 
@@ -90,7 +90,7 @@ void PromptCompositor::add_budget(std::vector<PromptSection>& sections,
 
     std::string budget_text = build_budget_awareness(*profile.budget);
     if (!budget_text.empty()) {
-        sections.push_back({budget_text, CacheScope::None});
+        sections.push_back({budget_text, PromptCachePolicy::None});
     }
 }
 

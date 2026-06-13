@@ -12,14 +12,14 @@ using namespace merak::prompts;
 
 TEST(PromptSectionSort, GlobalBeforeSessionBeforeNone) {
     std::vector<PromptSection> sections = {
-        {"volatile", CacheScope::None},
-        {"stable", CacheScope::Global},
-        {"semi", CacheScope::Session},
+        {"volatile", PromptCachePolicy::None},
+        {"stable", PromptCachePolicy::Global},
+        {"semi", PromptCachePolicy::Session},
     };
     PromptCompositor::sort_by_scope(sections);
-    EXPECT_EQ(sections[0].scope, CacheScope::Global);
-    EXPECT_EQ(sections[1].scope, CacheScope::Session);
-    EXPECT_EQ(sections[2].scope, CacheScope::None);
+    EXPECT_EQ(sections[0].cache_policy, PromptCachePolicy::Global);
+    EXPECT_EQ(sections[1].cache_policy, PromptCachePolicy::Session);
+    EXPECT_EQ(sections[2].cache_policy, PromptCachePolicy::None);
 }
 
 // ─── Memory Prompt ───
@@ -42,7 +42,7 @@ TEST(SkillPrompt, ContainsMarkdownConstraint) {
     auto section = build_skill_section();
     EXPECT_NE(section.text.find("Markdown"), std::string::npos);
     EXPECT_NE(section.text.find("简洁"), std::string::npos);
-    EXPECT_EQ(section.scope, CacheScope::Global);
+    EXPECT_EQ(section.cache_policy, PromptCachePolicy::Global);
 }
 
 // ─── Team Coordination ───
@@ -219,7 +219,7 @@ TEST(SceneContext, GodContextIncludesForeshadowing) {
     EXPECT_NE(section.text.find("第3日 夜"), std::string::npos);
     EXPECT_NE(section.text.find("伏笔"), std::string::npos);
     EXPECT_NE(section.text.find("秘密"), std::string::npos);
-    EXPECT_EQ(section.scope, CacheScope::None);
+    EXPECT_EQ(section.cache_policy, PromptCachePolicy::None);
 }
 
 TEST(SceneContext, CharacterContextIncludesMemories) {

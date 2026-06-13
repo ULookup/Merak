@@ -34,7 +34,7 @@ private:
 
     std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding_service_;
 
-    // 按 CacheScope 排序（Global < Session < None）
+    // 按 PromptCachePolicy 排序（Global < Session < None）
 public:
     static void sort_by_scope(std::vector<PromptSection>& sections);
 };
