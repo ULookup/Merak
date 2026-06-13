@@ -14,16 +14,10 @@ MemoryStore::MemoryStore(const MemoryConfig& config,
 {
 }
 
-MemoryStore::~MemoryStore() {
-    if (conn_ && conn_->is_open()) conn_->close();
-}
+MemoryStore::~MemoryStore() = default;
 
-pqxx::connection& MemoryStore::get_conn() {
-    std::lock_guard lock(conn_mutex_);
-    if (!conn_ || !conn_->is_open()) {
-        conn_ = std::make_unique<pqxx::connection>(config_.db_connection);
-    }
-    return *conn_;
+pqxx::connection MemoryStore::open_conn() const {
+    return pqxx::connection(config_.db_connection);
 }
 
 void MemoryStore::append_message(const Message& msg) {
@@ -56,7 +50,7 @@ std::expected<void, AgentError> MemoryStore::init_db() {
 
 std::expected<void, AgentError> MemoryStore::create_tables() {
     try {
-        auto& conn = get_conn();
+        auto conn = open_conn();
         pqxx::work txn(conn);
         txn.exec("CREATE EXTENSION IF NOT EXISTS vector");
         txn.exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"");
@@ -121,7 +115,7 @@ std::future<std::expected<void, AgentError>> MemoryStore::store(
         auto embedding = emb_future.get();
 
         try {
-            auto& conn = get_conn();
+            auto conn = open_conn();
             pqxx::work txn(conn);
 
             std::ostringstream oss;
@@ -182,7 +176,7 @@ std::future<std::expected<std::vector<MemorySnippet>, AgentError>> MemoryStore::
         std::string emb_str = oss.str();
 
         try {
-            auto& conn = get_conn();
+            auto conn = open_conn();
             pqxx::work txn(conn);
 
             auto result = txn.exec_params(
@@ -229,7 +223,7 @@ std::future<std::expected<std::vector<MemorySnippet>, AgentError>> MemoryStore::
 std::expected<void, AgentError> MemoryStore::remove(const std::string& id) {
     if (!config_.enabled) return {};
     try {
-        auto& conn = get_conn();
+        auto conn = open_conn();
         pqxx::work txn(conn);
         txn.exec_params("DELETE FROM memory_entries WHERE id = $1", id);
         txn.commit();
@@ -245,7 +239,7 @@ std::expected<void, AgentError> MemoryStore::remove(const std::string& id) {
 std::expected<int, AgentError> MemoryStore::decay_confidence() {
     if (!config_.enabled) return 0;
     try {
-        auto& conn = get_conn();
+        auto conn = open_conn();
         pqxx::work txn(conn);
         auto result = txn.exec_params(
             R"(
@@ -271,7 +265,7 @@ std::expected<int, AgentError> MemoryStore::decay_confidence() {
 std::expected<int, AgentError> MemoryStore::purge_expired(double threshold) {
     if (!config_.enabled) return 0;
     try {
-        auto& conn = get_conn();
+        auto conn = open_conn();
         pqxx::work txn(conn);
         auto result = txn.exec_params(
             "DELETE FROM memory_entries WHERE confidence < $1 RETURNING id",
@@ -292,7 +286,7 @@ std::expected<int, AgentError> MemoryStore::purge_expired(double threshold) {
 void MemoryStore::update_confidence(const std::string& id, double delta) {
     if (!config_.enabled) return;
     try {
-        auto& conn = get_conn();
+        auto conn = open_conn();
         pqxx::work txn(conn);
         txn.exec_params(
             "UPDATE memory_entries SET confidence = confidence + $1 WHERE id = $2",

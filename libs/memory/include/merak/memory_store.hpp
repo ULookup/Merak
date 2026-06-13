@@ -69,10 +69,8 @@ private:
     std::shared_ptr<EmbeddingProvider> embedder_;
     std::vector<Message> working_memory_;
     mutable std::mutex working_memory_mutex_;
-    mutable std::mutex conn_mutex_;
-    std::unique_ptr<pqxx::connection> conn_;
 
-    pqxx::connection& get_conn();
+    pqxx::connection open_conn() const;
     std::expected<void, AgentError> create_tables();
 };
 
