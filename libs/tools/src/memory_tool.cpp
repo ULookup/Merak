@@ -224,10 +224,10 @@ std::future<ToolResult> MemoryTool::execute(ToolCall call, ToolExecutionContext 
                     }
                 } else {
                     if (signal == "useful") {
-                        store->update_confidence(id, 0.1);
-                        spdlog::debug("MemoryTool: boosted confidence for {}", id);
+                        store->update_confidence(memory_id, 0.1);
+                        spdlog::debug("MemoryTool: boosted confidence for {}", memory_id);
                     } else if (signal == "misleading") {
-                        store->update_confidence(id, -0.1);
+                        store->update_confidence(memory_id, -0.1);
                     }
                 }
 
