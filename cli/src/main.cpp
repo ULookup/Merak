@@ -77,6 +77,11 @@ static const char* SETTINGS_TEMPLATE = R"({
 })";
 
 static std::filesystem::path merak_home() {
+    if (auto* override_home = std::getenv("MERAK_HOME")) return override_home;
+#ifdef _WIN32
+    if (auto* appdata = std::getenv("APPDATA")) return std::filesystem::path(appdata) / "Merak";
+    if (auto* profile = std::getenv("USERPROFILE")) return std::filesystem::path(profile) / ".merak";
+#endif
     if (auto* home = std::getenv("HOME")) return std::filesystem::path(home) / ".merak";
     return ".merak";
 }

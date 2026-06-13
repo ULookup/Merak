@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api, formatApiError } from '../../api/client';
+import {
+  exportDiagnostics,
+  getDesktopRuntimeStatus,
+  isDesktopApp,
+  openDiagnosticsFolder,
+  restartDesktopRuntime,
+  type DesktopRuntimeStatus,
+} from '../../desktop';
 import styles from './SettingsPanel.module.css';
 
 interface ConfigState {
@@ -21,6 +29,8 @@ export default function SettingsPanel() {
   const [testing, setTesting] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saved' | 'test_ok' | 'test_fail' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [runtime, setRuntime] = useState<DesktopRuntimeStatus | null>(null);
+  const [diagnosticMsg, setDiagnosticMsg] = useState('');
 
   useEffect(() => {
     api.getConfig().then((data) => {
@@ -29,6 +39,11 @@ export default function SettingsPanel() {
       setModel(data.default_model || '');
       setBaseUrl(data.api_base_url || '');
     }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktopApp()) return;
+    getDesktopRuntimeStatus().then(setRuntime);
   }, []);
 
   const handleSave = async () => {
@@ -63,6 +78,23 @@ export default function SettingsPanel() {
     } finally {
       setTesting(false);
     }
+  };
+
+  const refreshRuntime = async () => {
+    setRuntime(await getDesktopRuntimeStatus());
+  };
+
+  const handleRestartRuntime = async () => {
+    setDiagnosticMsg('');
+    const response = await restartDesktopRuntime();
+    setRuntime(response?.status ?? null);
+    setDiagnosticMsg(response?.ok ? 'Runtime restarted.' : 'Runtime restart did not complete.');
+  };
+
+  const handleExportDiagnostics = async () => {
+    const response = await exportDiagnostics();
+    if (response?.ok) setDiagnosticMsg(`Diagnostics exported: ${response.path}`);
+    else if (response) setDiagnosticMsg(response.path);
   };
 
   if (!config) return <div className={styles.panel}>Loading config...</div>;
@@ -135,6 +167,42 @@ export default function SettingsPanel() {
       )}
       {status === 'test_fail' && <div className={styles.error}>{errorMsg}</div>}
       {status === 'error' && <div className={styles.error}>{errorMsg}</div>}
+
+      {isDesktopApp() && (
+        <section className={styles.runtimePanel}>
+          <h3 className={styles.heading}>Desktop Runtime</h3>
+          <div className={styles.runtimeGrid}>
+            <span>Phase</span>
+            <strong>{runtime?.phase ?? 'unknown'}</strong>
+            <span>API</span>
+            <strong>{runtime?.apiBaseUrl ?? 'not ready'}</strong>
+            <span>Process</span>
+            <strong>{runtime?.pid ? `PID ${runtime.pid}` : 'not running'}</strong>
+            <span>Database</span>
+            <strong>{runtime?.pgStatus ?? 'unknown'}</strong>
+            <span>Config</span>
+            <strong>{runtime?.configPath ?? 'unknown'}</strong>
+            <span>Logs</span>
+            <strong>{runtime?.logPath ?? 'unknown'}</strong>
+          </div>
+          {runtime?.error && <div className={styles.error}>{runtime.error}</div>}
+          <div className={styles.actions}>
+            <button type="button" onClick={refreshRuntime} className={styles.btn}>
+              Refresh
+            </button>
+            <button type="button" onClick={handleRestartRuntime} className={styles.btn}>
+              Restart Runtime
+            </button>
+            <button type="button" onClick={() => openDiagnosticsFolder()} className={styles.btn}>
+              Open Logs
+            </button>
+            <button type="button" onClick={handleExportDiagnostics} className={styles.btn}>
+              Export Diagnostics
+            </button>
+          </div>
+          {diagnosticMsg && <div className={styles.ok}>{diagnosticMsg}</div>}
+        </section>
+      )}
     </div>
   );
 }
