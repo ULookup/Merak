@@ -1,0 +1,15 @@
+ {
+      "llm": {
+            "api_base_url": "https://api.deepseek.com/anthropic",
+          "default_model": "deepseek-v4-pro",
+          "request_timeout_ms": 60000
+      },
+      "agent": {
+          "system_prompt": "你是一个专业的作家助手，可以使用工具来完成用户的请求。",
+          "max_tool_turns": 25,
+          "permission_mode": "ask"
+      },
+      "memory": {
+          "enabled": false
+      }
+  }
