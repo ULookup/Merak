@@ -2,11 +2,11 @@
 #include <merak/tool_base.hpp>
 #include <merak/config.hpp>
 #include <merak/tool_meta.hpp>
+#include <merak/result.hpp>
 #include <nlohmann/json.hpp>
 #include <map>
 #include <vector>
 #include <string>
-#include <expected>
 #include <future>
 #include <memory>
 
@@ -21,7 +21,7 @@ public:
     void register_tool(std::unique_ptr<Tool> tool);
     void register_all(std::vector<std::unique_ptr<Tool>> tools);
     void register_platform_basics();
-    std::future<std::expected<int, AgentError>> import_from_mcp(
+    std::future<Result<int, AgentError>> import_from_mcp(
         std::shared_ptr<McpClient> client
     );
 

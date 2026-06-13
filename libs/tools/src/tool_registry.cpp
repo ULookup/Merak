@@ -7,7 +7,6 @@
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <cctype>
-#include <expected>
 #include <sstream>
 
 namespace merak {
@@ -33,16 +32,16 @@ void ToolRegistry::register_all(std::vector<std::unique_ptr<Tool>> tools) {
     }
 }
 
-std::future<std::expected<int, AgentError>> ToolRegistry::import_from_mcp(
+std::future<Result<int, AgentError>> ToolRegistry::import_from_mcp(
     std::shared_ptr<McpClient> client
 ) {
     return std::async(std::launch::async, [this, client = std::move(client)]()
-        -> std::expected<int, AgentError>
+        -> Result<int, AgentError>
     {
         auto result = client->list_tools().get();
 
         if (!result.has_value()) {
-            return std::unexpected(result.error());
+            return Result<int, AgentError>(std::move(result).error());
         }
 
         int count = 0;
