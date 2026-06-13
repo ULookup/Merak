@@ -137,6 +137,11 @@ export interface UpdateWorldResponse {
   description: string;
 }
 
+export interface DeleteWorldResponse {
+  ok?: boolean;
+  deleted: string;
+}
+
 export interface WorldAgent {
   id: string;
   name: string;
@@ -193,6 +198,13 @@ export interface WorldTimeResponse {
   time?: string;
   world_time?: string;
   now?: string;
+}
+
+export interface AdvanceWorldTimeResponse {
+  ok: boolean;
+  world_time?: string;
+  time?: string;
+  label?: string;
 }
 
 export interface LlmConfig {

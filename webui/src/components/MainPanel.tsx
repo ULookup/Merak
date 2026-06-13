@@ -1,6 +1,6 @@
 import { CircleHelp, Menu, PanelRight } from 'lucide-react';
-import type { ConnectionState } from '../hooks/useSSE';
 import { useAppState } from '../AppState';
+import type { ConnectionState } from '../hooks/useSSE';
 import BrandMark from './BrandMark';
 import ChatTimeline from './ChatTimeline';
 import Composer from './Composer';
@@ -29,15 +29,16 @@ export default function MainPanel({
   const currentWorld = state.worlds.find((w) => w.id === state.worldId);
 
   const headerTitle = currentAgent
-    ? `${currentAgent.display_name || currentAgent.name} · ${currentWorld?.name ?? ''}`
+    ? `${currentAgent.display_name || currentAgent.name} �� ${currentWorld?.name ?? ''}`
     : 'Merak Workbench';
 
   const headerSubtitle = currentAgent
     ? (() => {
         const kind = currentAgent.kind;
-        if (kind === 'god' || kind === '0') return 'Omniscient · 20 tools';
-        if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4'))) return 'Manager · 1 tool';
-        return `Character · 3 tools`;
+        if (kind === 'god' || kind === '0') return 'Omniscient �� 20 tools';
+        if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4')))
+          return 'Manager �� 1 tool';
+        return `Character �� 3 tools`;
       })()
     : 'Worldbuilding agent runtime';
 
@@ -64,7 +65,7 @@ export default function MainPanel({
             {headerSubtitle}
             {activeScene && (
               <span className={styles.activeSceneBadge}>
-                · Scene: {activeScene.title ?? activeScene.id}
+                �� Scene: {activeScene.title ?? activeScene.id}
               </span>
             )}
           </div>

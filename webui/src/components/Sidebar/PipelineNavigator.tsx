@@ -1,19 +1,19 @@
 import { useEffect } from 'react';
 import { BookOpen, FileText, PenLine } from 'lucide-react';
-import { useAppState } from '../../AppState';
-import type { CreativePhase } from '../../api/types';
 import { advancePipeline, getPipelineState } from '../../api/client';
+import type { CreativePhase } from '../../api/types';
+import { useAppState } from '../../AppState';
 import styles from './PipelineNavigator.module.css';
 
 const PHASES: { key: CreativePhase; label: string; desc: string }[] = [
-  { key: 'worldbuilding', label: '世界观构建', desc: '设定世界基础' },
-  { key: 'character_creation', label: '角色创建', desc: '创建和完善角色' },
-  { key: 'plot_architecture', label: '剧情架构', desc: '规划故事结构' },
-  { key: 'scene_writing', label: '场景写作', desc: '创作具体场景' },
-  { key: 'reflection', label: '回顾整理', desc: '检查与回顾' },
+  { key: 'worldbuilding', label: 'World', desc: 'Set the foundation' },
+  { key: 'character_creation', label: 'Characters', desc: 'Build the cast' },
+  { key: 'plot_architecture', label: 'Plot', desc: 'Shape the structure' },
+  { key: 'scene_writing', label: 'Scenes', desc: 'Draft the work' },
+  { key: 'reflection', label: 'Reflection', desc: 'Review and refine' },
 ];
 
-const VALID_PHASES = new Set<string>(PHASES.map(p => p.key));
+const VALID_PHASES = new Set<string>(PHASES.map((p) => p.key));
 
 export default function PipelineNavigator() {
   const { state, dispatch } = useAppState();
@@ -21,7 +21,7 @@ export default function PipelineNavigator() {
   const currentPhase: CreativePhase = VALID_PHASES.has(rawPhase)
     ? (rawPhase as CreativePhase)
     : 'worldbuilding';
-  const currentIdx = PHASES.findIndex(p => p.key === currentPhase);
+  const currentIdx = PHASES.findIndex((p) => p.key === currentPhase);
   const conditions = state.pipelineConditions ?? [];
   const nextAllowed = new Set(state.pipelineNextAllowed ?? []);
   const allowedRetreat = new Set(state.pipelineAllowedRetreat ?? []);
@@ -30,32 +30,28 @@ export default function PipelineNavigator() {
     if (!state.worldId) return;
     let cancelled = false;
     getPipelineState(state.worldId)
-      .then(view => {
+      .then((view) => {
         if (!cancelled) dispatch({ type: 'SET_PIPELINE_VIEW', view });
       })
       .catch(console.error);
-    return () => { cancelled = true; };
-  }, [state.worldId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [state.worldId, dispatch]);
 
   const handlePhaseClick = async (targetPhase: CreativePhase) => {
-    const targetIdx = PHASES.findIndex(p => p.key === targetPhase);
+    const targetIdx = PHASES.findIndex((p) => p.key === targetPhase);
     if (targetIdx === currentIdx) return;
 
     const isAdvance = targetIdx > currentIdx;
     const isRetreat = targetIdx < currentIdx;
 
-    // Only allow step-by-step advance
     if (isAdvance && targetIdx !== currentIdx + 1) return;
-    // Only allow retreat to allowed phases
     if (isRetreat && !allowedRetreat.has(targetPhase)) return;
 
     const label = PHASES[targetIdx].label;
-    const confirm = window.confirm(
-      isRetreat
-        ? `确定要退回到「${label}」吗？`
-        : `确定要进入「${label}」吗？`
-    );
-    if (!confirm) return;
+    const confirmed = window.confirm(isRetreat ? `Return to ${label}?` : `Advance to ${label}?`);
+    if (!confirmed) return;
 
     try {
       await advancePipeline(state.worldId!, {
@@ -83,7 +79,7 @@ export default function PipelineNavigator() {
       {state.showPhaseAdvancePrompt && (
         <div className={styles.confirmOverlay}>
           <div className={styles.confirmDialog}>
-            <p>Conditions met — advance to next phase?</p>
+            <p>Conditions met. Advance to the next phase?</p>
             <div className={styles.confirmActions}>
               <button
                 className={styles.confirmBtn}
@@ -114,10 +110,10 @@ export default function PipelineNavigator() {
         </div>
       )}
       <div className={styles.titleRow}>
-        <span className={styles.title}>创作管线</span>
+        <span className={styles.title}>Story Pipeline</span>
         {state.pipelineAutoAdvance !== undefined && (
           <span className={state.pipelineAutoAdvance ? styles.badgeAuto : styles.badgeManual}>
-            {state.pipelineAutoAdvance ? '自动' : '手动'}
+            {state.pipelineAutoAdvance ? 'Auto' : 'Manual'}
           </span>
         )}
       </div>
@@ -144,18 +140,17 @@ export default function PipelineNavigator() {
               title={
                 isCurrent && phaseConditions.length > 0
                   ? phaseConditions
-                      .map(c =>
-                        `${c.met ? '✓' : '✗'} ${c.name}${
-                          c.current !== undefined ? ` (${c.current}/${c.target})` : ''
-                        }`
+                      .map(
+                        (c) =>
+                          `${c.met ? 'Met' : 'Open'}: ${c.name}${
+                            c.current !== undefined ? ` (${c.current}/${c.target})` : ''
+                          }`,
                       )
                       .join('\n')
                   : undefined
               }
             >
-              <span className={styles.dot}>
-                {isDone ? '✓' : isCurrent ? '●' : '○'}
-              </span>
+              <span className={styles.dot}>{isDone ? 'ok' : isCurrent ? 'on' : '--'}</span>
               <div className={styles.phaseInfo}>
                 <span className={styles.phaseLabel}>{p.label}</span>
                 <span className={styles.phaseDesc}>{p.desc}</span>
@@ -188,8 +183,13 @@ export default function PipelineNavigator() {
           {state.storyOverview.current_chapter && (
             <div className={styles.treeItem}>
               <FileText size={12} aria-hidden="true" className={styles.treeIcon} />
-              <span>第{state.storyOverview.current_chapter.number}章 {state.storyOverview.current_chapter.title}</span>
-              <span className={styles.badge}>{state.storyOverview.current_chapter.scene_count} 场景</span>
+              <span>
+                Chapter {state.storyOverview.current_chapter.number}:{' '}
+                {state.storyOverview.current_chapter.title}
+              </span>
+              <span className={styles.badge}>
+                {state.storyOverview.current_chapter.scene_count} scenes
+              </span>
             </div>
           )}
           {state.storyOverview.current_scene && (

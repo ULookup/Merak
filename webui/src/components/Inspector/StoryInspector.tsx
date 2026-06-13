@@ -1,5 +1,14 @@
-import { AlertTriangle, BookOpen, Clock3, Flag, GitBranch, KeyRound, Plus, Users } from 'lucide-react';
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
+import {
+  AlertTriangle,
+  BookOpen,
+  Clock3,
+  Flag,
+  GitBranch,
+  KeyRound,
+  Plus,
+  Users,
+} from 'lucide-react';
 import { api } from '../../api/client';
 import type { DiaryEntry, WorldDetail } from '../../api/types';
 import { useAppState } from '../../AppState';
@@ -10,14 +19,14 @@ import CreateSecretModal from './CreateSecretModal';
 import EndSceneModal from './EndSceneModal';
 
 const MOOD_COLORS: Record<string, { bg: string; fg: string }> = {
-  '喜悦': { bg: '#dcfce7', fg: '#166534' },
-  '悲伤': { bg: '#dbeafe', fg: '#1e40af' },
-  '愤怒': { bg: '#fee2e2', fg: '#991b1b' },
-  '恐惧': { bg: '#fff7ed', fg: '#9a3412' },
-  '期待': { bg: '#f3e8ff', fg: '#6b21a8' },
-  '困惑': { bg: '#fef9c3', fg: '#854d0e' },
-  '决心': { bg: '#ccfbf1', fg: '#115e59' },
-  '平静': { bg: '#f3f4f6', fg: '#374151' },
+  happy: { bg: '#dcfce7', fg: '#166534' },
+  sad: { bg: '#dbeafe', fg: '#1e40af' },
+  angry: { bg: '#fee2e2', fg: '#991b1b' },
+  afraid: { bg: '#fff7ed', fg: '#9a3412' },
+  hopeful: { bg: '#f3e8ff', fg: '#6b21a8' },
+  confused: { bg: '#fef9c3', fg: '#854d0e' },
+  resolved: { bg: '#ccfbf1', fg: '#115e59' },
+  calm: { bg: '#f3f4f6', fg: '#374151' },
 };
 
 function moodStyle(mood: string): React.CSSProperties {
@@ -29,7 +38,7 @@ function moodStyle(mood: string): React.CSSProperties {
 function leakBadge(level: number) {
   if (level === 0) return null;
   const color = level >= 2 ? '#dc2626' : '#d97706';
-  const label = level >= 2 ? `泄密高风险` : `泄密低风险`;
+  const label = level >= 2 ? 'High leak risk' : 'Low leak risk';
   return (
     <span
       style={{
@@ -64,24 +73,38 @@ export default function StoryInspector() {
   const [showCreateSecret, setShowCreateSecret] = useState(false);
   const [showCreateScene, setShowCreateScene] = useState(false);
   const [worldDetail, setWorldDetail] = useState<WorldDetail | null>(null);
+  const [timeInput, setTimeInput] = useState('');
+  const [advancingTime, setAdvancingTime] = useState(false);
+  const [timeError, setTimeError] = useState('');
 
   useEffect(() => {
-    if (!state.worldId) { setWorldDetail(null); return; }
-    api.getWorldDetail(state.worldId)
-      .then(res => setWorldDetail(res.world))
+    if (!state.worldId) {
+      setWorldDetail(null);
+      return;
+    }
+    api
+      .getWorldDetail(state.worldId)
+      .then((res) => setWorldDetail(res.world))
       .catch(() => setWorldDetail(null));
   }, [state.worldId, state.storyVersion]);
 
+  useEffect(() => {
+    setTimeInput(state.worldTime ?? '');
+  }, [state.worldId, state.worldTime]);
+
   // Find the first writing/draft scene
   const activeScene = (() => {
-    if (overview?.current_scene?.status === 'writing' || overview?.current_scene?.status === 'draft') {
+    if (
+      overview?.current_scene?.status === 'writing' ||
+      overview?.current_scene?.status === 'draft'
+    ) {
       return overview.current_scene;
     }
     return null;
   })();
 
   const participantAgents = state.agents.filter((a) =>
-    activeScene?.participant_ids?.includes(a.id)
+    activeScene?.participant_ids?.includes(a.id),
   );
 
   const [participantDiaries, setParticipantDiaries] = useState<DiaryEntry[]>([]);
@@ -96,8 +119,10 @@ export default function StoryInspector() {
     setDiariesLoading(true);
     Promise.all(
       participantAgents.map((agent) =>
-        api.fetchDiaries(state.worldId!, agent.id).catch(() => ({ ok: true, diaries: [] as DiaryEntry[] }))
-      )
+        api
+          .fetchDiaries(state.worldId!, agent.id)
+          .catch(() => ({ ok: true, diaries: [] as DiaryEntry[] })),
+      ),
     )
       .then((results) => {
         if (cancelled) return;
@@ -112,11 +137,27 @@ export default function StoryInspector() {
       .finally(() => {
         if (!cancelled) setDiariesLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [state.worldId, activeScene?.id, state.storyVersion]);
 
   function handleCreated() {
     dispatch({ type: 'SET_STORY_VERSION' });
+  }
+
+  async function handleAdvanceTime() {
+    if (!state.worldId || !timeInput.trim()) return;
+    setAdvancingTime(true);
+    setTimeError('');
+    try {
+      await api.advanceWorldTime(state.worldId, timeInput.trim());
+      dispatch({ type: 'SET_STORY_VERSION' });
+    } catch (error) {
+      setTimeError(error instanceof Error ? error.message : 'Could not advance world time.');
+    } finally {
+      setAdvancingTime(false);
+    }
   }
 
   return (
@@ -139,7 +180,8 @@ export default function StoryInspector() {
           </span>
           <span>
             <GitBranch size={14} aria-hidden="true" />
-            {worldDetail ? worldDetail.stats.open_foreshadowing : state.foreshadowing.length} threads
+            {worldDetail ? worldDetail.stats.open_foreshadowing : state.foreshadowing.length}{' '}
+            threads
           </span>
         </div>
         {worldDetail && (
@@ -160,14 +202,28 @@ export default function StoryInspector() {
         )}
         <div className={styles.timeUnavailable}>
           <div>
-            <strong>世界时间控制</strong>
-            <span>{state.worldTime ? `当前：${state.worldTime}` : 'Time not set'}</span>
+            <strong>World Time</strong>
+            <span>{state.worldTime ? `Current: ${state.worldTime}` : 'Time not set'}</span>
           </div>
-          <button className={styles.ghostButton} disabled title="后端暂未实现 /time/advance">
-            <Clock3 size={14} aria-hidden="true" />
-            Advance unavailable
-          </button>
+          <div className={styles.timeControls}>
+            <input
+              value={timeInput}
+              onChange={(event) => setTimeInput(event.target.value)}
+              placeholder="Day 2 Dawn"
+              aria-label="World time"
+              className={styles.timeInput}
+            />
+            <button
+              className={styles.ghostButton}
+              disabled={!state.worldId || !timeInput.trim() || advancingTime}
+              onClick={handleAdvanceTime}
+            >
+              <Clock3 size={14} aria-hidden="true" />
+              {advancingTime ? 'Advancing...' : 'Advance'}
+            </button>
+          </div>
         </div>
+        {timeError && <div className={styles.timeError}>{timeError}</div>}
       </section>
 
       <section className={styles.section}>
@@ -180,7 +236,9 @@ export default function StoryInspector() {
           </div>
           <div>
             <span>Chapter</span>
-            <strong>{chapter ? `${chapter.number}. ${chapter.title}` : 'No chapter selected'}</strong>
+            <strong>
+              {chapter ? `${chapter.number}. ${chapter.title}` : 'No chapter selected'}
+            </strong>
             <small>{chapter ? `${chapter.scene_count} scenes` : 'waiting for backend'}</small>
           </div>
           <div>
@@ -191,17 +249,11 @@ export default function StoryInspector() {
         </div>
         {scene && state.worldId && chapter && (
           <div className={styles.sceneActions}>
-            <button
-              className={styles.entryButton}
-              onClick={() => setShowEndScene(true)}
-            >
+            <button className={styles.entryButton} onClick={() => setShowEndScene(true)}>
               <Flag size={14} aria-hidden="true" />
               End Scene
             </button>
-            <button
-              className={styles.ghostButton}
-              onClick={() => setShowCreateScene(true)}
-            >
+            <button className={styles.ghostButton} onClick={() => setShowCreateScene(true)}>
               <Plus size={14} aria-hidden="true" />
               New Scene
             </button>
@@ -213,16 +265,19 @@ export default function StoryInspector() {
         <section className={styles.section}>
           <div className={styles.sectionTitle}>Scene Narrative</div>
           <div className={styles.narrativeBox}>
-            {(activeScene as any).narrative || (activeScene as any).text || (activeScene as any).content || 'No narrative content yet.'}
+            {(activeScene as any).narrative ||
+              (activeScene as any).text ||
+              (activeScene as any).content ||
+              'No narrative content yet.'}
           </div>
           {participantAgents.length > 0 && (
             <>
-              <div className={styles.sectionTitle} style={{ marginTop: '0.75rem' }}>Participants</div>
+              <div className={styles.sectionTitle} style={{ marginTop: '0.75rem' }}>
+                Participants
+              </div>
               <div className={styles.voiceStrip}>
                 {participantAgents.map((agent) => (
-                  <span key={agent.id}>
-                    {agent.display_name || agent.name}
-                  </span>
+                  <span key={agent.id}>{agent.display_name || agent.name}</span>
                 ))}
               </div>
             </>
@@ -242,9 +297,25 @@ export default function StoryInspector() {
               const author = participantAgents.find((a) => a.id === diary.agent_id);
               return (
                 <div className={styles.thread} key={diary.id}>
-                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: 4,
+                      marginBottom: 4,
+                    }}
+                  >
                     {author && (
-                      <span style={{ display: 'inline-block', color: 'var(--teal)', fontWeight: 800, marginRight: 6, fontSize: 11 }}>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          color: 'var(--teal)',
+                          fontWeight: 800,
+                          marginRight: 6,
+                          fontSize: 11,
+                        }}
+                      >
                         {author.display_name || author.name}
                       </span>
                     )}
@@ -270,7 +341,9 @@ export default function StoryInspector() {
                     )}
                   </div>
                   <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--ink)' }}>
-                    {diary.content.length > 200 ? diary.content.slice(0, 200) + '...' : diary.content}
+                    {diary.content.length > 200
+                      ? diary.content.slice(0, 200) + '...'
+                      : diary.content}
                   </div>
                 </div>
               );
@@ -343,7 +416,9 @@ export default function StoryInspector() {
           state.secrets.slice(0, 5).map((item) => (
             <div className={styles.secret} key={item.id}>
               <strong>{item.title ?? item.content ?? item.id}</strong>
-              <small>{item.public_version ?? item.stakes ?? item.truth ?? statusLabel(item.status)}</small>
+              <small>
+                {item.public_version ?? item.stakes ?? item.truth ?? statusLabel(item.status)}
+              </small>
             </div>
           ))
         )}
@@ -359,13 +434,25 @@ export default function StoryInspector() {
         />
       )}
       {showCreateForeshadowing && state.worldId && (
-        <CreateForeshadowingModal worldId={state.worldId} onClose={() => setShowCreateForeshadowing(false)} onCreated={handleCreated} />
+        <CreateForeshadowingModal
+          worldId={state.worldId}
+          onClose={() => setShowCreateForeshadowing(false)}
+          onCreated={handleCreated}
+        />
       )}
       {showCreateSecret && state.worldId && (
-        <CreateSecretModal worldId={state.worldId} onClose={() => setShowCreateSecret(false)} onCreated={handleCreated} />
+        <CreateSecretModal
+          worldId={state.worldId}
+          onClose={() => setShowCreateSecret(false)}
+          onCreated={handleCreated}
+        />
       )}
       {showCreateScene && state.worldId && (
-        <CreateSceneModal worldId={state.worldId} onClose={() => setShowCreateScene(false)} onCreated={handleCreated} />
+        <CreateSceneModal
+          worldId={state.worldId}
+          onClose={() => setShowCreateScene(false)}
+          onCreated={handleCreated}
+        />
       )}
     </>
   );

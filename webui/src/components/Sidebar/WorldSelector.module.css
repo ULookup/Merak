@@ -148,3 +148,17 @@
   background: var(--ink);
   color: #fff;
 }
+
+.actions .danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: var(--ruby);
+}
+
+.actions .danger:hover {
+  border-color: #fca5a5;
+  background: #ffe4e6;
+}

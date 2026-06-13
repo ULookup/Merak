@@ -24,21 +24,31 @@ export default function SettingsPanel() {
   const [provider, setProvider] = useState('anthropic');
   const [model, setModel] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  const [maxOutputTokens, setMaxOutputTokens] = useState(4096);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'saved' | 'test_ok' | 'test_fail' | 'error'>('idle');
+  const [status, setStatus] = useState<'idle' | 'saved' | 'test_ok' | 'test_fail' | 'error'>(
+    'idle',
+  );
   const [errorMsg, setErrorMsg] = useState('');
   const [runtime, setRuntime] = useState<DesktopRuntimeStatus | null>(null);
   const [diagnosticMsg, setDiagnosticMsg] = useState('');
 
+  const loadConfig = async () => {
+    const data = await api.getConfig();
+    setConfig(data);
+    setProvider(data.provider || 'anthropic');
+    setModel(data.default_model || '');
+    setBaseUrl(data.api_base_url || '');
+    setMaxOutputTokens(data.max_output_tokens || 4096);
+  };
+
   useEffect(() => {
-    api.getConfig().then((data) => {
-      setConfig(data);
-      setProvider(data.provider || 'anthropic');
-      setModel(data.default_model || '');
-      setBaseUrl(data.api_base_url || '');
-    }).catch(() => {});
+    loadConfig().catch((error) => {
+      setStatus('error');
+      setErrorMsg(formatApiError(error, 'Could not load configuration.'));
+    });
   }, []);
 
   useEffect(() => {
@@ -49,13 +59,16 @@ export default function SettingsPanel() {
   const handleSave = async () => {
     setSaving(true);
     setStatus('idle');
+    setErrorMsg('');
     try {
       await api.saveConfig({
         provider,
         api_key: apiKey || undefined,
         default_model: model || undefined,
         api_base_url: baseUrl || undefined,
+        max_output_tokens: maxOutputTokens,
       });
+      await loadConfig();
       setStatus('saved');
       setApiKey('');
     } catch (e) {
@@ -69,12 +82,15 @@ export default function SettingsPanel() {
   const handleTest = async () => {
     setTesting(true);
     setStatus('idle');
+    setErrorMsg('');
     try {
       await api.testConfig();
       setStatus('test_ok');
     } catch (e) {
       setStatus('test_fail');
-      setErrorMsg(formatApiError(e, 'LLM connection test failed — check your API key and network.'));
+      setErrorMsg(
+        formatApiError(e, 'LLM connection test failed — check your API key and network.'),
+      );
     } finally {
       setTesting(false);
     }
@@ -89,6 +105,9 @@ export default function SettingsPanel() {
     const response = await restartDesktopRuntime();
     setRuntime(response?.status ?? null);
     setDiagnosticMsg(response?.ok ? 'Runtime restarted.' : 'Runtime restart did not complete.');
+    if (response?.ok) {
+      loadConfig().catch(() => {});
+    }
   };
 
   const handleExportDiagnostics = async () => {
@@ -97,7 +116,14 @@ export default function SettingsPanel() {
     else if (response) setDiagnosticMsg(response.path);
   };
 
-  if (!config) return <div className={styles.panel}>Loading config...</div>;
+  if (!config) {
+    return (
+      <div className={styles.panel}>
+        <h3 className={styles.heading}>Model Configuration</h3>
+        {status === 'error' ? <div className={styles.error}>{errorMsg}</div> : 'Loading config...'}
+      </div>
+    );
+  }
 
   return (
     <div className={styles.panel}>
@@ -105,7 +131,11 @@ export default function SettingsPanel() {
 
       <label className={styles.label}>
         Provider
-        <select value={provider} onChange={(e) => setProvider(e.target.value)} className={styles.input}>
+        <select
+          value={provider}
+          onChange={(e) => setProvider(e.target.value)}
+          className={styles.input}
+        >
           <option value="anthropic">Anthropic</option>
           <option value="openai">OpenAI</option>
           <option value="custom">Custom</option>
@@ -150,11 +180,28 @@ export default function SettingsPanel() {
         />
       </label>
 
+      <label className={styles.label}>
+        Max Output Tokens
+        <input
+          type="number"
+          min={256}
+          step={256}
+          value={maxOutputTokens}
+          onChange={(e) => setMaxOutputTokens(Math.max(256, Number(e.target.value) || 256))}
+          placeholder={String(config.max_output_tokens || 4096)}
+          className={styles.input}
+        />
+      </label>
+
       <div className={styles.actions}>
         <button onClick={handleTest} disabled={testing} className={styles.btn}>
           {testing ? 'Testing...' : 'Test Connection'}
         </button>
-        <button onClick={handleSave} disabled={saving} className={`${styles.btn} ${styles.primary}`}>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className={`${styles.btn} ${styles.primary}`}
+        >
           {saving ? 'Saving...' : 'Save Config'}
         </button>
       </div>
@@ -162,9 +209,7 @@ export default function SettingsPanel() {
       {status === 'saved' && (
         <div className={styles.ok}>Configuration saved. Restart server to apply changes.</div>
       )}
-      {status === 'test_ok' && (
-        <div className={styles.ok}>LLM connection test passed.</div>
-      )}
+      {status === 'test_ok' && <div className={styles.ok}>LLM connection test passed.</div>}
       {status === 'test_fail' && <div className={styles.error}>{errorMsg}</div>}
       {status === 'error' && <div className={styles.error}>{errorMsg}</div>}
 

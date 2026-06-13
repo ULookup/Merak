@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
 import { useToast } from '../Toast';
@@ -40,6 +40,24 @@ export default function WorldSelector() {
       ),
     });
     setEditWorld(null);
+  }
+
+  async function deleteWorld() {
+    if (!editWorld) return;
+    const ok = window.confirm(`Delete world "${editWorld.name || editWorld.id}"?`);
+    if (!ok) return;
+    try {
+      await api.deleteWorld(editWorld.id);
+      const nextWorlds = worlds.filter((world) => world.id !== editWorld.id);
+      dispatch({ type: 'SET_WORLDS', worlds: nextWorlds });
+      if (state.worldId === editWorld.id) {
+        dispatch({ type: 'SET_WORLD', worldId: null });
+      }
+      setEditWorld(null);
+      showToast('World deleted.', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not delete world.', 'error');
+    }
   }
 
   async function createWorld() {
@@ -144,6 +162,10 @@ export default function WorldSelector() {
             </label>
             <div className={styles.actions}>
               <button onClick={saveEdit}>Save</button>
+              <button onClick={deleteWorld} className={styles.danger}>
+                <Trash2 size={14} aria-hidden="true" />
+                Delete
+              </button>
               <button onClick={() => setEditWorld(null)}>Cancel</button>
             </div>
           </div>

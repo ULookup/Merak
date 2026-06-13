@@ -1,9 +1,14 @@
 import { useState } from 'react';
+import { CircleHelp, Minus, Plus } from 'lucide-react';
 import { api } from '../api/client';
 import { useAppState } from '../AppState';
 import styles from './WorldOnboarding.module.css';
 
-export default function WorldOnboarding() {
+interface WorldOnboardingProps {
+  onOpenGuide?: () => void;
+}
+
+export default function WorldOnboarding({ onOpenGuide }: WorldOnboardingProps) {
   const { state, dispatch } = useAppState();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -26,7 +31,6 @@ export default function WorldOnboarding() {
       const worldId = world.world_id;
       if (!worldId) throw new Error('Failed to get world ID from response');
 
-      // Optionally create first character
       if (characterName.trim()) {
         try {
           await api.createAgent(worldId, {
@@ -34,7 +38,7 @@ export default function WorldOnboarding() {
             identity: characterIdentity.trim() || 'A character in this world.',
           });
         } catch {
-          // Character creation failed but world exists — continue
+          // Character creation failed but the world can still be opened.
         }
       }
 
@@ -51,14 +55,28 @@ export default function WorldOnboarding() {
   }
 
   const existingWorlds = state.worlds.filter((w) => w.id);
+  const ToggleIcon = showCharacterForm ? Minus : Plus;
 
   return (
     <div className={styles.onboarding}>
       <div className={styles.card}>
-        <h1 className={styles.title}>Merak Creation Workshop</h1>
-        <p className={styles.subtitle}>
-          Create a new world to begin your storytelling journey.
-        </p>
+        <div className={styles.header}>
+          <div>
+            <h1 className={styles.title}>Merak Creation Workshop</h1>
+            <p className={styles.subtitle}>
+              Create a new world to begin your storytelling journey.
+            </p>
+          </div>
+          <button
+            className={styles.helpBtn}
+            type="button"
+            onClick={onOpenGuide}
+            aria-label="Open workbench guide"
+            title="Open workbench guide"
+          >
+            <CircleHelp size={18} aria-hidden="true" strokeWidth={2.2} />
+          </button>
+        </div>
 
         <div className={styles.field}>
           <label className={styles.label}>World Name *</label>
@@ -90,7 +108,8 @@ export default function WorldOnboarding() {
             onClick={() => setShowCharacterForm((prev) => !prev)}
             type="button"
           >
-            {showCharacterForm ? '−' : '+'} Create first character
+            <ToggleIcon size={14} aria-hidden="true" strokeWidth={2.4} />
+            Create first character
           </button>
 
           {showCharacterForm && (
