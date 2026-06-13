@@ -184,7 +184,7 @@ TEST(WorldbuildingE2E, FullMiniWorldCreationAndSceneLifecycle) {
     auto wrap = service.end_scene(world.id, created_scene.id, scene_draft);
 
     // Verify diaries were written for both participants
-    EXPECT_EQ(wrap.diaries_written.size(), 2);
+    EXPECT_EQ(wrap.pending_diary_agents.size(), 2);
 
     // Verify relation was updated
     EXPECT_EQ(wrap.relations_updated.size(), 1);

@@ -871,13 +871,9 @@ void WorldbuildingHttpHandler::handle_scene_end(const httplib::Request& req, htt
         auto wrapup = service_->end_scene(wid, sid, markdown);
         emit_story_update(runtime_, body.value("session_id", ""), wid, "scene", sid);
 
-        nlohmann::json diaries = nlohmann::json::array();
-        for (const auto& d : wrapup.diaries_written) {
-            diaries.push_back({
-                {"id", d.id},
-                {"agent_id", d.agent_id},
-                {"scene_id", d.scene_id}
-            });
+        nlohmann::json pending = nlohmann::json::array();
+        for (const auto& agent_id : wrapup.pending_diary_agents) {
+            pending.push_back(agent_id);
         }
 
         nlohmann::json foreshadowing = nlohmann::json::array();
@@ -889,12 +885,13 @@ void WorldbuildingHttpHandler::handle_scene_end(const httplib::Request& req, htt
         }
 
         json_response(res, {
-            {"ok", true},
-            {"diaries_written", diaries},
-            {"diary_count", wrapup.diaries_written.size()},
+            {"scene_id", sid},
+            {"status", "completed"},
+            {"world_time", scene.world_time},
             {"relations_updated", wrapup.relations_updated.size()},
-            {"proposed_foreshadowing", foreshadowing},
-            {"leak_risks", wrapup.leak_risks.size()}
+            {"foreshadowing_proposed", foreshadowing},
+            {"pending_diary_agents", pending},
+            {"pending_diary_count", wrapup.pending_diary_agents.size()}
         });
     } catch (const std::exception& e) {
         error_response(res, e.what());
