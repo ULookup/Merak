@@ -532,8 +532,14 @@ void WorldbuildingHttpHandler::handle_create_world(const httplib::Request& req, 
     }
 }
 
-void WorldbuildingHttpHandler::handle_delete_world(const httplib::Request&, httplib::Response& res) {
-    error_response(res, "Not yet implemented", 501);
+void WorldbuildingHttpHandler::handle_delete_world(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string world_id = req.matches[1];
+        service_->worlds().delete_world(world_id);
+        json_response(res, {{"deleted", world_id}}, 200);
+    } catch (const std::exception& e) {
+        error_response(res, e.what());
+    }
 }
 
 void WorldbuildingHttpHandler::handle_update_world(const httplib::Request& req, httplib::Response& res) {
