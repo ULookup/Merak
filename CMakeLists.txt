@@ -49,6 +49,7 @@ add_subdirectory(libs/portable_pg)
 add_subdirectory(libs/runtime)
 add_subdirectory(libs/skills)
 add_subdirectory(libs/http)
+# TEMP: disabled — tree-sitter FetchContent requires github.com access
 # add_subdirectory(cli)
 # add_subdirectory(tests)
 

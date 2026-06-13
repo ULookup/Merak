@@ -13,6 +13,7 @@ target_link_libraries(merak-loop PUBLIC
     merak-memory
     merak-tools
     merak-context
+    merak-skills
     nlohmann_json::nlohmann_json
     spdlog::spdlog
 )

@@ -6,5 +6,6 @@ add_library(merak-context-dsl STATIC
 target_include_directories(merak-context-dsl PUBLIC include)
 target_link_libraries(merak-context-dsl PUBLIC
     merak-worldbuilding
+    merak-kg-formatters
     nlohmann_json::nlohmann_json
 )

@@ -25,6 +25,7 @@ target_link_libraries(merak-tools PUBLIC
     merak-core
     merak-mcp
     merak-loop
+    merak-storage
     nlohmann_json::nlohmann_json
     spdlog::spdlog
     httplib::httplib

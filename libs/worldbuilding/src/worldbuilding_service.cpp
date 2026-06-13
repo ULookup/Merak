@@ -3,6 +3,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -412,6 +413,45 @@ void WorldbuildingService::sync_entity_to_kg(const merak::kg::GraphEntity& entit
         return;
     }
     kg_provider_->upsert_entity(entity);
+}
+
+std::string WorldbuildingService::build_world_context(const std::string& world_id) const {
+    std::ostringstream ctx;
+    auto world = worlds_.get_world(world_id);
+    if (!world) return "";
+
+    ctx << "世界: " << world->name << "\n";
+    if (!world->description.empty()) {
+        ctx << "描述: " << world->description << "\n";
+    }
+
+    auto knowledge = worlds_.get_world_knowledge(world_id, "");
+    if (!knowledge.empty()) {
+        ctx << "\n世界观知识:\n";
+        for (const auto& wk : knowledge) {
+            ctx << "- [" << wk.category << "] " << wk.content << "\n";
+        }
+    }
+
+    auto agents = worlds_.list_agents(world_id);
+    if (!agents.empty()) {
+        ctx << "\n角色:\n";
+        for (const auto& a : agents) {
+            ctx << "- " << a.name << " (" << to_string(a.kind) << ")\n";
+        }
+    }
+
+    auto locations = worlds_.list_locations(world_id);
+    if (!locations.empty()) {
+        ctx << "\n地点:\n";
+        for (const auto& loc : locations) {
+            ctx << "- " << loc.name;
+            if (!loc.region.empty()) ctx << " [" << loc.region << "]";
+            ctx << "\n";
+        }
+    }
+
+    return ctx.str();
 }
 
 } // namespace merak::worldbuilding

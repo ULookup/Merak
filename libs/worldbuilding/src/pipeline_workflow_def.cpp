@@ -12,6 +12,7 @@ void from_json(const nlohmann::json& j, ConditionDef& c) {
     if (j.contains("target_str")) c.target_str = j.at("target_str").get<std::string>();
     if (j.contains("checks")) c.checks = j.at("checks").get<std::vector<std::string>>();
     c.message = j.value("message", "");
+    if (j.contains("params")) c.params = j.at("params");
 }
 
 void from_json(const nlohmann::json& j, ConditionGroup& g) {

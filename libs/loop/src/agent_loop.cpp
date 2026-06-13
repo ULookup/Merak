@@ -1,4 +1,5 @@
 #include <merak/agent_loop.hpp>
+#include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <thread>

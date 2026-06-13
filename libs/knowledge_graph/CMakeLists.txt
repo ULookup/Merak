@@ -1,6 +1,15 @@
 find_package(PkgConfig)
 pkg_check_modules(NEO4J_CLIENT IMPORTED_TARGET libneo4j-client)
 
+# ── merak-kg-formatters: always built, no Neo4j dependency ──────────────
+add_library(merak-kg-formatters STATIC
+    src/kg_formatters.cpp
+)
+target_include_directories(merak-kg-formatters PUBLIC include)
+target_link_libraries(merak-kg-formatters PUBLIC
+    nlohmann_json::nlohmann_json
+)
+
 if(NOT NEO4J_CLIENT_FOUND)
   message(WARNING "libneo4j-client not found via pkg-config, trying manual search")
   find_path(NEO4J_CLIENT_INCLUDE_DIR neo4j-client.h)
@@ -26,6 +35,7 @@ target_include_directories(merak-knowledge-graph PUBLIC
     include
 )
 target_link_libraries(merak-knowledge-graph PUBLIC
+    merak-kg-formatters
     neo4j-client::neo4j-client
     nlohmann_json::nlohmann_json
 )

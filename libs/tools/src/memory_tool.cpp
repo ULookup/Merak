@@ -15,7 +15,7 @@ ToolSpec MemoryTool::spec() const {
     s.description = "Memory operations: store, retrieve, forget, feedback, search, profile";
     s.source = "builtin";
     s.category = Category::Mutating;
-    s.parameters_json = R"({
+    s.parameters_json = R"json({
   "type": "object",
   "properties": {
     "action": {
@@ -54,7 +54,7 @@ ToolSpec MemoryTool::spec() const {
     }
   },
   "required": ["action"]
-})";
+})json";
     return s;
 }
 

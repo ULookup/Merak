@@ -40,6 +40,7 @@ struct ConditionDef {
     std::optional<std::string> target_str;          // string target or variable reference ($total_scenes_target)
     std::optional<std::vector<std::string>> checks; // check items for all_checks_passed
     std::string message;                            // user-visible description
+    nlohmann::json params;                          // condition-specific parameters (e.g. min_count, entity_name)
 };
 
 // ─── Condition group ───
@@ -114,6 +115,7 @@ struct ConditionResult {
     std::optional<int> current;
     std::optional<int> target;
     nlohmann::json extra;
+    std::string error;
 };
 
 // ─── Condition evaluation summary ───

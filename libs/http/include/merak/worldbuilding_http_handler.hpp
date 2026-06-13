@@ -1,6 +1,7 @@
 #pragma once
 
 #include <merak/worldbuilding/worldbuilding_service.hpp>
+#include <merak/worldbuilding/pipeline_manager.hpp>
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <merak/storage/image_service.hpp>

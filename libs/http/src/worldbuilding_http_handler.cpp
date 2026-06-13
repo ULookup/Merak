@@ -351,7 +351,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
             worldbuilding::PipelineManager::AdvanceRequest areq;
             areq.world_id = world_id;
             if (body.contains("target_phase")) {
-                areq.target_phase = worldbuilding::creative_phase_from_string(body["target_phase"].get<std::string>());
+                std::string phase_str = body["target_phase"];
+                areq.target_phase = worldbuilding::creative_phase_from_string(phase_str);
             }
             areq.trigger = "manual";
             areq.triggered_by = "user_click";
@@ -879,6 +880,9 @@ void WorldbuildingHttpHandler::handle_scene_end(const httplib::Request& req, htt
         auto wrapup = service_->end_scene(wid, sid, markdown);
         emit_story_update(runtime_, body.value("session_id", ""), wid, "scene", sid);
 
+        auto scene = service_->narrative().get_scene(wid, sid);
+        std::string world_time = scene ? scene->world_time : "";
+
         nlohmann::json pending = nlohmann::json::array();
         for (const auto& agent_id : wrapup.pending_diary_agents) {
             pending.push_back(agent_id);
@@ -892,10 +896,10 @@ void WorldbuildingHttpHandler::handle_scene_end(const httplib::Request& req, htt
             });
         }
 
-        json_response(res, {
+        json_response(res, nlohmann::json{
             {"scene_id", sid},
             {"status", "completed"},
-            {"world_time", scene.world_time},
+            {"world_time", world_time},
             {"relations_updated", wrapup.relations_updated.size()},
             {"foreshadowing_proposed", foreshadowing},
             {"pending_diary_agents", pending},
@@ -1400,14 +1404,14 @@ void WorldbuildingHttpHandler::handle_upload_image(const httplib::Request& req, 
             return;
         }
 
-        auto file = req.get_file_value("file");
+        auto file = req.form.get_file("file");
         if (file.content.empty()) {
             error_response(res, "No file uploaded", 400, "missing_file");
             return;
         }
 
         std::string image_type;
-        auto ft = req.get_file_value("image_type");
+        auto ft = req.form.get_file("image_type");
         if (!ft.content.empty()) {
             image_type = ft.content;
         } else if (req.has_param("image_type")) {
@@ -1428,7 +1432,7 @@ void WorldbuildingHttpHandler::handle_upload_image(const httplib::Request& req, 
 
         auto j = image_json(img);
         j["url"] = "/api/worldbuilding/images/" + img.id;
-        json_response(res, {{"ok", true}, {"image", j}}, 201);
+        json_response(res, nlohmann::json{{"ok", true}, {"image", j}}, 201);
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
@@ -1579,7 +1583,7 @@ void WorldbuildingHttpHandler::handle_complete_chunked(const httplib::Request& r
         auto img = image_service_->complete_chunked(upload_id);
         auto j = image_json(img);
         j["url"] = "/api/worldbuilding/images/" + img.id;
-        json_response(res, {{"ok", true}, {"image", j}}, 201);
+        json_response(res, nlohmann::json{{"ok", true}, {"image", j}}, 201);
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }

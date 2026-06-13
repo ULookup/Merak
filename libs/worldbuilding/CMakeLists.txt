@@ -47,6 +47,7 @@ add_executable(worldbuilding_tests
     tests/test_voice_analyzer.cpp
     tests/test_world_store.cpp
     tests/test_worldbuilding_e2e.cpp
+    tests/support/sqlite_helpers.cpp
 )
 target_link_libraries(worldbuilding_tests PRIVATE
     merak-worldbuilding

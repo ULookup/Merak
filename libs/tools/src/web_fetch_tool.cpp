@@ -74,7 +74,7 @@ static std::pair<bool, std::string> check_url_safe(const std::string& url_str) {
         return {false, "Missing scheme in URL"};
     }
     std::string scheme = url_str.substr(0, scheme_end);
-    std::transform(scheme.begin(), scheme_end, scheme.begin(),
+    std::transform(scheme.begin(), scheme.end(), scheme.begin(),
                    [](unsigned char c) { return std::tolower(c); });
 
     if (scheme != "http" && scheme != "https") {

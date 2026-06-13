@@ -229,7 +229,7 @@ ToolSpec SymbolsTool::spec() const {
     s.description = "Extract function/class/struct signatures from a file using regex analysis";
     s.source = "builtin";
     s.category = Category::ReadOnly;
-    s.parameters_json = R"({
+    s.parameters_json = R"json({
         "type": "object",
         "properties": {
             "file_path": {
@@ -242,7 +242,7 @@ ToolSpec SymbolsTool::spec() const {
             }
         },
         "required": ["file_path"]
-    })";
+    })json";
     return s;
 }
 
