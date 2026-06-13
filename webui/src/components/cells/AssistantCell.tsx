@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react';
+import {
+  Children,
+  isValidElement,
+  useEffect,
+  useState,
+  type ComponentPropsWithoutRef,
+} from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Check, Copy } from 'lucide-react';
 import rehypeHighlight from 'rehype-highlight';
+import remarkGfm from 'remark-gfm';
 import type { StatusLabel } from '../../api/types';
 import styles from './Cells.module.css';
 
@@ -28,6 +35,18 @@ function labelForStatus(status?: StatusLabel) {
   if (status === 'responding') return 'Writing';
   if (status === 'waiting_approval') return 'Waiting for approval';
   return 'Thinking';
+}
+
+function textFromChildren(children: ComponentPropsWithoutRef<'code'>['children']): string {
+  return Children.toArray(children)
+    .map((child) => {
+      if (typeof child === 'string' || typeof child === 'number') return String(child);
+      if (isValidElement<{ children?: ComponentPropsWithoutRef<'code'>['children'] }>(child)) {
+        return textFromChildren(child.props.children);
+      }
+      return '';
+    })
+    .join('');
 }
 
 export default function AssistantCell({
@@ -73,7 +92,68 @@ export default function AssistantCell({
           </div>
         )}
         {hasText ? (
-          <ReactMarkdown rehypePlugins={[rehypeHighlight]}>{text}</ReactMarkdown>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            rehypePlugins={[rehypeHighlight]}
+            components={{
+              a({ children, ...props }) {
+                return (
+                  <a {...props} target="_blank" rel="noreferrer">
+                    {children}
+                  </a>
+                );
+              },
+              code({ children, className, ...props }) {
+                const match = /language-([\w-]+)/.exec(className ?? '');
+                const language = match?.[1];
+                const codeText = textFromChildren(children);
+                const isBlock = codeText.includes('\n') || Boolean(language);
+
+                if (!isBlock) {
+                  return (
+                    <code className={styles.inlineCode} {...props}>
+                      {children}
+                    </code>
+                  );
+                }
+
+                return (
+                  <code className={className} data-language={language ?? 'text'} {...props}>
+                    {children}
+                  </code>
+                );
+              },
+              pre({ children, ...props }) {
+                let language = 'text';
+                Children.forEach(children, (child) => {
+                  if (isValidElement<{ className?: string; 'data-language'?: string }>(child)) {
+                    language =
+                      child.props['data-language'] ??
+                      /language-([\w-]+)/.exec(child.props.className ?? '')?.[1] ??
+                      language;
+                  }
+                });
+
+                return (
+                  <div className={styles.codeBlock}>
+                    <div className={styles.codeHeader}>
+                      <span>{language}</span>
+                    </div>
+                    <pre {...props}>{children}</pre>
+                  </div>
+                );
+              },
+              table({ children, ...props }) {
+                return (
+                  <div className={styles.tableScroller}>
+                    <table {...props}>{children}</table>
+                  </div>
+                );
+              },
+            }}
+          >
+            {text}
+          </ReactMarkdown>
         ) : (
           <div className={styles.thinkingBody}>
             <span />

@@ -1,14 +1,15 @@
 .container {
-  padding: 10px 14px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border, #333);
 }
 
 .title {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.04em;
   color: var(--muted, #888);
   margin-bottom: 10px;
+  font-weight: 740;
 }
 
 .phases {
@@ -21,11 +22,14 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
+  padding: 7px 8px;
+  border-radius: 7px;
   font-size: 13px;
   color: var(--muted, #666);
-  transition: background 150ms ease;
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .phase:hover {
@@ -33,12 +37,13 @@
 }
 
 .current {
-  color: var(--teal, #4fc3f7);
-  background: var(--hover, rgba(79, 195, 247, 0.08));
+  color: var(--ink, #171717);
+  background: var(--surface, #fff);
+  box-shadow: inset 2px 0 0 var(--ink, #171717);
 }
 
 .done {
-  color: var(--teal-soft, #4a8);
+  color: var(--ink-soft, #333);
 }
 
 .dot {
@@ -93,9 +98,10 @@
 .badge {
   margin-left: auto;
   font-size: 10px;
-  background: var(--badge-bg, #2a2a3a);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #dce2e7);
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: 999px;
   color: var(--muted, #888);
 }
 
@@ -108,18 +114,19 @@
 
 .badgeAuto {
   font-size: 10px;
-  background: rgba(79, 195, 247, 0.15);
-  color: var(--teal, #4fc3f7);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e0dfdc);
+  color: var(--ink, #171717);
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: 999px;
 }
 
 .badgeManual {
   font-size: 10px;
-  background: rgba(255, 183, 77, 0.15);
-  color: #ffb74d;
+  background: var(--amber-soft, #fff4d6);
+  color: var(--amber, #a35c00);
   padding: 1px 6px;
-  border-radius: 8px;
+  border-radius: 999px;
 }
 
 .clickable {
@@ -185,9 +192,9 @@
 
 .confirmDialog {
   background: #fff;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 20px 24px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
   max-width: 360px;
   width: 90%;
 }

@@ -56,7 +56,7 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
   const overview = state.storyOverview;
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className={`${styles.sidebar} ${open ? styles.sidebarOpen : ''}`}>
       {open && <div className={styles.overlay} onClick={onClose} />}
       <button className={styles.closeBtn} onClick={onClose} aria-label="Close sidebar">
         <X size={16} aria-hidden="true" strokeWidth={2.4} />
