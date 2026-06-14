@@ -71,8 +71,8 @@ TEST_F(PipelineManagerTest, AdvancePhase_AlreadyAtPhase_ReturnsAlreadyAtPhase) {
     setup_world(mgr, "test-world");
     captured_events_.clear();
 
-    // State should be at Worldbuilding (initial phase)
-    PipelineManager::AdvanceRequest req{"test-world", CreativePhase::Worldbuilding,
+    // State should be at DirectionSelection (initial phase)
+    PipelineManager::AdvanceRequest req{"test-world", CreativePhase::DirectionSelection,
                                         "test", std::nullopt, false, false};
     auto result = mgr.advance_phase(req);
     EXPECT_EQ(result, PipelineManager::AdvanceResult::ALREADY_AT_PHASE);
@@ -87,9 +87,9 @@ TEST_F(PipelineManagerTest, AdvancePhase_InvalidTransition_ReturnsInvalidTransit
     setup_world(mgr, "test-world");
     captured_events_.clear();
 
-    // From Worldbuilding, PlotArchitecture is neither a forward transition
-    // nor in Worldbuilding's allowed_retreat
-    PipelineManager::AdvanceRequest req{"test-world", CreativePhase::PlotArchitecture,
+    // From DirectionSelection, only Worldbuilding is a valid forward transition;
+    // CharacterCreation is not in DirectionSelection's allowed_next_phases
+    PipelineManager::AdvanceRequest req{"test-world", CreativePhase::CharacterCreation,
                                         "test", std::nullopt, false, false};
     auto result = mgr.advance_phase(req);
     EXPECT_EQ(result, PipelineManager::AdvanceResult::INVALID_TRANSITION);
@@ -104,7 +104,16 @@ TEST_F(PipelineManagerTest, AdvancePhase_Force_SkipsConditionCheck) {
     setup_world(mgr, "test-world");
     captured_events_.clear();
 
-    // With force=true, conditions are skipped; advance from Worldbuilding to CharacterCreation
+    // With force=true, conditions are skipped.
+    // First force-advance from DirectionSelection to Worldbuilding
+    {
+        PipelineManager::AdvanceRequest req1{"test-world", CreativePhase::Worldbuilding,
+                                            "test", std::nullopt, true, false};
+        auto result1 = mgr.advance_phase(req1);
+        ASSERT_EQ(result1, PipelineManager::AdvanceResult::SUCCESS);
+    }
+
+    // Then force-advance from Worldbuilding to CharacterCreation
     PipelineManager::AdvanceRequest req{"test-world", CreativePhase::CharacterCreation,
                                         "test", std::nullopt, true, false};
     auto result = mgr.advance_phase(req);
@@ -123,7 +132,12 @@ TEST_F(PipelineManagerTest, AdvancePhase_Retreat_Allowed) {
     PipelineManager mgr(deps);
     setup_world(mgr, "test-world");
 
-    // First, force-advance to CharacterCreation
+    // First, force-advance to Worldbuilding, then to CharacterCreation
+    {
+        PipelineManager::AdvanceRequest req1{"test-world", CreativePhase::Worldbuilding,
+                                            "test", std::nullopt, true, false};
+        ASSERT_EQ(mgr.advance_phase(req1), PipelineManager::AdvanceResult::SUCCESS);
+    }
     PipelineManager::AdvanceRequest forward_req{"test-world", CreativePhase::CharacterCreation,
                                                  "test", std::nullopt, true, false};
     auto result1 = mgr.advance_phase(forward_req);
@@ -150,8 +164,8 @@ TEST_F(PipelineManagerTest, AdvancePhase_Retreat_NotAllowed) {
     PipelineManager mgr(deps);
     setup_world(mgr, "test-world");
 
-    // From Worldbuilding, try to retreat to Reflection — not in allowed_next_phases
-    // and Worldbuilding has no allowed_retreat in the workflow
+    // From DirectionSelection, try to retreat to Reflection — not in allowed_next_phases
+    // and DirectionSelection has no allowed_retreat in the workflow
     PipelineManager::AdvanceRequest req{"test-world", CreativePhase::Reflection,
                                         "test", std::nullopt, true, false};
     auto result = mgr.advance_phase(req);
@@ -166,7 +180,8 @@ TEST_F(PipelineManagerTest, AdvancePhase_Success_EmitsSSE) {
     setup_world(mgr, "test-world");
     captured_events_.clear();
 
-    PipelineManager::AdvanceRequest req{"test-world", CreativePhase::CharacterCreation,
+    // Force-advance from DirectionSelection to Worldbuilding (valid forward transition)
+    PipelineManager::AdvanceRequest req{"test-world", CreativePhase::Worldbuilding,
                                         "test", std::nullopt, true, false};
     auto result = mgr.advance_phase(req);
     EXPECT_EQ(result, PipelineManager::AdvanceResult::SUCCESS);
@@ -177,7 +192,7 @@ TEST_F(PipelineManagerTest, AdvancePhase_Success_EmitsSSE) {
         if (ev.type == "pipeline_phase_changed") {
             found = true;
             EXPECT_EQ(ev.payload.value("world_id", ""), "test-world");
-            EXPECT_EQ(ev.payload.value("phase", ""), "character_creation");
+            EXPECT_EQ(ev.payload.value("phase", ""), "worldbuilding");
             EXPECT_EQ(ev.payload.value("trigger", ""), "test");
             break;
         }
@@ -383,7 +398,7 @@ TEST_F(PipelineManagerTest, GetViewData_ReturnsState) {
 
     auto view = mgr.get_view_data("test-world");
     EXPECT_EQ(view.state.world_id, "test-world");
-    EXPECT_EQ(view.state.current_phase, CreativePhase::Worldbuilding);
+    EXPECT_EQ(view.state.current_phase, CreativePhase::DirectionSelection);
     EXPECT_EQ(view.active_workflow_name, "default_creative_pipeline");
     // history is populated from DB (may be empty for fresh world)
     EXPECT_GE(view.recent_history.size(), 0);

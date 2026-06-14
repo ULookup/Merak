@@ -5,6 +5,8 @@ namespace merak::worldbuilding {
 
 std::vector<CreativePhase> allowed_next_phases(CreativePhase current) {
     switch (current) {
+        case CreativePhase::DirectionSelection:
+            return {CreativePhase::Worldbuilding};
         case CreativePhase::Worldbuilding:
             return {CreativePhase::CharacterCreation};
         case CreativePhase::CharacterCreation:
@@ -21,6 +23,19 @@ std::vector<CreativePhase> allowed_next_phases(CreativePhase current) {
 
 std::string generate_phase_context(const PipelineState& state) {
     switch (state.current_phase) {
+        case CreativePhase::DirectionSelection: {
+            return R"(## 创作阶段：方向选择
+当前状态：正在引导用户确定创作方向
+
+### 目标
+- 了解用户想要创作的题材和类型
+- 确认创作方向和风格偏好
+- 为后续世界观构建奠定基础
+
+### 推荐下一步
+方向确定后，进入世界观构建阶段。
+)";
+        }
         case CreativePhase::Worldbuilding: {
             return R"(## 创作阶段：世界观构建
 当前状态：正在构建世界基础设定
