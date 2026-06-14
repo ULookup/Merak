@@ -23,6 +23,7 @@ import PipelineNavigator from './Sidebar/PipelineNavigator';
 import WorkflowMonitor from './Sidebar/WorkflowMonitor';
 import SessionList from './Sidebar/SessionList';
 import SettingsPanel from './Sidebar/SettingsPanel';
+import PreferencesPanel from './SettingsPanel';
 import WorldSelector from './Sidebar/WorldSelector';
 import type { WorldAgent } from '../api/types';
 import styles from './WorldSidebar.module.css';
@@ -167,7 +168,12 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
         <Settings size={15} aria-hidden="true" strokeWidth={2.3} />
         Settings
       </div>
-      {settingsOpen && <SettingsPanel />}
+      {settingsOpen && (
+        <>
+          <SettingsPanel />
+          <PreferencesPanel />
+        </>
+      )}
     </aside>
   );
 }

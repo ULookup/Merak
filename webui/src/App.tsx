@@ -28,6 +28,16 @@ function AppInner() {
   // Bootstrap: load metadata, worlds, sessions, capabilities once
   useEffect(() => {
     async function bootstrap() {
+      // Check if LLM is configured — if not, show setup wizard
+      try {
+        const config = await api.getConfig();
+        if (!config.api_key_masked) {
+          dispatch({ type: 'SHOW_SETUP_WIZARD', show: true });
+        }
+      } catch {
+        dispatch({ type: 'SHOW_SETUP_WIZARD', show: true });
+      }
+
       const [metadataRes, worldsRes, sessionsRes, capabilitiesRes] = await Promise.allSettled([
         api.metadata(),
         api.listWorlds(),
@@ -228,7 +238,9 @@ function AppInner() {
           chapterTitle={state.chapterReview.title}
           onNewChapter={() => {
             dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
-            // TODO: wire to actual new-chapter action
+            if (state.sessionId) {
+              api.startRun(state.sessionId, '开始写下一章', state.selectedModel).catch(() => {});
+            }
           }}
           onRevise={() => {
             dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
