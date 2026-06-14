@@ -1,10 +1,17 @@
 import { useState } from 'react';
+import { CircleHelp } from 'lucide-react';
 import { api } from '../api/client';
 import { useAppState } from '../AppState';
+import { LanguageToggle, useI18n } from '../i18n';
 import styles from './WorldOnboarding.module.css';
 
-export default function WorldOnboarding() {
+interface WorldOnboardingProps {
+  onOpenGuide?: () => void;
+}
+
+export default function WorldOnboarding({ onOpenGuide }: WorldOnboardingProps) {
   const { state, dispatch } = useAppState();
+  const { t } = useI18n();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [creating, setCreating] = useState(false);
@@ -15,7 +22,7 @@ export default function WorldOnboarding() {
 
   async function handleCreate() {
     if (!name.trim()) {
-      setError('World name is required.');
+      setError(t('onboarding.nameRequired'));
       return;
     }
     setCreating(true);
@@ -26,7 +33,6 @@ export default function WorldOnboarding() {
       const worldId = world.world_id;
       if (!worldId) throw new Error('Failed to get world ID from response');
 
-      // Optionally create first character
       if (characterName.trim()) {
         try {
           await api.createAgent(worldId, {
@@ -34,13 +40,13 @@ export default function WorldOnboarding() {
             identity: characterIdentity.trim() || 'A character in this world.',
           });
         } catch {
-          // Character creation failed but world exists — continue
+          // Character creation failed but world exists; continue.
         }
       }
 
       dispatch({ type: 'SET_WORLD', worldId });
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to create world.');
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'Failed to create world.');
     } finally {
       setCreating(false);
     }
@@ -55,31 +61,50 @@ export default function WorldOnboarding() {
   return (
     <div className={styles.onboarding}>
       <div className={styles.card}>
-        <h1 className={styles.title}>Merak Creation Workshop</h1>
-        <p className={styles.subtitle}>
-          Create a new world to begin your storytelling journey.
-        </p>
+        <div className={styles.topbar}>
+          <div className={styles.languageToggle}>
+            <LanguageToggle />
+          </div>
+          <button
+            type="button"
+            className={styles.helpBtn}
+            onClick={onOpenGuide}
+            aria-label={t('app.openGuide')}
+            title={t('app.openGuide')}
+          >
+            <CircleHelp size={16} aria-hidden="true" strokeWidth={2.2} />
+          </button>
+        </div>
+
+        <h1 className={styles.title}>{t('onboarding.title')}</h1>
+        <p className={styles.subtitle}>{t('onboarding.subtitle')}</p>
 
         <div className={styles.field}>
-          <label className={styles.label}>World Name *</label>
+          <label className={styles.label} htmlFor="world-name">
+            {t('onboarding.worldName')}
+          </label>
           <input
+            id="world-name"
             className={styles.input}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g., Cyberpunk 2077"
+            placeholder={t('onboarding.worldNamePlaceholder')}
             disabled={creating}
             autoFocus
           />
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Description (optional)</label>
+          <label className={styles.label} htmlFor="world-description">
+            {t('onboarding.description')}
+          </label>
           <textarea
+            id="world-description"
             className={styles.textarea}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="A dark future where megacorporations rule..."
+            placeholder={t('onboarding.descriptionPlaceholder')}
             disabled={creating}
           />
         </div>
@@ -90,30 +115,30 @@ export default function WorldOnboarding() {
             onClick={() => setShowCharacterForm((prev) => !prev)}
             type="button"
           >
-            {showCharacterForm ? '−' : '+'} Create first character
+            {showCharacterForm ? '-' : '+'} {t('onboarding.firstCharacter')}
           </button>
 
           {showCharacterForm && (
             <div className={styles.characterForm}>
               <div className={styles.field}>
-                <label className={styles.label}>Character Name</label>
+                <label className={styles.label}>{t('onboarding.characterName')}</label>
                 <input
                   className={styles.input}
                   type="text"
                   value={characterName}
                   onChange={(e) => setCharacterName(e.target.value)}
-                  placeholder="e.g., John Smith"
+                  placeholder={t('onboarding.characterNamePlaceholder')}
                   disabled={creating}
                 />
               </div>
               <div className={styles.field}>
-                <label className={styles.label}>Identity</label>
+                <label className={styles.label}>{t('onboarding.identity')}</label>
                 <input
                   className={styles.input}
                   type="text"
                   value={characterIdentity}
                   onChange={(e) => setCharacterIdentity(e.target.value)}
-                  placeholder="e.g., Private detective in Night City"
+                  placeholder={t('onboarding.identityPlaceholder')}
                   disabled={creating}
                 />
               </div>
@@ -126,14 +151,14 @@ export default function WorldOnboarding() {
           onClick={handleCreate}
           disabled={creating || !name.trim()}
         >
-          {creating ? 'Creating...' : 'Create World'}
+          {creating ? t('onboarding.creating') : t('onboarding.createWorld')}
         </button>
 
         {error && <div className={styles.error}>{error}</div>}
 
         {existingWorlds.length > 0 && (
           <div className={styles.existingWorlds}>
-            <p className={styles.existingTitle}>Existing Worlds</p>
+            <p className={styles.existingTitle}>{t('onboarding.existingWorlds')}</p>
             {existingWorlds.map((world) => (
               <div
                 key={world.id}

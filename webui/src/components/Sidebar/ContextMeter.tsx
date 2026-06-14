@@ -1,7 +1,9 @@
 import { useAppState } from '../../AppState';
+import { useI18n } from '../../i18n';
 import styles from './ContextMeter.module.css';
 
 export default function ContextMeter() {
+  const { t } = useI18n();
   const { state } = useAppState();
   const model = state.metadata?.models?.find((m) => m.name === state.selectedModel);
   const budget = model?.max_context_tokens ?? 128000;
@@ -10,11 +12,11 @@ export default function ContextMeter() {
 
   return (
     <div className={styles.meter}>
-      Context<span className={styles.pct}>{pct}%</span>
+      {t('sidebar.context')}<span className={styles.pct}>{pct}%</span>
       <div className={styles.bar}>
         <div className={styles.fill} style={{ width: `${pct}%` }} />
       </div>
-      {(used / 1000).toFixed(1)}K / {(budget / 1000).toFixed(0)}K tokens
+      {(used / 1000).toFixed(1)}K / {(budget / 1000).toFixed(0)}K {t('status.contextUnit')}
     </div>
   );
 }

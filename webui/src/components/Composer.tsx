@@ -13,36 +13,37 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { api, formatApiError } from '../api/client';
 import { useAppState } from '../AppState';
+import { useI18n } from '../i18n';
 import styles from './Composer.module.css';
 import { useToast } from './Toast';
 
-const promptModes: Array<{ label: string; Icon: LucideIcon; template: string }> = [
+const promptModes: Array<{ key: string; Icon: LucideIcon; template: string }> = [
   {
-    label: 'Scene',
+    key: 'composer.scene',
     Icon: PenLine,
     template:
       'Draft the next scene.\n\nScene goal:\nCharacters present:\nConflict:\nWorld constraints:\nDesired ending beat:',
   },
   {
-    label: 'Character',
+    key: 'composer.character',
     Icon: Feather,
     template:
       'Develop a character voice card.\n\nName:\nRole in story:\nCore desire:\nDeep fear:\nSpeech pattern:\nKnowledge boundary:',
   },
   {
-    label: 'World Rule',
+    key: 'composer.worldRule',
     Icon: Globe2,
     template:
       'Add or refine a world rule.\n\nRule:\nWhy it matters:\nWho knows it:\nExceptions:\nScenes affected:',
   },
   {
-    label: 'Outline',
+    key: 'composer.outline',
     Icon: BookOpen,
     template:
       'Outline the next chapter.\n\nChapter purpose:\nOpening state:\nMajor turns:\nForeshadowing to plant/pay:\nClosing hook:',
   },
   {
-    label: 'Rewrite',
+    key: 'composer.rewrite',
     Icon: WandSparkles,
     template:
       'Rewrite the selected draft.\n\nKeep:\nChange:\nTone:\nContinuity constraints:\nTarget length:',
@@ -51,19 +52,20 @@ const promptModes: Array<{ label: string; Icon: LucideIcon; template: string }> 
 
 export default function Composer() {
   const { state, dispatch } = useAppState();
+  const { t } = useI18n();
   const { showToast } = useToast();
 
   const currentAgent = state.agents.find((a) => a.id === state.agentId);
 
   const placeholder = (() => {
-    if (!currentAgent) return 'Send a message...';
+    if (!currentAgent) return t('composer.placeholder');
     const kind = currentAgent.kind;
-    if (kind === 'god' || kind === '0') return 'Send instructions as God...';
+    if (kind === 'god' || kind === '0') return t('composer.placeholderGod');
     if (kind === 'individual' || kind === 'group' || kind === '5' || kind === '6')
-      return `Speak as ${currentAgent.display_name || currentAgent.name}...`;
+      return t('composer.placeholderCharacter');
     if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4')))
-      return `Query as ${currentAgent.display_name || currentAgent.name}...`;
-    return 'Send a message...';
+      return t('composer.placeholderManager');
+    return t('composer.placeholder');
   })();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -181,7 +183,7 @@ export default function Composer() {
             disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
           >
             <Send size={13} aria-hidden="true" strokeWidth={2.3} />
-            Single
+            {t('composer.single')}
           </button>
           <button
             type="button"
@@ -190,20 +192,20 @@ export default function Composer() {
             disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
           >
             <UsersRound size={13} aria-hidden="true" strokeWidth={2.3} />
-            Delegate
+            {t('composer.delegate')}
           </button>
         </div>
-        {promptModes.map(({ label, Icon, template }) => (
+        {promptModes.map(({ key, Icon, template }) => (
           <button
-            key={label}
+            key={key}
             type="button"
             className={styles.modeBtn}
             onClick={() => insertMode(template)}
             disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
-            title={`Insert ${label} prompt`}
+            title={t(key)}
           >
             <Icon size={14} aria-hidden="true" strokeWidth={2.3} />
-            {label}
+            {t(key)}
           </button>
         ))}
       </div>
@@ -275,7 +277,7 @@ export default function Composer() {
             aria-label="Cancel run"
           >
             <Square size={14} aria-hidden="true" strokeWidth={2.4} />
-            Cancel
+            {t('composer.cancel')}
           </button>
         ) : (
           <button
@@ -286,13 +288,11 @@ export default function Composer() {
             aria-label="Send message"
           >
             <Send size={14} aria-hidden="true" strokeWidth={2.4} />
-            {runMode === 'delegate' ? 'Start Delegate' : 'Send'}
+            {runMode === 'delegate' ? t('composer.startDelegate') : t('composer.send')}
           </button>
         )}
       </div>
-      <div className={styles.hint}>
-        Enter &middot; send &nbsp;|&nbsp; Shift+Enter &middot; newline
-      </div>
+      <div className={styles.hint}>{t('composer.hint')}</div>
     </div>
   );
 }

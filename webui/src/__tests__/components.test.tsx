@@ -12,10 +12,13 @@ import ToolCell from '../components/cells/ToolCell';
 import UserCell from '../components/cells/UserCell';
 import ChatTimeline from '../components/ChatTimeline';
 import InspectorPanel from '../components/InspectorPanel';
+import RunInspector from '../components/Inspector/RunInspector';
 import MainPanel from '../components/MainPanel';
 import SessionList from '../components/Sidebar/SessionList';
 import WorldSelector from '../components/Sidebar/WorldSelector';
 import { ToastProvider } from '../components/Toast';
+import { I18nProvider } from '../i18n';
+import ConnectionBanner from '../components/ConnectionBanner';
 
 function TimelineHarness() {
   const { dispatch } = useAppState();
@@ -52,6 +55,30 @@ function StreamingMarkdownHarness() {
   }, [dispatch]);
 
   return <ChatTimeline />;
+}
+
+function RunInspectorHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({
+      type: 'SET_METADATA',
+      metadata: {
+        provider: 'anthropic',
+        model: 'claude-sonnet-4-6',
+        models: [{ name: 'claude-sonnet-4-6', provider: 'anthropic', max_context_tokens: 200000 }],
+        permission_mode: 'default',
+        memory: { enabled: true },
+        tools: [],
+        mcp_servers: [],
+        agents: [],
+        delegation_patterns: [],
+      },
+    });
+    dispatch({ type: 'SET_USAGE', inputTokens: 1200, outputTokens: 80 });
+  }, [dispatch]);
+
+  return <RunInspector />;
 }
 
 function SessionIconHarness() {
@@ -123,15 +150,59 @@ describe('Cell components', () => {
 
   it('ChatTimeline shows live agent status outside the message stream', async () => {
     render(
-      <AppStateProvider>
-        <TimelineHarness />
-      </AppStateProvider>,
+      <I18nProvider defaultLocale="en">
+        <AppStateProvider>
+          <TimelineHarness />
+        </AppStateProvider>
+      </I18nProvider>,
     );
 
     expect(await screen.findAllByText('Thinking')).toHaveLength(2);
-    expect(screen.getByText('SSE connected')).toBeDefined();
+    expect(screen.getByText('Connected')).toBeDefined();
     expect(screen.getByText('claude-sonnet-4-6')).toBeDefined();
-    expect(screen.getByText('1.3K tokens')).toBeDefined();
+    expect(screen.getByText('1.3K words of context')).toBeDefined();
+    expect(screen.queryByText(/SSE|runtime/i)).toBeNull();
+  });
+
+  it('ConnectionBanner uses plain language for interrupted local service states', () => {
+    render(
+      <I18nProvider defaultLocale="en">
+        <ConnectionBanner state="disconnected" />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Merak cannot connect right now.');
+    expect(screen.queryByText(/server|runtime|SSE|API/i)).toBeNull();
+  });
+
+  it('ChatTimeline empty state avoids technical transport language', () => {
+    render(
+      <I18nProvider defaultLocale="en">
+        <AppStateProvider>
+          <ChatTimeline />
+        </AppStateProvider>
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Build the next scene' })).toBeDefined();
+    expect(screen.queryByText(/SSE|Markdown|tools|delegation/i)).toBeNull();
+  });
+
+  it('RunInspector presents creation progress without developer terminology', async () => {
+    render(
+      <I18nProvider defaultLocale="en">
+        <AppStateProvider>
+          <RunInspectorHarness />
+        </AppStateProvider>
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByText('Current Creation')).toBeDefined();
+    expect(screen.getByText('No creation is running')).toBeDefined();
+    expect(screen.getByText(/words of context/)).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(
+      /Current Run|Runtime Signals|Available Tools|Context Health|Run Timeline|No active run|tools/i,
+    );
   });
 
   it('ChatTimeline renders streamed assistant markdown', async () => {

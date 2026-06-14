@@ -1,7 +1,7 @@
 import { AlertTriangle, BookOpen, Clock3, Flag, GitBranch, KeyRound, Plus, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
-import type { DiaryEntry, WorldDetail } from '../../api/types';
+import type { DiaryEntry, StoryScene, WorldDetail } from '../../api/types';
 import { useAppState } from '../../AppState';
 import styles from '../InspectorPanel.module.css';
 import CreateForeshadowingModal from './CreateForeshadowingModal';
@@ -18,6 +18,12 @@ const MOOD_COLORS: Record<string, { bg: string; fg: string }> = {
   '困惑': { bg: '#fef9c3', fg: '#854d0e' },
   '决心': { bg: '#ccfbf1', fg: '#115e59' },
   '平静': { bg: '#f3f4f6', fg: '#374151' },
+};
+
+type SceneWithNarrative = StoryScene & {
+  narrative?: string;
+  text?: string;
+  content?: string;
 };
 
 function moodStyle(mood: string): React.CSSProperties {
@@ -75,7 +81,7 @@ export default function StoryInspector() {
   // Find the first writing/draft scene
   const activeScene = (() => {
     if (overview?.current_scene?.status === 'writing' || overview?.current_scene?.status === 'draft') {
-      return overview.current_scene;
+      return overview.current_scene as SceneWithNarrative;
     }
     return null;
   })();
@@ -213,7 +219,7 @@ export default function StoryInspector() {
         <section className={styles.section}>
           <div className={styles.sectionTitle}>Scene Narrative</div>
           <div className={styles.narrativeBox}>
-            {(activeScene as any).narrative || (activeScene as any).text || (activeScene as any).content || 'No narrative content yet.'}
+            {activeScene.narrative || activeScene.text || activeScene.content || 'No narrative content yet.'}
           </div>
           {participantAgents.length > 0 && (
             <>

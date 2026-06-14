@@ -33,9 +33,9 @@
     "targets": ["msi", "nsis"],
     "resources": ["../resources"],
     "publisher": "ULookup",
-    "copyright": "Copyright © 2026 ULookup",
+    "copyright": "Copyright (c) 2026 ULookup",
     "category": "Productivity",
-    "shortDescription": "Merak narrative agent workbench",
-    "longDescription": "Merak is a narrative workbench for worldbuilding, agent sessions, story context, generated files, and run monitoring."
+    "shortDescription": "Merak novel and worldbuilding agent",
+    "longDescription": "Merak helps authors create worlds, characters, scenes, and polished novel drafts through a desktop GodAgent writing workspace."
   }
 }

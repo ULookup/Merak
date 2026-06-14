@@ -1,15 +1,17 @@
 import { Plug, Wrench } from 'lucide-react';
 import { useAppState } from '../../AppState';
+import { useI18n } from '../../i18n';
 import styles from '../Sidebar.module.css';
 import tpStyles from './ToolPanel.module.css';
 
 export default function ToolPanel() {
+  const { t } = useI18n();
   const { state } = useAppState();
   const tools = state.metadata?.tools ?? [];
 
   return (
     <div className={styles.section}>
-      <div className={styles.label}>Tools ({tools.length})</div>
+      <div className={styles.label}>{t('sidebar.abilities').replace('{count}', String(tools.length))}</div>
       <div className={tpStyles.panel}>
         {tools.map((t) => (
           <div key={t.name} className={tpStyles.row} data-testid="tool-row">

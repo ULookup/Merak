@@ -4,6 +4,7 @@ import styles from './App.module.css';
 import { AppStateProvider, useAppState } from './AppState';
 import ConnectionBanner from './components/ConnectionBanner';
 import ErrorBoundary from './components/ErrorBoundary';
+import HelpDrawer from './components/HelpDrawer';
 import InspectorPanel from './components/InspectorPanel';
 import MainPanel from './components/MainPanel';
 import Skeleton from './components/Skeleton';
@@ -13,11 +14,13 @@ import WorldSidebar from './components/WorldSidebar';
 import { ToastProvider } from './components/Toast';
 import DesktopBoot from './DesktopBoot';
 import { useSSE } from './hooks/useSSE';
+import { I18nProvider } from './i18n';
 
 function AppInner() {
   const { state, dispatch } = useAppState();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [inspectorOpen, setInspectorOpen] = useState(window.innerWidth >= 1180);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
 
   // Bootstrap: load metadata, worlds, sessions, capabilities once
@@ -174,7 +177,8 @@ function AppInner() {
   if (state.appPhase === 'no_world') {
     return (
       <ToastProvider>
-        <WorldOnboarding />
+        <WorldOnboarding onOpenGuide={() => setGuideOpen(true)} />
+        <HelpDrawer open={guideOpen} onClose={() => setGuideOpen(false)} />
       </ToastProvider>
     );
   }
@@ -200,6 +204,7 @@ function AppInner() {
             <MainPanel
               onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
               onToggleInspector={() => setInspectorOpen((prev) => !prev)}
+              onOpenGuide={() => setGuideOpen(true)}
               sidebarOpen={sidebarOpen}
               inspectorOpen={inspectorOpen}
               connectionState={connState}
@@ -209,6 +214,7 @@ function AppInner() {
         <ErrorBoundary>
           <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
         </ErrorBoundary>
+        <HelpDrawer open={guideOpen} onClose={() => setGuideOpen(false)} />
       </div>
     </ToastProvider>
   );
@@ -217,9 +223,11 @@ function AppInner() {
 export default function App() {
   return (
     <DesktopBoot>
-      <AppStateProvider>
-        <AppInner />
-      </AppStateProvider>
+      <I18nProvider>
+        <AppStateProvider>
+          <AppInner />
+        </AppStateProvider>
+      </I18nProvider>
     </DesktopBoot>
   );
 }

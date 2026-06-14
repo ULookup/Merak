@@ -48,6 +48,37 @@
   display: block;
 }
 
+.languageToggle button {
+  height: 32px;
+  min-width: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 740;
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+
+.languageToggle button:hover {
+  background: var(--surface-muted);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.languageToggle svg {
+  width: 15px;
+  height: 15px;
+}
+
 .title {
   color: var(--ink);
   font-weight: 780;
@@ -133,7 +164,8 @@
   }
 
   .subtitle,
-  .liveChip {
+  .liveChip,
+  .languageToggle {
     display: none;
   }
 

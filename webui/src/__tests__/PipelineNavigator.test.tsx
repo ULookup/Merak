@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { useEffect, useRef } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -11,7 +10,7 @@ vi.mock('../api/client', () => ({
 }));
 
 import PipelineNavigator from '../components/Sidebar/PipelineNavigator';
-import { advancePipeline, getPipelineState } from '../api/client';
+import { advancePipeline } from '../api/client';
 
 const EMPTY_ARR: string[] = [];
 const NEXT_CHAR_CREATION: CreativePhase[] = ['character_creation'];

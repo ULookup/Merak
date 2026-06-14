@@ -28,6 +28,9 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Cache npm
         uses: actions/cache@v4
         with:
@@ -36,9 +39,12 @@ jobs:
           restore-keys: ${{ runner.os }}-npm-
 
       - name: Configure CMake
+        shell: bash
         run: |
           conan install . --build=missing -s build_type=Release
-          cmake -B build -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+          TOOLCHAIN="$(find build -name conan_toolchain.cmake | head -n 1)"
+          test -n "$TOOLCHAIN"
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DCMAKE_BUILD_TYPE=Release
 
       - name: Build C++
         run: cmake --build build -j
@@ -96,6 +102,9 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Cache npm
         uses: actions/cache@v4
         with:
@@ -104,9 +113,12 @@ jobs:
           restore-keys: ${{ runner.os }}-npm-
 
       - name: Configure CMake
+        shell: bash
         run: |
           conan install . --build=missing -s build_type=Release
-          cmake -B build -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release
+          TOOLCHAIN="$(find build -name conan_toolchain.cmake | head -n 1)"
+          test -n "$TOOLCHAIN"
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" -DCMAKE_BUILD_TYPE=Release
 
       - name: Build C++
         run: cmake --build build --config Release -j

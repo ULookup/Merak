@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useAppState, type InspectorTab } from '../AppState';
+import { useI18n } from '../i18n';
 import AgentsInspector from './Inspector/AgentsInspector';
 import CreationDashboard from './Inspector/CreationDashboard';
 import FilesInspector from './Inspector/FilesInspector';
@@ -12,31 +13,33 @@ interface InspectorPanelProps {
   onClose?: () => void;
 }
 
-const tabs: Array<{ id: InspectorTab; label: string }> = [
-  { id: 'story', label: 'Story' },
-  { id: 'files', label: 'Files' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'creation', label: 'Create' },
-  { id: 'run', label: 'Run' },
+const tabs: Array<{ id: InspectorTab; labelKey: string }> = [
+  { id: 'story', labelKey: 'inspector.story' },
+  { id: 'files', labelKey: 'inspector.files' },
+  { id: 'agents', labelKey: 'inspector.agents' },
+  { id: 'creation', labelKey: 'inspector.creation' },
+  { id: 'run', labelKey: 'inspector.run' },
 ];
 
 function EmptyState({ tab }: { tab: InspectorTab }) {
-  if (tab === 'story') return <div className={styles.empty}>Select a world to load story context.</div>;
+  const { t } = useI18n();
+  if (tab === 'story') return <div className={styles.empty}>{t('inspector.emptyStory')}</div>;
   if (tab === 'agents')
     return <div className={styles.empty}>Select a world to see agent voices.</div>;
   return null;
 }
 
-function titleForTab(tab: InspectorTab) {
-  if (tab === 'files') return 'Output Files';
-  if (tab === 'agents') return 'Agent Voices';
-  if (tab === 'creation') return 'Creation Dashboard';
-  if (tab === 'run') return 'Run Monitor';
-  return 'Story Context';
+function titleKeyForTab(tab: InspectorTab) {
+  if (tab === 'files') return 'inspector.filesTitle';
+  if (tab === 'agents') return 'inspector.agentsTitle';
+  if (tab === 'creation') return 'inspector.creationTitle';
+  if (tab === 'run') return 'inspector.runTitle';
+  return 'inspector.storyTitle';
 }
 
 export default function InspectorPanel({ open = true, onClose }: InspectorPanelProps) {
   const { state, dispatch } = useAppState();
+  const { t } = useI18n();
 
   return (
     <aside
@@ -48,8 +51,8 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
       <div className={styles.surface}>
         <header className={styles.header}>
           <div>
-            <div className={styles.kicker}>Inspector</div>
-            <h2>{titleForTab(state.inspectorTab)}</h2>
+            <div className={styles.kicker}>{t('inspector.kicker')}</div>
+            <h2>{t(titleKeyForTab(state.inspectorTab))}</h2>
           </div>
           <button className={styles.closeBtn} onClick={onClose} aria-label="Close inspector">
             <X size={16} aria-hidden="true" strokeWidth={2.4} />
@@ -65,7 +68,7 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
               role="tab"
               aria-selected={state.inspectorTab === tab.id}
             >
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           ))}
         </div>

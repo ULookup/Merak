@@ -24,7 +24,6 @@ import WorkflowMonitor from './Sidebar/WorkflowMonitor';
 import SessionList from './Sidebar/SessionList';
 import SettingsPanel from './Sidebar/SettingsPanel';
 import WorldSelector from './Sidebar/WorldSelector';
-import type { WorldAgent } from '../api/types';
 import styles from './WorldSidebar.module.css';
 
 interface WorldSidebarProps {
@@ -127,8 +126,16 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
                   sessionId: res.session.id,
                   agentId: agent.id,
                 });
-              } catch (e) {
-                console.error('Failed to switch agent session:', e);
+              } catch {
+                dispatch({
+                  type: 'APPEND_MESSAGE',
+                  message: {
+                    id: `agent_switch_error_${Date.now()}`,
+                    kind: 'system',
+                    text: 'Agent session could not be opened.',
+                    error: true,
+                  },
+                });
               }
             }
             return (

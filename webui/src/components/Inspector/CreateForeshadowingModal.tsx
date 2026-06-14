@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Lightbulb, Loader2, Tag, X } from 'lucide-react';
+import { Eye, Lightbulb, Loader2, Tag, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';

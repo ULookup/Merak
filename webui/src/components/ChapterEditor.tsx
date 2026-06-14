@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
-import type { StoryChapter, StoryScene } from '../api/types';
 import { useAppState } from '../AppState';
 import styles from './ChapterEditor.module.css';
 

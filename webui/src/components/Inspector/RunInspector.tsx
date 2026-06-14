@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Activity, AlertTriangle, Brain, Clock3, FileText, Wrench } from 'lucide-react';
 import { useAppState } from '../../AppState';
+import { useI18n } from '../../i18n';
 import RunReplay from '../Replay/RunReplay';
 import AuditDashboard from '../Replay/AuditDashboard';
 import styles from '../InspectorPanel.module.css';
@@ -16,6 +17,7 @@ function timeLabel(value: number) {
 }
 
 export default function RunInspector() {
+  const { t } = useI18n();
   const { state } = useAppState();
   const [subTab, setSubTab] = useState<RunTab>('live');
   const used = state.usage.inputTokens + state.usage.outputTokens;
@@ -24,9 +26,9 @@ export default function RunInspector() {
   const pct = Math.min(100, Math.round((used / budget) * 100));
 
   const subTabs: Array<{ id: RunTab; label: string }> = [
-    { id: 'live', label: 'Live' },
-    { id: 'replay', label: 'Replay' },
-    { id: 'audit', label: 'Audit' },
+    { id: 'live', label: t('run.tab.live') },
+    { id: 'replay', label: t('run.tab.replay') },
+    { id: 'audit', label: t('run.tab.audit') },
   ];
 
   return (
@@ -50,38 +52,40 @@ export default function RunInspector() {
               <Activity size={14} aria-hidden="true" strokeWidth={2.4} />
             </span>
             <div>
-              <div className={styles.sectionTitle}>Current Run</div>
-              <strong>{state.status.replace(/_/g, ' ')}</strong>
-              <p>{state.currentRun ?? 'No active run'}</p>
+              <div className={styles.sectionTitle}>{t('run.current')}</div>
+              <strong>{t(`status.${state.status}.title`)}</strong>
+              <p>{state.currentRun ? t('run.active') : t('run.none')}</p>
             </div>
           </section>
 
           <section className={styles.section}>
-            <div className={styles.sectionTitle}>Runtime Signals</div>
+            <div className={styles.sectionTitle}>{t('run.signals')}</div>
             <div className={styles.signalGrid}>
               <span>
                 <Brain size={14} aria-hidden="true" />
-                {state.selectedModel || state.metadata?.model || 'Default model'}
+                {state.selectedModel || state.metadata?.model || t('status.defaultAssistant')}
               </span>
               <span>
                 <Wrench size={14} aria-hidden="true" />
-                {(state.metadata?.tools ?? []).length} tools
+                {t('run.abilitiesCount').replace('{count}', String((state.metadata?.tools ?? []).length))}
               </span>
               <span>
                 <FileText size={14} aria-hidden="true" />
-                {state.workspaceFiles.length} files
+                {t('run.draftsCount').replace('{count}', String(state.workspaceFiles.length))}
               </span>
               <span>
                 <Clock3 size={14} aria-hidden="true" />
-                {state.metadata?.delegation_patterns?.join(' / ') || 'single run'}
+                {state.metadata?.delegation_patterns?.length
+                  ? t('run.collaborationReady')
+                  : t('run.singleAssistant')}
               </span>
             </div>
           </section>
 
           <section className={styles.section}>
-            <div className={styles.sectionTitle}>Available Tools</div>
+            <div className={styles.sectionTitle}>{t('run.abilities')}</div>
             {!state.metadata?.tools || state.metadata.tools.length === 0 ? (
-              <p className={styles.muted}>No tools loaded.</p>
+              <p className={styles.muted}>{t('run.noAbilities')}</p>
             ) : (
               <div className={styles.toolList}>
                 {state.metadata.tools.map((tool) => (
@@ -98,19 +102,19 @@ export default function RunInspector() {
           </section>
 
           <section className={styles.section}>
-            <div className={styles.sectionTitle}>Context Health</div>
+            <div className={styles.sectionTitle}>{t('run.context')}</div>
             <div className={styles.meter}>
               <div style={{ width: `${pct}%` }} />
             </div>
             <p className={styles.muted}>
-              {(used / 1000).toFixed(1)}K / {(budget / 1000).toFixed(0)}K tokens
+              {(used / 1000).toFixed(1)}K / {(budget / 1000).toFixed(0)}K {t('status.contextUnit')}
             </p>
           </section>
 
           <section className={styles.section}>
-            <div className={styles.sectionTitle}>Run Timeline</div>
+            <div className={styles.sectionTitle}>{t('run.timeline')}</div>
             {state.runTimeline.length === 0 ? (
-              <p className={styles.muted}>Run steps, tool calls, approvals, and file events will land here.</p>
+              <p className={styles.muted}>{t('run.emptyTimeline')}</p>
             ) : (
               <div className={styles.timelineList}>
                 {state.runTimeline.map((item) => (

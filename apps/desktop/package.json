@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build",
+    "check": "node scripts/check-prereqs.mjs",
+    "build": "node scripts/check-prereqs.mjs && node scripts/prepare-runtime.mjs && tauri build",
+    "prepare-runtime": "node scripts/prepare-runtime.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
