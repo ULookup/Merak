@@ -235,6 +235,8 @@ HttpServer::HttpServer(std::shared_ptr<RuntimeService>runtime,RuntimeMetadata me
         }else{
             cached_config_["api_key_masked"]=key.empty()?"":"****";
         }
+        cached_config_["temperature"]=cfg.llm.temperature;
+        cached_config_["context_memory_length"]=cfg.llm.context_memory_length;
     }
     install_routes();}
 HttpResult HttpServer::error(const std::string&code,const std::string&message,int status,bool retryable){return{status,{{"error",{{"code",code},{"message",message},{"retryable",retryable}}}}};}
@@ -505,18 +507,9 @@ void HttpServer::handle_config_get(const httplib::Request&, httplib::Response& r
         json(res, error("config_load_failed", "no config loaded", 500));
         return;
     }
-    auto response = cached_config_;
-    // Mask API key in response — never expose raw key
-    if (response.contains("llm") && response["llm"].contains("api_key")) {
-        auto key = response["llm"]["api_key"].get<std::string>();
-        if (key.length() > 8) {
-            response["llm"]["api_key_masked"] = key.substr(0, 4) + "****" + key.substr(key.length() - 4);
-        } else {
-            response["llm"]["api_key_masked"] = "****";
-        }
-        response["llm"].erase("api_key");
-    }
-    res.set_content(response.dump(), "application/json");
+    // cached_config_ stores flat keys (provider, api_base_url, etc.)
+    // with api_key_masked already computed in the constructor — raw key is never stored.
+    res.set_content(cached_config_.dump(), "application/json");
 }
 void HttpServer::handle_config_set(const httplib::Request& req, httplib::Response& res) {
     try {
@@ -544,6 +537,10 @@ void HttpServer::handle_config_set(const httplib::Request& req, httplib::Respons
         std::filesystem::create_directories(local_path.parent_path());
         std::ofstream out(local_path);
         out << existing.dump(2);
+
+        // Refresh cached_config_ so GET reflects changes immediately
+        if (body.contains("temperature")) cached_config_["temperature"] = body["temperature"];
+        if (body.contains("context_memory_length")) cached_config_["context_memory_length"] = body["context_memory_length"];
 
         nlohmann::json resp;
         resp["ok"]=true;
