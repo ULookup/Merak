@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, AlertTriangle, Brain, Clock3, FileText, Wrench } from 'lucide-react';
+import { Activity, AlertTriangle, Brain, Clock3, FileText, Plug, Wrench } from 'lucide-react';
 import { useAppState } from '../../AppState';
 import { useI18n } from '../../i18n';
 import RunReplay from '../Replay/RunReplay';
@@ -91,7 +91,11 @@ export default function RunInspector() {
                 {state.metadata.tools.map((tool) => (
                   <div key={tool.name} className={styles.toolRow}>
                     <span className={styles.toolSource}>
-                      {tool.source === 'mcp' ? '\u{1F50C}' : '\u{1F527}'}
+                      {tool.source === 'mcp' ? (
+                        <Plug size={13} aria-hidden="true" strokeWidth={2.3} />
+                      ) : (
+                        <Wrench size={13} aria-hidden="true" strokeWidth={2.3} />
+                      )}
                     </span>
                     <span className={styles.toolName}>{tool.name}</span>
                     <span className={styles.toolBadge}>{tool.source ?? 'built-in'}</span>

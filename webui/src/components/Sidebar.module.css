@@ -51,6 +51,29 @@
   border-color: var(--border-strong);
 }
 
+.metaLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.metaLine span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metaLine span:first-child {
+  color: var(--muted-strong);
+  font-weight: 700;
+}
+
 .sessions {
   flex: 1;
   display: flex;

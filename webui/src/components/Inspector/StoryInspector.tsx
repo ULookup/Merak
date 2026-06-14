@@ -127,72 +127,68 @@ export default function StoryInspector() {
 
   return (
     <>
-      {state.fallback.storyOverview && (
-        <div className={styles.notice}>Story overview is using WebUI preview data.</div>
-      )}
-
       <section className={styles.heroBlock}>
         <div className={styles.worldName}>{selectedWorld?.name ?? state.worldId}</div>
-        <p>{selectedWorld?.description || 'No world description yet.'}</p>
+        <p>{selectedWorld?.description || '还没有世界简介。'}</p>
         <div className={styles.storyStats}>
           <span>
             <Clock3 size={14} aria-hidden="true" />
-            {state.worldTime ?? 'Time not set'}
+            {state.worldTime ?? '时间未设置'}
           </span>
           <span>
             <Users size={14} aria-hidden="true" />
-            {worldDetail ? worldDetail.stats.agents : state.agents.length} voices
+            {worldDetail ? worldDetail.stats.agents : state.agents.length} 角色
           </span>
           <span>
             <GitBranch size={14} aria-hidden="true" />
-            {worldDetail ? worldDetail.stats.open_foreshadowing : state.foreshadowing.length} threads
+            {worldDetail ? worldDetail.stats.open_foreshadowing : state.foreshadowing.length} 伏笔
           </span>
         </div>
         {worldDetail && (
           <div className={styles.storyStats} style={{ marginTop: 8 }}>
             <span>
               <BookOpen size={14} aria-hidden="true" />
-              {worldDetail.stats.chapters} chapters
+              {worldDetail.stats.chapters} 章节
             </span>
             <span>
               <GitBranch size={14} aria-hidden="true" />
-              {worldDetail.stats.scenes} scenes
+              {worldDetail.stats.scenes} 场景
             </span>
             <span>
               <KeyRound size={14} aria-hidden="true" />
-              {worldDetail.stats.active_secrets} secrets
+              {worldDetail.stats.active_secrets} 秘密
             </span>
           </div>
         )}
         <div className={styles.timeUnavailable}>
           <div>
             <strong>世界时间控制</strong>
-            <span>{state.worldTime ? `当前：${state.worldTime}` : 'Time not set'}</span>
+            <span>{state.worldTime ? `当前：${state.worldTime}` : '时间未设置'}</span>
           </div>
           <button className={styles.ghostButton} disabled title="后端暂未实现 /time/advance">
             <Clock3 size={14} aria-hidden="true" />
-            Advance unavailable
+            后端暂未支持
           </button>
         </div>
       </section>
 
       <section className={styles.section}>
-        <div className={styles.sectionTitle}>Narrative Position</div>
+        <div className={styles.sectionTitle}>叙事位置</div>
         <div className={styles.contextGrid}>
           <div>
-            <span>Arc</span>
-            <strong>{overview?.current_arc?.title ?? 'Unassigned arc'}</strong>
-            <small>{overview?.current_arc?.status ?? 'freeform'}</small>
+            <span>篇章线</span>
+            <strong>{overview?.current_arc?.title ?? '篇章线未加载'}</strong>
+            <small>{overview?.current_arc?.status ?? '自由创作'}</small>
           </div>
           <div>
-            <span>Chapter</span>
-            <strong>{chapter ? `${chapter.number}. ${chapter.title}` : 'No chapter selected'}</strong>
-            <small>{chapter ? `${chapter.scene_count} scenes` : 'waiting for backend'}</small>
+            <span>章节</span>
+            <strong>{chapter ? `${chapter.number}. ${chapter.title}` : '章节未加载'}</strong>
+            <small>{chapter ? `${chapter.scene_count} 个场景` : '尚未加载'}</small>
           </div>
           <div>
-            <span>Scene</span>
-            <strong>{scene?.title ?? 'No active scene'}</strong>
-            <small>{scene?.status ?? 'draft'}</small>
+            <span>场景</span>
+            <strong>{scene?.title ?? '场景未加载'}</strong>
+            <small>{scene?.status ?? '未开始'}</small>
           </div>
         </div>
         {scene && state.worldId && chapter && (
@@ -202,14 +198,14 @@ export default function StoryInspector() {
               onClick={() => setShowEndScene(true)}
             >
               <Flag size={14} aria-hidden="true" />
-              End Scene
+              结束场景
             </button>
             <button
               className={styles.ghostButton}
               onClick={() => setShowCreateScene(true)}
             >
               <Plus size={14} aria-hidden="true" />
-              New Scene
+              新建场景
             </button>
           </div>
         )}
@@ -217,13 +213,13 @@ export default function StoryInspector() {
 
       {activeScene && (
         <section className={styles.section}>
-          <div className={styles.sectionTitle}>Scene Narrative</div>
+          <div className={styles.sectionTitle}>场景正文</div>
           <div className={styles.narrativeBox}>
-            {activeScene.narrative || activeScene.text || activeScene.content || 'No narrative content yet.'}
+            {activeScene.narrative || activeScene.text || activeScene.content || '还没有场景正文。'}
           </div>
           {participantAgents.length > 0 && (
             <>
-              <div className={styles.sectionTitle} style={{ marginTop: '0.75rem' }}>Participants</div>
+              <div className={styles.sectionTitle} style={{ marginTop: '0.75rem' }}>参与角色</div>
               <div className={styles.voiceStrip}>
                 {participantAgents.map((agent) => (
                   <span key={agent.id}>
@@ -238,11 +234,11 @@ export default function StoryInspector() {
 
       {activeScene && (
         <section className={styles.section}>
-          <div className={styles.sectionTitle}>Character Diaries</div>
+          <div className={styles.sectionTitle}>角色日记</div>
           {diariesLoading ? (
-            <p className={styles.muted}>Loading diaries...</p>
+            <p className={styles.muted}>正在读取日记...</p>
           ) : participantDiaries.length === 0 ? (
-            <p className={styles.muted}>No diary entries for scene participants yet.</p>
+            <p className={styles.muted}>暂未加载参与角色的日记。</p>
           ) : (
             participantDiaries.slice(0, 10).map((diary) => {
               const author = participantAgents.find((a) => a.id === diary.agent_id);
@@ -287,10 +283,10 @@ export default function StoryInspector() {
 
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
-          <div className={styles.sectionTitle}>Active Voices</div>
+          <div className={styles.sectionTitle}>角色声音</div>
         </div>
         {state.agents.length === 0 ? (
-          <p className={styles.muted}>No character voices loaded.</p>
+          <p className={styles.muted}>暂未加载角色声音</p>
         ) : (
           <div className={styles.voiceStrip}>
             {state.agents.slice(0, 6).map((agent) => (
@@ -304,19 +300,19 @@ export default function StoryInspector() {
         <div className={styles.sectionHeader}>
           <div className={styles.sectionTitle}>
             <BookOpen size={14} aria-hidden="true" />
-            Open Foreshadowing
+            开放伏笔
           </div>
           <button
             className={styles.addBtn}
             onClick={() => setShowCreateForeshadowing(true)}
-            aria-label="Plant foreshadowing"
-            title="Plant new thread"
+            aria-label="埋设伏笔"
+            title="新增伏笔"
           >
             <Plus size={14} aria-hidden="true" />
           </button>
         </div>
         {state.foreshadowing.length === 0 ? (
-          <p className={styles.muted}>No open threads loaded.</p>
+          <p className={styles.muted}>暂未加载开放伏笔</p>
         ) : (
           state.foreshadowing.slice(0, 6).map((item) => (
             <div className={styles.thread} key={item.id}>
@@ -332,19 +328,19 @@ export default function StoryInspector() {
         <div className={styles.sectionHeader}>
           <div className={styles.sectionTitle}>
             <KeyRound size={14} aria-hidden="true" />
-            Knowledge Boundaries
+            知识边界
           </div>
           <button
             className={styles.addBtn}
             onClick={() => setShowCreateSecret(true)}
-            aria-label="Create secret"
-            title="New secret"
+            aria-label="创建秘密"
+            title="新增秘密"
           >
             <Plus size={14} aria-hidden="true" />
           </button>
         </div>
         {state.secrets.length === 0 ? (
-          <p className={styles.muted}>No secret boundaries loaded.</p>
+          <p className={styles.muted}>暂未加载秘密边界</p>
         ) : (
           state.secrets.slice(0, 5).map((item) => (
             <div className={styles.secret} key={item.id}>

@@ -13,8 +13,13 @@ import UserCell from '../components/cells/UserCell';
 import ChatTimeline from '../components/ChatTimeline';
 import InspectorPanel from '../components/InspectorPanel';
 import RunInspector from '../components/Inspector/RunInspector';
+import StoryInspector from '../components/Inspector/StoryInspector';
 import MainPanel from '../components/MainPanel';
+import AuditDashboard from '../components/Replay/AuditDashboard';
+import ContextMeter from '../components/Sidebar/ContextMeter';
+import ModelSelector from '../components/Sidebar/ModelSelector';
 import SessionList from '../components/Sidebar/SessionList';
+import ToolPanel from '../components/Sidebar/ToolPanel';
 import WorldSelector from '../components/Sidebar/WorldSelector';
 import { ToastProvider } from '../components/Toast';
 import { I18nProvider } from '../i18n';
@@ -79,6 +84,85 @@ function RunInspectorHarness() {
   }, [dispatch]);
 
   return <RunInspector />;
+}
+
+function SidebarAiConceptHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({
+      type: 'SET_METADATA',
+      metadata: {
+        provider: 'openai',
+        model: 'gpt-4o',
+        models: [
+          { name: 'gpt-4o', provider: 'openai', max_context_tokens: 128000 },
+          { name: 'claude-sonnet-4-6', provider: 'anthropic', max_context_tokens: 200000 },
+        ],
+        permission_mode: 'ask',
+        memory: { enabled: true },
+        worldbuilding: { enabled: true },
+        tools: [
+          { name: 'write_scene', description: 'Draft the next scene', source: 'builtin' },
+          { name: 'figma_sync', description: 'Send UI screens to Figma', source: 'mcp' },
+        ],
+        mcp_servers: [{ name: 'figma', alive: true }],
+        agents: [],
+        delegation_patterns: ['fan_out'],
+      },
+    });
+    dispatch({ type: 'SET_USAGE', inputTokens: 1200, outputTokens: 300 });
+  }, [dispatch]);
+
+  return (
+    <>
+      <ModelSelector />
+      <ContextMeter />
+      <ToolPanel />
+    </>
+  );
+}
+
+function StoryNoBackendDataHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({
+      type: 'SET_WORLDS',
+      worlds: [
+        {
+          id: 'world_1',
+          name: 'Northreach',
+          description: 'Snowbound border city',
+          created_at: '2026-06-06T10:00:00Z',
+        },
+      ],
+    });
+    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
+    dispatch({
+      type: 'SET_WORLDBUILDING_DATA',
+      worlds: [
+        {
+          id: 'world_1',
+          name: 'Northreach',
+          description: 'Snowbound border city',
+          created_at: '2026-06-06T10:00:00Z',
+        },
+      ],
+      agents: [],
+      foreshadowing: [],
+      secrets: [],
+      worldTime: null,
+      storyOverview: {
+        agents: [],
+        foreshadowing: [],
+        secrets: [],
+        world_time: null,
+      },
+    });
+  }, [dispatch]);
+
+  return <StoryInspector />;
 }
 
 function SessionIconHarness() {
@@ -205,6 +289,53 @@ describe('Cell components', () => {
     );
   });
 
+  it('sidebar explains model, token window, and tools in AI-friendly language', async () => {
+    render(
+      <I18nProvider defaultLocale="zh">
+        <AppStateProvider>
+          <SidebarAiConceptHarness />
+        </AppStateProvider>
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByText('模型与服务')).toBeDefined();
+    expect(screen.getByText('OpenAI')).toBeDefined();
+    expect(screen.getByText('128K token 窗口')).toBeDefined();
+    expect(screen.getByText('Token 上下文')).toBeDefined();
+    expect(screen.getByText('已用 1.5K / 128K tokens')).toBeDefined();
+    expect(screen.getByText('工具（2）')).toBeDefined();
+    expect(screen.getByText('内置')).toBeDefined();
+    expect(screen.getByText('需要授权')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/preview|mock|fake/i);
+  });
+
+  it('StoryInspector uses clear unloaded states instead of backend placeholders', async () => {
+    render(
+      <AppStateProvider>
+        <StoryNoBackendDataHarness />
+      </AppStateProvider>,
+    );
+
+    expect(await screen.findByText('Northreach')).toBeDefined();
+    expect(screen.getAllByText('时间未设置').length).toBeGreaterThan(0);
+    expect(screen.getByText('叙事位置')).toBeDefined();
+    expect(screen.getByText('章节未加载')).toBeDefined();
+    expect(screen.getByText('场景未加载')).toBeDefined();
+    expect(screen.getByText('暂未加载角色声音')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/waiting for backend|No active scene|Time not set/i);
+  });
+
+  it('AuditDashboard empty state avoids transport and backend jargon', () => {
+    render(
+      <AppStateProvider>
+        <AuditDashboard />
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByText('暂无运行记录。开始一次创作后，这里会显示步骤、工具和 token 统计。')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/Run Audit|Local timeline|backend/i);
+  });
+
   it('ChatTimeline renders streamed assistant markdown', async () => {
     render(
       <AppStateProvider>
@@ -323,9 +454,12 @@ describe('Icon source hygiene', () => {
       'src/components/Sidebar/SessionList.tsx',
       'src/components/Sidebar/WorldSelector.tsx',
       'src/components/Sidebar.tsx',
+      'src/components/Inspector/RunInspector.tsx',
     ];
     const source = files.map((file) => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
 
+    expect(source).not.toContain('\\u{1F50C}');
+    expect(source).not.toContain('\\u{1F527}');
     expect(source).not.toMatch(/[☰◫✎⧉✓]/);
     expect(source).not.toContain('鉁?');
     expect(source).not.toContain('脳');

@@ -55,7 +55,7 @@ export default function WorldSelector() {
       };
       dispatch({ type: 'SET_WORLDS', worlds: [world, ...worlds] });
       dispatch({ type: 'SET_WORLD', worldId: world.id });
-      showToast('World created in the workbench preview.', 'success');
+      showToast('World created.', 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not create world.', 'error');
     } finally {
