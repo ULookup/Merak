@@ -345,6 +345,8 @@ void HttpServer::install_routes(){
     server_.Get("/api/config/llm", [this](const auto& req, auto& res) { handle_config_get(req, res); });
     server_.Post("/api/config/llm", [this](const auto& req, auto& res) { handle_config_set(req, res); });
     server_.Post("/api/config/llm/test", [this](const auto& req, auto& res) { handle_config_test(req, res); });
+    server_.Get("/api/config/preferences", [this](const auto& req, auto& res) { handle_preferences_get(req, res); });
+    server_.Put("/api/config/preferences", [this](const auto& req, auto& res) { handle_preferences_set(req, res); });
     server_.Get("/api/workspace/files", [this](const auto& req, auto& res) { handle_workspace_files_list(req, res); });
     server_.Get("/api/workspace/files/content", [this](const auto& req, auto& res) { handle_workspace_file_content_get(req, res); });
     server_.Put("/api/workspace/files/content", [this](const auto& req, auto& res) { handle_workspace_file_content_put(req, res); });
@@ -593,4 +595,39 @@ void HttpServer::handle_workspace_open(const httplib::Request& req, httplib::Res
         json(res, error("open_failed", e.what(), 500));
     }
 }
+void HttpServer::handle_preferences_get(const httplib::Request&, httplib::Response& res) {
+    auto prefs = load_preferences();
+    nlohmann::json j;
+    j["ok"] = true;
+    j["default_genre"] = prefs.default_genre;
+    j["preferred_style"] = prefs.preferred_style;
+    j["allow_usage_logs"] = prefs.allow_usage_logs;
+    res.set_content(j.dump(), "application/json");
+}
+
+void HttpServer::handle_preferences_set(const httplib::Request& req, httplib::Response& res) {
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        auto prefs = load_preferences();
+        if (body.contains("default_genre")) prefs.default_genre = body["default_genre"];
+        if (body.contains("preferred_style")) {
+            auto style = body["preferred_style"].get<std::string>();
+            static const std::set<std::string> valid = {"轻松", "严肃", "诗意", "简洁"};
+            if (!valid.contains(style)) {
+                json(res, error("invalid_style", "preferred_style must be one of: 轻松, 严肃, 诗意, 简洁", 400));
+                return;
+            }
+            prefs.preferred_style = style;
+        }
+        if (body.contains("allow_usage_logs")) prefs.allow_usage_logs = body["allow_usage_logs"];
+        if (!save_preferences(prefs)) {
+            json(res, error("preferences_write_failed", "Failed to write preferences file", 500));
+            return;
+        }
+        res.set_content("{\"ok\":true}", "application/json");
+    } catch (const std::exception& e) {
+        json(res, error("preferences_save_failed", e.what(), 400));
+    }
+}
+
 } // namespace merak

@@ -396,4 +396,51 @@ Result<Config, AgentError> ConfigLoader::load_file(const std::string& filepath) 
     );
 }
 
+static std::filesystem::path prefs_path() {
+    if (const char* home = std::getenv("HOME"))
+        return std::filesystem::path(home) / ".merak" / "preferences.json";
+#ifdef _WIN32
+    if (const char* appdata = std::getenv("APPDATA"))
+        return std::filesystem::path(appdata) / "Merak" / "preferences.json";
+#endif
+    return ".merak/preferences.json";
+}
+
+UserPreferences load_preferences() {
+    UserPreferences p;
+    auto path = prefs_path();
+    if (!std::filesystem::exists(path)) return p;
+    std::ifstream f(path);
+    if (!f) return p;
+    try {
+        nlohmann::json j;
+        f >> j;
+        if (j.contains("default_genre")) p.default_genre = j["default_genre"];
+        if (j.contains("preferred_style")) p.preferred_style = j["preferred_style"];
+        if (j.contains("allow_usage_logs")) p.allow_usage_logs = j["allow_usage_logs"];
+    } catch (...) {
+        std::cerr << "Preferences parse error in " << path << " — using defaults" << std::endl;
+    }
+    return p;
+}
+
+bool save_preferences(const UserPreferences& p) {
+    auto path = prefs_path();
+    std::filesystem::create_directories(path.parent_path());
+    nlohmann::json j;
+    j["default_genre"] = p.default_genre;
+    j["preferred_style"] = p.preferred_style;
+    j["allow_usage_logs"] = p.allow_usage_logs;
+    auto tmp = path.string() + ".tmp";
+    std::ofstream out(tmp);
+    out << j.dump(2);
+    out.close();
+    if (out.fail()) {
+        std::cerr << "Failed to write preferences to " << path << std::endl;
+        return false;
+    }
+    std::filesystem::rename(tmp, path);
+    return true;
+}
+
 } // namespace merak
