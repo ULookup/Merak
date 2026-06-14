@@ -27,6 +27,7 @@ import type {
   ForeshadowingListResponse,
   GenerateTitleResponse,
   LlmConfig,
+  LlmConfigFull,
   OkResponse,
   OpenWorkspacePathResponse,
   PatchAgentCardResponse,
@@ -494,7 +495,7 @@ export const api = {
 
   sseUrl: (id: string) => `${apiBase}/v1/sessions/${id}/events/stream`,
 
-  getConfig: () => request<LlmConfig>('GET', '/api/config/llm'),
+  getConfig: () => request<LlmConfigFull>('GET', '/api/config/llm'),
 
   saveConfig: (config: {
     provider?: string;
@@ -502,6 +503,8 @@ export const api = {
     api_base_url?: string;
     default_model?: string;
     max_output_tokens?: number;
+    temperature?: number;
+    context_memory_length?: 'short' | 'medium' | 'long';
   }) => request<OkResponse>('POST', '/api/config/llm', config),
 
   testConfig: () => request<OkResponse>('POST', '/api/config/llm/test'),

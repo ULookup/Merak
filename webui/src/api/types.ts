@@ -525,6 +525,7 @@ export interface RelationListResponse {
 
 // === Pipeline ===
 export type CreativePhase =
+  | 'direction_selection'
   | 'worldbuilding'
   | 'character_creation'
   | 'plot_architecture'

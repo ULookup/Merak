@@ -75,6 +75,8 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         api_base_url: provider === 'custom' ? apiBaseUrl.trim() || undefined : undefined,
         default_model: model.trim(),
         max_output_tokens: maxTokens,
+        temperature,
+        context_memory_length: contextMemory,
       });
       setStep('test');
     } catch (e: unknown) {

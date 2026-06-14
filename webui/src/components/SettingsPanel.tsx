@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api, formatApiError } from '../api/client';
+import { useAppState } from '../AppState';
 import styles from './SettingsPanel.module.css';
 
 const GENRE_OPTIONS = [
@@ -21,6 +22,7 @@ const STYLE_OPTIONS = [
 
 export default function SettingsPanel() {
   const [genre, setGenre] = useState('无偏好');
+  const { dispatch } = useAppState();
   const [style, setStyle] = useState('轻松');
   const [allowUsageLogs, setAllowUsageLogs] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -43,6 +45,7 @@ export default function SettingsPanel() {
         if (prefs.default_genre) setGenre(prefs.default_genre);
         if (prefs.preferred_style) setStyle(prefs.preferred_style);
         if (prefs.allow_usage_logs !== undefined) setAllowUsageLogs(prefs.allow_usage_logs);
+        dispatch({ type: 'SET_USER_PREFERENCES', prefs: { default_genre: prefs.default_genre ?? '', preferred_style: prefs.preferred_style ?? '轻松' } });
       } catch (e: unknown) {
         if (cancelled) return;
         setFetchError(formatApiError(e, '加载偏好设置失败，请稍后重试。'));

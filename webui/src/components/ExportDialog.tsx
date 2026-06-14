@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { api, formatApiError } from '../api/client';
 import type { ExportResult } from '../api/types';
 import styles from './ExportDialog.module.css';
@@ -11,11 +11,35 @@ interface Chapter {
 
 interface Props {
   worldId: string;
-  chapters: Chapter[];
+  chapters?: Chapter[];
   onClose: () => void;
 }
 
-export default function ExportDialog({ worldId, chapters, onClose }: Props) {
+export default function ExportDialog({ worldId, chapters: preChapters, onClose }: Props) {
+  const [chapters, setChapters] = useState<Chapter[]>(preChapters ?? []);
+  const [loadingChapters, setLoadingChapters] = useState(!preChapters || preChapters.length === 0);
+
+  useEffect(() => {
+    if (preChapters && preChapters.length > 0) {
+      setChapters(preChapters);
+      setLoadingChapters(false);
+      return;
+    }
+    let cancelled = false;
+    api.listChapters(worldId, '').then((res) => {
+      if (cancelled) return;
+      setChapters(
+        (res.chapters ?? []).map((ch, i) => ({
+          id: ch.id,
+          title: ch.title,
+          number: ch.number ?? i + 1,
+        })),
+      );
+    }).catch(() => {}).finally(() => {
+      if (!cancelled) setLoadingChapters(false);
+    });
+    return () => { cancelled = true; };
+  }, [worldId, preChapters]);
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(chapters.map((c) => c.id)),
   );
@@ -82,19 +106,25 @@ export default function ExportDialog({ worldId, chapters, onClose }: Props) {
         <div className={styles.field}>
           <label className={styles.label}>选择章节</label>
           <div className={styles.chapterList}>
-            {chapters.map((ch) => (
-              <label key={ch.id} className={styles.chapterItem}>
-                <input
-                  type="checkbox"
-                  checked={selected.has(ch.id)}
-                  onChange={() => toggleChapter(ch.id)}
-                  disabled={exporting}
-                />
-                <span>
-                  第{ch.number}章 {ch.title}
-                </span>
-              </label>
-            ))}
+            {loadingChapters ? (
+              <div style={{ padding: 12, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>加载章节中...</div>
+            ) : chapters.length === 0 ? (
+              <div style={{ padding: 12, color: 'var(--text-secondary)', fontSize: '0.9rem' }}>暂无章节</div>
+            ) : (
+              chapters.map((ch) => (
+                <label key={ch.id} className={styles.chapterItem}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(ch.id)}
+                    onChange={() => toggleChapter(ch.id)}
+                    disabled={exporting}
+                  />
+                  <span>
+                    第{ch.number}章 {ch.title}
+                  </span>
+                </label>
+              ))
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
             <button
