@@ -11,6 +11,7 @@ import type {
   CancelRunResponse,
   CapabilitiesResponse,
   ChapterListResponse,
+  ChapterReviewResponse,
   ChunkedImageInitResponse,
   ChunkedImageProgressResponse,
   CreateAgentResponse,
@@ -21,6 +22,8 @@ import type {
   DeleteWorldResponse,
   DiaryListResponse,
   EndSceneResponse,
+  ExportRequest,
+  ExportResult,
   ForeshadowingListResponse,
   GenerateTitleResponse,
   LlmConfig,
@@ -29,6 +32,7 @@ import type {
   PatchAgentCardResponse,
   PipelineHistoryResponse,
   PipelineViewData,
+  PreferencesResponse,
   RelationListResponse,
   ResolveCreationResponse,
   RunAuditResponse,
@@ -501,6 +505,27 @@ export const api = {
   }) => request<OkResponse>('POST', '/api/config/llm', config),
 
   testConfig: () => request<OkResponse>('POST', '/api/config/llm/test'),
+
+  // Preferences
+  getPreferences: () =>
+    request<PreferencesResponse>('GET', '/api/config/preferences'),
+
+  savePreferences: (prefs: {
+    default_genre?: string;
+    preferred_style?: string;
+    allow_usage_logs?: boolean;
+  }) => request<OkResponse>('PUT', '/api/config/preferences', prefs),
+
+  // Chapter review
+  getChapterReview: (worldId: string, chapterId: string) =>
+    request<ChapterReviewResponse>(
+      'GET',
+      `/api/worldbuilding/${encodeURIComponent(worldId)}/chapters/${encodeURIComponent(chapterId)}/review`,
+    ),
+
+  // Export
+  exportChapters: (worldId: string, data: ExportRequest) =>
+    request<ExportResult>('POST', `/api/worldbuilding/${encodeURIComponent(worldId)}/export`, data),
 
   openWorkspacePath: (path: string, reveal = false) =>
     request<OpenWorkspacePathResponse>('POST', '/api/workspace/open', { path, reveal }),
