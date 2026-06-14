@@ -4,6 +4,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -638,6 +639,86 @@ WorldbuildingService::get_chapter_review(const std::string& world_id,
 
     review.writing_advice = advice.str();
     return review;
+}
+
+WorldbuildingService::ExportResult
+WorldbuildingService::export_chapters(const std::string& world_id,
+                                      const std::vector<std::string>& chapter_ids,
+                                      const std::string& title,
+                                      const std::string& author) {
+    if (chapter_ids.empty()) {
+        throw std::runtime_error("chapter_ids must not be empty");
+    }
+
+    auto world = worlds_.get_world(world_id);
+    if (!world) {
+        throw std::runtime_error("World not found: " + world_id);
+    }
+
+    // Build output directory: root_/exports/<world_name>/
+    auto export_dir = root_ / "exports" / world->name;
+    std::filesystem::create_directories(export_dir);
+
+    // Build filename from title
+    std::string filename = title.empty() ? "export" : title;
+    for (auto& ch : filename) {
+        if (ch == '/' || ch == '\\' || ch == ':' || ch == '*' || ch == '?'
+            || ch == '"' || ch == '<' || ch == '>' || ch == '|') {
+            ch = '_';
+        }
+    }
+    auto file_path = export_dir / (filename + ".txt");
+
+    std::ofstream out(file_path);
+    if (!out) {
+        throw std::runtime_error("Failed to open output file: " + file_path.string());
+    }
+
+    int total_chars = 0;
+
+    // Title and author header
+    if (!title.empty()) {
+        out << title << "\n";
+        total_chars += static_cast<int>(title.length());
+    }
+    if (!author.empty()) {
+        out << author << "\n";
+        total_chars += static_cast<int>(author.length());
+    }
+    out << "\n";
+
+    for (const auto& cid : chapter_ids) {
+        auto chapter = narrative_.get_chapter(world_id, cid);
+        if (!chapter) {
+            spdlog::warn("export_chapters: chapter not found: {}", cid);
+            continue;
+        }
+
+        out << "# " << chapter->title << "\n\n";
+        total_chars += static_cast<int>(chapter->title.length());
+
+        auto scenes = narrative_.list_scenes(world_id, cid);
+        for (const auto& ss : scenes) {
+            auto scene = narrative_.get_scene(world_id, ss.id);
+            if (!scene) continue;
+
+            out << "## " << scene->title << "\n\n";
+            total_chars += static_cast<int>(scene->title.length());
+
+            out << scene->narrative << "\n\n";
+            total_chars += static_cast<int>(scene->narrative.length());
+        }
+
+        out << "---\n";
+    }
+
+    out.flush();
+    if (out.fail()) {
+        throw std::runtime_error("Failed to write output file: " + file_path.string());
+    }
+    out.close();
+
+    return {file_path.string(), total_chars};
 }
 
 } // namespace merak::worldbuilding

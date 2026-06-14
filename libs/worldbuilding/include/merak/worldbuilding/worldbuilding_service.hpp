@@ -155,6 +155,17 @@ public:
     ChapterReview get_chapter_review(const std::string& world_id,
                                       const std::string& chapter_id) const;
 
+    // Export
+    struct ExportResult {
+        std::string file_path;
+        int total_chars = 0;
+    };
+
+    ExportResult export_chapters(const std::string& world_id,
+                                 const std::vector<std::string>& chapter_ids,
+                                 const std::string& title,
+                                 const std::string& author);
+
 private:
     std::filesystem::path root_;
     WorldStore worlds_;
