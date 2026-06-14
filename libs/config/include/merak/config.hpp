@@ -124,4 +124,10 @@ struct Config {
     TuiConfig tui;
 };
 
+	struct UserPreferences {
+	    std::string default_genre = "我还不确定";
+	    std::string preferred_style = "轻松"; // 轻松 | 严肃 | 诗意 | 简洁
+	    bool allow_usage_logs = false;
+	};
+
 } // namespace merak
