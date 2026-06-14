@@ -632,3 +632,52 @@ export interface ResolveCreationResponse {
   ok: boolean;
   status: string;
 }
+
+// === User preferences & LLM config ===
+export interface UserPreferences {
+  default_genre: string;
+  preferred_style: string;
+  allow_usage_logs: boolean;
+}
+
+export interface PreferencesResponse {
+  ok: boolean;
+  default_genre?: string;
+  preferred_style?: string;
+  allow_usage_logs?: boolean;
+}
+
+export interface LlmConfigFull extends LlmConfig {
+  temperature: number;
+  context_memory_length: 'short' | 'medium' | 'long';
+  restart_required?: boolean;
+}
+
+// === Chapter review ===
+export interface ChapterReviewItem {
+  chapter_id: string;
+  title: string;
+  word_count: number;
+  character_names: string[];
+  foreshadowing_planted: { id: string; content: string }[];
+  foreshadowing_paid: { id: string; content: string }[];
+  writing_advice: string;
+}
+
+export interface ChapterReviewResponse {
+  ok: boolean;
+  review: ChapterReviewItem;
+}
+
+// === Export ===
+export interface ExportRequest {
+  chapter_ids: string[];
+  title: string;
+  author?: string;
+}
+
+export interface ExportResult {
+  ok: boolean;
+  file_path: string;
+  total_chars: number;
+}
