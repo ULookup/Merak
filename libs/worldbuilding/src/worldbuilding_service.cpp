@@ -655,8 +655,9 @@ WorldbuildingService::export_chapters(const std::string& world_id,
         throw std::runtime_error("World not found: " + world_id);
     }
 
-    // Build output directory: root_/exports/<world_name>/
-    auto export_dir = root_ / "exports" / world->name;
+    // Build output directory: root_/exports/<world_id>/
+    // Use world->id (not name) to prevent path traversal
+    auto export_dir = root_ / "exports" / world->id;
     std::filesystem::create_directories(export_dir);
 
     // Build filename from title
@@ -671,7 +672,8 @@ WorldbuildingService::export_chapters(const std::string& world_id,
 
     std::ofstream out(file_path);
     if (!out) {
-        throw std::runtime_error("Failed to open output file: " + file_path.string());
+        spdlog::error("export_chapters: failed to open file: {}", file_path.string());
+        throw std::runtime_error("Failed to open output file");
     }
 
     int total_chars = 0;
@@ -714,7 +716,8 @@ WorldbuildingService::export_chapters(const std::string& world_id,
 
     out.flush();
     if (out.fail()) {
-        throw std::runtime_error("Failed to write output file: " + file_path.string());
+        spdlog::error("export_chapters: failed to write file: {}", file_path.string());
+        throw std::runtime_error("Failed to write output file");
     }
     out.close();
 
