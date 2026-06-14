@@ -235,6 +235,8 @@ HttpServer::HttpServer(std::shared_ptr<RuntimeService>runtime,RuntimeMetadata me
         }else{
             cached_config_["api_key_masked"]=key.empty()?"":"****";
         }
+        cached_config_["temperature"]=cfg.llm.temperature;
+        cached_config_["context_memory_length"]=cfg.llm.context_memory_length;
     }
     install_routes();}
 HttpResult HttpServer::error(const std::string&code,const std::string&message,int status,bool retryable){return{status,{{"error",{{"code",code},{"message",message},{"retryable",retryable}}}}};}
@@ -343,6 +345,8 @@ void HttpServer::install_routes(){
     server_.Get("/api/config/llm", [this](const auto& req, auto& res) { handle_config_get(req, res); });
     server_.Post("/api/config/llm", [this](const auto& req, auto& res) { handle_config_set(req, res); });
     server_.Post("/api/config/llm/test", [this](const auto& req, auto& res) { handle_config_test(req, res); });
+    server_.Get("/api/config/preferences", [this](const auto& req, auto& res) { handle_preferences_get(req, res); });
+    server_.Put("/api/config/preferences", [this](const auto& req, auto& res) { handle_preferences_set(req, res); });
     server_.Get("/api/workspace/files", [this](const auto& req, auto& res) { handle_workspace_files_list(req, res); });
     server_.Get("/api/workspace/files/content", [this](const auto& req, auto& res) { handle_workspace_file_content_get(req, res); });
     server_.Put("/api/workspace/files/content", [this](const auto& req, auto& res) { handle_workspace_file_content_put(req, res); });
@@ -505,6 +509,8 @@ void HttpServer::handle_config_get(const httplib::Request&, httplib::Response& r
         json(res, error("config_load_failed", "no config loaded", 500));
         return;
     }
+    // cached_config_ stores flat keys (provider, api_base_url, etc.)
+    // with api_key_masked already computed in the constructor — raw key is never stored.
     res.set_content(cached_config_.dump(), "application/json");
 }
 void HttpServer::handle_config_set(const httplib::Request& req, httplib::Response& res) {
@@ -527,10 +533,16 @@ void HttpServer::handle_config_set(const httplib::Request& req, httplib::Respons
         if (body.contains("api_base_url")) existing["llm"]["api_base_url"] = body["api_base_url"];
         if (body.contains("default_model")) existing["llm"]["default_model"] = body["default_model"];
         if (body.contains("max_output_tokens")) existing["llm"]["max_output_tokens"] = body["max_output_tokens"];
+        if (body.contains("temperature")) existing["llm"]["temperature"] = body["temperature"];
+        if (body.contains("context_memory_length")) existing["llm"]["context_memory_length"] = body["context_memory_length"];
 
         std::filesystem::create_directories(local_path.parent_path());
         std::ofstream out(local_path);
         out << existing.dump(2);
+
+        // Refresh cached_config_ so GET reflects changes immediately
+        if (body.contains("temperature")) cached_config_["temperature"] = body["temperature"];
+        if (body.contains("context_memory_length")) cached_config_["context_memory_length"] = body["context_memory_length"];
 
         nlohmann::json resp;
         resp["ok"]=true;
@@ -583,4 +595,39 @@ void HttpServer::handle_workspace_open(const httplib::Request& req, httplib::Res
         json(res, error("open_failed", e.what(), 500));
     }
 }
+void HttpServer::handle_preferences_get(const httplib::Request&, httplib::Response& res) {
+    auto prefs = load_preferences();
+    nlohmann::json j;
+    j["ok"] = true;
+    j["default_genre"] = prefs.default_genre;
+    j["preferred_style"] = prefs.preferred_style;
+    j["allow_usage_logs"] = prefs.allow_usage_logs;
+    res.set_content(j.dump(), "application/json");
+}
+
+void HttpServer::handle_preferences_set(const httplib::Request& req, httplib::Response& res) {
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        auto prefs = load_preferences();
+        if (body.contains("default_genre")) prefs.default_genre = body["default_genre"];
+        if (body.contains("preferred_style")) {
+            auto style = body["preferred_style"].get<std::string>();
+            static const std::set<std::string> valid = {"轻松", "严肃", "诗意", "简洁"};
+            if (!valid.contains(style)) {
+                json(res, error("invalid_style", "preferred_style must be one of: 轻松, 严肃, 诗意, 简洁", 400));
+                return;
+            }
+            prefs.preferred_style = style;
+        }
+        if (body.contains("allow_usage_logs")) prefs.allow_usage_logs = body["allow_usage_logs"];
+        if (!save_preferences(prefs)) {
+            json(res, error("preferences_write_failed", "Failed to write preferences file", 500));
+            return;
+        }
+        res.set_content("{\"ok\":true}", "application/json");
+    } catch (const std::exception& e) {
+        json(res, error("preferences_save_failed", e.what(), 400));
+    }
+}
+
 } // namespace merak

@@ -69,6 +69,12 @@ private:
     void handle_agent_diary_add(const httplib::Request&, httplib::Response&);
     void handle_agent_relations(const httplib::Request&, httplib::Response&);
 
+    // Chapter review
+    void handle_chapter_review(const httplib::Request&, httplib::Response&);
+
+    // Export
+    void handle_export_chapters(const httplib::Request&, httplib::Response&);
+
     // PATCH routes for narrative entities
     void handle_patch_scene(const httplib::Request&, httplib::Response&);
     void handle_patch_chapter(const httplib::Request&, httplib::Response&);

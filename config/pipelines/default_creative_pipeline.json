@@ -1,14 +1,33 @@
 {
   "name": "default_creative_pipeline",
-  "description": "标准5阶段创作管线：世界观→角色→情节→场景→反思",
+  "description": "标准6阶段创作管线：方向选择→世界观→角色→情节→场景→反思",
   "version": 1,
   "auto_advance": true,
   "require_confirmation": false,
   "phases": [
     {
+      "key": "direction_selection",
+      "label": "创作方向选择",
+      "initial": true,
+      "context": {
+        "inject": ["phase_guidance", "available_tools"]
+      },
+      "allowed_tools": [],
+      "on_enter": [
+        { "type": "log", "params": { "level": "info", "message": "进入创作方向选择阶段" } }
+      ],
+      "on_exit": [],
+      "allowed_retreat": [],
+      "advance_when": {
+        "operator": "and",
+        "conditions": [
+          { "type": "user_confirmed", "message": "用户确认创作方向" }
+        ]
+      }
+    },
+    {
       "key": "worldbuilding",
       "label": "世界观构建",
-      "initial": true,
       "context": {
         "inject": ["phase_guidance", "available_tools", "world_summary"]
       },

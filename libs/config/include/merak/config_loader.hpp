@@ -28,4 +28,8 @@ private:
     static void apply_env_overrides(Config& cfg);
 };
 
+// ——— User Preferences ———
+UserPreferences load_preferences();
+bool save_preferences(const UserPreferences& prefs);
+
 } // namespace merak

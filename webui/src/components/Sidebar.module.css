@@ -126,6 +126,48 @@
   box-shadow: var(--shadow-sm);
 }
 
+.sectionTitle {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.phaseLabel {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
+.navItem {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted-strong);
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 180ms var(--ease),
+    color 180ms var(--ease),
+    transform 180ms var(--ease);
+  margin-bottom: 2px;
+}
+
+.navItem:hover {
+  background: var(--surface);
+  color: var(--ink);
+  transform: translateX(3px);
+}
+
+.bottomSection {
+  padding: 11px 12px;
+  border-top: 1px solid var(--border);
+}
+
 /* ---- Mobile ---- */
 .overlay {
   display: none;
