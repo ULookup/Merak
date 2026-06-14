@@ -150,7 +150,7 @@ private:
 
     // In-memory cache backed by PostgreSQL so creation confirmations survive
     // server restarts and can still be resolved from the UI.
-    std::map<std::string, PendingCreation> pending_creations_;
+    mutable std::map<std::string, PendingCreation> pending_creations_;
     mutable std::mutex pending_mutex_;
     void ensure_pending_creation_table();
     void persist_pending_creation(const PendingCreation& pc);

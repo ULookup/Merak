@@ -17,7 +17,13 @@
         { "type": "log", "params": { "level": "info", "message": "进入创作方向选择阶段" } }
       ],
       "on_exit": [],
-      "allowed_retreat": []
+      "allowed_retreat": [],
+      "advance_when": {
+        "operator": "and",
+        "conditions": [
+          { "type": "user_confirmed", "message": "用户确认创作方向" }
+        ]
+      }
     },
     {
       "key": "worldbuilding",
