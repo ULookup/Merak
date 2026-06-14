@@ -320,6 +320,30 @@
   transform: translateY(0) scale(0.98);
 }
 
+.feedbackRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.feedbackBtn {
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-alt);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.feedbackBtn:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
 .hint {
   font-size: 10px;
   color: var(--muted);

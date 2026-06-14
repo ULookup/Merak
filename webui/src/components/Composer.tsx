@@ -94,66 +94,72 @@ export default function Composer() {
     }
   }, [state.currentRun]);
 
+  const doSend = useCallback(
+    async (msg: string) => {
+      if (!msg || sending) return;
+      if (!state.sessionId) {
+        showToast('Waiting for session...', 'info');
+        return;
+      }
+      setSending(true);
+
+      try {
+        if (runMode === 'delegate') {
+          const agents = selectedAgentIds.length
+            ? selectedAgentIds
+            : state.agentId
+              ? [state.agentId]
+              : [];
+          if (agents.length === 0) {
+            showToast('请选择至少一个 Agent。', 'info');
+            return;
+          }
+          const res = await api.startDelegation(
+            state.sessionId,
+            delegationPattern,
+            agents,
+            msg,
+            aggregation,
+          );
+          dispatch({ type: 'SET_CURRENT_RUN', runId: res.parent_run_id });
+          dispatch({
+            type: 'APPEND_MESSAGE',
+            message: {
+              id: `delegation_${Date.now()}`,
+              kind: 'system',
+              text: `Delegate 已启动：${delegationPattern} · ${agents.length} Agent`,
+            },
+          });
+          showToast('Delegate Run 已启动。', 'success');
+        } else {
+          await api.startRun(state.sessionId, msg, state.selectedModel);
+        }
+      } catch (e) {
+        showToast(formatApiError(e), 'error');
+      } finally {
+        setSending(false);
+      }
+    },
+    [
+      aggregation,
+      delegationPattern,
+      dispatch,
+      runMode,
+      selectedAgentIds,
+      sending,
+      showToast,
+      state.agentId,
+      state.sessionId,
+      state.selectedModel,
+    ],
+  );
+
   const send = useCallback(async () => {
     const msg = text.trim();
-    if (!msg || sending) return;
-    if (!state.sessionId) {
-      showToast('Waiting for session...', 'info');
-      return;
-    }
+    if (!msg) return;
     setText('');
-    setSending(true);
-
-    try {
-      if (runMode === 'delegate') {
-        const agents = selectedAgentIds.length
-          ? selectedAgentIds
-          : state.agentId
-            ? [state.agentId]
-            : [];
-        if (agents.length === 0) {
-          showToast('请选择至少一个 Agent。', 'info');
-          setText(msg);
-          return;
-        }
-        const res = await api.startDelegation(
-          state.sessionId,
-          delegationPattern,
-          agents,
-          msg,
-          aggregation,
-        );
-        dispatch({ type: 'SET_CURRENT_RUN', runId: res.parent_run_id });
-        dispatch({
-          type: 'APPEND_MESSAGE',
-          message: {
-            id: `delegation_${Date.now()}`,
-            kind: 'system',
-            text: `Delegate 已启动：${delegationPattern} · ${agents.length} Agent`,
-          },
-        });
-        showToast('Delegate Run 已启动。', 'success');
-      } else {
-        await api.startRun(state.sessionId, msg, state.selectedModel);
-      }
-    } catch (e) {
-      showToast(formatApiError(e), 'error');
-    } finally {
-      setSending(false);
-    }
-  }, [
-    aggregation,
-    delegationPattern,
-    dispatch,
-    runMode,
-    selectedAgentIds,
-    sending,
-    showToast,
-    state.agentId,
-    state.sessionId,
-    state.selectedModel,
-    text,
-  ]);
+    await doSend(msg);
+  }, [text, doSend]);
 
   const isRunning =
     state.currentRun !== null && state.status !== 'idle' && state.status !== 'waiting_approval';
@@ -289,6 +295,26 @@ export default function Composer() {
             {runMode === 'delegate' ? 'Start Delegate' : 'Send'}
           </button>
         )}
+      </div>
+      <div className={styles.feedbackRow}>
+        <button
+          className={styles.feedbackBtn}
+          onClick={() => doSend('继续写')}
+        >
+          继续写
+        </button>
+        <button
+          className={styles.feedbackBtn}
+          onClick={() => doSend('改一下')}
+        >
+          改一下
+        </button>
+        <button
+          className={styles.feedbackBtn}
+          onClick={() => doSend('说说想法')}
+        >
+          说说想法
+        </button>
       </div>
       <div className={styles.hint}>
         Enter &middot; send &nbsp;|&nbsp; Shift+Enter &middot; newline
