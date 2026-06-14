@@ -16,6 +16,7 @@ import CreateAgentModal from '../components/Inspector/CreateAgentModal';
 import CreateForeshadowingModal from '../components/Inspector/CreateForeshadowingModal';
 import CreateSceneModal from '../components/Inspector/CreateSceneModal';
 import CreateSecretModal from '../components/Inspector/CreateSecretModal';
+import AgentsInspector from '../components/Inspector/AgentsInspector';
 import RunInspector from '../components/Inspector/RunInspector';
 import StoryInspector from '../components/Inspector/StoryInspector';
 import MainPanel from '../components/MainPanel';
@@ -216,6 +217,46 @@ function WorldIconHarness() {
   }, [dispatch]);
 
   return <WorldSelector />;
+}
+
+function EmptyAgentsHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
+    dispatch({
+      type: 'SET_WORLDBUILDING_DATA',
+      worlds: [],
+      agents: [],
+      foreshadowing: [],
+      secrets: [],
+      worldTime: null,
+    });
+  }, [dispatch]);
+
+  return <AgentsInspector />;
+}
+
+function FilledAgentsHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
+    dispatch({
+      type: 'SET_WORLDBUILDING_DATA',
+      worlds: [],
+      agents: [
+        { id: 'god_1', name: 'god', display_name: '总控', kind: 'god' },
+        { id: 'agent_1', name: 'elara', display_name: '艾拉', kind: 'individual' },
+        { id: 'manager_1', name: 'map', display_name: '地图助手', kind: 'map_manager' },
+      ],
+      foreshadowing: [],
+      secrets: [],
+      worldTime: null,
+    });
+  }, [dispatch]);
+
+  return <AgentsInspector />;
 }
 
 describe('Cell components', () => {
@@ -444,7 +485,7 @@ describe('Cell components', () => {
     expect(
       screen.getByRole('button', { name: 'Generate title' }).querySelector('svg'),
     ).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Edit world' }).querySelector('svg')).toBeDefined();
+    expect(screen.getByRole('button', { name: '编辑世界' }).querySelector('svg')).toBeDefined();
     expect(screen.queryByText('+')).toBeNull();
   });
 
@@ -518,6 +559,68 @@ describe('Icon source hygiene', () => {
     expect(source).not.toMatch(/[☰◫✎⧉✓]/);
     expect(source).not.toContain('鉁?');
     expect(source).not.toContain('脳');
+  });
+
+  it('WorldSelector creation and edit dialogs use Chinese workbench language', async () => {
+    render(
+      <ToastProvider>
+        <AppStateProvider>
+          <WorldIconHarness />
+        </AppStateProvider>
+      </ToastProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '创建世界' }));
+    expect(screen.getByRole('dialog', { name: '创建世界' })).toBeDefined();
+    expect(screen.getByText('世界名称')).toBeDefined();
+    expect(screen.getByText('一句话设定')).toBeDefined();
+    expect(screen.getByText('保存到后端')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/Create World|Description|Cancel|None/i);
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑世界' }));
+    expect(screen.getByRole('dialog', { name: '编辑世界' })).toBeDefined();
+    expect(screen.getByText('保存修改')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/Edit World|Save|Cancel/i);
+  });
+
+  it('default onboarding copy is localized for the workbench audience', () => {
+    const source = readFileSync(join(process.cwd(), 'src/i18n.tsx'), 'utf8');
+
+    expect(source).toContain("'onboarding.title': 'Merak 创作工作台'");
+    expect(source).toContain('AI 写作工作流');
+    expect(source).not.toContain('Merak Creation Workshop');
+    expect(source).not.toContain('Create a world, then start shaping people, scenes, and setting.');
+  });
+
+  it('AgentsInspector explains empty and diagnostics states without developer preview wording', () => {
+    render(
+      <AppStateProvider>
+        <EmptyAgentsHarness />
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByText('角色声音')).toBeDefined();
+    expect(screen.getByText('当前世界还没有角色。创建第一个角色后，工作台会用真实后端数据展示声音、提示词和知识边界。')).toBeDefined();
+    expect(screen.getByText('创建第一个角色')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/agents loaded|Create First Character|preview/i);
+  });
+
+  it('AgentsInspector uses Chinese labels for populated voice system', () => {
+    render(
+      <AppStateProvider>
+        <FilledAgentsHarness />
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByText('声音系统')).toBeDefined();
+    expect(screen.getByText('3 个可用角色 / 助手')).toBeDefined();
+    expect(screen.getAllByText('总控助手').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('设定助手').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('角色').length).toBeGreaterThan(0);
+    expect(screen.getByText('声音诊断')).toBeDefined();
+    expect(screen.getByText('系统提示词可查看')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/Voice System|Voice Diagnostics|active agents|Prompt preview|Managers|Characters/i);
   });
 });
 
