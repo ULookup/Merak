@@ -543,4 +543,101 @@ std::string WorldbuildingService::build_world_context(const std::string& world_i
     return ctx.str();
 }
 
+WorldbuildingService::ChapterReview
+WorldbuildingService::get_chapter_review(const std::string& world_id,
+                                          const std::string& chapter_id) const {
+    ChapterReview review;
+    review.chapter_id = chapter_id;
+
+    auto chapter = narrative_.get_chapter(world_id, chapter_id);
+    if (!chapter) {
+        throw std::runtime_error("Chapter not found: " + chapter_id);
+    }
+    review.title = chapter->title;
+
+    // Collect scenes for this chapter
+    auto scenes = narrative_.list_scenes(world_id, chapter_id);
+    std::unordered_set<std::string> seen_characters;
+    for (const auto& ss : scenes) {
+        auto scene = narrative_.get_scene(world_id, ss.id);
+        if (!scene) continue;
+
+        // Count Chinese characters in narrative text
+        int chinese_chars = 0;
+        for (size_t i = 0; i < scene->narrative.length(); ) {
+            unsigned char c = static_cast<unsigned char>(scene->narrative[i]);
+            int len = 1;
+            if ((c & 0x80) == 0x00) {
+                len = 1;
+            } else if ((c & 0xE0) == 0xC0) {
+                len = 2;
+            } else if ((c & 0xF0) == 0xE0) {
+                len = 3;
+            } else if ((c & 0xF8) == 0xF0) {
+                len = 4;
+            }
+            if (len >= 3) chinese_chars++;  // CJK characters are 3+ bytes in UTF-8
+            i += len;
+        }
+        review.word_count += chinese_chars;
+
+        // Collect character names from participant_ids
+        for (const auto& pid : scene->participant_ids) {
+            if (seen_characters.contains(pid)) continue;
+            seen_characters.insert(pid);
+            auto agent = agents_.get_agent(pid);
+            if (agent) {
+                review.character_names.push_back(agent->name);
+            }
+        }
+    }
+
+    // Collect foreshadowings planted/paid in this chapter
+    auto all_foreshadows = foreshadowing_.list(world_id, std::nullopt);
+    for (const auto& f : all_foreshadows) {
+        if (f.planted_at.has_value() && *f.planted_at == chapter_id) {
+            review.foreshadowing_planted.push_back({f.id, f.content});
+        }
+        if (f.paid_at.has_value() && *f.paid_at == chapter_id) {
+            review.foreshadowing_paid.push_back({f.id, f.content});
+        }
+    }
+
+    // Generate writing advice in Chinese
+    int char_count = static_cast<int>(review.character_names.size());
+    int foreshadow_open = static_cast<int>(review.foreshadowing_planted.size());
+    int foreshadow_paid = static_cast<int>(review.foreshadowing_paid.size());
+
+    std::ostringstream advice;
+    advice << "本章出场" << char_count << "个角色，"
+           << "埋下伏笔" << foreshadow_open << "个，回收伏笔" << foreshadow_paid << "个。";
+
+    if (review.word_count < 1000) {
+        advice << "篇幅较短，可以考虑适当展开场景描写或角色对话。";
+    } else if (review.word_count > 5000) {
+        advice << "篇幅较长，建议保持节奏感，避免读者疲劳。";
+    } else {
+        advice << "篇幅适中，节奏良好。";
+    }
+
+    if (foreshadow_open == 0 && foreshadow_paid == 0) {
+        advice << "本章暂无伏笔操作，可以考虑为后续情节埋下线索。";
+    }
+
+    if (char_count > 0) {
+        advice << "主要角色包括：";
+        for (size_t i = 0; i < review.character_names.size() && i < 5; i++) {
+            if (i > 0) advice << "、";
+            advice << review.character_names[i];
+        }
+        if (review.character_names.size() > 5) {
+            advice << "等" << review.character_names.size() << "人";
+        }
+        advice << "。";
+    }
+
+    review.writing_advice = advice.str();
+    return review;
+}
+
 } // namespace merak::worldbuilding

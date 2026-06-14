@@ -136,6 +136,25 @@ public:
     int diary_context_limit() const { return diary_context_limit_; }
     void set_diary_context_limit(int limit) { diary_context_limit_ = limit; }
 
+    // Chapter review
+    struct ForeshadowingItem {
+        std::string id;
+        std::string content;
+    };
+
+    struct ChapterReview {
+        std::string chapter_id;
+        std::string title;
+        int word_count = 0;
+        std::vector<std::string> character_names;
+        std::vector<ForeshadowingItem> foreshadowing_planted;
+        std::vector<ForeshadowingItem> foreshadowing_paid;
+        std::string writing_advice;
+    };
+
+    ChapterReview get_chapter_review(const std::string& world_id,
+                                      const std::string& chapter_id) const;
+
 private:
     std::filesystem::path root_;
     WorldStore worlds_;

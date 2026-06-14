@@ -256,6 +256,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_get_chapter(req, res); });
     server.Patch(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+))",
         [this](const auto& req, auto& res) { handle_patch_chapter(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+)/review)",
+        [this](const auto& req, auto& res) { handle_chapter_review(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/scenes)",
         [this](const auto& req, auto& res) { handle_list_scenes(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes)",
@@ -1293,6 +1295,41 @@ void WorldbuildingHttpHandler::handle_patch_chapter(const httplib::Request& req,
         res.set_content(j.dump(), "application/json");
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
+    }
+}
+
+// --- Chapter review ---
+
+void WorldbuildingHttpHandler::handle_chapter_review(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string cid = req.matches[2];
+
+        auto review = service_->get_chapter_review(wid, cid);
+
+        nlohmann::json planted_arr = nlohmann::json::array();
+        for (const auto& f : review.foreshadowing_planted) {
+            planted_arr.push_back({{"id", f.id}, {"content", f.content}});
+        }
+        nlohmann::json paid_arr = nlohmann::json::array();
+        for (const auto& f : review.foreshadowing_paid) {
+            paid_arr.push_back({{"id", f.id}, {"content", f.content}});
+        }
+
+        json_response(res, {
+            {"ok", true},
+            {"review", {
+                {"chapter_id", review.chapter_id},
+                {"title", review.title},
+                {"word_count", review.word_count},
+                {"character_names", review.character_names},
+                {"foreshadowing_planted", planted_arr},
+                {"foreshadowing_paid", paid_arr},
+                {"writing_advice", review.writing_advice}
+            }}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 500, "review_failed");
     }
 }
 
