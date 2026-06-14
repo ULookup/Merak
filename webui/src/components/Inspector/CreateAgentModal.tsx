@@ -60,75 +60,75 @@ export default function CreateAgentModal({ worldId, onClose, onCreated }: Props)
 
   return (
     <div className={styles.scrim} role="presentation">
-      <section className={styles.modal} role="dialog" aria-modal="true" aria-label="Create character">
-        <button className={styles.closeBtn} onClick={onClose} aria-label="Cancel" disabled={submitting}>
+      <section className={styles.modal} role="dialog" aria-modal="true" aria-label="创建角色">
+        <button className={styles.closeBtn} onClick={onClose} aria-label="取消" disabled={submitting}>
           <X size={17} aria-hidden="true" strokeWidth={2.4} />
         </button>
         <div className={styles.iconWrap}>
           <UserPlus size={28} aria-hidden="true" strokeWidth={2.1} />
         </div>
-        <div className={styles.kicker}>New Voice</div>
-        <h2>Create Character</h2>
-        <p>Add a new character to this world. The more detail you provide, the more consistent their voice will be in scenes.</p>
+        <div className={styles.kicker}>角色声音</div>
+        <h2>创建角色</h2>
+        <p>把角色的身份、动机和说话方式交给后端保存。信息越清楚，后续场景里的角色声音越稳定。</p>
 
         <div className={styles.row}>
           <label className={styles.field}>
-            <span>Name (ID)</span>
-            <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. elara_moonshadow" />
+            <span>角色名</span>
+            <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：艾拉、陈泊舟" />
           </label>
           <label className={styles.field}>
-            <span>Identity</span>
-            <input className={styles.input} value={identity} onChange={(e) => setIdentity(e.target.value)} placeholder="Thief, Scholar..." />
+            <span>身份定位</span>
+            <input className={styles.input} value={identity} onChange={(e) => setIdentity(e.target.value)} placeholder="例如：边境医师、失势贵族" />
           </label>
         </div>
 
         <div className={styles.row}>
           <label className={styles.field}>
-            <span>Gender</span>
-            <input className={styles.input} value={gender} onChange={(e) => setGender(e.target.value)} placeholder="Female / Male / ..." />
+            <span>性别</span>
+            <input className={styles.input} value={gender} onChange={(e) => setGender(e.target.value)} placeholder="可留空，或写角色自我认同" />
           </label>
           <label className={styles.field}>
-            <span>Age</span>
+            <span>年龄</span>
             <input className={styles.input} type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="28" />
           </label>
         </div>
 
         <label className={styles.field}>
-          <span>Race</span>
-          <input className={styles.input} value={race} onChange={(e) => setRace(e.target.value)} placeholder="Human, Elf, ..." />
+          <span>种族 / 群体</span>
+          <input className={styles.input} value={race} onChange={(e) => setRace(e.target.value)} placeholder="例如：人类、仿生人、北境氏族" />
         </label>
 
         <label className={styles.field}>
-          <span>Core Desire</span>
-          <input className={styles.input} value={coreDesire} onChange={(e) => setCoreDesire(e.target.value)} placeholder="What drives them..." />
+          <span>核心欲望</span>
+          <input className={styles.input} value={coreDesire} onChange={(e) => setCoreDesire(e.target.value)} placeholder="这个角色最想得到什么？" />
         </label>
 
         <label className={styles.field}>
-          <span>Deep Fear</span>
-          <input className={styles.input} value={deepFear} onChange={(e) => setDeepFear(e.target.value)} placeholder="What they're most afraid of..." />
+          <span>深层恐惧</span>
+          <input className={styles.input} value={deepFear} onChange={(e) => setDeepFear(e.target.value)} placeholder="他们最害怕失去或面对什么？" />
         </label>
 
         <label className={styles.field}>
-          <span>Speaking Style</span>
-          <input className={styles.input} value={speakingStyle} onChange={(e) => setSpeakingStyle(e.target.value)} placeholder="Formal, casual, terse..." />
+          <span>说话风格</span>
+          <input className={styles.input} value={speakingStyle} onChange={(e) => setSpeakingStyle(e.target.value)} placeholder="例如：克制、讽刺、短句多" />
         </label>
 
         <label className={styles.field}>
-          <span>Background</span>
-          <textarea className={styles.textarea} value={background} onChange={(e) => setBackground(e.target.value)} placeholder="A brief history..." rows={3} />
+          <span>背景</span>
+          <textarea className={styles.textarea} value={background} onChange={(e) => setBackground(e.target.value)} placeholder="简要写下经历、关系或创伤。" rows={3} />
         </label>
 
         <label className={styles.field}>
-          <span>Core Traits (comma-separated)</span>
-          <input className={styles.input} value={traits} onChange={(e) => setTraits(e.target.value)} placeholder="brave, loyal, reckless" />
+          <span>核心特质（用逗号分隔）</span>
+          <input className={styles.input} value={traits} onChange={(e) => setTraits(e.target.value)} placeholder="勇敢，敏感，容易冲动" />
         </label>
 
         {error && <div className={styles.error}>{error}</div>}
 
         <div className={styles.actions}>
-          <button className={styles.secondary} onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className={styles.secondary} onClick={onClose} disabled={submitting}>取消</button>
           <button className={styles.primary} onClick={handleSubmit} disabled={submitting || !name.trim()}>
-            {submitting ? <><Loader2 size={15} aria-hidden="true" className={styles.spin} /> Creating...</> : <><Sparkles size={14} aria-hidden="true" /> Create Character</>}
+            {submitting ? <><Loader2 size={15} aria-hidden="true" className={styles.spin} /> 正在创建...</> : <><Sparkles size={14} aria-hidden="true" /> 创建角色</>}
           </button>
         </div>
       </section>
