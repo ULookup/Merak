@@ -14,6 +14,7 @@ Config ConfigLoader::default_config() {
     cfg.llm.api_base_url = "https://api.openai.com/v1";
     cfg.llm.default_model = "gpt-4o";
     cfg.llm.max_output_tokens = 4096;
+    cfg.llm.temperature = 0.8;
     cfg.llm.provider = "openai";
     return cfg;
 }
@@ -171,7 +172,7 @@ void ConfigLoader::merge(Config& base, const Config& override_cfg) {
     if (l.request_timeout_ms > 0) base.llm.request_timeout_ms = l.request_timeout_ms;
     if (l.max_retries > 0) base.llm.max_retries = l.max_retries;
     if (l.thinking.has_value()) base.llm.thinking = l.thinking;
-    if (l.temperature != 0.0) base.llm.temperature = l.temperature;
+    if (l.temperature >= 0.0) base.llm.temperature = l.temperature; // -1.0 sentinel = "not set"
     if (!l.context_memory_length.empty()) base.llm.context_memory_length = l.context_memory_length;
 
     if (!override_cfg.models.empty()) base.models = override_cfg.models;

@@ -23,7 +23,7 @@ struct LLMConfig {
     int max_output_tokens = 0;
     int request_timeout_ms = 60000;
     int max_retries = 3;
-    double temperature = 0.8;
+    double temperature = -1.0; // -1.0 = "not set" sentinel; valid range [0.0, 2.0]
     std::string context_memory_length = "medium"; // "short" | "medium" | "long"
     std::optional<ThinkingConfig> thinking;
 };
