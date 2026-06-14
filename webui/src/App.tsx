@@ -12,6 +12,9 @@ import { ToastProvider } from './components/Toast';
 import WorldDashboard from './components/WorldDashboard';
 import WorldOnboarding from './components/WorldOnboarding';
 import WorldSidebar from './components/WorldSidebar';
+import SetupWizard from './components/SetupWizard';
+import ChapterReviewBanner from './components/ChapterReviewBanner';
+import ExportDialog from './components/ExportDialog';
 import DesktopBoot from './DesktopBoot';
 import { useSSE } from './hooks/useSSE';
 
@@ -211,6 +214,38 @@ function AppInner() {
           <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
         </ErrorBoundary>
       </div>
+
+      {/* Setup Wizard — shown when LLM is not configured */}
+      {state.showSetupWizard && (
+        <SetupWizard onComplete={() => dispatch({ type: 'SET_LLM_CONFIGURED', configured: true })} />
+      )}
+
+      {/* Chapter Review Banner — shown after chapter completion */}
+      {state.chapterReview && state.worldId && (
+        <ChapterReviewBanner
+          worldId={state.worldId}
+          chapterId={state.chapterReview.chapter_id}
+          chapterTitle={state.chapterReview.title}
+          onNewChapter={() => {
+            dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
+            // TODO: wire to actual new-chapter action
+          }}
+          onRevise={() => {
+            dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
+          }}
+          onExport={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: true })}
+          onClose={() => dispatch({ type: 'SET_CHAPTER_REVIEW', review: null })}
+        />
+      )}
+
+      {/* Export Dialog */}
+      {state.showExportDialog && state.worldId && (
+        <ExportDialog
+          worldId={state.worldId}
+          chapters={[] /* TODO: populate from full chapter list when available in state */}
+          onClose={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: false })}
+        />
+      )}
     </ToastProvider>
   );
 }
