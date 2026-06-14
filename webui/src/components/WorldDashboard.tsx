@@ -1,3 +1,4 @@
+import { CircleHelp } from 'lucide-react';
 import { useAppState } from '../AppState';
 import AgentCard from './AgentCard';
 import styles from './WorldDashboard.module.css';
@@ -10,16 +11,17 @@ const PIPELINE_PHASES = [
   'reflection',
 ];
 
-export default function WorldDashboard() {
+interface WorldDashboardProps {
+  onOpenGuide?: () => void;
+}
+
+export default function WorldDashboard({ onOpenGuide }: WorldDashboardProps) {
   const { state, dispatch } = useAppState();
 
   const currentWorld = state.worlds.find((w) => w.id === state.worldId);
   const storyOverview = state.storyOverview;
 
-  // Compute chapter and scene counts from storyOverview (loaded by App.tsx)
-  const chapterCount = storyOverview?.current_chapter
-    ? storyOverview.current_chapter.number
-    : 0;
+  const chapterCount = storyOverview?.current_chapter ? storyOverview.current_chapter.number : 0;
   const sceneCount = storyOverview?.current_scene ? 1 : 0;
 
   function handleBack() {
@@ -28,17 +30,10 @@ export default function WorldDashboard() {
   }
 
   const isLoading = state.worldbuildingStatus === 'loading';
-
-  // Separate agents by kind (string-based; actual API uses string kinds)
   const godAgent = state.agents.filter((a) => a.kind === 'god');
-  const characterAgents = state.agents.filter(
-    (a) => a.kind === 'individual' || a.kind === 'group'
-  );
+  const characterAgents = state.agents.filter((a) => a.kind === 'individual' || a.kind === 'group');
   const managerAgents = state.agents.filter((a) => a.kind.includes('manager'));
-
-  const activePhaseIndex = state.pipelinePhase
-    ? PIPELINE_PHASES.indexOf(state.pipelinePhase)
-    : -1;
+  const activePhaseIndex = state.pipelinePhase ? PIPELINE_PHASES.indexOf(state.pipelinePhase) : -1;
 
   if (isLoading) {
     return (
@@ -55,16 +50,23 @@ export default function WorldDashboard() {
       <div className={styles.container}>
         <div className={styles.header}>
           <button className={styles.backBtn} onClick={handleBack}>
-            ← Back to Worlds
+            Back to Worlds
           </button>
-          <div>
-            <h1 className={styles.worldTitle}>
-              {currentWorld?.name ?? 'World Dashboard'}
-            </h1>
+          <div className={styles.headerText}>
+            <h1 className={styles.worldTitle}>{currentWorld?.name ?? 'World Dashboard'}</h1>
             {currentWorld?.description && (
               <p className={styles.worldDesc}>{currentWorld.description}</p>
             )}
           </div>
+          <button
+            className={styles.helpBtn}
+            type="button"
+            onClick={onOpenGuide}
+            aria-label="Open workbench guide"
+            title="Open workbench guide"
+          >
+            <CircleHelp size={18} aria-hidden="true" strokeWidth={2.2} />
+          </button>
         </div>
 
         <div className={styles.stats}>
@@ -133,9 +135,7 @@ export default function WorldDashboard() {
           </div>
         )}
 
-        {state.worldbuildingError && (
-          <div className={styles.error}>{state.worldbuildingError}</div>
-        )}
+        {state.worldbuildingError && <div className={styles.error}>{state.worldbuildingError}</div>}
       </div>
     </div>
   );

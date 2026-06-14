@@ -1,0 +1,142 @@
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.scrim {
+  flex: 1;
+  border: 0;
+  background: rgba(18, 24, 27, 0.18);
+  cursor: default;
+}
+
+.drawer {
+  width: min(420px, 100vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-md);
+  overflow-y: auto;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  padding: 18px 18px 14px;
+}
+
+.kicker {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.header h2 {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 820;
+  letter-spacing: 0;
+}
+
+.closeBtn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.closeBtn:hover {
+  background: var(--surface-muted);
+  border-color: var(--border-strong);
+}
+
+.intro {
+  margin: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+  padding: 11px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 650;
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 18px 20px;
+}
+
+.section {
+  border-bottom: 1px solid var(--border);
+  padding: 0 0 12px;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.sectionHeader h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.3;
+  font-weight: 780;
+}
+
+.section p {
+  margin: 8px 0;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.section ul {
+  margin: 0;
+  padding-left: 17px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.section li + li {
+  margin-top: 3px;
+}
+
+@media (max-width: 640px) {
+  .scrim {
+    display: none;
+  }
+
+  .drawer {
+    width: 100vw;
+    border-left: 0;
+  }
+}

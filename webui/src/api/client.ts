@@ -1,4 +1,5 @@
 import type {
+  AdvanceWorldTimeResponse,
   AgentDetailResponse,
   AgentImageListResponse,
   AgentImageType,
@@ -17,6 +18,7 @@ import type {
   CreateSceneResponse,
   CreateSecretResponse,
   CreateSessionResponse,
+  DeleteWorldResponse,
   DiaryListResponse,
   EndSceneResponse,
   ForeshadowingListResponse,
@@ -388,8 +390,8 @@ export const api = {
       description,
     }),
 
-  deleteWorld: () =>
-    Promise.reject(new ApiError('删除世界后端接口暂未实现。', 501, 'not_implemented')),
+  deleteWorld: (id: string) =>
+    request<DeleteWorldResponse>('DELETE', `/api/worldbuilding/worlds/${id}`),
 
   listAgents: (worldId: string) =>
     request<AgentListResponse>('GET', `/api/worldbuilding/${worldId}/agents`),
@@ -403,8 +405,10 @@ export const api = {
   getWorldTime: (worldId: string) =>
     request<WorldTimeResponse>('GET', `/api/worldbuilding/${worldId}/time`),
 
-  advanceWorldTime: () =>
-    Promise.reject(new ApiError('推进世界时间后端接口暂未实现。', 501, 'not_implemented')),
+  advanceWorldTime: (worldId: string, worldTime: string) =>
+    request<AdvanceWorldTimeResponse>('POST', `/api/worldbuilding/${worldId}/time/advance`, {
+      world_time: worldTime,
+    }),
 
   getStoryOverview: (worldId: string, sessionId = '') =>
     fallbackRequest<StoryOverviewResponse>(

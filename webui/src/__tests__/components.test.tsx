@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
+﻿import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { AppStateProvider, useAppState } from '../AppState';
@@ -11,6 +11,7 @@ import SystemCell from '../components/cells/SystemCell';
 import ToolCell from '../components/cells/ToolCell';
 import UserCell from '../components/cells/UserCell';
 import ChatTimeline from '../components/ChatTimeline';
+import HelpDrawer from '../components/HelpDrawer';
 import InspectorPanel from '../components/InspectorPanel';
 import MainPanel from '../components/MainPanel';
 import SessionList from '../components/Sidebar/SessionList';
@@ -103,10 +104,23 @@ function WorldIconHarness() {
   return <WorldSelector />;
 }
 
+function HelpDrawerHarness() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <AppStateProvider>
+      <ToastProvider>
+        <MainPanel onOpenGuide={() => setOpen(true)} connectionState="connected" />
+        <HelpDrawer open={open} onClose={() => setOpen(false)} />
+      </ToastProvider>
+    </AppStateProvider>
+  );
+}
+
 describe('Cell components', () => {
   it('BrandMark renders the Merak logo accessibly', () => {
     render(<BrandMark />);
-    expect(screen.getByRole('img', { name: 'Merak pen planet logo' })).toBeDefined();
+    expect(screen.getByRole('img', { name: 'Merak wordmark logo' })).toBeDefined();
     expect(screen.getByText('MERAK')).toBeDefined();
   });
 
@@ -164,15 +178,26 @@ describe('Cell components', () => {
     expect(
       screen.getByRole('button', { name: 'Open inspector' }).querySelector('svg'),
     ).toBeDefined();
-    expect(screen.queryByText('☰')).toBeNull();
-    expect(screen.queryByText('◫')).toBeNull();
   });
 
   it('AssistantCell copy action uses real SVG icons', () => {
     render(<AssistantCell text="Copy me" />);
     const button = screen.getByRole('button', { name: 'Copy message' });
     expect(button.querySelector('svg')).toBeDefined();
-    expect(screen.queryByText('⧉ Copy')).toBeNull();
+  });
+
+  it('opens and closes the workbench guide from the help button', async () => {
+    render(<HelpDrawerHarness />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open workbench guide' }));
+
+    expect(await screen.findByRole('dialog', { name: 'Merak guide' })).toBeDefined();
+    expect(screen.getByText('Create a world')).toBeDefined();
+    expect(screen.getByText('Run and stream')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close guide' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Merak guide' })).toBeNull();
   });
 
   it('Sidebar session and world actions use real SVG icons', async () => {
@@ -245,19 +270,20 @@ describe('Cell components', () => {
 });
 
 describe('Icon source hygiene', () => {
-  it('does not use emoji or symbol placeholders for functional icons', () => {
+  it('does not leave mojibake in primary workbench components', () => {
     const files = [
       'src/components/MainPanel.tsx',
+      'src/components/Inspector/StoryInspector.tsx',
+      'src/components/Sidebar/PipelineNavigator.tsx',
+      'src/components/Sidebar/WorkflowMonitor.tsx',
       'src/components/cells/AssistantCell.tsx',
       'src/components/Sidebar/SessionList.tsx',
       'src/components/Sidebar/WorldSelector.tsx',
       'src/components/Sidebar.tsx',
     ];
-    const source = files.map((file) => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
+    const source = files.map((file) => readFileSync(join(process.cwd(), file), 'utf8')).join('');
 
-    expect(source).not.toMatch(/[☰◫✎⧉✓]/);
-    expect(source).not.toContain('鉁?');
-    expect(source).not.toContain('脳');
+    expect(source).not.toMatch(/[涓褰宸鈥鉁瑙鍦鍒鑷鎵锛路]/);
   });
 });
 

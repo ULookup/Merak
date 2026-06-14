@@ -1,16 +1,15 @@
 import { useEffect } from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { activatePipelineWorkflow, listPipelineWorkflows } from '../api/client';
+import type { WorkflowSummary } from '../api/types';
 import { AppStateProvider, useAppState } from '../AppState';
+import WorkflowMonitor from '../components/Sidebar/WorkflowMonitor';
 
 vi.mock('../api/client', () => ({
   listPipelineWorkflows: vi.fn(),
   activatePipelineWorkflow: vi.fn(),
 }));
-
-import WorkflowMonitor from '../components/Sidebar/WorkflowMonitor';
-import { activatePipelineWorkflow, listPipelineWorkflows } from '../api/client';
-import type { WorkflowSummary } from '../api/types';
 
 function MonitorHarness() {
   const { dispatch } = useAppState();
@@ -41,9 +40,7 @@ describe('WorkflowMonitor', () => {
   });
 
   it('shows loading state initially', async () => {
-    vi.mocked(listPipelineWorkflows).mockReturnValue(
-      new Promise<WorkflowSummary[]>(() => {}),
-    );
+    vi.mocked(listPipelineWorkflows).mockReturnValue(new Promise<WorkflowSummary[]>(() => {}));
 
     render(
       <AppStateProvider>
@@ -92,7 +89,7 @@ describe('WorkflowMonitor', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('工作流状态')).toBeDefined();
+      expect(screen.getByText('Workflow Status')).toBeDefined();
     });
 
     expect(screen.queryByRole('combobox')).toBeNull();
@@ -113,10 +110,7 @@ describe('WorkflowMonitor', () => {
     fireEvent.change(select, { target: { value: 'fast_track' } });
 
     await waitFor(() => {
-      expect(vi.mocked(activatePipelineWorkflow)).toHaveBeenCalledWith(
-        'world_1',
-        'fast_track',
-      );
+      expect(vi.mocked(activatePipelineWorkflow)).toHaveBeenCalledWith('world_1', 'fast_track');
     });
   });
 
@@ -136,9 +130,7 @@ describe('WorkflowMonitor', () => {
     fireEvent.change(select, { target: { value: 'fast_track' } });
 
     await waitFor(() => {
-      expect(alertMock).toHaveBeenCalledWith(
-        'Failed to activate workflow: Server error',
-      );
+      expect(alertMock).toHaveBeenCalledWith('Failed to activate workflow: Server error');
       expect((select as HTMLSelectElement).value).toBe('default');
     });
   });

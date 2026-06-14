@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { api } from './api/client';
 import styles from './App.module.css';
 import { AppStateProvider, useAppState } from './AppState';
 import ConnectionBanner from './components/ConnectionBanner';
 import ErrorBoundary from './components/ErrorBoundary';
+import HelpDrawer from './components/HelpDrawer';
 import InspectorPanel from './components/InspectorPanel';
 import MainPanel from './components/MainPanel';
 import Skeleton from './components/Skeleton';
-import WorldOnboarding from './components/WorldOnboarding';
-import WorldDashboard from './components/WorldDashboard';
-import WorldSidebar from './components/WorldSidebar';
 import { ToastProvider } from './components/Toast';
+import WorldDashboard from './components/WorldDashboard';
+import WorldOnboarding from './components/WorldOnboarding';
+import WorldSidebar from './components/WorldSidebar';
 import DesktopBoot from './DesktopBoot';
 import { useSSE } from './hooks/useSSE';
 
@@ -18,18 +19,18 @@ function AppInner() {
   const { state, dispatch } = useAppState();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [inspectorOpen, setInspectorOpen] = useState(window.innerWidth >= 1180);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [bootstrapped, setBootstrapped] = useState(false);
 
   // Bootstrap: load metadata, worlds, sessions, capabilities once
   useEffect(() => {
     async function bootstrap() {
-      const [metadataRes, worldsRes, sessionsRes, capabilitiesRes] =
-        await Promise.allSettled([
-          api.metadata(),
-          api.listWorlds(),
-          api.listSessions(),
-          api.capabilities(),
-        ]);
+      const [metadataRes, worldsRes, sessionsRes, capabilitiesRes] = await Promise.allSettled([
+        api.metadata(),
+        api.listWorlds(),
+        api.listSessions(),
+        api.capabilities(),
+      ]);
 
       if (metadataRes.status === 'fulfilled') {
         dispatch({ type: 'SET_METADATA', metadata: metadataRes.value });
@@ -58,9 +59,7 @@ function AppInner() {
       }
 
       // Try to restore last active session with a world binding
-      const activeSession = sessions.find(
-        (s) => !s.archived_at && s.world_id
-      );
+      const activeSession = sessions.find((s) => !s.archived_at && s.world_id);
 
       if (activeSession) {
         dispatch({ type: 'SET_WORLD', worldId: activeSession.world_id });
@@ -145,7 +144,7 @@ function AppInner() {
     };
   }, [state.worldId, state.sessionId, state.storyVersion, dispatch]);
 
-  // Esc key → cancel current run
+  // Esc key cancels current run
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -160,9 +159,7 @@ function AppInner() {
   }, [state.currentRun, state.status]);
 
   // SSE connection: only in 'ready' phase
-  const sseUrl = state.appPhase === 'ready' && state.sessionId
-    ? api.sseUrl(state.sessionId)
-    : null;
+  const sseUrl = state.appPhase === 'ready' && state.sessionId ? api.sseUrl(state.sessionId) : null;
 
   const connState = useSSE(sseUrl, dispatch, state.lastSeq);
 
@@ -174,7 +171,8 @@ function AppInner() {
   if (state.appPhase === 'no_world') {
     return (
       <ToastProvider>
-        <WorldOnboarding />
+        <WorldOnboarding onOpenGuide={() => setHelpOpen(true)} />
+        <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
       </ToastProvider>
     );
   }
@@ -182,7 +180,8 @@ function AppInner() {
   if (state.appPhase === 'no_agent') {
     return (
       <ToastProvider>
-        <WorldDashboard />
+        <WorldDashboard onOpenGuide={() => setHelpOpen(true)} />
+        <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
       </ToastProvider>
     );
   }
@@ -200,12 +199,14 @@ function AppInner() {
             <MainPanel
               onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
               onToggleInspector={() => setInspectorOpen((prev) => !prev)}
+              onOpenGuide={() => setHelpOpen(true)}
               sidebarOpen={sidebarOpen}
               inspectorOpen={inspectorOpen}
               connectionState={connState}
             />
           </div>
         </ErrorBoundary>
+        <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
         <ErrorBoundary>
           <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
         </ErrorBoundary>

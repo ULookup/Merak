@@ -1,17 +1,15 @@
-import { useEffect } from 'react';
 import { useEffect, useRef } from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { AppStateProvider, useAppState } from '../AppState';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { advancePipeline } from '../api/client';
 import type { CreativePhase } from '../api/types';
+import { AppStateProvider, useAppState } from '../AppState';
+import PipelineNavigator from '../components/Sidebar/PipelineNavigator';
 
 vi.mock('../api/client', () => ({
   advancePipeline: vi.fn(),
   getPipelineState: vi.fn().mockResolvedValue({}),
 }));
-
-import PipelineNavigator from '../components/Sidebar/PipelineNavigator';
-import { advancePipeline, getPipelineState } from '../api/client';
 
 const EMPTY_ARR: string[] = [];
 const NEXT_CHAR_CREATION: CreativePhase[] = ['character_creation'];
@@ -48,7 +46,7 @@ function PipelineHarness({
     if (pipelineAdvanceError) {
       dispatch({ type: 'PIPELINE_ADVANCE_FAILED', reason: pipelineAdvanceError });
     }
-  }, []);
+  }, [allowedRetreat, dispatch, nextAllowed, phase, pipelineAdvanceError]);
 
   return <PipelineNavigator />;
 }
@@ -72,11 +70,11 @@ describe('PipelineNavigator', () => {
       </AppStateProvider>,
     );
 
-    expect(screen.getByText('世界观构建')).toBeInTheDocument();
-    expect(screen.getByText('角色创建')).toBeInTheDocument();
-    expect(screen.getByText('剧情架构')).toBeInTheDocument();
-    expect(screen.getByText('场景写作')).toBeInTheDocument();
-    expect(screen.getByText('回顾整理')).toBeInTheDocument();
+    expect(screen.getByText('World')).toBeInTheDocument();
+    expect(screen.getByText('Characters')).toBeInTheDocument();
+    expect(screen.getByText('Plot')).toBeInTheDocument();
+    expect(screen.getByText('Scenes')).toBeInTheDocument();
+    expect(screen.getByText('Reflection')).toBeInTheDocument();
   });
 
   it('shows error banner when pipelineAdvanceError is set', () => {
@@ -98,7 +96,9 @@ describe('PipelineNavigator', () => {
 
     expect(screen.getByText(/Advance failed: Test error/)).toBeInTheDocument();
 
-    fireEvent.click(within(screen.getByText(/Advance failed: Test error/).parentElement!).getByText('Dismiss'));
+    fireEvent.click(
+      within(screen.getByText(/Advance failed: Test error/).parentElement!).getByText('Dismiss'),
+    );
 
     await waitFor(() => {
       expect(screen.queryByText(/Advance failed: Test error/)).toBeNull();
@@ -111,19 +111,14 @@ describe('PipelineNavigator', () => {
 
     render(
       <AppStateProvider>
-        <PipelineHarness
-          phase="worldbuilding"
-          nextAllowed={NEXT_CHAR_CREATION}
-        />
+        <PipelineHarness phase="worldbuilding" nextAllowed={NEXT_CHAR_CREATION} />
       </AppStateProvider>,
     );
 
-    fireEvent.click(screen.getByText('角色创建'));
+    fireEvent.click(screen.getByText('Characters'));
 
     await waitFor(() => {
-      expect(alertMock).toHaveBeenCalledWith(
-        'Pipeline advance failed: Server error',
-      );
+      expect(alertMock).toHaveBeenCalledWith('Pipeline advance failed: Server error');
     });
   });
 });
