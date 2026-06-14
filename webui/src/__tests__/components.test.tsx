@@ -12,6 +12,10 @@ import ToolCell from '../components/cells/ToolCell';
 import UserCell from '../components/cells/UserCell';
 import ChatTimeline from '../components/ChatTimeline';
 import InspectorPanel from '../components/InspectorPanel';
+import CreateAgentModal from '../components/Inspector/CreateAgentModal';
+import CreateForeshadowingModal from '../components/Inspector/CreateForeshadowingModal';
+import CreateSceneModal from '../components/Inspector/CreateSceneModal';
+import CreateSecretModal from '../components/Inspector/CreateSecretModal';
 import RunInspector from '../components/Inspector/RunInspector';
 import StoryInspector from '../components/Inspector/StoryInspector';
 import MainPanel from '../components/MainPanel';
@@ -334,6 +338,57 @@ describe('Cell components', () => {
 
     expect(screen.getByText('暂无运行记录。开始一次创作后，这里会显示步骤、工具和 token 统计。')).toBeDefined();
     expect(document.body.textContent ?? '').not.toMatch(/Run Audit|Local timeline|backend/i);
+  });
+
+  it('creation modals use beginner-friendly Chinese labels and avoid engineering placeholders', () => {
+    const noop = () => {};
+    const { rerender } = render(
+      <AppStateProvider>
+        <CreateAgentModal worldId="world_1" onClose={noop} />
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByRole('dialog', { name: '创建角色' })).toBeDefined();
+    expect(screen.getByText('角色名')).toBeDefined();
+    expect(screen.getByPlaceholderText('例如：艾拉、陈泊舟')).toBeDefined();
+    expect(screen.getByText('说话风格')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/Create|New Voice|Name \(ID\)|comma-separated|e\.g\./i);
+
+    rerender(
+      <AppStateProvider>
+        <CreateSceneModal worldId="world_1" onClose={noop} />
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByRole('dialog', { name: '创建场景' })).toBeDefined();
+    expect(screen.getByText('所属章节 ID')).toBeDefined();
+    expect(screen.getByPlaceholderText('从当前章节自动带入，或粘贴后端返回的章节 ID')).toBeDefined();
+    expect(screen.getByText('参与角色 ID')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/Create Scene|New Beat|agent IDs|Day 1 Dawn/i);
+
+    rerender(
+      <AppStateProvider>
+        <CreateForeshadowingModal worldId="world_1" onClose={noop} />
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByRole('dialog', { name: '埋设伏笔' })).toBeDefined();
+    expect(screen.getByText('伏笔内容')).toBeDefined();
+    expect(screen.getByText('隐蔽程度')).toBeDefined();
+    expect(screen.getByText('含蓄')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/New Foreshadowing|Plant Thread|Visible|Subtle|Obvious/i);
+
+    rerender(
+      <AppStateProvider>
+        <CreateSecretModal worldId="world_1" onClose={noop} />
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByRole('dialog', { name: '创建秘密' })).toBeDefined();
+    expect(screen.getByText('真相')).toBeDefined();
+    expect(screen.getByText('知情角色 ID')).toBeDefined();
+    expect(screen.getByText('怀疑中的角色 ID')).toBeDefined();
+    expect(document.body.textContent ?? '').not.toMatch(/New Secret|Knowledge Boundary|agent IDs|Public version/i);
   });
 
   it('ChatTimeline renders streamed assistant markdown', async () => {

@@ -55,60 +55,60 @@ export default function CreateSceneModal({ worldId, onClose, onCreated }: Props)
 
   return (
     <div className={styles.scrim} role="presentation">
-      <section className={styles.modal} role="dialog" aria-modal="true" aria-label="Create scene">
-        <button className={styles.closeBtn} onClick={onClose} aria-label="Cancel" disabled={submitting}>
+      <section className={styles.modal} role="dialog" aria-modal="true" aria-label="创建场景">
+        <button className={styles.closeBtn} onClick={onClose} aria-label="取消" disabled={submitting}>
           <X size={17} aria-hidden="true" strokeWidth={2.4} />
         </button>
         <div className={styles.iconWrap}>
           <Clapperboard size={28} aria-hidden="true" strokeWidth={2.1} />
         </div>
-        <div className={styles.kicker}>New Beat</div>
-        <h2>Create Scene</h2>
-        <p>Add a new scene to continue the narrative. Each scene is a contained story beat.</p>
+        <div className={styles.kicker}>叙事片段</div>
+        <h2>创建场景</h2>
+        <p>把一个独立故事片段保存到当前世界。章节 ID 和角色 ID 会直接传给后端，不会在前端伪造关系。</p>
 
         <label className={styles.field}>
-          <span>Title</span>
-          <input className={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. The Tavern Confrontation" />
+          <span>场景标题</span>
+          <input className={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="例如：酒馆里的摊牌" />
         </label>
 
         <div className={styles.row}>
           <label className={styles.field}>
-            <span>Chapter ID</span>
-            <input className={styles.input} value={chapterId} onChange={(e) => setChapterId(e.target.value)} placeholder="chapter ID" />
+            <span>所属章节 ID</span>
+            <input className={styles.input} value={chapterId} onChange={(e) => setChapterId(e.target.value)} placeholder="从当前章节自动带入，或粘贴后端返回的章节 ID" />
           </label>
           <label className={styles.field}>
-            <span><MapPin size={12} aria-hidden="true" /> World Time</span>
-            <input className={styles.input} value={worldTime} onChange={(e) => setWorldTime(e.target.value)} placeholder={state.worldTime ?? 'Day 1 Dawn'} />
+            <span><MapPin size={12} aria-hidden="true" /> 世界时间</span>
+            <input className={styles.input} value={worldTime} onChange={(e) => setWorldTime(e.target.value)} placeholder={state.worldTime ?? '例如：第一天清晨'} />
           </label>
         </div>
 
         <label className={styles.field}>
-          <span><Users size={12} aria-hidden="true" /> Participants (comma-separated agent IDs)</span>
-          <input className={styles.input} value={participantIds} onChange={(e) => setParticipantIds(e.target.value)} placeholder="agent IDs..." />
+          <span><Users size={12} aria-hidden="true" /> 参与角色 ID</span>
+          <input className={styles.input} value={participantIds} onChange={(e) => setParticipantIds(e.target.value)} placeholder="多个角色 ID 用逗号分隔" />
         </label>
 
         <div className={styles.row}>
           <label className={styles.field}>
-            <span>Section ID</span>
-            <input className={styles.input} value={sectionId} onChange={(e) => setSectionId(e.target.value)} placeholder="optional" />
+            <span>分段 ID</span>
+            <input className={styles.input} value={sectionId} onChange={(e) => setSectionId(e.target.value)} placeholder="可选，留空则由后端处理" />
           </label>
           <label className={styles.field}>
-            <span>Location ID</span>
-            <input className={styles.input} value={locationId} onChange={(e) => setLocationId(e.target.value)} placeholder="optional" />
+            <span>地点 ID</span>
+            <input className={styles.input} value={locationId} onChange={(e) => setLocationId(e.target.value)} placeholder="可选，已有地点时再填写" />
           </label>
         </div>
 
         <label className={styles.field}>
-          <span>Opening Narrative</span>
-          <textarea className={styles.textarea} value={narrative} onChange={(e) => setNarrative(e.target.value)} placeholder="Optional scene opening..." rows={3} />
+          <span>开场正文</span>
+          <textarea className={styles.textarea} value={narrative} onChange={(e) => setNarrative(e.target.value)} placeholder="可选：写一段场景开头，后端会保存为正文。" rows={3} />
         </label>
 
         {error && <div className={styles.error}>{error}</div>}
 
         <div className={styles.actions}>
-          <button className={styles.secondary} onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className={styles.secondary} onClick={onClose} disabled={submitting}>取消</button>
           <button className={styles.primary} onClick={handleSubmit} disabled={submitting || !title.trim() || !chapterId.trim()}>
-            {submitting ? <><Loader2 size={15} aria-hidden="true" className={styles.spin} /> Creating...</> : 'Create Scene'}
+            {submitting ? <><Loader2 size={15} aria-hidden="true" className={styles.spin} /> 正在创建...</> : '创建场景'}
           </button>
         </div>
       </section>
