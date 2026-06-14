@@ -505,7 +505,18 @@ void HttpServer::handle_config_get(const httplib::Request&, httplib::Response& r
         json(res, error("config_load_failed", "no config loaded", 500));
         return;
     }
-    res.set_content(cached_config_.dump(), "application/json");
+    auto response = cached_config_;
+    // Mask API key in response — never expose raw key
+    if (response.contains("llm") && response["llm"].contains("api_key")) {
+        auto key = response["llm"]["api_key"].get<std::string>();
+        if (key.length() > 8) {
+            response["llm"]["api_key_masked"] = key.substr(0, 4) + "****" + key.substr(key.length() - 4);
+        } else {
+            response["llm"]["api_key_masked"] = "****";
+        }
+        response["llm"].erase("api_key");
+    }
+    res.set_content(response.dump(), "application/json");
 }
 void HttpServer::handle_config_set(const httplib::Request& req, httplib::Response& res) {
     try {
@@ -527,6 +538,8 @@ void HttpServer::handle_config_set(const httplib::Request& req, httplib::Respons
         if (body.contains("api_base_url")) existing["llm"]["api_base_url"] = body["api_base_url"];
         if (body.contains("default_model")) existing["llm"]["default_model"] = body["default_model"];
         if (body.contains("max_output_tokens")) existing["llm"]["max_output_tokens"] = body["max_output_tokens"];
+        if (body.contains("temperature")) existing["llm"]["temperature"] = body["temperature"];
+        if (body.contains("context_memory_length")) existing["llm"]["context_memory_length"] = body["context_memory_length"];
 
         std::filesystem::create_directories(local_path.parent_path());
         std::ofstream out(local_path);
