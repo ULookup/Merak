@@ -6,7 +6,7 @@ import styles from '../InspectorPanel.module.css';
 import { useToast } from '../Toast';
 
 function formatSize(size: number) {
-  if (!size) return 'preview';
+  if (!size) return '0 B';
   if (size > 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
   if (size > 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${size} B`;
@@ -60,7 +60,6 @@ export default function FilesInspector() {
     try {
       const res = await api.readWorkspaceFile(file.path);
       dispatch({ type: 'SET_EDITOR_CONTENT', fileId, content: res.file });
-      if (res.fallback) showToast('Loaded a local preview buffer while the file API is pending.', 'info');
     } catch (error) {
       showToast(formatApiError(error, 'Could not read file.'), 'error');
     } finally {
@@ -88,8 +87,7 @@ export default function FilesInspector() {
         root: state.outputDirectory ?? undefined,
         fallback: state.fallback.workspaceFiles,
       });
-      if (res.fallback) showToast('Saved to the WebUI preview buffer. Backend save is pending.', 'info');
-      else showToast('File saved.', 'success');
+      showToast('File saved.', 'success');
     } catch (error) {
       dispatch({
         type: 'SET_EDITOR_SAVE_STATUS',
@@ -110,9 +108,6 @@ export default function FilesInspector() {
             <p className={styles.muted}>Generated files will appear here after a run writes to disk.</p>
           )}
         </div>
-        {state.fallback.workspaceFiles && (
-          <div className={styles.notice}>Files are using WebUI preview data.</div>
-        )}
         <button
           className={styles.entryButton}
           type="button"

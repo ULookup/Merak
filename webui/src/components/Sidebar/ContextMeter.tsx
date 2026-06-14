@@ -2,6 +2,10 @@ import { useAppState } from '../../AppState';
 import { useI18n } from '../../i18n';
 import styles from './ContextMeter.module.css';
 
+function formatTokenCount(value: number) {
+  return value >= 1000 ? `${(value / 1000).toFixed(1).replace(/\.0$/, '')}K` : `${value}`;
+}
+
 export default function ContextMeter() {
   const { t } = useI18n();
   const { state } = useAppState();
@@ -9,14 +13,23 @@ export default function ContextMeter() {
   const budget = model?.max_context_tokens ?? 128000;
   const used = state.usage.inputTokens + state.usage.outputTokens;
   const pct = Math.min(100, Math.round((used / budget) * 100));
+  const usedLabel = formatTokenCount(used);
+  const budgetLabel = formatTokenCount(budget);
 
   return (
     <div className={styles.meter}>
-      {t('sidebar.context')}<span className={styles.pct}>{pct}%</span>
+      <div className={styles.header}>
+        <span>{t('sidebar.context')}</span>
+        <span className={styles.pct}>{pct}%</span>
+      </div>
       <div className={styles.bar}>
         <div className={styles.fill} style={{ width: `${pct}%` }} />
       </div>
-      {(used / 1000).toFixed(1)}K / {(budget / 1000).toFixed(0)}K {t('status.contextUnit')}
+      <div className={styles.detail}>
+        {t('sidebar.contextUsed')
+          .replace('{used}', usedLabel)
+          .replace('{budget}', budgetLabel)}
+      </div>
     </div>
   );
 }

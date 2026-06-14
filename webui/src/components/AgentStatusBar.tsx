@@ -47,9 +47,6 @@ export default function AgentStatusBar({ connectionState }: Props) {
     state.metadata?.memory?.enabled ? t('status.feature.memory') : null,
     state.metadata?.worldbuilding?.enabled ? t('status.feature.world') : null,
     state.metadata?.delegation_patterns?.length ? t('status.feature.collaboration') : null,
-    state.fallback.capabilities || state.fallback.workspaceFiles || state.fallback.storyOverview
-      ? t('status.feature.preview')
-      : null,
   ].filter(Boolean);
 
   return (
