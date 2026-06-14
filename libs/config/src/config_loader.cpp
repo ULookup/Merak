@@ -38,6 +38,8 @@ static std::optional<Config> parse_config_file(const std::string& filepath) {
             if (l.contains("max_output_tokens")) cfg.llm.max_output_tokens = l["max_output_tokens"];
             if (l.contains("request_timeout_ms")) cfg.llm.request_timeout_ms = l["request_timeout_ms"];
             if (l.contains("max_retries")) cfg.llm.max_retries = l["max_retries"];
+            if (l.contains("temperature")) cfg.llm.temperature = l["temperature"];
+            if (l.contains("context_memory_length")) cfg.llm.context_memory_length = l["context_memory_length"];
             if (l.contains("thinking")) {
                 auto& t = l["thinking"];
                 ThinkingConfig thinking;
@@ -169,6 +171,8 @@ void ConfigLoader::merge(Config& base, const Config& override_cfg) {
     if (l.request_timeout_ms > 0) base.llm.request_timeout_ms = l.request_timeout_ms;
     if (l.max_retries > 0) base.llm.max_retries = l.max_retries;
     if (l.thinking.has_value()) base.llm.thinking = l.thinking;
+    if (l.temperature != 0.0) base.llm.temperature = l.temperature;
+    if (!l.context_memory_length.empty()) base.llm.context_memory_length = l.context_memory_length;
 
     if (!override_cfg.models.empty()) base.models = override_cfg.models;
 
@@ -240,6 +244,10 @@ void ConfigLoader::apply_env_overrides(Config& cfg) {
         if (!cfg.llm.thinking) cfg.llm.thinking = ThinkingConfig{};
         cfg.llm.thinking->budget_tokens = *v;
     }
+    if (auto* v = env_str("MERAK_TEMPERATURE")) {
+        try { cfg.llm.temperature = std::stod(v); } catch (...) {}
+    }
+    if (auto* v = env_str("MERAK_CONTEXT_MEMORY_LENGTH")) cfg.llm.context_memory_length = v;
 
     if (auto* v = env_str("MERAK_DIARY_MODEL")) cfg.memory.diary_model = v;
     if (auto* v = env_str("MERAK_DB_CONNECTION")) cfg.memory.db_connection = v;
