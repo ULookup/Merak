@@ -12,6 +12,7 @@
 #include <merak/openai_provider.hpp>
 #include <merak/openai_embedding_provider.hpp>
 #include <merak/portable_pg.hpp>
+#include <merak/portable_neo4j.hpp>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <merak/worldbuilding/worldbuilding_tools.hpp>
 #include <merak/worldbuilding/pipeline_manager.hpp>
@@ -84,6 +85,7 @@ void Application::start() {
     if (started_) return;
 
     init_portable_db();
+    init_portable_neo4j();
     init_worldbuilding();
     init_llm();
     init_tools_phase1();
@@ -127,6 +129,38 @@ void Application::init_portable_db() {
             std::cerr << "Warning: portable PostgreSQL failed to start\n";
             portable_pg_.reset();
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────
+// init_portable_neo4j
+// ─────────────────────────────────────────────────────
+
+void Application::init_portable_neo4j() {
+    if (!config_.knowledge_graph.enabled) return;
+
+    auto neo4j_bin = options_.exe_dir / "neo4j";
+    auto java_bin = options_.exe_dir / "java";
+    if (options_.exe_dir.empty() ||
+        !std::filesystem::exists(neo4j_bin) ||
+        !std::filesystem::exists(java_bin)) {
+        std::cerr << "Warning: portable Neo4j or Java not found at "
+                  << options_.exe_dir << " (neo4j/ and java/ expected)\n";
+        return;
+    }
+
+    portable_neo4j_ = std::make_unique<PortableNeo4j>(neo4j_bin, java_bin);
+    if (portable_neo4j_->start()) {
+        config_.knowledge_graph.neo4j_uri = portable_neo4j_->bolt_uri();
+        config_.knowledge_graph.neo4j_user = portable_neo4j_->user();
+        config_.knowledge_graph.neo4j_password = portable_neo4j_->password();
+        std::cout << "Portable Neo4j started on port "
+                  << portable_neo4j_->bolt_port() << " (Bolt), "
+                  << portable_neo4j_->http_port() << " (HTTP)\n";
+    } else {
+        std::cerr << "Warning: portable Neo4j failed to start\n";
+        portable_neo4j_.reset();
+        config_.knowledge_graph.enabled = false;
     }
 }
 

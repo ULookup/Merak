@@ -24,6 +24,7 @@ class PipelineManager;
 
 namespace merak {
 class PortablePg;
+class PortableNeo4j;
 class WorldbuildingHttpHandler;
 namespace kg { class KnowledgeGraphProvider; }
 namespace skills { class SkillRegistry; }
@@ -65,6 +66,7 @@ public:
 private:
     // ---------- initialization phases, called by start() ----------
     void init_portable_db();
+    void init_portable_neo4j();
     void init_worldbuilding();
     void init_llm();
     void init_tools_phase1();   // platform + deferred tools
@@ -89,6 +91,7 @@ private:
 
     // Owned components
     std::unique_ptr<PortablePg> portable_pg_;
+    std::unique_ptr<PortableNeo4j> portable_neo4j_;
     std::shared_ptr<pqxx::connection> pg_conn_;
     std::unique_ptr<merak::kg::KnowledgeGraphProvider> kg_provider_;
     std::shared_ptr<worldbuilding::WorldbuildingService> wb_service_;
