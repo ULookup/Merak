@@ -71,6 +71,8 @@ static std::optional<Config> parse_config_file(const std::string& filepath) {
             if (mem.contains("decay_interval_days")) cfg.memory.decay_interval_days = mem["decay_interval_days"];
             if (mem.contains("diary_model"))
                 cfg.memory.diary_model = mem["diary_model"].get<std::string>();
+            if (mem.contains("writer_model"))
+                cfg.memory.writer_model = mem["writer_model"].get<std::string>();
             if (mem.contains("diary_compression_threshold"))
                 cfg.memory.diary_compression_threshold = mem["diary_compression_threshold"].get<int>();
             if (mem.contains("diary_context_limit"))
@@ -185,6 +187,7 @@ void ConfigLoader::merge(Config& base, const Config& override_cfg) {
     if (override_cfg.memory.confidence_decay != 0.0f) base.memory.confidence_decay = override_cfg.memory.confidence_decay;
     if (override_cfg.memory.decay_interval_days > 0) base.memory.decay_interval_days = override_cfg.memory.decay_interval_days;
     if (!override_cfg.memory.diary_model.empty()) base.memory.diary_model = override_cfg.memory.diary_model;
+    if (!override_cfg.memory.writer_model.empty()) base.memory.writer_model = override_cfg.memory.writer_model;
     if (override_cfg.memory.diary_compression_threshold > 0) base.memory.diary_compression_threshold = override_cfg.memory.diary_compression_threshold;
     if (override_cfg.memory.diary_context_limit > 0) base.memory.diary_context_limit = override_cfg.memory.diary_context_limit;
     if (override_cfg.memory.diary_max_tokens > 0) base.memory.diary_max_tokens = override_cfg.memory.diary_max_tokens;
@@ -251,6 +254,7 @@ void ConfigLoader::apply_env_overrides(Config& cfg) {
     if (auto* v = env_str("MERAK_CONTEXT_MEMORY_LENGTH")) cfg.llm.context_memory_length = v;
 
     if (auto* v = env_str("MERAK_DIARY_MODEL")) cfg.memory.diary_model = v;
+    if (auto* v = env_str("MERAK_WRITER_MODEL")) cfg.memory.writer_model = v;
     if (auto* v = env_str("MERAK_DB_CONNECTION")) cfg.memory.db_connection = v;
     if (auto* v = env_str("MERAK_KG_ENABLED")) cfg.knowledge_graph.enabled = (std::string(v) == "1" || std::string(v) == "true");
     if (auto* v = env_str("MERAK_KG_NEO4J_URI")) cfg.knowledge_graph.neo4j_uri = v;

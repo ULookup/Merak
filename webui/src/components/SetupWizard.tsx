@@ -30,6 +30,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(4096);
   const [contextMemory, setContextMemory] = useState<'short' | 'medium' | 'long'>('medium');
+  const [writerModel, setWriterModel] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -77,6 +78,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         max_output_tokens: maxTokens,
         temperature,
         context_memory_length: contextMemory,
+        ...(writerModel.trim() ? { writer_model: writerModel.trim() } : {}),
       });
       setStep('test');
     } catch (e: unknown) {
@@ -255,6 +257,18 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.label}>Writer 模型名称</label>
+              <input
+                className={styles.input}
+                type="text"
+                value={writerModel}
+                onChange={(e) => setWriterModel(e.target.value)}
+                placeholder="默认与主模型相同"
+                disabled={saving}
+              />
             </div>
           </div>
         )}

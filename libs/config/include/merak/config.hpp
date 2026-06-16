@@ -56,6 +56,7 @@ struct MemoryConfig {
 
     // ——— Diary & memory compression ———
     std::string diary_model;             // empty = fallback to llm.default_model
+    std::string writer_model;            // empty = fallback to llm.default_model
     int diary_compression_threshold = 20;
     int diary_context_limit = 5;
     int diary_max_tokens = 500;

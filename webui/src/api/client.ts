@@ -335,6 +335,7 @@ export const api = {
     max_output_tokens?: number;
     temperature?: number;
     context_memory_length?: 'short' | 'medium' | 'long';
+    writer_model?: string;
   }) => request<OkResponse>('POST', '/api/config/llm', config),
 
   testConfig: () => request<OkResponse>('POST', '/api/config/llm/test'),

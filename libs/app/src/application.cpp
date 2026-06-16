@@ -258,7 +258,7 @@ void Application::init_tools_phase1() {
     if (wb_service_) {
         worldbuilding::WorldbuildingTools wb_tools(
             *wb_service_, llm_, config_.memory.diary_compression_threshold,
-            config_.memory.diary_model);
+            config_.memory.diary_model, config_.memory.writer_model);
         auto god_tools = wb_tools.create_tools(worldbuilding::AgentKind::God);
         tools_->register_all(std::move(god_tools));
     }
