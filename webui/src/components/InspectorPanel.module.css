@@ -1,13 +1,17 @@
 .panel {
   width: 360px;
   min-width: 360px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(224, 223, 220, 0.92);
   border-radius: 8px;
-  background: var(--surface-muted);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(242, 242, 240, 0.82)),
+    var(--surface-muted);
   display: flex;
   position: relative;
   z-index: 20;
-  box-shadow: none;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(18px);
+  animation: inspectorEnter 620ms var(--ease-spring) 80ms both;
 }
 
 .surface {
@@ -44,8 +48,8 @@
 .closeBtn {
   display: grid;
   place-items: center;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid rgba(224, 223, 220, 0.92);
+  background: rgba(255, 255, 255, 0.78);
   color: var(--muted);
   width: 28px;
   height: 28px;
@@ -63,7 +67,7 @@
   background: var(--surface-muted);
   border-color: var(--border-strong);
   color: var(--ink);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .closeBtn:active {
@@ -80,8 +84,8 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   padding: 3px;
-  background: var(--page-warm);
-  border: 1px solid var(--border);
+  background: rgba(233, 227, 216, 0.78);
+  border: 1px solid rgba(224, 223, 220, 0.92);
   border-radius: 6px;
 }
 
@@ -111,9 +115,12 @@
 }
 
 .tabActive {
-  background: var(--surface);
+  background: linear-gradient(180deg, #fff, var(--surface-muted));
   color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--border);
+  box-shadow:
+    inset 0 0 0 1px rgba(23, 23, 23, 0.08),
+    0 6px 14px rgba(23, 23, 23, 0.05);
+  animation: tabSettle 240ms var(--ease-spring);
 }
 
 .subTabs {
@@ -158,8 +165,8 @@
 
 .empty {
   margin-top: 32px;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid rgba(224, 223, 220, 0.92);
+  background: rgba(255, 255, 255, 0.76);
   color: var(--muted);
   border-radius: 6px;
   padding: 20px;
@@ -170,15 +177,18 @@
 .heroBlock,
 .section,
 .runCard {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(250, 250, 250, 0.84)), var(--surface);
+  border: 1px solid rgba(224, 223, 220, 0.92);
   border-radius: 6px;
   padding: 12px;
-  box-shadow: none;
-  animation: panelRise 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 8px 22px rgba(23, 23, 23, 0.035);
+  animation: panelRise 460ms var(--ease-spring);
   transition:
     border-color var(--duration-fast) var(--ease),
-    background var(--duration-fast) var(--ease);
+    background var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
 }
 
 .heroBlock:hover,
@@ -186,6 +196,8 @@
 .runCard:hover {
   border-color: var(--border-strong);
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
 }
 
 .worldName {
@@ -225,7 +237,7 @@
   flex-wrap: wrap;
   gap: 10px;
   border: 1px dashed rgba(183, 121, 31, 0.32);
-  background: var(--amber-soft);
+  background: linear-gradient(135deg, var(--amber-wash), var(--amber-soft));
   border-radius: 7px;
   padding: 9px;
 }
@@ -310,8 +322,8 @@
 .storyStats span,
 .contextGrid div {
   min-width: 0;
-  border: 1px solid var(--border);
-  background: var(--surface-strong);
+  border: 1px solid rgba(224, 223, 220, 0.92);
+  background: rgba(255, 255, 255, 0.66);
   border-radius: 6px;
   padding: 8px;
 }
@@ -356,13 +368,13 @@
 
 .thread,
 .secret {
-  border: 1px solid var(--border);
+  border: 1px solid rgba(222, 214, 201, 0.94);
   border-radius: 6px;
   padding: 9px 10px;
   font-size: 12px;
   line-height: 1.45;
   color: var(--ink);
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.72);
   margin-top: 6px;
   transition:
     transform 180ms ease,
@@ -370,14 +382,15 @@
 }
 
 .outputCard {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 253, 248, 0.82)), var(--surface);
+  border: 1px solid rgba(222, 214, 201, 0.94);
   border-radius: 6px;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  animation: panelRise 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: panelRise 460ms var(--ease-spring);
 }
 
 .pathLine {
@@ -399,7 +412,7 @@
   gap: 7px;
   border: none;
   border-radius: 6px;
-  background: var(--ink);
+  background: linear-gradient(135deg, #343434, var(--ink));
   color: #fff;
   cursor: pointer;
   font-size: 12px;
@@ -418,8 +431,9 @@
 }
 
 .entryButton:hover {
-  background: #343a40;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, #4a4a4a, #343a40);
+  box-shadow: 0 12px 24px rgba(23, 23, 23, 0.12);
+  transform: translateY(-3px);
 }
 
 .entryButton:active:not(:disabled) {
@@ -441,8 +455,8 @@
 
 .fileItem {
   width: 100%;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid rgba(224, 223, 220, 0.92);
+  background: rgba(255, 255, 255, 0.72);
   border-radius: 6px;
   padding: 9px;
   color: var(--ink);
@@ -467,7 +481,7 @@
 .fileItem:hover {
   background: var(--surface-strong);
   border-color: var(--border-strong);
-  transform: translateY(-1px);
+  transform: translateY(-3px);
 }
 
 .fileItem:active {
@@ -559,14 +573,15 @@
 
 .editorPanel {
   min-height: 340px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(250, 250, 250, 0.84)), var(--surface);
+  border: 1px solid rgba(224, 223, 220, 0.92);
   border-radius: 6px;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  animation: panelRise 360ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: panelRise 460ms var(--ease-spring);
 }
 
 .editorHeader {
@@ -671,7 +686,7 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(224, 223, 220, 0.92);
   border-radius: 6px;
   background: var(--surface-strong);
   color: var(--muted-strong);
@@ -689,7 +704,7 @@
 .secondaryButton:hover:not(:disabled) {
   border-color: var(--border-strong);
   color: var(--ink);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .secondaryButton:active:not(:disabled) {
@@ -758,7 +773,7 @@
 .thread:hover,
 .secret:hover,
 .agent:hover {
-  transform: translateY(-1px);
+  transform: translateY(-3px);
   border-color: var(--border-strong);
   background: var(--surface-strong);
   box-shadow: none;
@@ -818,7 +833,7 @@
   border-radius: 7px;
   display: grid;
   place-items: center;
-  background: var(--surface-muted);
+  background: linear-gradient(135deg, var(--surface-muted), var(--surface-strong));
   color: var(--muted-strong);
   font-weight: 760;
 }
@@ -845,8 +860,8 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--muted-strong);
-  box-shadow: 0 0 0 0 rgba(89, 97, 106, 0.22);
+  background: var(--ink);
+  box-shadow: 0 0 0 0 rgba(23, 23, 23, 0.18);
   animation: pulse 1.6s ease-out infinite;
   margin-top: 3px;
 }
@@ -910,7 +925,7 @@
 .meter div {
   height: 100%;
   border-radius: inherit;
-  background: var(--muted-strong);
+  background: linear-gradient(90deg, var(--ink), var(--muted));
   transition: width 500ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -937,18 +952,20 @@
 }
 
 .timelineItem {
-  border: 1px solid var(--border);
+  border: 1px solid rgba(224, 223, 220, 0.92);
   border-radius: 8px;
-  background: var(--surface-strong);
+  background: rgba(255, 255, 255, 0.68);
   padding: 10px;
   transition:
     background var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease);
+    border-color var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
 }
 
 .timelineItem:hover {
   background: var(--surface);
   border-color: var(--border-strong);
+  transform: translateY(-2px);
 }
 
 .timelineItem span,
@@ -1044,11 +1061,43 @@
 @keyframes panelRise {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(16px) scale(0.985);
   }
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes inspectorEnter {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes tabSettle {
+  from {
+    transform: translateY(4px) scale(0.96);
+  }
+  to {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .tabActive,
+  .heroBlock,
+  .section,
+  .runCard,
+  .outputCard,
+  .editorPanel {
+    animation: none;
   }
 }
 

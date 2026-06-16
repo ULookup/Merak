@@ -52,7 +52,7 @@
 }
 
 .dot.state {
-  background: #4fc3f7;
+  background: var(--ink);
 }
 
 .dot.tool {
@@ -95,7 +95,7 @@
 }
 
 .stepHeader:hover {
-  background: var(--hover, rgba(255,255,255,0.04));
+  background: var(--hover, rgba(255, 255, 255, 0.04));
 }
 
 .time {

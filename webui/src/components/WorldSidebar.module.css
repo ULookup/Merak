@@ -3,13 +3,17 @@
   width: 272px;
   min-height: 0;
   overflow-y: auto;
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(242, 242, 240, 0.78)),
+    var(--surface-muted);
+  border: 1px solid rgba(224, 223, 220, 0.92);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  box-shadow: none;
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(18px);
+  animation: sidebarEnter 620ms var(--ease-spring) both;
   transition:
     width 240ms var(--ease),
     min-width 240ms var(--ease),
@@ -45,9 +49,9 @@
   margin: 0 8px 8px;
   padding: 7px 8px;
   cursor: pointer;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(224, 223, 220, 0.92);
   border-radius: 6px;
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.75);
   color: var(--muted-strong);
   transition:
     background var(--duration-fast) var(--ease),
@@ -96,6 +100,7 @@
   transition:
     background var(--duration-fast) var(--ease),
     color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
     padding-left var(--duration-fast) var(--ease);
 }
 
@@ -104,9 +109,10 @@
 }
 
 .storyTreeItem:hover {
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.78);
   color: var(--color-text-primary);
-  padding-left: 10px;
+  box-shadow: inset 2px 0 0 rgba(23, 23, 23, 0.28);
+  padding-left: 12px;
 }
 
 .storyTreeItemActive {
@@ -153,18 +159,19 @@
 }
 
 .agentListItem:hover {
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.78);
   color: var(--color-text-primary);
-  padding-left: 10px;
+  padding-left: 12px;
 }
 
 .agentListItemActive {
   composes: agentListItem;
-  color: var(--brand-strong);
+  color: var(--ink);
   font-weight: 700;
-  background: var(--surface);
+  background: linear-gradient(90deg, rgba(23, 23, 23, 0.055), rgba(255, 255, 255, 0.72));
   border: 1px solid var(--border);
   box-shadow: inset 2px 0 0 var(--ink);
+  animation: activeRail 360ms var(--ease-spring);
 }
 
 .settingsTrigger {
@@ -183,8 +190,35 @@
 }
 
 .settingsTrigger:hover {
-  background: var(--surface-muted);
+  background: rgba(255, 255, 255, 0.58);
   color: var(--ink);
+}
+
+@keyframes sidebarEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes activeRail {
+  from {
+    background-position: -80px 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .agentListItemActive {
+    animation: none;
+  }
 }
 
 @media (max-width: 768px) {

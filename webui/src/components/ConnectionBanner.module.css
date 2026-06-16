@@ -12,15 +12,15 @@
 }
 
 .connecting {
-  background: #eef2ff;
-  border-bottom-color: #c7d2fe;
-  color: #4f46e5;
+  background: #f3f3f1;
+  border-bottom-color: var(--border);
+  color: var(--muted-strong);
 }
 
 .reconnecting {
-  background: #fff8d9;
-  border-bottom-color: #efd681;
-  color: #6f5200;
+  background: #f7f7f5;
+  border-bottom-color: var(--border-strong);
+  color: var(--ink-soft);
 }
 
 .disconnected {
