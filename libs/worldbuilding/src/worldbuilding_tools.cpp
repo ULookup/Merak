@@ -3034,6 +3034,8 @@ WorldbuildingTools::create_tools(AgentKind kind) const {
         break;
     case AgentKind::Group:
         break;
+    case AgentKind::Writer:
+        break;
     }
 
     return tools;
