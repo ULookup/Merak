@@ -8,7 +8,7 @@ interface BrandMarkProps {
 export default function BrandMark({ compact = false }: BrandMarkProps) {
   return (
     <div className={`${styles.brand} ${compact ? styles.compact : ''}`}>
-      <img className={styles.logo} src={logoUrl} alt="Merak pen planet logo" />
+      <img className={styles.logo} src={logoUrl} alt="Merak wordmark logo" />
       {!compact && (
         <div>
           <div className={styles.wordmark}>MERAK</div>

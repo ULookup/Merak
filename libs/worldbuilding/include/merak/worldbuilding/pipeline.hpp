@@ -8,6 +8,7 @@
 namespace merak::worldbuilding {
 
 enum class CreativePhase {
+    DirectionSelection,
     Worldbuilding,
     CharacterCreation,
     PlotArchitecture,
@@ -17,6 +18,8 @@ enum class CreativePhase {
 
 inline std::string to_string(CreativePhase p) {
     switch (p) {
+        case CreativePhase::DirectionSelection:
+            return "direction_selection";
         case CreativePhase::Worldbuilding:
             return "worldbuilding";
         case CreativePhase::CharacterCreation:
@@ -32,6 +35,7 @@ inline std::string to_string(CreativePhase p) {
 }
 
 inline std::optional<CreativePhase> creative_phase_from_string(const std::string& s) {
+    if (s == "direction_selection") return CreativePhase::DirectionSelection;
     if (s == "worldbuilding") return CreativePhase::Worldbuilding;
     if (s == "character_creation") return CreativePhase::CharacterCreation;
     if (s == "plot_architecture") return CreativePhase::PlotArchitecture;

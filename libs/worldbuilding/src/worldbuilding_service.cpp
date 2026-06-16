@@ -1,11 +1,14 @@
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <merak/worldbuilding/ids.hpp>
+#include <merak/worldbuilding/pg_helpers.hpp>
 
 #include <spdlog/spdlog.h>
 
+#include <fstream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 
 namespace merak::worldbuilding {
 
@@ -19,11 +22,71 @@ WorldbuildingService::WorldbuildingService(std::string_view pg_conninfo,
       foreshadowing_(worlds_, narrative_, pg_conninfo, root_),
       secrets_(worlds_, foreshadowing_, pg_conninfo, root_),
       voice_(),
+      kg_provider_(std::move(kg_provider)),
       orchestrator_(worlds_, agents_, narrative_, foreshadowing_, secrets_, voice_, kg_provider_.get()),
-      kg_provider_(std::move(kg_provider)) {}
+      pending_pool_(std::make_unique<PgPool>(pg_conninfo, 2)) {}
+
+WorldbuildingService::~WorldbuildingService() = default;
 
 void WorldbuildingService::initialize() {
     worlds_.initialize();
+    ensure_pending_creation_table();
+}
+
+void WorldbuildingService::ensure_pending_creation_table() {
+    PgConn conn(*pending_pool_);
+    conn.exec(R"(
+        CREATE TABLE IF NOT EXISTS pending_creations (
+            creation_id TEXT PRIMARY KEY,
+            world_id TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+            tool_name TEXT NOT NULL,
+            params JSONB NOT NULL DEFAULT '{}',
+            preview JSONB NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL
+        )
+    )");
+    conn.exec("CREATE INDEX IF NOT EXISTS idx_pending_creations_world ON pending_creations(world_id)");
+}
+
+void WorldbuildingService::persist_pending_creation(const PendingCreation& pc) {
+    PgConn conn(*pending_pool_);
+    conn.execute(R"(
+        INSERT INTO pending_creations (creation_id, world_id, tool_name, params, preview, created_at)
+        VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6)
+        ON CONFLICT (creation_id) DO UPDATE SET
+            world_id = EXCLUDED.world_id,
+            tool_name = EXCLUDED.tool_name,
+            params = EXCLUDED.params,
+            preview = EXCLUDED.preview,
+            created_at = EXCLUDED.created_at
+    )", {pc.creation_id, pc.world_id, pc.tool_name, pc.params.dump(),
+          pc.preview.dump(), now_iso_utc()});
+}
+
+std::optional<PendingCreation> WorldbuildingService::load_pending_creation(
+        const std::string& creation_id) const {
+    PgConn conn(*pending_pool_);
+    auto rows = conn.query(R"(
+        SELECT creation_id, world_id, tool_name, params::text, preview::text
+        FROM pending_creations WHERE creation_id = $1
+    )", {creation_id});
+    if (rows.ntuples() == 0) return std::nullopt;
+
+    PendingCreation pc;
+    pc.creation_id = rows.get(0, 0);
+    pc.world_id = rows.get(0, 1);
+    pc.tool_name = rows.get(0, 2);
+    pc.params = nlohmann::json::parse(rows.get(0, 3), nullptr, false);
+    if (pc.params.is_discarded()) pc.params = nlohmann::json::object();
+    pc.preview = nlohmann::json::parse(rows.get(0, 4), nullptr, false);
+    if (pc.preview.is_discarded()) pc.preview = nlohmann::json::object();
+    pc.created_at = std::chrono::steady_clock::now();
+    return pc;
+}
+
+void WorldbuildingService::delete_pending_creation(const std::string& creation_id) {
+    PgConn conn(*pending_pool_);
+    conn.execute("DELETE FROM pending_creations WHERE creation_id = $1", {creation_id});
 }
 
 WorldMeta WorldbuildingService::create_world(std::string name,
@@ -149,10 +212,21 @@ Secret WorldbuildingService::create_secret(const std::string& world_id,
 
 std::vector<VoiceComparison>
 WorldbuildingService::voice_check(const std::string& world_id) const {
-    return voice_.check_all(voice_.list_fingerprints());
+    std::unordered_set<std::string> world_agent_ids;
+    for (const auto& agent : worlds_.list_agents(world_id)) {
+        world_agent_ids.insert(agent.id);
+    }
+
+    std::vector<VoiceFingerprint> scoped;
+    for (const auto& fp : voice_.list_fingerprints()) {
+        if (world_agent_ids.contains(fp.agent_id)) {
+            scoped.push_back(fp);
+        }
+    }
+    return voice_.check_all(scoped);
 }
 
-// ── Preview builders (no DB write) ──────────────────────────────────────────
+// Preview builders (no DB write)
 
 nlohmann::json WorldbuildingService::build_scene_preview(const std::string& world_id,
                                                          const nlohmann::json& params) {
@@ -224,12 +298,11 @@ nlohmann::json WorldbuildingService::build_location_preview(const std::string& w
     return preview;
 }
 
-// ── Store and retrieve pending creations ───────────────────────────────────
+// Store and retrieve pending creations
 
 std::string WorldbuildingService::store_pending_creation(
         const std::string& world_id, const std::string& tool_name,
         const nlohmann::json& params, const nlohmann::json& preview) {
-    std::lock_guard lock(pending_mutex_);
     PendingCreation pc;
     pc.creation_id = "creation_" + make_id("c");
     pc.tool_name = tool_name;
@@ -237,45 +310,61 @@ std::string WorldbuildingService::store_pending_creation(
     pc.params = params;
     pc.preview = preview;
     pc.created_at = std::chrono::steady_clock::now();
-    pending_creations_[pc.creation_id] = pc;
+    persist_pending_creation(pc);
+    {
+        std::lock_guard lock(pending_mutex_);
+        pending_creations_[pc.creation_id] = pc;
+    }
     return pc.creation_id;
 }
 
 std::optional<PendingCreation> WorldbuildingService::get_pending_creation(
         const std::string& creation_id) const {
-    std::lock_guard lock(pending_mutex_);
-    auto it = pending_creations_.find(creation_id);
-    if (it == pending_creations_.end()) return std::nullopt;
-    return it->second;
+    {
+        std::lock_guard lock(pending_mutex_);
+        auto it = pending_creations_.find(creation_id);
+        if (it != pending_creations_.end()) return it->second;
+    }
+
+    auto loaded = load_pending_creation(creation_id);
+    if (loaded) {
+        std::lock_guard lock(pending_mutex_);
+        pending_creations_[creation_id] = *loaded;
+    }
+    return loaded;
 }
 
-// ── Resolution (writes to DB on allow/modify) ──────────────────────────────
+// Resolution (writes to DB on allow/modify)
 
 nlohmann::json WorldbuildingService::resolve_creation(
         const std::string& creation_id,
         const std::string& decision,
         const nlohmann::json& modifications) {
 
-    // Step 1: Under lock, find and copy, erase for non-deny
     PendingCreation pc;
     {
         std::lock_guard lock(pending_mutex_);
         auto it = pending_creations_.find(creation_id);
-        if (it == pending_creations_.end()) {
+        if (it != pending_creations_.end()) {
+            pc = std::move(it->second);
+            pending_creations_.erase(it);
+        }
+    }
+
+    if (pc.creation_id.empty()) {
+        auto loaded = load_pending_creation(creation_id);
+        if (!loaded) {
             throw std::runtime_error("Pending creation not found: " + creation_id);
         }
-        pc = std::move(it->second);
-
-        if (decision == "deny") {
-            pending_creations_.erase(it);
-            return {{"ok", true}, {"decision", "deny"}, {"creation_id", creation_id}};
-        }
-
-        // For allow/modify: erase from map BEFORE DB write
-        pending_creations_.erase(it);
+        pc = std::move(*loaded);
     }
-    // Lock released here — DB work happens without holding mutex
 
+    if (decision == "deny") {
+        delete_pending_creation(creation_id);
+        return {{"ok", true}, {"decision", "deny"}, {"creation_id", creation_id}};
+    }
+
+    delete_pending_creation(creation_id);
     // Step 2: Merge modifications for "modify"
     nlohmann::json final_params = pc.params;
     if (decision == "modify" && !modifications.is_null()) {
@@ -397,7 +486,8 @@ nlohmann::json WorldbuildingService::resolve_creation(
             throw std::runtime_error("Unknown tool_name: " + pc.tool_name);
         }
     } catch (...) {
-        // Step 4: On failure, re-insert pc into map for retry
+        // Step 4: On failure, re-insert pc into map and PostgreSQL for retry.
+        persist_pending_creation(pc);
         std::lock_guard lock(pending_mutex_);
         pending_creations_[creation_id] = std::move(pc);
         throw;
@@ -452,6 +542,186 @@ std::string WorldbuildingService::build_world_context(const std::string& world_i
     }
 
     return ctx.str();
+}
+
+WorldbuildingService::ChapterReview
+WorldbuildingService::get_chapter_review(const std::string& world_id,
+                                          const std::string& chapter_id) const {
+    ChapterReview review;
+    review.chapter_id = chapter_id;
+
+    auto chapter = narrative_.get_chapter(world_id, chapter_id);
+    if (!chapter) {
+        throw std::runtime_error("Chapter not found: " + chapter_id);
+    }
+    review.title = chapter->title;
+
+    // Collect scenes for this chapter
+    auto scenes = narrative_.list_scenes(world_id, chapter_id);
+    std::unordered_set<std::string> seen_characters;
+    for (const auto& ss : scenes) {
+        auto scene = narrative_.get_scene(world_id, ss.id);
+        if (!scene) continue;
+
+        // Count Chinese characters in narrative text
+        int chinese_chars = 0;
+        for (size_t i = 0; i < scene->narrative.length(); ) {
+            unsigned char c = static_cast<unsigned char>(scene->narrative[i]);
+            int len = 1;
+            if ((c & 0x80) == 0x00) {
+                len = 1;
+            } else if ((c & 0xE0) == 0xC0) {
+                len = 2;
+            } else if ((c & 0xF0) == 0xE0) {
+                len = 3;
+            } else if ((c & 0xF8) == 0xF0) {
+                len = 4;
+            }
+            if (len >= 3) chinese_chars++;  // CJK characters are 3+ bytes in UTF-8
+            i += len;
+        }
+        review.word_count += chinese_chars;
+
+        // Collect character names from participant_ids
+        for (const auto& pid : scene->participant_ids) {
+            if (seen_characters.contains(pid)) continue;
+            seen_characters.insert(pid);
+            auto agent = agents_.get_agent(pid);
+            if (agent) {
+                review.character_names.push_back(agent->name);
+            }
+        }
+    }
+
+    // Collect foreshadowings planted/paid in this chapter
+    auto all_foreshadows = foreshadowing_.list(world_id, std::nullopt);
+    for (const auto& f : all_foreshadows) {
+        if (f.planted_at.has_value() && *f.planted_at == chapter_id) {
+            review.foreshadowing_planted.push_back({f.id, f.content});
+        }
+        if (f.paid_at.has_value() && *f.paid_at == chapter_id) {
+            review.foreshadowing_paid.push_back({f.id, f.content});
+        }
+    }
+
+    // Generate writing advice in Chinese
+    int char_count = static_cast<int>(review.character_names.size());
+    int foreshadow_open = static_cast<int>(review.foreshadowing_planted.size());
+    int foreshadow_paid = static_cast<int>(review.foreshadowing_paid.size());
+
+    std::ostringstream advice;
+    advice << "本章出场" << char_count << "个角色，"
+           << "埋下伏笔" << foreshadow_open << "个，回收伏笔" << foreshadow_paid << "个。";
+
+    if (review.word_count < 1000) {
+        advice << "篇幅较短，可以考虑适当展开场景描写或角色对话。";
+    } else if (review.word_count > 5000) {
+        advice << "篇幅较长，建议保持节奏感，避免读者疲劳。";
+    } else {
+        advice << "篇幅适中，节奏良好。";
+    }
+
+    if (foreshadow_open == 0 && foreshadow_paid == 0) {
+        advice << "本章暂无伏笔操作，可以考虑为后续情节埋下线索。";
+    }
+
+    if (char_count > 0) {
+        advice << "主要角色包括：";
+        for (size_t i = 0; i < review.character_names.size() && i < 5; i++) {
+            if (i > 0) advice << "、";
+            advice << review.character_names[i];
+        }
+        if (review.character_names.size() > 5) {
+            advice << "等" << review.character_names.size() << "人";
+        }
+        advice << "。";
+    }
+
+    review.writing_advice = advice.str();
+    return review;
+}
+
+WorldbuildingService::ExportResult
+WorldbuildingService::export_chapters(const std::string& world_id,
+                                      const std::vector<std::string>& chapter_ids,
+                                      const std::string& title,
+                                      const std::string& author) {
+    if (chapter_ids.empty()) {
+        throw std::runtime_error("chapter_ids must not be empty");
+    }
+
+    auto world = worlds_.get_world(world_id);
+    if (!world) {
+        throw std::runtime_error("World not found: " + world_id);
+    }
+
+    // Build output directory: root_/exports/<world_id>/
+    // Use world->id (not name) to prevent path traversal
+    auto export_dir = root_ / "exports" / world->id;
+    std::filesystem::create_directories(export_dir);
+
+    // Build filename from title
+    std::string filename = title.empty() ? "export" : title;
+    for (auto& ch : filename) {
+        if (ch == '/' || ch == '\\' || ch == ':' || ch == '*' || ch == '?'
+            || ch == '"' || ch == '<' || ch == '>' || ch == '|') {
+            ch = '_';
+        }
+    }
+    auto file_path = export_dir / (filename + ".txt");
+
+    std::ofstream out(file_path);
+    if (!out) {
+        spdlog::error("export_chapters: failed to open file: {}", file_path.string());
+        throw std::runtime_error("Failed to open output file");
+    }
+
+    int total_chars = 0;
+
+    // Title and author header
+    if (!title.empty()) {
+        out << title << "\n";
+        total_chars += static_cast<int>(title.length());
+    }
+    if (!author.empty()) {
+        out << author << "\n";
+        total_chars += static_cast<int>(author.length());
+    }
+    out << "\n";
+
+    for (const auto& cid : chapter_ids) {
+        auto chapter = narrative_.get_chapter(world_id, cid);
+        if (!chapter) {
+            spdlog::warn("export_chapters: chapter not found: {}", cid);
+            continue;
+        }
+
+        out << "# " << chapter->title << "\n\n";
+        total_chars += static_cast<int>(chapter->title.length());
+
+        auto scenes = narrative_.list_scenes(world_id, cid);
+        for (const auto& ss : scenes) {
+            auto scene = narrative_.get_scene(world_id, ss.id);
+            if (!scene) continue;
+
+            out << "## " << scene->title << "\n\n";
+            total_chars += static_cast<int>(scene->title.length());
+
+            out << scene->narrative << "\n\n";
+            total_chars += static_cast<int>(scene->narrative.length());
+        }
+
+        out << "---\n";
+    }
+
+    out.flush();
+    if (out.fail()) {
+        spdlog::error("export_chapters: failed to write file: {}", file_path.string());
+        throw std::runtime_error("Failed to write output file");
+    }
+    out.close();
+
+    return {file_path.string(), total_chars};
 }
 
 } // namespace merak::worldbuilding

@@ -222,6 +222,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   border: 1px dashed rgba(183, 121, 31, 0.32);
   background: var(--amber-soft);
@@ -244,6 +245,35 @@
   color: var(--brand-strong);
   font-size: 11px;
   font-weight: 800;
+  line-height: 1.4;
+}
+
+.timeControls {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 1;
+}
+
+.timeInput {
+  min-width: 0;
+  width: min(180px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.timeError {
+  margin-top: 8px;
+  color: var(--ruby);
+  font-size: 11px;
+  font-weight: 700;
   line-height: 1.4;
 }
 

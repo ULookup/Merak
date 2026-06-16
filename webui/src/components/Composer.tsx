@@ -61,10 +61,12 @@ export default function Composer() {
     if (!currentAgent) return t('composer.placeholder');
     const kind = currentAgent.kind;
     if (kind === 'god' || kind === '0') return t('composer.placeholderGod');
-    if (kind === 'individual' || kind === 'group' || kind === '5' || kind === '6')
+    if (kind === 'individual' || kind === 'group' || kind === '5' || kind === '6') {
       return t('composer.placeholderCharacter');
-    if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4')))
+    }
+    if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4'))) {
       return t('composer.placeholderManager');
+    }
     return t('composer.placeholder');
   })();
   const [text, setText] = useState('');
@@ -96,66 +98,72 @@ export default function Composer() {
     }
   }, [state.currentRun]);
 
+  const doSend = useCallback(
+    async (msg: string) => {
+      if (!msg || sending) return;
+      if (!state.sessionId) {
+        showToast('正在等待会话建立...', 'info');
+        return;
+      }
+      setSending(true);
+
+      try {
+        if (runMode === 'delegate') {
+          const agents = selectedAgentIds.length
+            ? selectedAgentIds
+            : state.agentId
+              ? [state.agentId]
+              : [];
+          if (agents.length === 0) {
+            showToast('请选择至少一个 Agent。', 'info');
+            return;
+          }
+          const res = await api.startDelegation(
+            state.sessionId,
+            delegationPattern,
+            agents,
+            msg,
+            aggregation,
+          );
+          dispatch({ type: 'SET_CURRENT_RUN', runId: res.parent_run_id });
+          dispatch({
+            type: 'APPEND_MESSAGE',
+            message: {
+              id: `delegation_${Date.now()}`,
+              kind: 'system',
+              text: `Delegate 已启动：${delegationPattern} · ${agents.length} Agent`,
+            },
+          });
+          showToast('Delegate Run 已启动。', 'success');
+        } else {
+          await api.startRun(state.sessionId, msg, state.selectedModel);
+        }
+      } catch (e) {
+        showToast(formatApiError(e), 'error');
+      } finally {
+        setSending(false);
+      }
+    },
+    [
+      aggregation,
+      delegationPattern,
+      dispatch,
+      runMode,
+      selectedAgentIds,
+      sending,
+      showToast,
+      state.agentId,
+      state.sessionId,
+      state.selectedModel,
+    ],
+  );
+
   const send = useCallback(async () => {
     const msg = text.trim();
-    if (!msg || sending) return;
-    if (!state.sessionId) {
-      showToast('Waiting for session...', 'info');
-      return;
-    }
+    if (!msg) return;
     setText('');
-    setSending(true);
-
-    try {
-      if (runMode === 'delegate') {
-        const agents = selectedAgentIds.length
-          ? selectedAgentIds
-          : state.agentId
-            ? [state.agentId]
-            : [];
-        if (agents.length === 0) {
-          showToast('请选择至少一个 Agent。', 'info');
-          setText(msg);
-          return;
-        }
-        const res = await api.startDelegation(
-          state.sessionId,
-          delegationPattern,
-          agents,
-          msg,
-          aggregation,
-        );
-        dispatch({ type: 'SET_CURRENT_RUN', runId: res.parent_run_id });
-        dispatch({
-          type: 'APPEND_MESSAGE',
-          message: {
-            id: `delegation_${Date.now()}`,
-            kind: 'system',
-            text: `Delegate 已启动：${delegationPattern} · ${agents.length} Agent`,
-          },
-        });
-        showToast('Delegate Run 已启动。', 'success');
-      } else {
-        await api.startRun(state.sessionId, msg, state.selectedModel);
-      }
-    } catch (e) {
-      showToast(formatApiError(e), 'error');
-    } finally {
-      setSending(false);
-    }
-  }, [
-    aggregation,
-    delegationPattern,
-    dispatch,
-    runMode,
-    selectedAgentIds,
-    sending,
-    showToast,
-    state.agentId,
-    state.sessionId,
-    state.selectedModel,
-    text,
-  ]);
+    await doSend(msg);
+  }, [text, doSend]);
 
   const isRunning =
     state.currentRun !== null && state.status !== 'idle' && state.status !== 'waiting_approval';
@@ -174,8 +182,8 @@ export default function Composer() {
 
   return (
     <div className={styles.area}>
-      <div className={styles.modeRail} aria-label="Creative prompt modes">
-        <div className={styles.runModeToggle} role="group" aria-label="Run mode">
+      <div className={styles.modeRail} aria-label="创作提示模式">
+        <div className={styles.runModeToggle} role="group" aria-label="运行模式">
           <button
             type="button"
             className={runMode === 'single' ? styles.runModeActive : styles.runModeBtn}
@@ -210,9 +218,9 @@ export default function Composer() {
         ))}
       </div>
       {runMode === 'delegate' && (
-        <div className={styles.delegatePanel} aria-label="Delegate run options">
+        <div className={styles.delegatePanel} aria-label="Delegate 运行选项">
           <div className={styles.delegateGroup}>
-            <span>Pattern</span>
+            <span>模式</span>
             <div className={styles.choiceRow}>
               {availablePatterns.map((pattern) => (
                 <button
@@ -228,7 +236,7 @@ export default function Composer() {
             </div>
           </div>
           <label className={styles.delegateField}>
-            <span>Aggregation</span>
+            <span>汇总方式</span>
             <select value={aggregation} onChange={(e) => setAggregation(e.target.value)}>
               <option value="all_results">all_results</option>
               <option value="consensus">consensus</option>
@@ -236,7 +244,7 @@ export default function Composer() {
             </select>
           </label>
           <div className={styles.delegateGroup}>
-            <span>Agents</span>
+            <span>Agent</span>
             <div className={styles.agentChoices}>
               {state.agents.length === 0 ? (
                 <span className={styles.delegateHint}>当前世界没有可选 Agent。</span>
@@ -261,7 +269,7 @@ export default function Composer() {
           ref={ref}
           className={styles.input}
           data-testid="composer-input"
-          aria-label="Type a message"
+          aria-label="输入消息"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
@@ -274,7 +282,7 @@ export default function Composer() {
             className={styles.cancelBtn}
             onClick={cancel}
             data-testid="cancel-btn"
-            aria-label="Cancel run"
+            aria-label="取消运行"
           >
             <Square size={14} aria-hidden="true" strokeWidth={2.4} />
             {t('composer.cancel')}
@@ -285,12 +293,23 @@ export default function Composer() {
             onClick={send}
             disabled={sending || !text.trim()}
             data-testid="send-btn"
-            aria-label="Send message"
+            aria-label="发送消息"
           >
             <Send size={14} aria-hidden="true" strokeWidth={2.4} />
             {runMode === 'delegate' ? t('composer.startDelegate') : t('composer.send')}
           </button>
         )}
+      </div>
+      <div className={styles.feedbackRow}>
+        <button className={styles.feedbackBtn} onClick={() => doSend('继续写')}>
+          继续写
+        </button>
+        <button className={styles.feedbackBtn} onClick={() => doSend('改一下')}>
+          改一下
+        </button>
+        <button className={styles.feedbackBtn} onClick={() => doSend('说说想法')}>
+          说说想法
+        </button>
       </div>
       <div className={styles.hint}>{t('composer.hint')}</div>
     </div>

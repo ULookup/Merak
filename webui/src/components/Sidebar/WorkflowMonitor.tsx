@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useAppState } from '../../AppState';
-import type { PipelineHistoryResponse, WorkflowSummary } from '../../api/types';
 import { activatePipelineWorkflow, listPipelineWorkflows } from '../../api/client';
+import type { PipelineHistoryResponse, WorkflowSummary } from '../../api/types';
+import { useAppState } from '../../AppState';
 import styles from './WorkflowMonitor.module.css';
 
-async function fetchPipelineHistory(worldId: string, limit = 12): Promise<PipelineHistoryResponse | null> {
+async function fetchPipelineHistory(
+  worldId: string,
+  limit = 12,
+): Promise<PipelineHistoryResponse | null> {
   if (typeof fetch !== 'function') return null;
   const params = new URLSearchParams({ world_id: worldId, limit: String(limit) });
   const res = await fetch(`/api/worldbuilding/pipeline/history?${params}`);
@@ -16,7 +19,7 @@ export default function WorkflowMonitor() {
   const { state, dispatch } = useAppState();
   const conditions = state.pipelineConditions ?? [];
   const history = state.pipelineHistory ?? [];
-  const metCount = conditions.filter(c => c.met).length;
+  const metCount = conditions.filter((c) => c.met).length;
   const total = conditions.length;
   const pct = total > 0 ? Math.round((metCount / total) * 100) : 0;
 
@@ -30,10 +33,18 @@ export default function WorkflowMonitor() {
     setWorkflowsLoading(true);
     setWorkflowsError(null);
     listPipelineWorkflows()
-      .then(data => { if (!cancelled) setWorkflows(data); })
-      .catch(err => { if (!cancelled) setWorkflowsError(err.message); })
-      .finally(() => { if (!cancelled) setWorkflowsLoading(false); });
-    return () => { cancelled = true; };
+      .then((data) => {
+        if (!cancelled) setWorkflows(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setWorkflowsError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setWorkflowsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -71,7 +82,7 @@ export default function WorkflowMonitor() {
 
   return (
     <div className={styles.container}>
-      <div className={styles.title}>工作流状态</div>
+      <div className={styles.title}>Workflow Status</div>
 
       {workflowsLoading && <div className={styles.status}>Loading workflows...</div>}
       {workflowsError && <div className={styles.status}>Error: {workflowsError}</div>}
@@ -79,10 +90,12 @@ export default function WorkflowMonitor() {
         <select
           className={styles.workflowSelect}
           value={selectedWorkflow}
-          onChange={e => handleWorkflowChange(e.target.value)}
+          onChange={(e) => handleWorkflowChange(e.target.value)}
         >
-          {workflows.map(w => (
-            <option key={w.name} value={w.name}>{w.description || w.name}</option>
+          {workflows.map((w) => (
+            <option key={w.name} value={w.name}>
+              {w.description || w.name}
+            </option>
           ))}
         </select>
       )}
@@ -90,8 +103,10 @@ export default function WorkflowMonitor() {
       {total > 0 && (
         <div className={styles.section}>
           <div className={styles.progressHeader}>
-            <span>条件进度</span>
-            <span>{metCount}/{total} ({pct}%)</span>
+            <span>Condition progress</span>
+            <span>
+              {metCount}/{total} ({pct}%)
+            </span>
           </div>
           <div className={styles.progressBar}>
             <div className={styles.progressFill} style={{ width: `${pct}%` }} />
@@ -100,7 +115,7 @@ export default function WorkflowMonitor() {
             {conditions.map((c, i) => (
               <div key={i} className={styles.conditionItem}>
                 <span className={c.met ? styles.checkGreen : styles.checkGray}>
-                  {c.met ? '✓' : '○'}
+                  {c.met ? 'OK' : '--'}
                 </span>
                 <span className={styles.conditionName}>{c.name}</span>
                 {c.current !== undefined && (
@@ -120,7 +135,7 @@ export default function WorkflowMonitor() {
           {history.slice(0, 5).map((h) => (
             <div key={h.id} className={styles.historyItem}>
               <span className={styles.historyPhases}>
-                {h.from} → {h.to}
+                {h.from} -&gt; {h.to}
               </span>
               <span className={styles.historyTrigger}>{h.trigger}</span>
             </div>

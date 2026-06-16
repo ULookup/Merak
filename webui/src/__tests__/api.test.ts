@@ -113,4 +113,67 @@ describe('api client', () => {
       expect.objectContaining({ method: 'GET' }),
     );
   });
+
+  it('saveConfig() sends max_output_tokens to the backend', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      status: 200,
+      json: async () => ({ ok: true }),
+    } as Response);
+
+    const { api } = await import('../api/client');
+    await api.saveConfig({
+      provider: 'openai',
+      api_key: 'sk-test',
+      api_base_url: 'https://api.openai.com/v1',
+      default_model: 'gpt-4o',
+      max_output_tokens: 8192,
+    });
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      '/api/config/llm',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          provider: 'openai',
+          api_key: 'sk-test',
+          api_base_url: 'https://api.openai.com/v1',
+          default_model: 'gpt-4o',
+          max_output_tokens: 8192,
+        }),
+      }),
+    );
+  });
+
+  it('deleteWorld() calls DELETE /api/worldbuilding/worlds/:id', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      status: 200,
+      json: async () => ({ ok: true, deleted: 'world_1' }),
+    } as Response);
+
+    const { api } = await import('../api/client');
+    await api.deleteWorld('world_1');
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      '/api/worldbuilding/worlds/world_1',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
+  it('advanceWorldTime() calls POST /api/worldbuilding/:worldId/time/advance', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      status: 200,
+      json: async () => ({ ok: true, world_time: 'Day 2 Dawn' }),
+    } as Response);
+
+    const { api } = await import('../api/client');
+    await api.advanceWorldTime('world_1', 'Day 2 Dawn');
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      '/api/worldbuilding/world_1/time/advance',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ world_time: 'Day 2 Dawn' }),
+      }),
+    );
+  });
 });

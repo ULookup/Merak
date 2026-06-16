@@ -14,6 +14,7 @@ Config ConfigLoader::default_config() {
     cfg.llm.api_base_url = "https://api.openai.com/v1";
     cfg.llm.default_model = "gpt-4o";
     cfg.llm.max_output_tokens = 4096;
+    cfg.llm.temperature = 0.8;
     cfg.llm.provider = "openai";
     return cfg;
 }
@@ -38,6 +39,8 @@ static std::optional<Config> parse_config_file(const std::string& filepath) {
             if (l.contains("max_output_tokens")) cfg.llm.max_output_tokens = l["max_output_tokens"];
             if (l.contains("request_timeout_ms")) cfg.llm.request_timeout_ms = l["request_timeout_ms"];
             if (l.contains("max_retries")) cfg.llm.max_retries = l["max_retries"];
+            if (l.contains("temperature")) cfg.llm.temperature = l["temperature"];
+            if (l.contains("context_memory_length")) cfg.llm.context_memory_length = l["context_memory_length"];
             if (l.contains("thinking")) {
                 auto& t = l["thinking"];
                 ThinkingConfig thinking;
@@ -169,6 +172,8 @@ void ConfigLoader::merge(Config& base, const Config& override_cfg) {
     if (l.request_timeout_ms > 0) base.llm.request_timeout_ms = l.request_timeout_ms;
     if (l.max_retries > 0) base.llm.max_retries = l.max_retries;
     if (l.thinking.has_value()) base.llm.thinking = l.thinking;
+    if (l.temperature >= 0.0) base.llm.temperature = l.temperature; // -1.0 sentinel = "not set"
+    if (!l.context_memory_length.empty()) base.llm.context_memory_length = l.context_memory_length;
 
     if (!override_cfg.models.empty()) base.models = override_cfg.models;
 
@@ -240,6 +245,10 @@ void ConfigLoader::apply_env_overrides(Config& cfg) {
         if (!cfg.llm.thinking) cfg.llm.thinking = ThinkingConfig{};
         cfg.llm.thinking->budget_tokens = *v;
     }
+    if (auto* v = env_str("MERAK_TEMPERATURE")) {
+        try { cfg.llm.temperature = std::stod(v); } catch (...) {}
+    }
+    if (auto* v = env_str("MERAK_CONTEXT_MEMORY_LENGTH")) cfg.llm.context_memory_length = v;
 
     if (auto* v = env_str("MERAK_DIARY_MODEL")) cfg.memory.diary_model = v;
     if (auto* v = env_str("MERAK_DB_CONNECTION")) cfg.memory.db_connection = v;
@@ -385,6 +394,53 @@ Result<Config, AgentError> ConfigLoader::load_file(const std::string& filepath) 
         ErrorType::CONFIG_ERROR,
         "Cannot load config file: " + filepath
     );
+}
+
+static std::filesystem::path prefs_path() {
+    if (const char* home = std::getenv("HOME"))
+        return std::filesystem::path(home) / ".merak" / "preferences.json";
+#ifdef _WIN32
+    if (const char* appdata = std::getenv("APPDATA"))
+        return std::filesystem::path(appdata) / "Merak" / "preferences.json";
+#endif
+    return ".merak/preferences.json";
+}
+
+UserPreferences load_preferences() {
+    UserPreferences p;
+    auto path = prefs_path();
+    if (!std::filesystem::exists(path)) return p;
+    std::ifstream f(path);
+    if (!f) return p;
+    try {
+        nlohmann::json j;
+        f >> j;
+        if (j.contains("default_genre")) p.default_genre = j["default_genre"];
+        if (j.contains("preferred_style")) p.preferred_style = j["preferred_style"];
+        if (j.contains("allow_usage_logs")) p.allow_usage_logs = j["allow_usage_logs"];
+    } catch (...) {
+        std::cerr << "Preferences parse error in " << path << " — using defaults" << std::endl;
+    }
+    return p;
+}
+
+bool save_preferences(const UserPreferences& p) {
+    auto path = prefs_path();
+    std::filesystem::create_directories(path.parent_path());
+    nlohmann::json j;
+    j["default_genre"] = p.default_genre;
+    j["preferred_style"] = p.preferred_style;
+    j["allow_usage_logs"] = p.allow_usage_logs;
+    auto tmp = path.string() + ".tmp";
+    std::ofstream out(tmp);
+    out << j.dump(2);
+    out.close();
+    if (out.fail()) {
+        std::cerr << "Failed to write preferences to " << path << std::endl;
+        return false;
+    }
+    std::filesystem::rename(tmp, path);
+    return true;
 }
 
 } // namespace merak

@@ -256,6 +256,10 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_get_chapter(req, res); });
     server.Patch(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+))",
         [this](const auto& req, auto& res) { handle_patch_chapter(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+)/review)",
+        [this](const auto& req, auto& res) { handle_chapter_review(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/export)",
+        [this](const auto& req, auto& res) { handle_export_chapters(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/scenes)",
         [this](const auto& req, auto& res) { handle_list_scenes(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes)",
@@ -1296,6 +1300,41 @@ void WorldbuildingHttpHandler::handle_patch_chapter(const httplib::Request& req,
     }
 }
 
+// --- Chapter review ---
+
+void WorldbuildingHttpHandler::handle_chapter_review(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string cid = req.matches[2];
+
+        auto review = service_->get_chapter_review(wid, cid);
+
+        nlohmann::json planted_arr = nlohmann::json::array();
+        for (const auto& f : review.foreshadowing_planted) {
+            planted_arr.push_back({{"id", f.id}, {"content", f.content}});
+        }
+        nlohmann::json paid_arr = nlohmann::json::array();
+        for (const auto& f : review.foreshadowing_paid) {
+            paid_arr.push_back({{"id", f.id}, {"content", f.content}});
+        }
+
+        json_response(res, {
+            {"ok", true},
+            {"review", {
+                {"chapter_id", review.chapter_id},
+                {"title", review.title},
+                {"word_count", review.word_count},
+                {"character_names", review.character_names},
+                {"foreshadowing_planted", planted_arr},
+                {"foreshadowing_paid", paid_arr},
+                {"writing_advice", review.writing_advice}
+            }}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 500, "review_failed");
+    }
+}
+
 // --- PATCH foreshadow / secret ---
 
 void WorldbuildingHttpHandler::handle_patch_foreshadow(const httplib::Request& req, httplib::Response& res) {
@@ -1601,6 +1640,45 @@ void WorldbuildingHttpHandler::handle_cancel_chunked(const httplib::Request& req
         json_response(res, {{"ok", true}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
+    }
+}
+
+// --- Export ---
+
+void WorldbuildingHttpHandler::handle_export_chapters(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string world_id = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+
+        if (!body.contains("chapter_ids") || !body["chapter_ids"].is_array() || body["chapter_ids"].empty()) {
+            error_response(res, "Missing or empty chapter_ids array", 400, "missing_chapter_ids");
+            return;
+        }
+
+        std::vector<std::string> chapter_ids;
+        for (const auto& cid : body["chapter_ids"]) {
+            if (cid.is_string()) {
+                chapter_ids.push_back(cid.get<std::string>());
+            }
+        }
+
+        if (chapter_ids.empty()) {
+            error_response(res, "No valid chapter IDs provided", 400, "missing_chapter_ids");
+            return;
+        }
+
+        std::string title = body.value("title", "");
+        std::string author = body.value("author", "");
+
+        auto result = service_->export_chapters(world_id, chapter_ids, title, author);
+
+        json_response(res, {
+            {"ok", true},
+            {"file_path", result.file_path},
+            {"total_chars", result.total_chars}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 500, "export_failed");
     }
 }
 

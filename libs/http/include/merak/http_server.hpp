@@ -54,6 +54,8 @@ private:
     void handle_config_get(const httplib::Request& req, httplib::Response& res);
     void handle_config_set(const httplib::Request& req, httplib::Response& res);
     void handle_config_test(const httplib::Request& req, httplib::Response& res);
+    void handle_preferences_get(const httplib::Request& req, httplib::Response& res);
+    void handle_preferences_set(const httplib::Request& req, httplib::Response& res);
     void handle_workspace_open(const httplib::Request& req, httplib::Response& res);
     void handle_capabilities(const httplib::Request& req, httplib::Response& res);
     void handle_workspace_files_list(const httplib::Request& req, httplib::Response& res);

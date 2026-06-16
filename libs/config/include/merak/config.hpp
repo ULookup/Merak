@@ -23,6 +23,8 @@ struct LLMConfig {
     int max_output_tokens = 0;
     int request_timeout_ms = 60000;
     int max_retries = 3;
+    double temperature = -1.0; // -1.0 = "not set" sentinel; valid range [0.0, 2.0]
+    std::string context_memory_length = "medium"; // "short" | "medium" | "long"
     std::optional<ThinkingConfig> thinking;
 };
 
@@ -121,5 +123,11 @@ struct Config {
     AgentConfig agent;
     TuiConfig tui;
 };
+
+	struct UserPreferences {
+	    std::string default_genre = "我还不确定";
+	    std::string preferred_style = "轻松"; // 轻松 | 严肃 | 诗意 | 简洁
+	    bool allow_usage_logs = false;
+	};
 
 } // namespace merak

@@ -24,6 +24,8 @@
 
 namespace merak::worldbuilding {
 
+class PgPool;
+
 struct PendingCreation {
     std::string creation_id;
     std::string tool_name;
@@ -37,6 +39,7 @@ class WorldbuildingService {
 public:
     WorldbuildingService(std::string_view pg_conninfo, std::filesystem::path root,
                          std::unique_ptr<merak::kg::KnowledgeGraphProvider> kg_provider = nullptr);
+    ~WorldbuildingService();
     void initialize();
 
     // Knowledge Graph
@@ -133,6 +136,36 @@ public:
     int diary_context_limit() const { return diary_context_limit_; }
     void set_diary_context_limit(int limit) { diary_context_limit_ = limit; }
 
+    // Chapter review
+    struct ForeshadowingItem {
+        std::string id;
+        std::string content;
+    };
+
+    struct ChapterReview {
+        std::string chapter_id;
+        std::string title;
+        int word_count = 0;
+        std::vector<std::string> character_names;
+        std::vector<ForeshadowingItem> foreshadowing_planted;
+        std::vector<ForeshadowingItem> foreshadowing_paid;
+        std::string writing_advice;
+    };
+
+    ChapterReview get_chapter_review(const std::string& world_id,
+                                      const std::string& chapter_id) const;
+
+    // Export
+    struct ExportResult {
+        std::string file_path;
+        int total_chars = 0;
+    };
+
+    ExportResult export_chapters(const std::string& world_id,
+                                 const std::vector<std::string>& chapter_ids,
+                                 const std::string& title,
+                                 const std::string& author);
+
 private:
     std::filesystem::path root_;
     WorldStore worlds_;
@@ -141,15 +174,18 @@ private:
     ForeshadowingStore foreshadowing_;
     SecretStore secrets_;
     VoiceAnalyzer voice_;
-    SceneOrchestrator orchestrator_;
     std::unique_ptr<merak::kg::KnowledgeGraphProvider> kg_provider_;
+    SceneOrchestrator orchestrator_;
+    std::unique_ptr<PgPool> pending_pool_;
 
-    // NOTE: pending_creations_ is in-memory only. On server restart, in-flight
-    // creation confirmations are lost. The tool result in the session history
-    // will still reference the creation_id, but resolution will fail.
-    // TODO: persist pending creations to SessionStore for restart recovery.
-    std::map<std::string, PendingCreation> pending_creations_;
+    // In-memory cache backed by PostgreSQL so creation confirmations survive
+    // server restarts and can still be resolved from the UI.
+    mutable std::map<std::string, PendingCreation> pending_creations_;
     mutable std::mutex pending_mutex_;
+    void ensure_pending_creation_table();
+    void persist_pending_creation(const PendingCreation& pc);
+    std::optional<PendingCreation> load_pending_creation(const std::string& creation_id) const;
+    void delete_pending_creation(const std::string& creation_id);
 
     std::function<void(std::string, std::string, nlohmann::json)> entity_event_handler_;
     int diary_context_limit_ = 5;

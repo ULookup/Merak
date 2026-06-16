@@ -26,6 +26,7 @@ export default function SettingsPanel() {
   const [provider, setProvider] = useState('anthropic');
   const [model, setModel] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  const [maxOutputTokens, setMaxOutputTokens] = useState(4096);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -36,17 +37,21 @@ export default function SettingsPanel() {
   const [runtime, setRuntime] = useState<DesktopRuntimeStatus | null>(null);
   const [diagnosticMsg, setDiagnosticMsg] = useState('');
 
+  const loadConfig = async () => {
+    const data = await api.getConfig();
+    setConfig(data);
+    setProvider(data.provider || 'anthropic');
+    setModel(data.default_model || '');
+    setBaseUrl(data.api_base_url || '');
+    setMaxOutputTokens(data.max_output_tokens || 4096);
+  };
+
   useEffect(() => {
-    api
-      .getConfig()
-      .then((data) => {
-        setConfig(data);
-        setProvider(data.provider || 'anthropic');
-        setModel(data.default_model || '');
-        setBaseUrl(data.api_base_url || '');
-      })
-      .catch(() => {});
-  }, []);
+    loadConfig().catch((error) => {
+      setStatus('error');
+      setErrorMsg(formatApiError(error, t('settings.saveFail')));
+    });
+  }, [t]);
 
   useEffect(() => {
     if (!isDesktopApp()) return;
@@ -56,13 +61,16 @@ export default function SettingsPanel() {
   const handleSave = async () => {
     setSaving(true);
     setStatus('idle');
+    setErrorMsg('');
     try {
       await api.saveConfig({
         provider,
         api_key: apiKey || undefined,
         default_model: model || undefined,
         api_base_url: baseUrl || undefined,
+        max_output_tokens: maxOutputTokens,
       });
+      await loadConfig();
       setStatus('saved');
       setApiKey('');
     } catch (error) {
@@ -76,6 +84,7 @@ export default function SettingsPanel() {
   const handleTest = async () => {
     setTesting(true);
     setStatus('idle');
+    setErrorMsg('');
     try {
       await api.testConfig();
       setStatus('test_ok');
@@ -96,6 +105,9 @@ export default function SettingsPanel() {
     const response = await restartDesktopRuntime();
     setRuntime(response?.status ?? null);
     setDiagnosticMsg(response?.ok ? t('settings.restartOk') : t('settings.restartFail'));
+    if (response?.ok) {
+      loadConfig().catch(() => {});
+    }
   };
 
   const handleExportDiagnostics = async () => {
@@ -104,7 +116,14 @@ export default function SettingsPanel() {
     else if (response) setDiagnosticMsg(response.path);
   };
 
-  if (!config) return <div className={styles.panel}>{t('settings.loading')}</div>;
+  if (!config) {
+    return (
+      <div className={styles.panel}>
+        <h3 className={styles.heading}>{t('settings.title')}</h3>
+        {status === 'error' ? <div className={styles.error}>{errorMsg}</div> : t('settings.loading')}
+      </div>
+    );
+  }
 
   return (
     <div className={styles.panel}>
@@ -161,11 +180,28 @@ export default function SettingsPanel() {
         />
       </label>
 
+      <label className={styles.label}>
+        最大输出 Token
+        <input
+          type="number"
+          min={256}
+          step={256}
+          value={maxOutputTokens}
+          onChange={(event) => setMaxOutputTokens(Math.max(256, Number(event.target.value) || 256))}
+          placeholder={String(config.max_output_tokens || 4096)}
+          className={styles.input}
+        />
+      </label>
+
       <div className={styles.actions}>
         <button onClick={handleTest} disabled={testing} className={styles.btn}>
           {testing ? t('settings.testing') : t('settings.test')}
         </button>
-        <button onClick={handleSave} disabled={saving} className={`${styles.btn} ${styles.primary}`}>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className={`${styles.btn} ${styles.primary}`}
+        >
           {saving ? t('settings.saving') : t('settings.save')}
         </button>
       </div>

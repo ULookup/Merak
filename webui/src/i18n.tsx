@@ -281,7 +281,7 @@ const en: Dictionary = {
   'composer.character': 'Character',
   'composer.worldRule': 'World Rule',
   'composer.outline': 'Outline',
-  'composer.rewrite': 'Polish',
+  'composer.rewrite': 'Rewrite',
   'composer.placeholder': 'Tell GodAgent what you want to create...',
   'composer.placeholderGod': 'Tell GodAgent your writing goal...',
   'composer.placeholderCharacter': 'Speak in this character voice...',

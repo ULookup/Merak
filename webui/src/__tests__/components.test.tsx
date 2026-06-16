@@ -262,7 +262,7 @@ function FilledAgentsHarness() {
 describe('Cell components', () => {
   it('BrandMark renders the Merak logo accessibly', () => {
     render(<BrandMark />);
-    expect(screen.getByRole('img', { name: 'Merak pen planet logo' })).toBeDefined();
+    expect(screen.getByRole('img', { name: 'Merak wordmark logo' })).toBeDefined();
     expect(screen.getByText('MERAK')).toBeDefined();
   });
 

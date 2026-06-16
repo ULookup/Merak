@@ -463,7 +463,8 @@ PipelineManager::AdvanceResult PipelineManager::advance_phase(const AdvanceReque
     state.current_phase = target;
     state.last_updated = current_iso_timestamp();
     // Clear scene-level refs when moving to pre-scene phases
-    if (target == CreativePhase::Worldbuilding ||
+    if (target == CreativePhase::DirectionSelection ||
+        target == CreativePhase::Worldbuilding ||
         target == CreativePhase::CharacterCreation ||
         target == CreativePhase::PlotArchitecture) {
         state.active_scene_id = std::nullopt;

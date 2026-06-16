@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
 import type {
+  ChapterReviewItem,
   ConditionState,
   ForeshadowingItem,
   Message,
@@ -94,6 +95,11 @@ export interface AppState {
     conditions: ConditionState[];
   } | null;
   pipelineCycleComplete: { message: string } | null;
+  showSetupWizard: boolean;
+  llmConfigured: boolean;
+  chapterReview: ChapterReviewItem | null;
+  showExportDialog: boolean;
+  userPreferences: { default_genre: string; preferred_style: string } | null;
 }
 
 export const initialState: AppState = {
@@ -153,6 +159,11 @@ export const initialState: AppState = {
   pipelineAutoAdvance: true,
   showPhaseAdvancePrompt: null,
   pipelineCycleComplete: null,
+  showSetupWizard: false,
+  llmConfigured: false,
+  chapterReview: null,
+  showExportDialog: false,
+  userPreferences: null,
 };
 
 let nextId = 1;
@@ -292,7 +303,12 @@ export type Action =
   | { type: 'PIPELINE_ADVANCE_FAILED'; reason: string }
   | { type: 'PIPELINE_ERROR_CLEARED' }
   | { type: 'CLEAR_PHASE_ADVANCE_PROMPT' }
-  | { type: 'CLEAR_CYCLE_COMPLETE' };
+  | { type: 'CLEAR_CYCLE_COMPLETE' }
+  | { type: 'SET_LLM_CONFIGURED'; configured: boolean }
+  | { type: 'SHOW_SETUP_WIZARD'; show: boolean }
+  | { type: 'SET_CHAPTER_REVIEW'; review: ChapterReviewItem | null }
+  | { type: 'SET_SHOW_EXPORT_DIALOG'; show: boolean }
+  | { type: 'SET_USER_PREFERENCES'; prefs: { default_genre: string; preferred_style: string } };
 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -651,6 +667,21 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'CLEAR_CYCLE_COMPLETE':
       return { ...state, pipelineCycleComplete: null };
+
+    case 'SET_LLM_CONFIGURED':
+      return { ...state, llmConfigured: action.configured, showSetupWizard: false };
+
+    case 'SHOW_SETUP_WIZARD':
+      return { ...state, showSetupWizard: action.show };
+
+    case 'SET_CHAPTER_REVIEW':
+      return { ...state, chapterReview: action.review };
+
+    case 'SET_SHOW_EXPORT_DIALOG':
+      return { ...state, showExportDialog: action.show };
+
+    case 'SET_USER_PREFERENCES':
+      return { ...state, userPreferences: action.prefs };
 
     default:
       return state;

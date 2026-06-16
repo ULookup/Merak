@@ -49,6 +49,12 @@ std::expected<void, AgentError> MemoryStore::init_db() {
 }
 
 std::expected<void, AgentError> MemoryStore::create_tables() {
+    if (!embedder_) {
+        return std::unexpected(AgentError(
+            ErrorType::MEMORY_ERROR,
+            "No EmbeddingProvider configured"
+        ));
+    }
     try {
         auto conn = open_conn();
         pqxx::work txn(conn);

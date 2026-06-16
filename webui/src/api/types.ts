@@ -137,6 +137,11 @@ export interface UpdateWorldResponse {
   description: string;
 }
 
+export interface DeleteWorldResponse {
+  ok?: boolean;
+  deleted: string;
+}
+
 export interface WorldAgent {
   id: string;
   name: string;
@@ -193,6 +198,13 @@ export interface WorldTimeResponse {
   time?: string;
   world_time?: string;
   now?: string;
+}
+
+export interface AdvanceWorldTimeResponse {
+  ok: boolean;
+  world_time?: string;
+  time?: string;
+  label?: string;
 }
 
 export interface LlmConfig {
@@ -513,6 +525,7 @@ export interface RelationListResponse {
 
 // === Pipeline ===
 export type CreativePhase =
+  | 'direction_selection'
   | 'worldbuilding'
   | 'character_creation'
   | 'plot_architecture'
@@ -619,4 +632,53 @@ export interface AgentPromptResponse {
 export interface ResolveCreationResponse {
   ok: boolean;
   status: string;
+}
+
+// === User preferences & LLM config ===
+export interface UserPreferences {
+  default_genre: string;
+  preferred_style: string;
+  allow_usage_logs: boolean;
+}
+
+export interface PreferencesResponse {
+  ok: boolean;
+  default_genre?: string;
+  preferred_style?: string;
+  allow_usage_logs?: boolean;
+}
+
+export interface LlmConfigFull extends LlmConfig {
+  temperature: number;
+  context_memory_length: 'short' | 'medium' | 'long';
+  restart_required?: boolean;
+}
+
+// === Chapter review ===
+export interface ChapterReviewItem {
+  chapter_id: string;
+  title: string;
+  word_count: number;
+  character_names: string[];
+  foreshadowing_planted: { id: string; content: string }[];
+  foreshadowing_paid: { id: string; content: string }[];
+  writing_advice: string;
+}
+
+export interface ChapterReviewResponse {
+  ok: boolean;
+  review: ChapterReviewItem;
+}
+
+// === Export ===
+export interface ExportRequest {
+  chapter_ids: string[];
+  title: string;
+  author?: string;
+}
+
+export interface ExportResult {
+  ok: boolean;
+  file_path: string;
+  total_chars: number;
 }

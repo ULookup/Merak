@@ -453,7 +453,59 @@ prompts::PromptProfile RuntimeService::build_prompt_profile(
     return profile;
 }
 
-void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=store_->get_run(r.id);!current||current->status==RunStatus::Cancelled)return;auto token=std::make_shared<CancellationToken>();auto control=std::make_shared<Control>(*this,r,token);{std::lock_guard lock(mutex_);tokens_[r.id]=token;controls_[r.id]=control;}store_->update_run_status(r.id,RunStatus::Running);try{std::shared_ptr<AgentLoop> loop;{std::lock_guard lock(session_loops_mutex_);auto it=session_loops_.find(r.session_id);if(it!=session_loops_.end()){loop=it->second;}else{loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_(model)));session_loops_[r.session_id]=loop;auto history=restore_messages(r.session_id);if(!history.empty()){loop->restore_history(std::move(history));}}}        // Build dynamic system_prompt from WorldbuildingService when session is bound
+std::optional<std::string> RuntimeService::active_scene_for_session(const SessionRecord& session) {
+    if (session.world_id.empty()) return std::nullopt;
+    if (pipeline_mgr_) {
+        if (auto state = pipeline_mgr_->get_state(session.world_id)) {
+            if (state->active_scene_id && !state->active_scene_id->empty()) {
+                return state->active_scene_id;
+            }
+        }
+    }
+    if (!wb_service_) return std::nullopt;
+    try {
+        auto scenes = wb_service_->narrative().list_scenes(session.world_id);
+        for (const auto& sc : scenes) {
+            if (sc.status == "writing") return sc.id;
+        }
+        for (const auto& sc : scenes) {
+            if (sc.status == "draft") return sc.id;
+        }
+    } catch (const std::exception& e) {
+        spdlog::warn("active_scene_for_session: failed for session {}: {}",
+                     session.id, e.what());
+    }
+    return std::nullopt;
+}
+
+void RuntimeService::configure_loop_for_run(AgentLoop& loop, const RunRecord& run) {
+    loop.set_worldbuilding_service(wb_service_);
+    loop.set_skill_registry(skill_registry_);
+
+    auto session = store_->get_session(run.session_id);
+    if (!session) {
+        loop.set_active_world_id(std::nullopt);
+        loop.set_active_scene_id(std::nullopt);
+        loop.set_caller_agent_id(std::nullopt);
+        return;
+    }
+
+    if (!session->world_id.empty()) {
+        loop.set_active_world_id(session->world_id);
+    } else {
+        loop.set_active_world_id(std::nullopt);
+    }
+    loop.set_active_scene_id(active_scene_for_session(*session));
+    if (!session->agent_id.empty()) {
+        loop.set_caller_agent_id(session->agent_id);
+    } else if (!run.agent_id.empty()) {
+        loop.set_caller_agent_id(run.agent_id);
+    } else {
+        loop.set_caller_agent_id(std::nullopt);
+    }
+}
+
+void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=store_->get_run(r.id);!current||current->status==RunStatus::Cancelled)return;auto token=std::make_shared<CancellationToken>();auto control=std::make_shared<Control>(*this,r,token);{std::lock_guard lock(mutex_);tokens_[r.id]=token;controls_[r.id]=control;}store_->update_run_status(r.id,RunStatus::Running);try{std::shared_ptr<AgentLoop> loop;{std::lock_guard lock(session_loops_mutex_);auto it=session_loops_.find(r.session_id);if(it!=session_loops_.end()){loop=it->second;}else{loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_(model)));session_loops_[r.session_id]=loop;auto history=restore_messages(r.session_id);if(!history.empty()){loop->restore_history(std::move(history));}}}configure_loop_for_run(*loop,r);        // Build dynamic system_prompt from WorldbuildingService when session is bound
         auto session = store_->get_session(r.session_id);
         if (session && !session->world_id.empty() && !session->agent_id.empty() && wb_service_) {
             auto profile = build_prompt_profile(session->world_id, session->agent_id);
@@ -470,9 +522,6 @@ void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=
             if (!composed.empty()) {
                 loop->set_system_prompt(composed);
             }
-        }
-        if (session && !session->world_id.empty()) {
-            loop->set_active_world_id(session->world_id);
         }
         loop->run(r.user_message,*control).get();if(token->cancelled()){if(store_->get_run(r.id)->status!=RunStatus::Cancelled){store_->update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_->update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed",{{"pipeline_snapshot",(session&&!session->world_id.empty()&&pipeline_mgr_)?pipeline_mgr_->snapshot_to_json(session->world_id):""}});}}catch(const std::exception&e){if(token->cancelled()){if(store_->get_run(r.id)->status!=RunStatus::Cancelled){store_->update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_->update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
 AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig& agent_, const std::string& task, const RunRecord& parent, const std::string& delegation_id, std::optional<std::string> previous_output) {
@@ -506,7 +555,15 @@ AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig& agent_, cons
     emit(parent.session_id,sub.id,"sub_run_started",{{"run_id",sub.id},{"parent_run_id",parent.id},{"delegation_id",delegation_id},{"agent_id",agent.id},{"task",prompt},{"status","running"}});
     try{
         if(token->cancelled())throw AgentError(ErrorType::INTERNAL_ERROR,"Run cancelled");
-        auto response=sub_run_executor_(agent,prompt,*control);
+        AgentRunContext context;
+        if (auto session = store_->get_session(parent.session_id)) {
+            context.world_id = session->world_id;
+            if (auto scene_id = active_scene_for_session(*session)) {
+                context.scene_id = *scene_id;
+            }
+        }
+        context.caller_agent_id = agent.id;
+        auto response=sub_run_executor_(agent,prompt,*control,context);
         if(token->cancelled()){
             store_->update_run_status(sub.id,RunStatus::Cancelled);
             emit(parent.session_id,sub.id,"sub_run_completed",{{"run_id",sub.id},{"parent_run_id",parent.id},{"delegation_id",delegation_id},{"agent_id",agent.id},{"status","cancelled"}});
@@ -565,8 +622,9 @@ void RuntimeService::execute_delegation(RunRecord parent,DelegationRequest reque
     std::lock_guard lock(mutex_);tokens_.erase(parent.id);controls_.erase(parent.id);child_runs_.erase(parent.id);
 }
 ApprovalRecord RuntimeService::resolve_approval(const std::string&id,ApprovalStatus status){auto a=store_->resolve_approval(id,status);auto run=store_->get_run(a.run_id);if(!run)throw RuntimeError("run_not_found","Run does not exist");emit(run->session_id,run->id,"approval_resolved",{{"approval_id",id},{"decision",to_string(a.status)}});std::shared_ptr<Control>control;{std::lock_guard lock(mutex_);auto it=controls_.find(run->id);if(it!=controls_.end())control=it->second;}if(control)control->resolve(a.status==ApprovalStatus::Allowed);else if(run->status==RunStatus::WaitingApproval)resume_after_restarted_approval(*run,a,a.status==ApprovalStatus::Allowed);return a;}
-void RuntimeService::set_worldbuilding_service(worldbuilding::WorldbuildingService* wb_service) {
-    wb_service_ = wb_service;
+void RuntimeService::set_worldbuilding_service(
+        std::shared_ptr<worldbuilding::WorldbuildingService> wb_service) {
+    wb_service_ = std::move(wb_service);
     if (wb_service_) {
         wb_service_->set_entity_event_handler(
             [this](const std::string& event_type, const std::string& world_id,
@@ -790,7 +848,7 @@ void RuntimeService::resume_after_restarted_approval(RunRecord run,ApprovalRecor
     if(allowed){auto temp_loop=loop_factory_("");result=temp_loop->tools()->execute(call,ToolExecutionContext{token}).get();}
     else{result.is_error=true;result.output="User denied permission for tool: "+call.name;}
     control->emit_tool_completed(call,result);Message tool;tool.role="tool";tool.content=result.output;tool.tool_call_id=result.call_id;history.push_back(tool);control->append_message(tool);
-    auto loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_("")));loop->restore_history(std::move(history));{std::lock_guard lock(session_loops_mutex_);if(session_loops_.count(run.session_id))spdlog::warn("Resume after restart: overwriting existing session loop for {}",run.session_id);session_loops_[run.session_id]=loop;}
+    auto loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_("")));loop->restore_history(std::move(history));configure_loop_for_run(*loop,run);{std::lock_guard lock(session_loops_mutex_);if(session_loops_.count(run.session_id))spdlog::warn("Resume after restart: overwriting existing session loop for {}",run.session_id);session_loops_[run.session_id]=loop;}
     std::thread([self=shared_from_this(),run,control,token,loop]()mutable{try{loop->resume(*control).get();if(token->cancelled()){self->store_->update_run_status(run.id,RunStatus::Cancelled);self->emit(run.session_id,run.id,"run_cancelled");}else{self->store_->update_run_status(run.id,RunStatus::Completed);self->emit(run.session_id,run.id,"run_completed");}}catch(const std::exception&e){self->store_->update_run_status(run.id,RunStatus::Failed,e.what());self->emit(run.session_id,run.id,"run_failed",{{"error",e.what()}});}std::lock_guard lock(self->mutex_);self->tokens_.erase(run.id);self->controls_.erase(run.id);}).detach();
 }
 } // namespace merak

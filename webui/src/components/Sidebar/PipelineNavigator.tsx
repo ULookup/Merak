@@ -1,19 +1,19 @@
 import { useEffect } from 'react';
 import { BookOpen, FileText, PenLine } from 'lucide-react';
-import { useAppState } from '../../AppState';
-import type { CreativePhase } from '../../api/types';
 import { advancePipeline, getPipelineState } from '../../api/client';
+import type { CreativePhase } from '../../api/types';
+import { useAppState } from '../../AppState';
 import styles from './PipelineNavigator.module.css';
 
 const PHASES: { key: CreativePhase; label: string; desc: string }[] = [
-  { key: 'worldbuilding', label: '世界观构建', desc: '设定世界基础' },
-  { key: 'character_creation', label: '角色创建', desc: '创建和完善角色' },
-  { key: 'plot_architecture', label: '剧情架构', desc: '规划故事结构' },
-  { key: 'scene_writing', label: '场景写作', desc: '创作具体场景' },
-  { key: 'reflection', label: '回顾整理', desc: '检查与回顾' },
+  { key: 'worldbuilding', label: '世界观构建', desc: '整理世界规则与背景' },
+  { key: 'character_creation', label: '角色创建', desc: '建立角色声音与关系' },
+  { key: 'plot_architecture', label: '情节架构', desc: '梳理章节目标与转折' },
+  { key: 'scene_writing', label: '场景写作', desc: '推进正文草稿' },
+  { key: 'reflection', label: '复盘修订', desc: '检查连续性并润色' },
 ];
 
-const VALID_PHASES = new Set<string>(PHASES.map(p => p.key));
+const VALID_PHASES = new Set<string>(PHASES.map((p) => p.key));
 
 export default function PipelineNavigator() {
   const { state, dispatch } = useAppState();
@@ -21,7 +21,7 @@ export default function PipelineNavigator() {
   const currentPhase: CreativePhase = VALID_PHASES.has(rawPhase)
     ? (rawPhase as CreativePhase)
     : 'worldbuilding';
-  const currentIdx = PHASES.findIndex(p => p.key === currentPhase);
+  const currentIdx = PHASES.findIndex((p) => p.key === currentPhase);
   const conditions = state.pipelineConditions ?? [];
   const nextAllowed = new Set(state.pipelineNextAllowed ?? []);
   const allowedRetreat = new Set(state.pipelineAllowedRetreat ?? []);
@@ -30,32 +30,28 @@ export default function PipelineNavigator() {
     if (!state.worldId) return;
     let cancelled = false;
     getPipelineState(state.worldId)
-      .then(view => {
+      .then((view) => {
         if (!cancelled) dispatch({ type: 'SET_PIPELINE_VIEW', view });
       })
-      .catch(console.error);
-    return () => { cancelled = true; };
-  }, [state.worldId]);
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [state.worldId, dispatch]);
 
   const handlePhaseClick = async (targetPhase: CreativePhase) => {
-    const targetIdx = PHASES.findIndex(p => p.key === targetPhase);
+    const targetIdx = PHASES.findIndex((p) => p.key === targetPhase);
     if (targetIdx === currentIdx) return;
 
     const isAdvance = targetIdx > currentIdx;
     const isRetreat = targetIdx < currentIdx;
 
-    // Only allow step-by-step advance
     if (isAdvance && targetIdx !== currentIdx + 1) return;
-    // Only allow retreat to allowed phases
     if (isRetreat && !allowedRetreat.has(targetPhase)) return;
 
     const label = PHASES[targetIdx].label;
-    const confirm = window.confirm(
-      isRetreat
-        ? `确定要退回到「${label}」吗？`
-        : `确定要进入「${label}」吗？`
-    );
-    if (!confirm) return;
+    const confirmed = window.confirm(isRetreat ? `回到「${label}」阶段？` : `推进到「${label}」阶段？`);
+    if (!confirmed) return;
 
     try {
       await advancePipeline(state.worldId!, {
@@ -66,9 +62,9 @@ export default function PipelineNavigator() {
     } catch (err) {
       dispatch({
         type: 'PIPELINE_ADVANCE_FAILED',
-        reason: err instanceof Error ? err.message : 'Unknown error',
+        reason: err instanceof Error ? err.message : '未知错误',
       });
-      alert(`Pipeline advance failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      alert(`阶段推进失败：${err instanceof Error ? err.message : '未知错误'}`);
     }
   };
 
@@ -76,14 +72,14 @@ export default function PipelineNavigator() {
     <div className={styles.container}>
       {state.pipelineAdvanceError && (
         <div className={styles.errorBanner}>
-          <span>Advance failed: {state.pipelineAdvanceError}</span>
-          <button onClick={() => dispatch({ type: 'PIPELINE_ERROR_CLEARED' })}>Dismiss</button>
+          <span>推进失败：{state.pipelineAdvanceError}</span>
+          <button onClick={() => dispatch({ type: 'PIPELINE_ERROR_CLEARED' })}>关闭</button>
         </div>
       )}
       {state.showPhaseAdvancePrompt && (
         <div className={styles.confirmOverlay}>
           <div className={styles.confirmDialog}>
-            <p>Conditions met — advance to next phase?</p>
+            <p>当前条件已满足，要推进到下一阶段吗？</p>
             <div className={styles.confirmActions}>
               <button
                 className={styles.confirmBtn}
@@ -95,13 +91,13 @@ export default function PipelineNavigator() {
                   dispatch({ type: 'CLEAR_PHASE_ADVANCE_PROMPT' });
                 }}
               >
-                Advance
+                推进
               </button>
               <button
                 className={styles.cancelBtn}
                 onClick={() => dispatch({ type: 'CLEAR_PHASE_ADVANCE_PROMPT' })}
               >
-                Cancel
+                取消
               </button>
             </div>
           </div>
@@ -110,11 +106,11 @@ export default function PipelineNavigator() {
       {state.pipelineCycleComplete && (
         <div className={styles.completeBanner}>
           <span>{state.pipelineCycleComplete.message}</span>
-          <button onClick={() => dispatch({ type: 'CLEAR_CYCLE_COMPLETE' })}>Dismiss</button>
+          <button onClick={() => dispatch({ type: 'CLEAR_CYCLE_COMPLETE' })}>关闭</button>
         </div>
       )}
       <div className={styles.titleRow}>
-        <span className={styles.title}>创作管线</span>
+        <span className={styles.title}>故事流水线</span>
         {state.pipelineAutoAdvance !== undefined && (
           <span className={state.pipelineAutoAdvance ? styles.badgeAuto : styles.badgeManual}>
             {state.pipelineAutoAdvance ? '自动' : '手动'}
@@ -144,18 +140,17 @@ export default function PipelineNavigator() {
               title={
                 isCurrent && phaseConditions.length > 0
                   ? phaseConditions
-                      .map(c =>
-                        `${c.met ? '✓' : '✗'} ${c.name}${
-                          c.current !== undefined ? ` (${c.current}/${c.target})` : ''
-                        }`
+                      .map(
+                        (c) =>
+                          `${c.met ? '已满足' : '待完成'}: ${c.name}${
+                            c.current !== undefined ? ` (${c.current}/${c.target})` : ''
+                          }`,
                       )
                       .join('\n')
                   : undefined
               }
             >
-              <span className={styles.dot}>
-                {isDone ? '✓' : isCurrent ? '●' : '○'}
-              </span>
+              <span className={styles.dot}>{isDone ? 'ok' : isCurrent ? 'on' : '--'}</span>
               <div className={styles.phaseInfo}>
                 <span className={styles.phaseLabel}>{p.label}</span>
                 <span className={styles.phaseDesc}>{p.desc}</span>
@@ -188,8 +183,13 @@ export default function PipelineNavigator() {
           {state.storyOverview.current_chapter && (
             <div className={styles.treeItem}>
               <FileText size={12} aria-hidden="true" className={styles.treeIcon} />
-              <span>第{state.storyOverview.current_chapter.number}章 {state.storyOverview.current_chapter.title}</span>
-              <span className={styles.badge}>{state.storyOverview.current_chapter.scene_count} 场景</span>
+              <span>
+                第 {state.storyOverview.current_chapter.number} 章：{' '}
+                {state.storyOverview.current_chapter.title}
+              </span>
+              <span className={styles.badge}>
+                {state.storyOverview.current_chapter.scene_count} 个场景
+              </span>
             </div>
           )}
           {state.storyOverview.current_scene && (

@@ -429,6 +429,23 @@ void AgentLoop::set_active_world_id(std::optional<std::string> world_id) {
     active_world_id_ = std::move(world_id);
 }
 
+void AgentLoop::set_active_scene_id(std::optional<std::string> scene_id) {
+    active_scene_id_ = std::move(scene_id);
+}
+
+void AgentLoop::set_caller_agent_id(std::optional<std::string> agent_id) {
+    caller_agent_id_ = std::move(agent_id);
+}
+
+void AgentLoop::set_worldbuilding_service(
+    std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding) {
+    worldbuilding_ = std::move(worldbuilding);
+}
+
+void AgentLoop::set_skill_registry(std::shared_ptr<skills::SkillRegistry> skills) {
+    skills_ = std::move(skills);
+}
+
 std::vector<Message> AgentLoop::build_context() {
     BindSources sources;
     sources.identity_text = [this]() {
@@ -559,6 +576,8 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
 
         ToolExecutionContext ctx{control.cancellation_token()};
         ctx.world_id = active_world_id_.value_or("");
+        ctx.scene_id = active_scene_id_.value_or("");
+        ctx.caller_agent_id = caller_agent_id_.value_or("");
         auto result_future = tools_->execute(call, std::move(ctx));
         auto result = result_future.get();
 
