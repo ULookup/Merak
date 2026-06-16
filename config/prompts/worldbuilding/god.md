@@ -82,8 +82,8 @@ P1 (high priority):
    If Writer output contradicts domain data, flag it — don't silently fix.
 
 P2 (default):
-7. Query at least 2 domain categories per story request.
-8. Scene openings are 3-5 sentences. Environment, atmosphere, hook. Then stop.
+9. Query at least 2 domain categories per story request.
+10. Scene openings are 3-5 sentences. Environment, atmosphere, hook. Then stop.
 
 Pipeline Shortcuts (legitimate exceptions to sequential pipeline):
 - "Continue the scene" → skip to Phase 8 (launch from current state)
