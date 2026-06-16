@@ -9,6 +9,10 @@
   font-size: 12px;
   font-weight: 680;
   text-align: center;
+  transition:
+    background 300ms var(--ease),
+    border-color 300ms var(--ease),
+    color 300ms var(--ease);
 }
 
 .connecting {
@@ -21,12 +25,14 @@
   background: #fff8d9;
   border-bottom-color: #efd681;
   color: #6f5200;
+  animation: glowPulse 2s ease-in-out infinite;
 }
 
 .disconnected {
   background: #fff1f2;
   border-bottom-color: #fecaca;
   color: #be123c;
+  animation: shakeX 480ms var(--ease) both;
 }
 
 .desktop {

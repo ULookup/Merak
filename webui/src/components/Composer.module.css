@@ -270,19 +270,23 @@
   transition:
     background 180ms var(--ease),
     opacity 180ms var(--ease),
-    transform var(--duration-fast) var(--ease);
+    transform var(--duration-fast) var(--ease),
+    box-shadow 180ms var(--ease);
 }
 .sendBtn:hover {
   background: #303030;
   transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(23, 23, 23, 0.18);
 }
 .sendBtn:active:not(:disabled) {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.96);
+  box-shadow: 0 2px 6px rgba(23, 23, 23, 0.12);
 }
 .sendBtn:disabled {
   opacity: 0.4;
   cursor: default;
   transform: none;
+  box-shadow: none;
 }
 
 .cancelBtn {

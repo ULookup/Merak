@@ -4,7 +4,7 @@
   border-radius: 8px;
   font-size: 13px;
   line-height: 1.55;
-  animation: messageIn 320ms var(--ease);
+  animation: messageIn 360ms var(--ease-spring) both;
   transition:
     border-color var(--duration-fast) var(--ease),
     background var(--duration-fast) var(--ease),
@@ -302,7 +302,7 @@
   font-size: 12px;
   color: var(--muted-strong);
   min-width: min(520px, 88%);
-  animation: messageIn 320ms var(--ease);
+  animation: messageIn 360ms var(--ease-spring) both;
   transition:
     border-color var(--duration-fast) var(--ease),
     background var(--duration-fast) var(--ease),
@@ -391,10 +391,13 @@
   font-size: 12px;
   color: #6f5200;
   max-width: 640px;
+  animation: messageIn 360ms var(--ease-spring) both;
   transition:
     border-color var(--duration-fast) var(--ease),
     background var(--duration-fast) var(--ease),
-    transform var(--duration-fast) var(--ease);
+    transform var(--duration-fast) var(--ease),
+    opacity 300ms var(--ease),
+    filter 300ms var(--ease);
 }
 
 .approval:hover {
@@ -404,10 +407,12 @@
 
 .approvalResolved {
   animation: none;
-  opacity: 0.65;
+  opacity: 0.55;
+  filter: grayscale(0.6);
   color: var(--muted);
   background: #f6f8fa;
   border-color: var(--border);
+  transform: scale(0.98);
 }
 
 .approvalRow {
@@ -568,7 +573,7 @@
 @keyframes messageIn {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.98);
+    transform: translateY(16px) scale(0.96);
   }
   to {
     opacity: 1;

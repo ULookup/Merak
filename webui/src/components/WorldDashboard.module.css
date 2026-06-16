@@ -5,6 +5,7 @@
   min-height: 100vh;
   padding: 2rem;
   background: var(--color-bg);
+  animation: slideUpIn 400ms var(--ease-spring) both;
 }
 
 .container {
@@ -87,6 +88,8 @@
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
+  animation: slideUpIn 300ms var(--ease-spring) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
 }
 
 .statValue {
@@ -123,7 +126,11 @@
 
 .pipelinePhase {
   flex: 1;
-  transition: background 0.3s;
+  transition: background 300ms var(--ease), box-shadow 300ms var(--ease);
+}
+
+.pipelinePhaseActive {
+  box-shadow: 0 0 8px rgba(23, 23, 23, 0.12);
 }
 
 .pipelinePhaseActive {

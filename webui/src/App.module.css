@@ -17,17 +17,19 @@
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  animation: workspaceIn 360ms var(--ease-spring);
+  animation: workspaceIn 480ms var(--ease-spring) both;
 }
 
 @keyframes workspaceIn {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(12px) scale(0.98);
+    filter: blur(4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+    filter: blur(0);
   }
 }
 

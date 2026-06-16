@@ -14,7 +14,7 @@
   border-radius: 14px;
   font-size: 13px;
   line-height: 1.4;
-  animation: slideIn 0.28s var(--ease);
+  animation: slideIn 320ms var(--ease-spring) both;
   word-break: break-word;
   box-shadow: var(--shadow-md);
 }

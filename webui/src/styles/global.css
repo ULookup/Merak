@@ -41,9 +41,12 @@
   --shadow-lg: 0 18px 46px rgba(23, 23, 23, 0.12);
   --ring: 0 0 0 3px rgba(23, 23, 23, 0.12);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 120ms;
   --duration-med: 220ms;
+  --duration-slow: 360ms;
+  --duration-entrance: 480ms;
   --mono: 'SF Mono', Monaco, Consolas, 'Liberation Mono', monospace;
   --color-bg: var(--page);
   --color-bg-secondary: var(--surface-muted);
@@ -130,5 +133,40 @@ textarea:focus-visible {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+@keyframes shakeX {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(23, 23, 23, 0); }
+  50% { box-shadow: 0 0 0 6px rgba(23, 23, 23, 0.08); }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideUpIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

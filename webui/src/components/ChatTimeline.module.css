@@ -21,7 +21,7 @@
   border-radius: 7px;
   padding: 22px;
   box-shadow: var(--shadow-sm);
-  animation: emptyFloat 520ms var(--ease);
+  animation: emptyFloat 520ms var(--ease-spring) both;
 }
 
 .emptyMark {
