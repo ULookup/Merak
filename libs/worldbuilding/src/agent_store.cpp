@@ -46,6 +46,9 @@ AgentKind agent_kind_from_string(const std::string& value) {
     if (value == "group") {
         return AgentKind::Group;
     }
+    if (value == "writer") {
+        return AgentKind::Writer;
+    }
     throw std::runtime_error("unknown agent kind: " + value);
 }
 

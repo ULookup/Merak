@@ -30,6 +30,7 @@ AgentKind agent_kind_from_string(const std::string& value) {
     if (value == "relation_manager") return AgentKind::RelationManager;
     if (value == "group") return AgentKind::Group;
     if (value == "individual") return AgentKind::Individual;
+    if (value == "writer") return AgentKind::Writer;
     throw std::runtime_error("unknown agent kind: " + value);
 }
 
