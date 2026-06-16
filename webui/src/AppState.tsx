@@ -75,6 +75,7 @@ export interface AppState {
   fileTypeFilter: string;
   activeEditorFileId: string | null;
   editorBuffers: Record<string, string>;
+  editorOriginals: Record<string, string>;
   editorVersions: Record<string, string>;
   editorSaveStatus: 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
   editorError: string | null;
@@ -146,6 +147,7 @@ export const initialState: AppState = {
   activeEditorFileId: null,
   storyVersion: 0,
   editorBuffers: {},
+  editorOriginals: {},
   editorVersions: {},
   editorSaveStatus: 'idle',
   editorError: null,
@@ -279,6 +281,8 @@ export type Action =
   | { type: 'OPEN_WORKSPACE_FILE'; fileId: string }
   | { type: 'SET_EDITOR_CONTENT'; fileId: string; content: WorkspaceFileContent }
   | { type: 'UPDATE_EDITOR_BUFFER'; fileId: string; content: string }
+  | { type: 'REVERT_EDITOR_BUFFER'; fileId: string }
+  | { type: 'COMMIT_EDITOR_BUFFER'; fileId: string; version?: string }
   | { type: 'SET_EDITOR_SAVE_STATUS'; status: AppState['editorSaveStatus']; error?: string | null }
   | { type: 'SET_MODEL'; model: string }
   | { type: 'SET_LAST_SEQ'; seq: number }
@@ -440,6 +444,10 @@ export function reducer(state: AppState, action: Action): AppState {
           ...state.editorBuffers,
           [action.fileId]: action.content.content,
         },
+        editorOriginals: {
+          ...state.editorOriginals,
+          [action.fileId]: action.content.content,
+        },
         editorVersions: {
           ...state.editorVersions,
           [action.fileId]: action.content.version,
@@ -460,6 +468,33 @@ export function reducer(state: AppState, action: Action): AppState {
         ),
         editorSaveStatus: 'dirty',
         editorError: null,
+      };
+
+    case 'REVERT_EDITOR_BUFFER':
+      return {
+        ...state,
+        editorBuffers: {
+          ...state.editorBuffers,
+          [action.fileId]: state.editorOriginals[action.fileId] ?? state.editorBuffers[action.fileId] ?? '',
+        },
+        workspaceFiles: state.workspaceFiles.map((file) =>
+          file.id === action.fileId ? { ...file, dirty: false } : file,
+        ),
+        editorSaveStatus: 'idle',
+        editorError: null,
+      };
+
+    case 'COMMIT_EDITOR_BUFFER':
+      return {
+        ...state,
+        editorOriginals: {
+          ...state.editorOriginals,
+          [action.fileId]: state.editorBuffers[action.fileId] ?? '',
+        },
+        editorVersions: {
+          ...state.editorVersions,
+          ...(action.version ? { [action.fileId]: action.version } : {}),
+        },
       };
 
     case 'SET_EDITOR_SAVE_STATUS':

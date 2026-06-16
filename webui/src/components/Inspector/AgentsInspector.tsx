@@ -157,11 +157,6 @@ export default function AgentsInspector() {
         </div>
       </section>
 
-      {/* TODO: MemorySummary display — when the backend serves per-agent memory
-          summaries via GET /api/worldbuilding/:worldId/agents/:agentId/memory-summaries,
-          render MemorySummary data here (period_start, period_end, summary text,
-          source diary count). Use the MemorySummary interface from ../../api/types. */}
-
       {showCreateAgent && state.worldId && (
         <CreateAgentModal
           worldId={state.worldId}

@@ -26,7 +26,6 @@ import type {
   ExportResult,
   ForeshadowingListResponse,
   GenerateTitleResponse,
-  LlmConfig,
   LlmConfigFull,
   OkResponse,
   OpenWorkspacePathResponse,
