@@ -1,7 +1,7 @@
-import { CircleHelp, Menu, PanelRight } from 'lucide-react';
+import { CircleHelp, Menu, PanelRight, X } from 'lucide-react';
+import { useState } from 'react';
 import type { ConnectionState } from '../hooks/useSSE';
 import { useAppState } from '../AppState';
-import { LanguageToggle, useI18n } from '../i18n';
 import BrandMark from './BrandMark';
 import ChatTimeline from './ChatTimeline';
 import Composer from './Composer';
@@ -25,25 +25,25 @@ export default function MainPanel({
   connectionState = 'connecting',
 }: MainPanelProps) {
   const { state } = useAppState();
-  const { t } = useI18n();
+  const [guideOpen, setGuideOpen] = useState(false);
 
   const currentAgent = state.agents.find((a) => a.id === state.agentId);
   const currentWorld = state.worlds.find((w) => w.id === state.worldId);
 
   const headerTitle = currentAgent
-    ? `${currentAgent.display_name || currentAgent.name} · ${currentWorld?.name ?? ''}`
-    : `Merak ${t('app.workbench')}`;
+    ? `${currentAgent.display_name || currentAgent.name} / ${currentWorld?.name ?? ''}`
+    : 'Merak Workbench';
 
   const headerSubtitle = currentAgent
     ? (() => {
         const kind = currentAgent.kind;
-        if (kind === 'god' || kind === '0') return t('agent.god');
+        if (kind === 'god' || kind === '0') return 'Omniscient / 20 tools';
         if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4'))) {
-          return t('agent.manager');
+          return 'Manager / 1 tool';
         }
-        return t('agent.character');
+        return 'Character / 3 tools';
       })()
-    : t('composer.placeholder');
+    : 'Worldbuilding agent runtime';
 
   const activeScene = state.storyOverview?.current_scene ?? null;
 
@@ -53,7 +53,7 @@ export default function MainPanel({
         <button
           className={styles.iconBtn}
           onClick={onToggleSidebar}
-          aria-label={sidebarOpen ? t('app.closeSidebar') : t('app.openSidebar')}
+          aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
           data-testid="menu-btn"
         >
           <Menu size={18} aria-hidden="true" strokeWidth={2.2} />
@@ -67,7 +67,7 @@ export default function MainPanel({
             {headerSubtitle}
             {activeScene && (
               <span className={styles.activeSceneBadge}>
-                · {t('composer.scene')}: {activeScene.title ?? activeScene.id}
+                / Scene: {activeScene.title ?? activeScene.id}
               </span>
             )}
           </div>
@@ -77,28 +77,73 @@ export default function MainPanel({
           className={`${styles.liveChip} ${connectionState === 'connected' ? styles.liveChipOn : ''}`}
         >
           <span className={styles.liveDot} />
-          {connectionState === 'connected' ? t('app.runtimeReady') : t('app.connecting')}
-        </div>
-        <div className={styles.languageToggle}>
-          <LanguageToggle />
+          {connectionState === 'connected' ? 'Live SSE' : connectionState}
         </div>
         <button
           className={styles.iconBtn}
-          onClick={onOpenGuide}
-          aria-label={t('app.openGuide')}
-          title={t('app.openGuide')}
+          onClick={() => {
+            onOpenGuide?.();
+            setGuideOpen(true);
+          }}
+          aria-label="Open workbench guide"
+          title="Open workbench guide"
         >
           <CircleHelp size={18} aria-hidden="true" strokeWidth={2.2} />
         </button>
         <button
           className={styles.iconBtn}
           onClick={onToggleInspector}
-          aria-label={inspectorOpen ? t('app.closeInspector') : t('app.openInspector')}
+          aria-label={inspectorOpen ? 'Close inspector' : 'Open inspector'}
           data-testid="inspector-btn"
         >
           <PanelRight size={18} aria-hidden="true" strokeWidth={2.2} />
         </button>
       </header>
+
+      {guideOpen && (
+        <div className={styles.guideOverlay} role="presentation">
+          <section
+            className={styles.guide}
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="workbench-guide-title"
+          >
+            <div className={styles.guideHeader}>
+              <div>
+                <h2 id="workbench-guide-title">Workbench guide</h2>
+                <p>Keep the creative loop moving without losing context.</p>
+              </div>
+              <button
+                type="button"
+                className={styles.iconBtn}
+                onClick={() => setGuideOpen(false)}
+                aria-label="Close workbench guide"
+              >
+                <X size={18} aria-hidden="true" strokeWidth={2.2} />
+              </button>
+            </div>
+            <div className={styles.guideGrid}>
+              <article>
+                <strong>Start with context</strong>
+                <span>Choose the world, agent lane, and scene before sending a prompt.</span>
+              </article>
+              <article>
+                <strong>Watch the run</strong>
+                <span>Use the timeline, live status, and inspector tabs to follow tool work.</span>
+              </article>
+              <article>
+                <strong>Capture output</strong>
+                <span>Generated files appear in Files, where drafts can be opened and edited.</span>
+              </article>
+              <article>
+                <strong>Close safely</strong>
+                <span>Active runs and unsaved editor changes are protected before window close.</span>
+              </article>
+            </div>
+          </section>
+        </div>
+      )}
+
       <ChatTimeline connectionState={connectionState} />
       <Composer />
     </main>

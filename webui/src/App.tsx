@@ -1,7 +1,7 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from './api/client';
 import styles from './App.module.css';
-import { AppStateProvider, useAppState } from './AppState';
+import { AppStateProvider, useAppState, type AppState } from './AppState';
 import ConnectionBanner from './components/ConnectionBanner';
 import ErrorBoundary from './components/ErrorBoundary';
 import HelpDrawer from './components/HelpDrawer';
@@ -18,6 +18,19 @@ import ExportDialog from './components/ExportDialog';
 import DesktopBoot from './DesktopBoot';
 import { useSSE } from './hooks/useSSE';
 import { I18nProvider } from './i18n';
+
+export function shouldReportWorldbuildingPartialFailure(
+  overviewLoaded: boolean,
+  hasSecondaryFailure: boolean,
+) {
+  return !overviewLoaded && hasSecondaryFailure;
+}
+
+export function shouldWarnBeforeClose(state: AppState) {
+  const runActive = Boolean(state.currentRun) && state.status !== 'idle';
+  const editorUnsafe = state.editorSaveStatus === 'dirty' || state.editorSaveStatus === 'saving';
+  return runActive || editorUnsafe;
+}
 
 function AppInner() {
   const { state, dispatch } = useAppState();
@@ -131,7 +144,7 @@ function AppInner() {
               null) as string | null)
           : null);
 
-      const failed = [agentsRes, foreshadowingRes, secretsRes, timeRes].some(
+      const secondaryFailed = [agentsRes, foreshadowingRes, secretsRes, timeRes].some(
         (r) => r.status === 'rejected',
       );
       dispatch({
@@ -144,7 +157,12 @@ function AppInner() {
         storyOverview: overview,
         fallback: overviewRes.status === 'fulfilled' ? overviewRes.value.fallback : false,
       });
-      if (failed) {
+      if (
+        shouldReportWorldbuildingPartialFailure(
+          overviewRes.status === 'fulfilled',
+          secondaryFailed,
+        )
+      ) {
         dispatch({
           type: 'SET_WORLDBUILDING_STATUS',
           status: 'error',
@@ -171,6 +189,16 @@ function AppInner() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [state.currentRun, state.status]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!shouldWarnBeforeClose(state)) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [state]);
 
   // SSE connection: only in 'ready' phase
   const sseUrl = state.appPhase === 'ready' && state.sessionId ? api.sseUrl(state.sessionId) : null;

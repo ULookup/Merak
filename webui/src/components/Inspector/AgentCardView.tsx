@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Pencil } from 'lucide-react';
 import { api } from '../../api/client';
 import type { AgentDetail } from '../../api/types';
 import { useAppState } from '../../AppState';
@@ -11,6 +12,10 @@ interface Props {
   agentId: string;
   onClose: () => void;
   onViewPrompt?: () => void;
+}
+
+function fallback(value: string | number | null | undefined) {
+  return value || 'Not set';
 }
 
 export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props) {
@@ -47,7 +52,7 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
     return () => abortRef.current?.abort();
   }, [load]);
 
-  if (loading)
+  if (loading) {
     return (
       <div className={styles.container}>
         <div className={styles.skeletonHeader} />
@@ -57,6 +62,8 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
         <div className={styles.skeletonLine} style={{ width: '80%' }} />
       </div>
     );
+  }
+
   if (error) return <div className={styles.container}>Error: {error}</div>;
   if (!detail) return <div className={styles.container}>Agent not found</div>;
 
@@ -79,11 +86,13 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
   const cc = detail.character_card;
   const displayName = detail.display_name || detail.name;
   const images = detail.images ?? { avatar: [], design: [] };
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
         <button onClick={onClose} className={styles.backBtn}>
-          ← 返回
+          <ArrowLeft size={14} aria-hidden="true" />
+          Back
         </button>
         <div className={styles.headerActions}>
           {onViewPrompt && (
@@ -92,7 +101,8 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
             </button>
           )}
           <button onClick={() => setEditMode(true)} className={styles.editBtn}>
-            编辑
+            <Pencil size={13} aria-hidden="true" />
+            Edit
           </button>
         </div>
       </div>
@@ -102,9 +112,7 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
         <div className={styles.profileText}>
           <h3>{displayName}</h3>
           <span>{detail.kind}</span>
-          <p>
-            {cc.identity || cc.appearance || 'Character profile ready for worldbuilding context.'}
-          </p>
+          <p>{cc.identity || cc.appearance || 'Character profile ready for worldbuilding context.'}</p>
         </div>
       </section>
 
@@ -133,68 +141,72 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
       )}
 
       <section className={styles.section}>
-        <h4>基础信息</h4>
+        <h4>Basics</h4>
         <div className={styles.fieldRow}>
-          <span>年龄：{cc.age ?? '—'}</span>
-          <span>性别：{cc.gender ?? '—'}</span>
-          <span>种族：{cc.race ?? '—'}</span>
-          <span>身份：{cc.identity ?? '—'}</span>
+          <span>Age: {fallback(cc.age)}</span>
+          <span>Gender: {fallback(cc.gender)}</span>
+          <span>Race: {fallback(cc.race)}</span>
+          <span>Identity: {fallback(cc.identity)}</span>
         </div>
       </section>
 
       <section className={styles.section}>
-        <h4>性格特征</h4>
-        <div className={styles.tags}>
-          {cc.core_traits?.map((t) => (
-            <span key={t} className={styles.tag}>
-              {t}
-            </span>
-          ))}
-        </div>
+        <h4>Core Traits</h4>
+        {cc.core_traits?.length ? (
+          <div className={styles.tags}>
+            {cc.core_traits.map((trait) => (
+              <span key={trait} className={styles.tag}>
+                {trait}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p>Not set</p>
+        )}
       </section>
 
       {cc.emotional_tendency && (
         <section className={styles.section}>
-          <h4>情感倾向</h4>
+          <h4>Emotional Tendency</h4>
           <p>{cc.emotional_tendency}</p>
         </section>
       )}
 
       <section className={styles.section}>
-        <h4>说话风格</h4>
-        <p>{cc.speaking_style ?? '—'}</p>
+        <h4>Speaking Style</h4>
+        <p>{fallback(cc.speaking_style)}</p>
       </section>
 
       <section className={styles.section}>
-        <h4>核心欲望</h4>
-        <p>{cc.core_desire ?? '—'}</p>
+        <h4>Core Desire</h4>
+        <p>{fallback(cc.core_desire)}</p>
       </section>
 
       <section className={styles.section}>
-        <h4>深层恐惧</h4>
-        <p>{cc.deep_fear ?? '—'}</p>
+        <h4>Deep Fear</h4>
+        <p>{fallback(cc.deep_fear)}</p>
       </section>
 
       <section className={styles.section}>
-        <h4>日常目标</h4>
-        <p>{cc.daily_goal ?? '—'}</p>
+        <h4>Daily Goal</h4>
+        <p>{fallback(cc.daily_goal)}</p>
       </section>
 
       {cc.background && (
         <section className={styles.section}>
-          <h4>背景故事</h4>
+          <h4>Background</h4>
           <p className={styles.longText}>{cc.background}</p>
         </section>
       )}
 
       <section className={styles.section}>
-        <h4>知识范围</h4>
-        <p>{cc.knowledge_scope ?? '—'}</p>
+        <h4>Knowledge Scope</h4>
+        <p>{fallback(cc.knowledge_scope)}</p>
       </section>
 
       {cc.appearance && (
         <section className={styles.section}>
-          <h4>外观</h4>
+          <h4>Appearance</h4>
           <p>{cc.appearance}</p>
         </section>
       )}

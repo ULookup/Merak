@@ -7,46 +7,52 @@
 }
 
 :root {
-  --page: #f7f7f5;
-  --page-warm: #eeeeeb;
+  --page: #f6f6f4;
+  --page-warm: #ededeb;
   --surface: #ffffff;
-  --surface-muted: #f3f3f1;
+  --surface-muted: #f2f2f0;
   --surface-strong: #fafafa;
   --surface-raised: #ffffff;
+  --glass: rgba(255, 255, 255, 0.74);
+  --glass-strong: rgba(255, 255, 255, 0.9);
   --ink: #171717;
   --ink-soft: #333333;
   --muted: #77756f;
   --muted-strong: #55524c;
   --border: #e0dfdc;
-  --border-strong: #c8c7c3;
+  --border-strong: #c7c5bf;
   --teal: #171717;
+  --teal-strong: #171717;
   --teal-soft: #ededeb;
+  --teal-wash: #f7f7f5;
   --brand: #343434;
   --brand-strong: #171717;
   --brand-soft: #e8e7e4;
-  --brand-wash: #f6f6f4;
-  --amber: #8a5a12;
-  --amber-soft: #fbf2dc;
+  --brand-wash: #f7f7f5;
+  --amber: #55524c;
+  --amber-soft: #f0efed;
+  --amber-wash: #fafafa;
   --ruby: #be123c;
   --ruby-soft: #ffe4e6;
   --indigo: #4a4a4a;
   --indigo-soft: #eeeeec;
+  --violet: #62605b;
+  --violet-soft: #f0efed;
   --purple: #62605b;
   --purple-soft: #f0efed;
   --green: #16a34a;
   --green-soft: #dcfce7;
   --hover: rgba(23, 23, 23, 0.055);
-  --shadow-sm: 0 1px 2px rgba(23, 23, 23, 0.06);
-  --shadow-md: 0 12px 28px rgba(23, 23, 23, 0.1);
-  --shadow-lg: 0 18px 46px rgba(23, 23, 23, 0.12);
+  --shadow-sm: 0 1px 2px rgba(23, 23, 23, 0.06), 0 8px 20px rgba(23, 23, 23, 0.035);
+  --shadow-md: 0 14px 32px rgba(23, 23, 23, 0.09);
+  --shadow-lg: 0 24px 56px rgba(23, 23, 23, 0.12);
+  --shadow-glow: 0 18px 44px rgba(23, 23, 23, 0.08);
   --ring: 0 0 0 3px rgba(23, 23, 23, 0.12);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 120ms;
   --duration-med: 220ms;
-  --duration-slow: 360ms;
-  --duration-entrance: 480ms;
+  --duration-slow: 520ms;
   --mono: 'SF Mono', Monaco, Consolas, 'Liberation Mono', monospace;
   --color-bg: var(--page);
   --color-bg-secondary: var(--surface-muted);
@@ -81,6 +87,18 @@ body,
 
 body {
   overflow: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(23, 23, 23, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 23, 23, 0.03) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(circle at 50% 36%, #000 0%, transparent 68%);
 }
 
 button,
@@ -122,7 +140,7 @@ textarea:focus-visible {
 }
 
 ::selection {
-  background: rgba(37, 111, 104, 0.18);
+  background: rgba(23, 23, 23, 0.14);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -133,40 +151,5 @@ textarea:focus-visible {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.001ms !important;
-  }
-}
-
-@keyframes shakeX {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-4px); }
-  40% { transform: translateX(4px); }
-  60% { transform: translateX(-3px); }
-  80% { transform: translateX(2px); }
-}
-
-@keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(23, 23, 23, 0); }
-  50% { box-shadow: 0 0 0 6px rgba(23, 23, 23, 0.08); }
-}
-
-@keyframes scaleIn {
-  from {
-    opacity: 0;
-    transform: scale(0.92);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes slideUpIn {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }

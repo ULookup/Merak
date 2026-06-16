@@ -4,10 +4,27 @@ import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
 import { useToast } from '../Toast';
 import styles from './SessionList.module.css';
+import type { SessionSummary } from '../../api/types';
 
 interface SessionListProps {
   worldId?: string;
   agentId?: string;
+}
+
+function turnLabel(count: number) {
+  return `${count} ${count === 1 ? 'turn' : 'turns'}`;
+}
+
+function formatSessionTime(value: string | null | undefined) {
+  if (!value) return 'Not started';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export default function SessionList({ worldId, agentId }: SessionListProps) {
@@ -108,6 +125,98 @@ export default function SessionList({ worldId, agentId }: SessionListProps) {
       new Date(b.updated_at || b.created_at).getTime() -
       new Date(a.updated_at || a.created_at).getTime(),
   );
+  const activeSessions = sessions.filter((session) => !session.archived_at);
+  const archivedSessions = sessions.filter((session) => session.archived_at);
+
+  function renderSession(session: SessionSummary) {
+    const title = session.title || 'New Session';
+    const metadata = `${turnLabel(session.last_seq)} / ${formatSessionTime(session.updated_at || session.created_at)}`;
+    const label = `Session ${title}${session.archived_at ? ', archived' : ''}, ${turnLabel(session.last_seq)}`;
+
+    return (
+      <li
+        key={session.id}
+        className={`${styles.item} ${session.id === state.sessionId ? styles.itemActive : ''} ${
+          session.archived_at ? styles.itemArchived : ''
+        }`}
+        onClick={() => select(session.id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          startRename(session);
+        }}
+        aria-label={label}
+      >
+        {editingId === session.id ? (
+          <input
+            className={styles.renameInput}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onBlur={() => confirmRename(session.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') confirmRename(session.id);
+              if (e.key === 'Escape') cancelRename();
+            }}
+            onClick={(e) => e.stopPropagation()}
+            autoFocus
+          />
+        ) : (
+          <>
+            <span className={styles.sessionMain}>
+              <span
+                className={styles.title}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  startRename(session);
+                }}
+              >
+                {title}
+              </span>
+              <span className={styles.meta}>{metadata}</span>
+            </span>
+            {session.id === state.sessionId && (
+              <span className={styles.actions}>
+                <button
+                  className={styles.generateBtn}
+                  aria-label="Rename session"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startRename(session);
+                  }}
+                >
+                  <Pencil size={14} aria-hidden="true" strokeWidth={2.2} />
+                </button>
+                <button
+                  className={styles.generateBtn}
+                  aria-label="Generate title"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    generateTitle(session.id);
+                  }}
+                >
+                  <Sparkles size={14} aria-hidden="true" strokeWidth={2.2} />
+                </button>
+                <button
+                  className={styles.generateBtn}
+                  aria-label={session.archived_at ? 'Restore session' : 'Archive session'}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    archiveSession(session, !session.archived_at);
+                  }}
+                >
+                  {session.archived_at ? (
+                    <RotateCcw size={14} aria-hidden="true" strokeWidth={2.2} />
+                  ) : (
+                    <Archive size={14} aria-hidden="true" strokeWidth={2.2} />
+                  )}
+                </button>
+              </span>
+            )}
+            {session.archived_at && <span className={styles.badge}>Archived</span>}
+          </>
+        )}
+      </li>
+    );
+  }
 
   return (
     <div className={styles.list}>
@@ -117,86 +226,30 @@ export default function SessionList({ worldId, agentId }: SessionListProps) {
           <Plus size={15} aria-hidden="true" strokeWidth={2.4} />
         </button>
       </div>
-      <ul>
-        {sessions.map((s) => (
-          <li
-            key={s.id}
-            className={`${styles.item} ${s.id === state.sessionId ? styles.itemActive : ''}`}
-            onClick={() => select(s.id)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              startRename(s);
-            }}
-          >
-            {editingId === s.id ? (
-              <input
-                className={styles.renameInput}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={() => confirmRename(s.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') confirmRename(s.id);
-                  if (e.key === 'Escape') cancelRename();
-                }}
-                onClick={(e) => e.stopPropagation()}
-                autoFocus
-              />
+      <div className={styles.groups}>
+        <section>
+          <div className={styles.groupTitle}>
+            <span>Active Sessions</span>
+            <strong>{activeSessions.length}</strong>
+          </div>
+          <ul>
+            {activeSessions.length > 0 ? (
+              activeSessions.map(renderSession)
             ) : (
-              <>
-                <span
-                  className={styles.title}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    startRename(s);
-                  }}
-                  aria-label={s.title || 'New Session'}
-                >
-                  {s.title || 'New Session'}
-                </span>
-                {s.id === state.sessionId && (
-                  <span className={styles.actions}>
-                    <button
-                      className={styles.generateBtn}
-                      aria-label="Rename session"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        startRename(s);
-                      }}
-                    >
-                      <Pencil size={14} aria-hidden="true" strokeWidth={2.2} />
-                    </button>
-                    <button
-                      className={styles.generateBtn}
-                      aria-label="Generate title"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        generateTitle(s.id);
-                      }}
-                    >
-                      <Sparkles size={14} aria-hidden="true" strokeWidth={2.2} />
-                    </button>
-                    <button
-                      className={styles.generateBtn}
-                      aria-label={s.archived_at ? 'Restore session' : 'Archive session'}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        archiveSession(s, !s.archived_at);
-                      }}
-                    >
-                      {s.archived_at ? (
-                        <RotateCcw size={14} aria-hidden="true" strokeWidth={2.2} />
-                      ) : (
-                        <Archive size={14} aria-hidden="true" strokeWidth={2.2} />
-                      )}
-                    </button>
-                  </span>
-                )}
-                {s.archived_at && <span className={styles.badge}>Archived</span>}
-              </>
+              <li className={styles.empty}>No active sessions yet.</li>
             )}
-          </li>
-        ))}
-      </ul>
+          </ul>
+        </section>
+        {archivedSessions.length > 0 && (
+          <section>
+            <div className={styles.groupTitle}>
+              <span>Archived Sessions</span>
+              <strong>{archivedSessions.length}</strong>
+            </div>
+            <ul>{archivedSessions.map(renderSession)}</ul>
+          </section>
+        )}
+      </div>
     </div>
   );
 }

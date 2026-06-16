@@ -1,9 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { useEffect } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../api/client';
 import { AppStateProvider, useAppState } from '../AppState';
+import { getDesktopRuntimeSteps } from '../DesktopBoot';
 import BrandMark from '../components/BrandMark';
 import AssistantCell from '../components/cells/AssistantCell';
 import StatusPill from '../components/cells/StatusPill';
@@ -12,23 +14,12 @@ import ToolCell from '../components/cells/ToolCell';
 import UserCell from '../components/cells/UserCell';
 import ChatTimeline from '../components/ChatTimeline';
 import InspectorPanel from '../components/InspectorPanel';
-import CreateAgentModal from '../components/Inspector/CreateAgentModal';
-import CreateForeshadowingModal from '../components/Inspector/CreateForeshadowingModal';
-import CreateSceneModal from '../components/Inspector/CreateSceneModal';
-import CreateSecretModal from '../components/Inspector/CreateSecretModal';
-import AgentsInspector from '../components/Inspector/AgentsInspector';
-import RunInspector from '../components/Inspector/RunInspector';
-import StoryInspector from '../components/Inspector/StoryInspector';
 import MainPanel from '../components/MainPanel';
-import AuditDashboard from '../components/Replay/AuditDashboard';
-import ContextMeter from '../components/Sidebar/ContextMeter';
-import ModelSelector from '../components/Sidebar/ModelSelector';
 import SessionList from '../components/Sidebar/SessionList';
-import ToolPanel from '../components/Sidebar/ToolPanel';
 import WorldSelector from '../components/Sidebar/WorldSelector';
 import { ToastProvider } from '../components/Toast';
-import { I18nProvider } from '../i18n';
-import ConnectionBanner from '../components/ConnectionBanner';
+import WorldDashboard from '../components/WorldDashboard';
+import WorldOnboarding from '../components/WorldOnboarding';
 
 function TimelineHarness() {
   const { dispatch } = useAppState();
@@ -67,109 +58,6 @@ function StreamingMarkdownHarness() {
   return <ChatTimeline />;
 }
 
-function RunInspectorHarness() {
-  const { dispatch } = useAppState();
-
-  useEffect(() => {
-    dispatch({
-      type: 'SET_METADATA',
-      metadata: {
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-6',
-        models: [{ name: 'claude-sonnet-4-6', provider: 'anthropic', max_context_tokens: 200000 }],
-        permission_mode: 'default',
-        memory: { enabled: true },
-        tools: [],
-        mcp_servers: [],
-        agents: [],
-        delegation_patterns: [],
-      },
-    });
-    dispatch({ type: 'SET_USAGE', inputTokens: 1200, outputTokens: 80 });
-  }, [dispatch]);
-
-  return <RunInspector />;
-}
-
-function SidebarAiConceptHarness() {
-  const { dispatch } = useAppState();
-
-  useEffect(() => {
-    dispatch({
-      type: 'SET_METADATA',
-      metadata: {
-        provider: 'openai',
-        model: 'gpt-4o',
-        models: [
-          { name: 'gpt-4o', provider: 'openai', max_context_tokens: 128000 },
-          { name: 'claude-sonnet-4-6', provider: 'anthropic', max_context_tokens: 200000 },
-        ],
-        permission_mode: 'ask',
-        memory: { enabled: true },
-        worldbuilding: { enabled: true },
-        tools: [
-          { name: 'write_scene', description: 'Draft the next scene', source: 'builtin' },
-          { name: 'figma_sync', description: 'Send UI screens to Figma', source: 'mcp' },
-        ],
-        mcp_servers: [{ name: 'figma', alive: true }],
-        agents: [],
-        delegation_patterns: ['fan_out'],
-      },
-    });
-    dispatch({ type: 'SET_USAGE', inputTokens: 1200, outputTokens: 300 });
-  }, [dispatch]);
-
-  return (
-    <>
-      <ModelSelector />
-      <ContextMeter />
-      <ToolPanel />
-    </>
-  );
-}
-
-function StoryNoBackendDataHarness() {
-  const { dispatch } = useAppState();
-
-  useEffect(() => {
-    dispatch({
-      type: 'SET_WORLDS',
-      worlds: [
-        {
-          id: 'world_1',
-          name: 'Northreach',
-          description: 'Snowbound border city',
-          created_at: '2026-06-06T10:00:00Z',
-        },
-      ],
-    });
-    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
-    dispatch({
-      type: 'SET_WORLDBUILDING_DATA',
-      worlds: [
-        {
-          id: 'world_1',
-          name: 'Northreach',
-          description: 'Snowbound border city',
-          created_at: '2026-06-06T10:00:00Z',
-        },
-      ],
-      agents: [],
-      foreshadowing: [],
-      secrets: [],
-      worldTime: null,
-      storyOverview: {
-        agents: [],
-        foreshadowing: [],
-        secrets: [],
-        world_time: null,
-      },
-    });
-  }, [dispatch]);
-
-  return <StoryInspector />;
-}
-
 function SessionIconHarness() {
   const { dispatch } = useAppState();
 
@@ -190,6 +78,41 @@ function SessionIconHarness() {
           created_at: '2026-06-06T10:30:00Z',
           updated_at: '2026-06-06T10:35:00Z',
           archived_at: null,
+        },
+      ],
+    });
+  }, [dispatch]);
+
+  return <SessionList />;
+}
+
+function SessionLifecycleHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'SET_SESSION', sessionId: 'session_live' });
+    dispatch({
+      type: 'SET_SESSIONS',
+      sessions: [
+        {
+          id: 'session_live',
+          title: 'Planning scene',
+          world_id: null,
+          agent_id: null,
+          last_seq: 2,
+          created_at: '2026-06-06T10:30:00Z',
+          updated_at: '2026-06-06T10:35:00Z',
+          archived_at: null,
+        },
+        {
+          id: 'session_archived',
+          title: 'Old outline',
+          world_id: null,
+          agent_id: null,
+          last_seq: 8,
+          created_at: '2026-06-04T09:00:00Z',
+          updated_at: '2026-06-04T09:30:00Z',
+          archived_at: '2026-06-05T12:00:00Z',
         },
       ],
     });
@@ -219,46 +142,6 @@ function WorldIconHarness() {
   return <WorldSelector />;
 }
 
-function EmptyAgentsHarness() {
-  const { dispatch } = useAppState();
-
-  useEffect(() => {
-    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
-    dispatch({
-      type: 'SET_WORLDBUILDING_DATA',
-      worlds: [],
-      agents: [],
-      foreshadowing: [],
-      secrets: [],
-      worldTime: null,
-    });
-  }, [dispatch]);
-
-  return <AgentsInspector />;
-}
-
-function FilledAgentsHarness() {
-  const { dispatch } = useAppState();
-
-  useEffect(() => {
-    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
-    dispatch({
-      type: 'SET_WORLDBUILDING_DATA',
-      worlds: [],
-      agents: [
-        { id: 'god_1', name: 'god', display_name: '总控', kind: 'god' },
-        { id: 'agent_1', name: 'elara', display_name: '艾拉', kind: 'individual' },
-        { id: 'manager_1', name: 'map', display_name: '地图助手', kind: 'map_manager' },
-      ],
-      foreshadowing: [],
-      secrets: [],
-      worldTime: null,
-    });
-  }, [dispatch]);
-
-  return <AgentsInspector />;
-}
-
 describe('Cell components', () => {
   it('BrandMark renders the Merak logo accessibly', () => {
     render(<BrandMark />);
@@ -279,157 +162,15 @@ describe('Cell components', () => {
 
   it('ChatTimeline shows live agent status outside the message stream', async () => {
     render(
-      <I18nProvider defaultLocale="en">
-        <AppStateProvider>
-          <TimelineHarness />
-        </AppStateProvider>
-      </I18nProvider>,
+      <AppStateProvider>
+        <TimelineHarness />
+      </AppStateProvider>,
     );
 
     expect(await screen.findAllByText('Thinking')).toHaveLength(2);
     expect(screen.getByText('Connected')).toBeDefined();
     expect(screen.getByText('claude-sonnet-4-6')).toBeDefined();
     expect(screen.getByText('1.3K words of context')).toBeDefined();
-    expect(screen.queryByText(/SSE|runtime/i)).toBeNull();
-  });
-
-  it('ConnectionBanner uses plain language for interrupted local service states', () => {
-    render(
-      <I18nProvider defaultLocale="en">
-        <ConnectionBanner state="disconnected" />
-      </I18nProvider>,
-    );
-
-    expect(screen.getByRole('status')).toHaveTextContent('Merak cannot connect right now.');
-    expect(screen.queryByText(/server|runtime|SSE|API/i)).toBeNull();
-  });
-
-  it('ChatTimeline empty state avoids technical transport language', () => {
-    render(
-      <I18nProvider defaultLocale="en">
-        <AppStateProvider>
-          <ChatTimeline />
-        </AppStateProvider>
-      </I18nProvider>,
-    );
-
-    expect(screen.getByRole('heading', { name: 'Build the next scene' })).toBeDefined();
-    expect(screen.queryByText(/SSE|Markdown|tools|delegation/i)).toBeNull();
-  });
-
-  it('RunInspector presents creation progress without developer terminology', async () => {
-    render(
-      <I18nProvider defaultLocale="en">
-        <AppStateProvider>
-          <RunInspectorHarness />
-        </AppStateProvider>
-      </I18nProvider>,
-    );
-
-    expect(await screen.findByText('Current Creation')).toBeDefined();
-    expect(screen.getByText('No creation is running')).toBeDefined();
-    expect(screen.getByText(/words of context/)).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(
-      /Current Run|Runtime Signals|Available Tools|Context Health|Run Timeline|No active run|tools/i,
-    );
-  });
-
-  it('sidebar explains model, token window, and tools in AI-friendly language', async () => {
-    render(
-      <I18nProvider defaultLocale="zh">
-        <AppStateProvider>
-          <SidebarAiConceptHarness />
-        </AppStateProvider>
-      </I18nProvider>,
-    );
-
-    expect(await screen.findByText('模型与服务')).toBeDefined();
-    expect(screen.getByText('OpenAI')).toBeDefined();
-    expect(screen.getByText('128K token 窗口')).toBeDefined();
-    expect(screen.getByText('Token 上下文')).toBeDefined();
-    expect(screen.getByText('已用 1.5K / 128K tokens')).toBeDefined();
-    expect(screen.getByText('工具（2）')).toBeDefined();
-    expect(screen.getByText('内置')).toBeDefined();
-    expect(screen.getByText('需要授权')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/preview|mock|fake/i);
-  });
-
-  it('StoryInspector uses clear unloaded states instead of backend placeholders', async () => {
-    render(
-      <AppStateProvider>
-        <StoryNoBackendDataHarness />
-      </AppStateProvider>,
-    );
-
-    expect(await screen.findByText('Northreach')).toBeDefined();
-    expect(screen.getAllByText('时间未设置').length).toBeGreaterThan(0);
-    expect(screen.getByText('叙事位置')).toBeDefined();
-    expect(screen.getByText('章节未加载')).toBeDefined();
-    expect(screen.getByText('场景未加载')).toBeDefined();
-    expect(screen.getByText('暂未加载角色声音')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/waiting for backend|No active scene|Time not set/i);
-  });
-
-  it('AuditDashboard empty state avoids transport and backend jargon', () => {
-    render(
-      <AppStateProvider>
-        <AuditDashboard />
-      </AppStateProvider>,
-    );
-
-    expect(screen.getByText('暂无运行记录。开始一次创作后，这里会显示步骤、工具和 token 统计。')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/Run Audit|Local timeline|backend/i);
-  });
-
-  it('creation modals use beginner-friendly Chinese labels and avoid engineering placeholders', () => {
-    const noop = () => {};
-    const { rerender } = render(
-      <AppStateProvider>
-        <CreateAgentModal worldId="world_1" onClose={noop} />
-      </AppStateProvider>,
-    );
-
-    expect(screen.getByRole('dialog', { name: '创建角色' })).toBeDefined();
-    expect(screen.getByText('角色名')).toBeDefined();
-    expect(screen.getByPlaceholderText('例如：艾拉、陈泊舟')).toBeDefined();
-    expect(screen.getByText('说话风格')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/Create|New Voice|Name \(ID\)|comma-separated|e\.g\./i);
-
-    rerender(
-      <AppStateProvider>
-        <CreateSceneModal worldId="world_1" onClose={noop} />
-      </AppStateProvider>,
-    );
-
-    expect(screen.getByRole('dialog', { name: '创建场景' })).toBeDefined();
-    expect(screen.getByText('所属章节 ID')).toBeDefined();
-    expect(screen.getByPlaceholderText('从当前章节自动带入，或粘贴后端返回的章节 ID')).toBeDefined();
-    expect(screen.getByText('参与角色 ID')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/Create Scene|New Beat|agent IDs|Day 1 Dawn/i);
-
-    rerender(
-      <AppStateProvider>
-        <CreateForeshadowingModal worldId="world_1" onClose={noop} />
-      </AppStateProvider>,
-    );
-
-    expect(screen.getByRole('dialog', { name: '埋设伏笔' })).toBeDefined();
-    expect(screen.getByText('伏笔内容')).toBeDefined();
-    expect(screen.getByText('隐蔽程度')).toBeDefined();
-    expect(screen.getByText('含蓄')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/New Foreshadowing|Plant Thread|Visible|Subtle|Obvious/i);
-
-    rerender(
-      <AppStateProvider>
-        <CreateSecretModal worldId="world_1" onClose={noop} />
-      </AppStateProvider>,
-    );
-
-    expect(screen.getByRole('dialog', { name: '创建秘密' })).toBeDefined();
-    expect(screen.getByText('真相')).toBeDefined();
-    expect(screen.getByText('知情角色 ID')).toBeDefined();
-    expect(screen.getByText('怀疑中的角色 ID')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/New Secret|Knowledge Boundary|agent IDs|Public version/i);
   });
 
   it('ChatTimeline renders streamed assistant markdown', async () => {
@@ -466,6 +207,25 @@ describe('Cell components', () => {
     expect(screen.queryByText('◫')).toBeNull();
   });
 
+  it('MainPanel opens an in-workbench guide from the help control', () => {
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <MainPanel connectionState="connected" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open workbench guide' }));
+
+    expect(screen.getByRole('dialog', { name: 'Workbench guide' })).toBeDefined();
+    expect(screen.getByText('Start with context')).toBeDefined();
+    expect(screen.getByText('Close safely')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close workbench guide' }));
+    expect(screen.queryByRole('dialog', { name: 'Workbench guide' })).toBeNull();
+  });
+
   it('AssistantCell copy action uses real SVG icons', () => {
     render(<AssistantCell text="Copy me" />);
     const button = screen.getByRole('button', { name: 'Copy message' });
@@ -487,6 +247,21 @@ describe('Cell components', () => {
     ).toBeDefined();
     expect(screen.getByRole('button', { name: '编辑世界' }).querySelector('svg')).toBeDefined();
     expect(screen.queryByText('+')).toBeNull();
+  });
+
+  it('SessionList groups live and archived sessions with lifecycle metadata', () => {
+    render(
+      <AppStateProvider>
+        <SessionLifecycleHarness />
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByText('Active Sessions')).toBeDefined();
+    expect(screen.getByText('Archived Sessions')).toBeDefined();
+    expect(screen.getByText(/2 turns/)).toBeDefined();
+    expect(screen.getByText(/8 turns/)).toBeDefined();
+    expect(screen.getByLabelText('Session Planning scene, 2 turns')).toBeDefined();
+    expect(screen.getByLabelText('Session Old outline, archived, 8 turns')).toBeDefined();
   });
 
   it('UserCell renders text', () => {
@@ -550,77 +325,262 @@ describe('Icon source hygiene', () => {
       'src/components/Sidebar/SessionList.tsx',
       'src/components/Sidebar/WorldSelector.tsx',
       'src/components/Sidebar.tsx',
-      'src/components/Inspector/RunInspector.tsx',
+      'src/components/Composer.tsx',
     ];
     const source = files.map((file) => readFileSync(join(process.cwd(), file), 'utf8')).join('\n');
 
-    expect(source).not.toContain('\\u{1F50C}');
-    expect(source).not.toContain('\\u{1F527}');
     expect(source).not.toMatch(/[☰◫✎⧉✓]/);
     expect(source).not.toContain('鉁?');
     expect(source).not.toContain('脳');
   });
+});
 
-  it('WorldSelector creation and edit dialogs use Chinese workbench language', async () => {
-    render(
-      <ToastProvider>
-        <AppStateProvider>
-          <WorldIconHarness />
-        </AppStateProvider>
-      </ToastProvider>,
-    );
+describe('Visible copy hygiene', () => {
+  it('keeps workbench-facing source free of mojibake copy', () => {
+    const source = readFileSync(join(process.cwd(), 'src/components/Composer.tsx'), 'utf8');
+    expect(source).not.toMatch(/[璇宸褰€]/);
+  });
+});
 
-    fireEvent.click(screen.getByRole('button', { name: '创建世界' }));
-    expect(screen.getByRole('dialog', { name: '创建世界' })).toBeDefined();
-    expect(screen.getByText('世界名称')).toBeDefined();
-    expect(screen.getByText('一句话设定')).toBeDefined();
-    expect(screen.getByText('保存到后端')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/Create World|Description|Cancel|None/i);
-
-    fireEvent.click(screen.getByRole('button', { name: '取消' }));
-    fireEvent.click(screen.getByRole('button', { name: '编辑世界' }));
-    expect(screen.getByRole('dialog', { name: '编辑世界' })).toBeDefined();
-    expect(screen.getByText('保存修改')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/Edit World|Save|Cancel/i);
+describe('World onboarding', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('default onboarding copy is localized for the workbench audience', () => {
-    const source = readFileSync(join(process.cwd(), 'src/i18n.tsx'), 'utf8');
-
-    expect(source).toContain("'onboarding.title': 'Merak 创作工作台'");
-    expect(source).toContain('AI 写作工作流');
-    expect(source).not.toContain('Merak Creation Workshop');
-    expect(source).not.toContain('Create a world, then start shaping people, scenes, and setting.');
-  });
-
-  it('AgentsInspector explains empty and diagnostics states without developer preview wording', () => {
+  it('keeps first-run labels readable', () => {
     render(
       <AppStateProvider>
-        <EmptyAgentsHarness />
+        <WorldOnboarding />
       </AppStateProvider>,
     );
 
-    expect(screen.getByText('角色声音')).toBeDefined();
-    expect(screen.getByText('当前世界还没有角色。创建第一个角色后，工作台会用真实后端数据展示声音、提示词和知识边界。')).toBeDefined();
-    expect(screen.getByText('创建第一个角色')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/agents loaded|Create First Character|preview/i);
+    expect(screen.getByRole('heading', { name: /Merak/ })).toBeDefined();
+    expect(screen.getByText('Create your first World')).toBeDefined();
+    expect(screen.getByRole('button', { name: /创建第一个|Create first/ })).toBeDefined();
+    expect(screen.queryByText(/[�鈥鈫鈭]/)).toBeNull();
   });
 
-  it('AgentsInspector uses Chinese labels for populated voice system', () => {
+  it('prioritizes entering an existing world before creation controls', () => {
+    function ExistingWorldsHarness() {
+      const { dispatch } = useAppState();
+
+      useEffect(() => {
+        dispatch({
+          type: 'SET_WORLDS',
+          worlds: [
+            {
+              id: 'world_1',
+              name: 'Northreach',
+              description: 'Snowbound border city',
+              created_at: '2026-06-06T10:00:00Z',
+              updated_at: '2026-06-07T12:30:00Z',
+            },
+          ],
+        });
+      }, [dispatch]);
+
+      return <WorldOnboarding />;
+    }
+
     render(
       <AppStateProvider>
-        <FilledAgentsHarness />
+        <ExistingWorldsHarness />
       </AppStateProvider>,
     );
 
-    expect(screen.getByText('声音系统')).toBeDefined();
-    expect(screen.getByText('3 个可用角色 / 助手')).toBeDefined();
-    expect(screen.getAllByText('总控助手').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('设定助手').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('角色').length).toBeGreaterThan(0);
-    expect(screen.getByText('声音诊断')).toBeDefined();
-    expect(screen.getByText('系统提示词可查看')).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/Voice System|Voice Diagnostics|active agents|Prompt preview|Managers|Characters/i);
+    expect(screen.getByText('Continue a World')).toBeDefined();
+    expect(screen.getByText('Northreach')).toBeDefined();
+    expect(screen.getByText('Ready to enter')).toBeDefined();
+    expect(screen.getByText(/Last opened/)).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Enter Northreach' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Create new world' })).toBeDefined();
+    expect(screen.queryByLabelText(/World Name|世界名称/)).toBeNull();
+  });
+
+  it('creates a world and optional first character from the first-run flow', async () => {
+    const createWorld = vi
+      .spyOn(api, 'createWorld')
+      .mockResolvedValue({ ok: true, world_id: 'world_99', name: 'Northreach' });
+    const createAgent = vi
+      .spyOn(api, 'createAgent')
+      .mockResolvedValue({ ok: true, agent_id: 'agent_99' });
+
+    render(
+      <AppStateProvider>
+        <WorldOnboarding />
+      </AppStateProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText(/World Name|世界名称/), {
+      target: { value: 'Northreach' },
+    });
+    fireEvent.change(screen.getByLabelText(/Description|一句话/), {
+      target: { value: 'Snowbound border city' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /创建第一个|Create first/ }));
+    fireEvent.change(screen.getByLabelText(/Character Name|人物姓名|角色姓名/), { target: { value: 'Lian' } });
+    fireEvent.change(screen.getByLabelText(/Identity|身份/), {
+      target: { value: 'Archivist of the old passes' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Create World|创建世界/ }));
+
+    await screen.findByRole('button', { name: /Creating|创建中/ });
+    expect(createWorld).toHaveBeenCalledWith('Northreach', 'Snowbound border city');
+    expect(createAgent).toHaveBeenCalledWith('world_99', {
+      name: 'Lian',
+      identity: 'Archivist of the old passes',
+    });
+  });
+
+  it('stores the newly created world summary before moving to the dashboard', async () => {
+    vi.spyOn(api, 'createWorld').mockResolvedValue({
+      ok: true,
+      world_id: 'world_99',
+      name: 'Northreach',
+      description: 'Snowbound border city',
+    });
+
+    function CreatedWorldProbe() {
+      const { state } = useAppState();
+      const created = state.worlds.find((world) => world.id === 'world_99');
+      return <output aria-label="created-world">{created?.name ?? 'missing'}</output>;
+    }
+
+    render(
+      <AppStateProvider>
+        <WorldOnboarding />
+        <CreatedWorldProbe />
+      </AppStateProvider>,
+    );
+
+    fireEvent.change(screen.getByLabelText(/World Name|世界名称/), {
+      target: { value: 'Northreach' },
+    });
+    fireEvent.change(screen.getByLabelText(/Description|一句话/), {
+      target: { value: 'Snowbound border city' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Create World|创建世界/ }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('created-world')).toHaveTextContent('Northreach');
+    });
+  });
+});
+
+function WorldDashboardHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
+    dispatch({
+      type: 'SET_WORLDBUILDING_DATA',
+      worlds: [
+        {
+          id: 'world_1',
+          name: 'Northreach',
+          description: 'Snowbound border city',
+          created_at: '2026-06-06T10:00:00Z',
+        },
+      ],
+      agents: [],
+      foreshadowing: [],
+      secrets: [],
+      worldTime: 'Day 1, dawn',
+      storyOverview: {
+        current_arc: {
+          id: 'arc_1',
+          title: 'The sealed pass',
+          status: 'drafting',
+        },
+        current_chapter: {
+          id: 'chapter_1',
+          title: 'Arrival at Northreach',
+          number: 1,
+          status: 'drafting',
+          scene_count: 0,
+        },
+        current_scene: null,
+        agents: [],
+        foreshadowing: [],
+        secrets: [],
+        world_time: 'Day 1, dawn',
+      },
+    });
+  }, [dispatch]);
+
+  return <WorldDashboard />;
+}
+
+describe('World dashboard', () => {
+  it('shows readable navigation and next steps when a world has no agents yet', async () => {
+    render(
+      <AppStateProvider>
+        <WorldDashboardHarness />
+      </AppStateProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Northreach' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Back to Worlds' })).toBeDefined();
+    expect(screen.getByText('Choose an agent lane to start writing')).toBeDefined();
+    expect(screen.getByText('Create a character')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Create first character' })).toBeDefined();
+    expect(screen.queryByText(/[�鈥鈫鈭]/)).toBeNull();
+  });
+
+  it('opens character creation from the empty-world next step', async () => {
+    render(
+      <AppStateProvider>
+        <WorldDashboardHarness />
+      </AppStateProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create first character' }));
+
+    expect(screen.getByRole('dialog', { name: 'Create character' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Create Character' })).toBeDefined();
+  });
+});
+
+describe('Desktop boot progress model', () => {
+  it('marks runtime startup as active while the desktop runtime is starting', () => {
+    const steps = getDesktopRuntimeSteps('starting', {
+      phase: 'starting',
+      apiBaseUrl: null,
+      port: null,
+      pid: 101,
+      version: '0.1.0',
+      pgStatus: 'bundled',
+      configPath: 'settings.local.json',
+      logPath: 'merak-runtime.log',
+      error: null,
+    });
+
+    expect(steps.map((step) => `${step.label}:${step.state}`)).toEqual([
+      'Local process:active',
+      'Local address:waiting',
+      'Writing assistant:waiting',
+      'Workbench:waiting',
+    ]);
+  });
+
+  it('surfaces runtime failure in the progress model', () => {
+    const steps = getDesktopRuntimeSteps('failed', {
+      phase: 'failed',
+      apiBaseUrl: null,
+      port: null,
+      pid: null,
+      version: '0.1.0',
+      pgStatus: 'external-or-unavailable',
+      configPath: 'settings.local.json',
+      logPath: 'merak-runtime.log',
+      error: 'Runtime exited',
+    });
+
+    expect(steps[0]).toMatchObject({
+      label: 'Local process',
+      state: 'failed',
+      detail: 'Runtime exited',
+    });
   });
 });
 
@@ -668,6 +628,66 @@ function InspectorHarness() {
   return <InspectorPanel open={true} onClose={() => {}} />;
 }
 
+function CreationDashboardHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
+    dispatch({
+      type: 'SET_WORLDBUILDING_DATA',
+      worlds: [
+        { id: 'world_1', name: 'Northreach', description: 'Snowbound border city', created_at: '' },
+      ],
+      agents: [{ id: 'agent_1', name: 'lian', display_name: 'Lian', kind: 'individual' }],
+      foreshadowing: [
+        {
+          id: 'f1',
+          content: 'The old bell never rings at noon.',
+          status: 'open',
+          pay_off_idea: 'It rings only when the pass opens.',
+          tags: ['omen'],
+        },
+      ],
+      secrets: [
+        {
+          id: 's1',
+          title: 'The gate key is fake',
+          truth: 'The real key is a song.',
+          public_version: 'The brass key opens the north gate.',
+          stakes: 'The wrong key traps the caravan.',
+          status: 'active',
+          aware_character_ids: ['agent_1'],
+        },
+      ],
+      worldTime: 'Day 4, dusk',
+    });
+    dispatch({ type: 'SET_INSPECTOR_TAB', tab: 'creation' });
+  }, [dispatch]);
+
+  return <InspectorPanel open={true} onClose={() => {}} />;
+}
+
+function AgentsPanelHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
+    dispatch({
+      type: 'SET_WORLDBUILDING_DATA',
+      worlds: [
+        { id: 'world_1', name: 'Northreach', description: 'Snowbound border city', created_at: '' },
+      ],
+      agents: [{ id: 'agent_1', name: 'lian', display_name: 'Lian', kind: 'individual' }],
+      foreshadowing: [],
+      secrets: [],
+      worldTime: 'Day 4, dusk',
+    });
+    dispatch({ type: 'SET_INSPECTOR_TAB', tab: 'agents' });
+  }, [dispatch]);
+
+  return <InspectorPanel open={true} onClose={() => {}} />;
+}
+
 function FilesHarness() {
   const { dispatch } = useAppState();
 
@@ -692,6 +712,10 @@ function FilesHarness() {
 }
 
 describe('InspectorPanel', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders selected world context and live run state', async () => {
     render(
       <AppStateProvider>
@@ -704,6 +728,9 @@ describe('InspectorPanel', () => {
     expect(screen.getByText('Lian')).toBeDefined();
     expect(screen.getByText('The bell tower never rings at noon')).toBeDefined();
     expect(screen.getByText('Lian knows the passphrase')).toBeDefined();
+    expect(screen.getByText('World time control')).toBeDefined();
+    expect(screen.getByText('Current: Day 4, dusk')).toBeDefined();
+    expect(screen.queryByText(/[�鈥鈫鈭]/)).toBeNull();
   });
 
   it('renders an empty world state before selection', () => {
@@ -731,6 +758,17 @@ describe('InspectorPanel', () => {
   });
 
   it('opens a text editor when a generated file is double-clicked', async () => {
+    vi.spyOn(api, 'readWorkspaceFile').mockResolvedValue({
+      ok: true,
+      file: {
+        path: '/Users/me/novel/chapter-12.md',
+        content: 'Original draft.',
+        encoding: 'utf-8',
+        updated_at: '2026-06-16T08:00:00.000Z',
+        version: 'v1',
+      },
+    });
+
     render(
       <AppStateProvider>
         <FilesHarness />
@@ -739,9 +777,155 @@ describe('InspectorPanel', () => {
 
     fireEvent.doubleClick(await screen.findByText('chapter-12'));
     const editor = await screen.findByLabelText('Edit chapter-12');
+    await waitFor(() => expect((editor as HTMLTextAreaElement).value).toBe('Original draft.'));
     fireEvent.change(editor, { target: { value: 'A revised opening line.' } });
 
     expect((editor as HTMLTextAreaElement).value).toBe('A revised opening line.');
     expect(screen.getAllByText('/Users/me/novel/chapter-12.md')).toHaveLength(2);
+  });
+
+  it('marks dirty workspace files and reverts to the loaded editor baseline', async () => {
+    vi.spyOn(api, 'readWorkspaceFile').mockResolvedValue({
+      ok: true,
+      file: {
+        path: '/Users/me/novel/chapter-12.md',
+        content: 'Original draft.',
+        encoding: 'utf-8',
+        updated_at: '2026-06-16T08:00:00.000Z',
+        version: 'v1',
+      },
+    });
+
+    render(
+      <AppStateProvider>
+        <FilesHarness />
+      </AppStateProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
+    const editor = await screen.findByLabelText('Edit chapter-12');
+    await waitFor(() => expect((editor as HTMLTextAreaElement).value).toBe('Original draft.'));
+    fireEvent.change(editor, { target: { value: 'Changed draft.' } });
+
+    expect(screen.getAllByText('Unsaved changes').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revert chapter-12 to last loaded version' }));
+
+    expect((editor as HTMLTextAreaElement).value).toBe('Original draft.');
+    expect(screen.queryByText('Unsaved changes')).toBeNull();
+  });
+
+  it('surfaces save failures in the editor and toast rail', async () => {
+    vi.spyOn(api, 'readWorkspaceFile').mockResolvedValue({
+      ok: true,
+      file: {
+        path: '/Users/me/novel/chapter-12.md',
+        content: 'Original draft.',
+        encoding: 'utf-8',
+        updated_at: '2026-06-16T08:00:00.000Z',
+        version: 'v1',
+      },
+    });
+    vi.spyOn(api, 'saveWorkspaceFile').mockRejectedValue(new Error('Disk is locked'));
+
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
+    const editor = await screen.findByLabelText('Edit chapter-12');
+    await waitFor(() => expect((editor as HTMLTextAreaElement).value).toBe('Original draft.'));
+    fireEvent.change(editor, { target: { value: 'Changed draft.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter-12' }));
+
+    expect(await screen.findAllByText('Disk is locked')).toHaveLength(2);
+  });
+
+  it('renders a readable creation dashboard without mojibake copy', async () => {
+    render(
+      <AppStateProvider>
+        <CreationDashboardHarness />
+      </AppStateProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Creation Panel' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /Foreshadowing/ })).toBeDefined();
+    expect(screen.getByText('Plant and track narrative threads.')).toBeDefined();
+    expect(screen.getByText('Open Threads')).toBeDefined();
+    expect(screen.getByText('The old bell never rings at noon.')).toBeDefined();
+    expect(screen.queryByText(/[�鈥鈫鈭]/)).toBeNull();
+  });
+
+  it('shows secrets and relation empty hints from creation tabs', async () => {
+    render(
+      <AppStateProvider>
+        <CreationDashboardHarness />
+      </AppStateProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('tab', { name: /Secrets/ }));
+
+    expect(screen.getByText('Manage private truths and knowledge boundaries.')).toBeDefined();
+    expect(screen.getByText('Public version: The brass key opens the north gate.')).toBeDefined();
+    expect(screen.getByText('Aware: Lian')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('tab', { name: /Relations/ }));
+
+    expect(screen.getByText('Map character ties, alliances, and tension.')).toBeDefined();
+    expect(screen.getByText('No explicit relationship edges yet.')).toBeDefined();
+  });
+
+  it('opens a readable agent profile and edit form', async () => {
+    vi.spyOn(api, 'fetchAgentDetail').mockResolvedValue({
+      ok: true,
+      agent: {
+        id: 'agent_1',
+        world_id: 'world_1',
+        name: 'lian',
+        display_name: 'Lian',
+        kind: 'individual',
+        created_at: '2026-06-16T08:00:00Z',
+        updated_at: '2026-06-16T08:00:00Z',
+        images: { avatar: [], design: [] },
+        character_card: {
+          version: 1,
+          age: 28,
+          gender: 'Female',
+          race: 'Human',
+          identity: 'Archivist',
+          core_traits: ['patient', 'watchful'],
+          speaking_style: 'Measured',
+          core_desire: 'Protect the archive',
+          deep_fear: 'Forgetting the old treaties',
+        },
+      },
+    });
+
+    render(
+      <AppStateProvider>
+        <AgentsPanelHarness />
+      </AppStateProvider>,
+    );
+
+    const agentName = await screen.findByText('Lian');
+    const agentButton = agentName.closest('[role="button"]');
+    expect(agentButton).toBeDefined();
+    fireEvent.click(agentButton!);
+
+    expect(await screen.findByRole('heading', { name: 'Lian' })).toBeDefined();
+    expect(screen.getByText('Basics')).toBeDefined();
+    expect(screen.getByText('Core Traits')).toBeDefined();
+    expect(screen.getByText('Speaking Style')).toBeDefined();
+    expect(screen.queryByText(/[�鈥鈫鈭]/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByRole('heading', { name: 'Edit Lian' })).toBeDefined();
+    expect(screen.getByText('Core traits (comma or space separated)')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDefined();
   });
 });

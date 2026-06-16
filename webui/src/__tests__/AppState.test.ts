@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { shouldReportWorldbuildingPartialFailure, shouldWarnBeforeClose } from '../App';
 import { initialState, reducer, type AppState } from '../AppState';
 
 function state(overrides: Partial<AppState> = {}): AppState {
@@ -335,5 +336,30 @@ describe('AppState reducer', () => {
       expect(next.messages[0].text).toBe('Something broke');
       expect(next.messages[0].error).toBe(true);
     });
+  });
+});
+
+describe('worldbuilding bootstrap error policy', () => {
+  it('does not report secondary endpoint failures when an overview is available', () => {
+    expect(shouldReportWorldbuildingPartialFailure(true, true)).toBe(false);
+  });
+
+  it('reports secondary endpoint failures when no overview is available', () => {
+    expect(shouldReportWorldbuildingPartialFailure(false, true)).toBe(true);
+  });
+});
+
+describe('close protection policy', () => {
+  it('warns before closing while a run is active', () => {
+    expect(shouldWarnBeforeClose(state({ currentRun: 'run_1', status: 'thinking' }))).toBe(true);
+  });
+
+  it('warns before closing when editor changes are not safely persisted', () => {
+    expect(shouldWarnBeforeClose(state({ editorSaveStatus: 'dirty' }))).toBe(true);
+    expect(shouldWarnBeforeClose(state({ editorSaveStatus: 'saving' }))).toBe(true);
+  });
+
+  it('does not warn when the workbench is idle and saved', () => {
+    expect(shouldWarnBeforeClose(state({ currentRun: null, status: 'idle' }))).toBe(false);
   });
 });
