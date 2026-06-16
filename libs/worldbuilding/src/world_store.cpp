@@ -35,13 +35,20 @@ AgentKind agent_kind_from_string(const std::string& value) {
 }
 
 WorldMeta world_meta_from_row(const PgResult& res, int row) {
-    return WorldMeta{
+    WorldMeta meta{
         .id = res.get(row, 0),
         .name = res.get(row, 1),
         .description = res.get(row, 2),
         .created_at = res.get(row, 3),
         .updated_at = res.get(row, 4),
     };
+    if (res.nfields() > 5) {
+        std::string config_str = res.get(row, 5);
+        if (!config_str.empty()) {
+            try { meta.config = nlohmann::json::parse(config_str); } catch (...) {}
+        }
+    }
+    return meta;
 }
 
 AgentRecord agent_record_from_row(const PgResult& res, int row) {
