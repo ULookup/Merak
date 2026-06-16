@@ -99,6 +99,15 @@ WorldStore::~WorldStore() = default;
 void WorldStore::initialize() {
     std::filesystem::create_directories(data_root_);
     std::filesystem::create_directories(data_root_ / "worlds");
+
+    // Migration: add config JSONB column if not exists
+    try {
+        PgConn conn(*pool_);
+        conn.execute(
+            "ALTER TABLE worlds ADD COLUMN IF NOT EXISTS config JSONB DEFAULT '{}'");
+    } catch (...) {
+        // Column may already exist — safe to ignore
+    }
 }
 
 WorldMeta WorldStore::create_world(const std::string& name,
@@ -133,8 +142,8 @@ WorldMeta WorldStore::create_world(const std::string& name,
 
         conn.exec("BEGIN");
         conn.execute(
-            "INSERT INTO worlds(id, name, description, created_at, updated_at) "
-            "VALUES($1, $2, $3, $4, $5)",
+            "INSERT INTO worlds(id, name, description, created_at, updated_at, config) "
+            "VALUES($1, $2, $3, $4, $5, '{}'::jsonb)",
             {world.id, world.name, world.description, world.created_at, world.updated_at});
 
         const auto agent_id = make_id("agent");
@@ -182,6 +191,7 @@ WorldMeta WorldStore::update_world(const std::string& world_id,
         .description = new_desc,
         .created_at = existing->created_at,
         .updated_at = timestamp,
+        .config = existing->config,
     };
 }
 
@@ -189,7 +199,7 @@ std::optional<WorldMeta>
 WorldStore::get_world(const std::string& world_id) const {
     PgConn conn(*pool_);
     auto res = conn.query(
-        "SELECT id, name, description, created_at, updated_at "
+        "SELECT id, name, description, created_at, updated_at, config "
         "FROM worlds WHERE id = $1",
         {world_id});
     if (res.ntuples() == 0) return std::nullopt;
@@ -199,7 +209,7 @@ WorldStore::get_world(const std::string& world_id) const {
 std::vector<WorldMeta> WorldStore::list_worlds() const {
     PgConn conn(*pool_);
     auto res = conn.query(
-        "SELECT id, name, description, created_at, updated_at "
+        "SELECT id, name, description, created_at, updated_at, config "
         "FROM worlds ORDER BY created_at ASC, id ASC");
     std::vector<WorldMeta> worlds;
     for (int i = 0; i < res.ntuples(); i++) {
@@ -231,6 +241,15 @@ bool WorldStore::delete_world(const std::string& world_id) {
         try { conn.exec("ROLLBACK"); } catch (...) {}
         throw;
     }
+}
+
+void WorldStore::update_world_config(const std::string& world_id,
+                                     const nlohmann::json& config) {
+    initialize();
+    PgConn conn(*pool_);
+    conn.execute(
+        "UPDATE worlds SET config = $2, updated_at = NOW() WHERE id = $1",
+        {world_id, config.dump()});
 }
 
 void WorldStore::add_world_knowledge(const std::string& world_id,
