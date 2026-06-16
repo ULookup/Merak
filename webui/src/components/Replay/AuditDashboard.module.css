@@ -24,9 +24,9 @@
 }
 
 .sourceBackend {
-  border-color: rgba(15, 118, 110, 0.22);
-  background: var(--teal-soft, #ecfdf5);
-  color: var(--teal, #0f766e);
+  border-color: var(--border-strong);
+  background: var(--teal-soft, var(--surface-muted));
+  color: var(--teal, var(--ink));
 }
 
 .section {
@@ -38,7 +38,7 @@
 .sectionTitle {
   font-size: 11px;
   font-weight: 700;
-  color: var(--teal, #4fc3f7);
+  color: var(--teal, var(--ink));
   margin-bottom: 8px;
 }
 
@@ -82,7 +82,7 @@
 .tokenFill {
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, #4fc3f7, #7c4dff);
+  background: linear-gradient(90deg, var(--ink), var(--muted));
   transition: width 300ms ease;
 }
 

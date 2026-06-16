@@ -4,8 +4,7 @@
   place-items: center;
   background:
     linear-gradient(135deg, rgba(24, 79, 135, 0.08), transparent 38%),
-    linear-gradient(315deg, rgba(32, 116, 89, 0.08), transparent 42%),
-    var(--color-bg, #f7f8fb);
+    linear-gradient(315deg, rgba(32, 116, 89, 0.08), transparent 42%), var(--color-bg, #f7f8fb);
   color: var(--color-text, #1f2937);
   padding: 32px;
 }
@@ -208,8 +207,8 @@
 }
 
 .primary {
-  border-color: var(--color-accent, #2563eb);
-  background: var(--color-accent, #2563eb);
+  border-color: var(--color-accent, var(--ink));
+  background: var(--color-accent, var(--ink));
   color: #fff;
 }
 
@@ -244,8 +243,8 @@
 }
 
 .note {
-  background: #eef2ff;
-  color: #3730a3;
+  background: var(--surface-muted);
+  color: var(--muted-strong);
 }
 
 @keyframes spin {
