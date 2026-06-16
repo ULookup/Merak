@@ -1,4 +1,12 @@
-## 地理规则
-- 所有地点必须在世界地图上有明确位置
-- 新地点引入时需要描述与已有地点的空间关系
-- 地点之间的旅行时间必须合理且一致
+## Geography Rules
+- Every location must have a defined position on the world map.
+- New locations must describe spatial relationships to existing locations
+  (distance, direction, terrain connection).
+- Travel time between locations must be reasonable and internally consistent.
+  Distance + terrain + method = travel duration.
+- No location exists in isolation. Every place connects to at least one other
+  defined location.
+- Terrain changes require geological justification. A mountain doesn't appear
+  where plains were mapped without a reason.
+- Geography is ground truth. The story adapts to the map — the map does not
+  bend for the story.
