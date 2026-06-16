@@ -17,7 +17,8 @@ enum class AgentKind {
     FactionManager,
     RelationManager,
     Individual,
-    Group
+    Group,
+    Writer
 };
 enum class ChapterStatus { Outline, Drafting, Completed, Revised };
 enum class SceneStatus { Draft, Writing, Completed };
@@ -289,6 +290,8 @@ inline std::string to_string(AgentKind value) {
         return "individual";
     case AgentKind::Group:
         return "group";
+    case AgentKind::Writer:
+        return "writer";
     }
     return "individual";
 }
