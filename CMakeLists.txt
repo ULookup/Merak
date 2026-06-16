@@ -49,6 +49,7 @@ add_subdirectory(libs/portable_pg)
 add_subdirectory(libs/runtime)
 add_subdirectory(libs/skills)
 add_subdirectory(libs/http)
+add_subdirectory(libs/app)
 add_subdirectory(cli)
 # add_subdirectory(tests)
 
