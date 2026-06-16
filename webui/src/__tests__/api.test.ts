@@ -48,6 +48,38 @@ describe('api client', () => {
     await expect(api.startRun('s1', 'hi')).rejects.toThrow('session busy');
   });
 
+  it('does not invent a world when world creation is unavailable', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      status: 501,
+      json: async () => ({ error: { message: 'world creation unavailable' } }),
+    } as Response);
+
+    const { api } = await import('../api/client');
+    await expect(api.createWorld('Northreach')).rejects.toThrow('world creation unavailable');
+  });
+
+  it('does not return mock story overview data when the backend is unavailable', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      status: 503,
+      json: async () => ({ error: { message: 'story overview unavailable' } }),
+    } as Response);
+
+    const { api } = await import('../api/client');
+    await expect(api.getStoryOverview('world_1')).rejects.toThrow('story overview unavailable');
+  });
+
+  it('does not return mock workspace files when the backend is unavailable', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      status: 404,
+      json: async () => ({ error: { message: 'files endpoint missing' } }),
+    } as Response);
+
+    const { api } = await import('../api/client');
+    await expect(api.listWorkspaceFiles({ world_id: 'world_1' })).rejects.toThrow(
+      'files endpoint missing',
+    );
+  });
+
   it('worldbuilding readers call the selected world endpoints', async () => {
     vi.mocked(fetch).mockResolvedValue({
       status: 200,

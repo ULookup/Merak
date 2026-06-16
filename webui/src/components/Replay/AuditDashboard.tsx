@@ -8,7 +8,7 @@ export default function AuditDashboard() {
   const { state } = useAppState();
   const auditRunId = state.currentRun ?? state.lastRunId;
   const [audit, setAudit] = useState<RunAudit | null>(null);
-  const [auditStatus, setAuditStatus] = useState<'idle' | 'loading' | 'ready' | 'fallback'>('idle');
+  const [auditStatus, setAuditStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [auditError, setAuditError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,8 +31,8 @@ export default function AuditDashboard() {
       .catch((error) => {
         if (!cancelled) {
           setAudit(null);
-          setAuditStatus('fallback');
-          setAuditError(formatApiError(error, '无法读取后端审计，已显示本地统计。'));
+          setAuditStatus('error');
+          setAuditError(formatApiError(error, '后端审计不可用；下方仅显示当前界面的运行记录。'));
         }
       });
     return () => {
@@ -78,7 +78,7 @@ export default function AuditDashboard() {
   const usagePct = Math.min(100, Math.round((totalTokens / budget) * 100));
 
   if (state.runTimeline.length === 0 && !auditRunId) {
-    return <p className={styles.empty}>暂无运行数据。开始一次 Run 后这里会显示统计。</p>;
+    return <p className={styles.empty}>暂无运行记录。开始一次创作后，这里会显示步骤、工具和 token 统计。</p>;
   }
 
   return (
@@ -86,10 +86,10 @@ export default function AuditDashboard() {
       <div className={styles.header}>运行审计</div>
 
       <div className={`${styles.sourceBanner} ${auditStatus === 'ready' ? styles.sourceBackend : ''}`}>
-        {auditStatus === 'loading' && '正在读取后端 Run Audit...'}
-        {auditStatus === 'ready' && `Backend audit · ${audit?.run_id}`}
-        {auditStatus === 'fallback' && (auditError ?? '后端审计不可用，显示本地统计。')}
-        {auditStatus === 'idle' && 'Local timeline summary'}
+        {auditStatus === 'loading' && '正在读取后端运行审计...'}
+        {auditStatus === 'ready' && `后端审计 · ${audit?.run_id}`}
+        {auditStatus === 'error' && auditError}
+        {auditStatus === 'idle' && '当前界面运行记录'}
       </div>
 
       <section className={styles.section}>

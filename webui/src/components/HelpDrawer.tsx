@@ -1,4 +1,5 @@
-import { BookOpen, CheckCircle2, Plug, Settings, Sparkles, X } from 'lucide-react';
+import { BookOpen, FileText, MessageSquareText, Sparkles, UsersRound, X } from 'lucide-react';
+import { useI18n } from '../i18n';
 import styles from './HelpDrawer.module.css';
 
 interface HelpDrawerProps {
@@ -6,108 +7,103 @@ interface HelpDrawerProps {
   onClose: () => void;
 }
 
-const sections = [
+const zhSteps = [
   {
-    icon: Plug,
-    title: 'Start and connect',
-    body: 'Run merak serve, then open the WebUI. The client reads /v1/runtime for model, tool, memory, and worldbuilding status. Live responses stream through the session SSE endpoint.',
-    steps: [
-      'Confirm the Live SSE chip is connected.',
-      'Open Settings if model credentials need updating.',
-    ],
+    title: '和 GodAgent 说你想写什么',
+    text: '可以直接描述题材、主角、情绪、冲突，GodAgent 会帮你整理成可继续创作的方向。',
+    Icon: MessageSquareText,
   },
   {
-    icon: Sparkles,
-    title: 'Create a world',
-    body: 'Use the world selector to create or rename a world. World data comes from /api/worldbuilding/worlds, and story context loads after a world is selected.',
-    steps: [
-      'Create a world with a name and short premise.',
-      'Pick or create an agent session for that world.',
-    ],
+    title: '创建人物、场景和世界规则',
+    text: '右侧“创建”里可以补人物、场景、秘密和伏笔。不会写也没关系，先填你知道的部分。',
+    Icon: UsersRound,
   },
   {
-    icon: BookOpen,
-    title: 'Run and stream',
-    body: 'Write in the composer to start a run. Merak creates a session run, streams state changes, tool calls, approvals, generated files, and final text back to the timeline.',
-    steps: [
-      'Choose a model in the sidebar.',
-      'Send a scene, character, outline, or rewrite request.',
-      'Approve tool calls when permission mode asks.',
-    ],
+    title: '检查故事资料',
+    text: '“故事”会汇总当前世界、正在写的场景、角色记忆、秘密和伏笔，方便你保持前后一致。',
+    Icon: BookOpen,
   },
   {
-    icon: CheckCircle2,
-    title: 'Inspect the work',
-    body: 'The inspector keeps story, files, agents, and run diagnostics close to the writing flow. It uses /api/workspace, /api/worldbuilding, and /v1/runs endpoints where available.',
-    steps: [
-      'Story: chapters, scenes, secrets, threads, and world time.',
-      'Files: generated local files with preview and save.',
-      'Agents: cards, prompts, diaries, relations, and images.',
-      'Run: timeline, replay, and audit fallback.',
-    ],
+    title: '整理成小说文本',
+    text: '让 GodAgent 写下一场、润色片段或汇总章节。生成的文稿会出现在“文稿”里，可以继续编辑。',
+    Icon: FileText,
+  },
+];
+
+const enSteps = [
+  {
+    title: 'Tell GodAgent what you want to write',
+    text: 'Describe the genre, main character, mood, conflict, or ending. GodAgent turns that into a workable direction.',
+    Icon: MessageSquareText,
   },
   {
-    icon: Settings,
-    title: 'Configure Merak',
-    body: 'Settings writes model provider, API key, base URL, and output token limits to /api/config/llm. Desktop builds can restart the local runtime from the same panel.',
-    steps: [
-      'Save config after edits.',
-      'Use Test Connection after restart or credential changes.',
-      'Check runtime logs if the desktop runtime fails to become ready.',
-    ],
+    title: 'Create people, scenes, and rules',
+    text: 'Use Create to add characters, scenes, secrets, and foreshadowing. Fill only what you know now.',
+    Icon: UsersRound,
+  },
+  {
+    title: 'Review story context',
+    text: 'Story gathers the current world, active scene, character memories, secrets, and clues so the draft stays consistent.',
+    Icon: BookOpen,
+  },
+  {
+    title: 'Shape it into novel text',
+    text: 'Ask GodAgent for the next scene, a polish pass, or a chapter draft. Drafts appear in Drafts and remain editable.',
+    Icon: FileText,
   },
 ];
 
 export default function HelpDrawer({ open, onClose }: HelpDrawerProps) {
+  const { locale, t } = useI18n();
+  const steps = locale === 'zh' ? zhSteps : enSteps;
+
   if (!open) return null;
 
   return (
     <div className={styles.layer}>
-      <button
-        className={styles.scrim}
-        type="button"
-        aria-label="Close guide backdrop"
-        onClick={onClose}
-      />
-      <aside className={styles.drawer} role="dialog" aria-modal="true" aria-label="Merak guide">
+      <div className={styles.scrim} onClick={onClose} />
+      <aside className={styles.drawer} role="dialog" aria-modal="true" aria-label={t('help.title')}>
         <header className={styles.header}>
           <div>
-            <div className={styles.kicker}>Guide</div>
-            <h2>Merak Workbench</h2>
+            <div className={styles.kicker}>Merak</div>
+            <h2>{t('help.title')}</h2>
           </div>
-          <button
-            className={styles.closeBtn}
-            type="button"
-            aria-label="Close guide"
-            onClick={onClose}
-          >
-            <X size={18} aria-hidden="true" strokeWidth={2.2} />
+          <button type="button" className={styles.closeBtn} onClick={onClose} aria-label={t('help.close')}>
+            <X size={17} aria-hidden="true" strokeWidth={2.4} />
           </button>
         </header>
 
-        <div className={styles.intro}>
-          A compact tour of the local runtime, worldbuilding workspace, and authoring flow.
+        <div className={styles.hero}>
+          <Sparkles size={18} aria-hidden="true" strokeWidth={2.2} />
+          <p>
+            {locale === 'zh'
+              ? 'Merak 像一间安静的创作室：你负责想象，GodAgent 帮你把想法整理成人物、设定、场景和文稿。'
+              : 'Merak works like a quiet writing room: you imagine, and GodAgent helps organize people, setting, scenes, and drafts.'}
+          </p>
         </div>
 
-        <div className={styles.sections}>
-          {sections.map((section) => {
-            const Icon = section.icon;
-            return (
-              <section className={styles.section} key={section.title}>
-                <div className={styles.sectionHeader}>
-                  <Icon size={17} aria-hidden="true" strokeWidth={2.2} />
-                  <h3>{section.title}</h3>
-                </div>
-                <p>{section.body}</p>
-                <ul>
-                  {section.steps.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
+        <ol className={styles.steps}>
+          {steps.map(({ title, text, Icon }) => (
+            <li key={title} className={styles.step}>
+              <div className={styles.stepIcon}>
+                <Icon size={16} aria-hidden="true" strokeWidth={2.2} />
+              </div>
+              <div>
+                <h3>{title}</h3>
+                <p>{text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <section className={styles.tip}>
+          <h3>{locale === 'zh' ? '一句话开始' : 'Start with one sentence'}</h3>
+          <p>
+            {locale === 'zh'
+              ? '例如：“帮我写一个雪夜边境城市里的悬疑故事，主角是会说谎的巡夜人。”'
+              : 'For example: “Help me write a mystery in a snowy border city. The main character is a night watchman who lies.”'}
+          </p>
+        </section>
       </aside>
     </div>
   );

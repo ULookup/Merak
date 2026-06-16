@@ -8,6 +8,7 @@ import {
   restartDesktopRuntime,
   type DesktopRuntimeStatus,
 } from '../../desktop';
+import { useI18n } from '../../i18n';
 import styles from './SettingsPanel.module.css';
 
 interface ConfigState {
@@ -19,6 +20,7 @@ interface ConfigState {
 }
 
 export default function SettingsPanel() {
+  const { t } = useI18n();
   const [config, setConfig] = useState<ConfigState | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [provider, setProvider] = useState('anthropic');
@@ -47,9 +49,9 @@ export default function SettingsPanel() {
   useEffect(() => {
     loadConfig().catch((error) => {
       setStatus('error');
-      setErrorMsg(formatApiError(error, 'Could not load configuration.'));
+      setErrorMsg(formatApiError(error, t('settings.saveFail')));
     });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!isDesktopApp()) return;
@@ -71,9 +73,9 @@ export default function SettingsPanel() {
       await loadConfig();
       setStatus('saved');
       setApiKey('');
-    } catch (e) {
+    } catch (error) {
       setStatus('error');
-      setErrorMsg(formatApiError(e, 'Save failed'));
+      setErrorMsg(formatApiError(error, t('settings.saveFail')));
     } finally {
       setSaving(false);
     }
@@ -86,11 +88,9 @@ export default function SettingsPanel() {
     try {
       await api.testConfig();
       setStatus('test_ok');
-    } catch (e) {
+    } catch (error) {
       setStatus('test_fail');
-      setErrorMsg(
-        formatApiError(e, 'LLM connection test failed — check your API key and network.'),
-      );
+      setErrorMsg(formatApiError(error, t('settings.testFail')));
     } finally {
       setTesting(false);
     }
@@ -104,7 +104,7 @@ export default function SettingsPanel() {
     setDiagnosticMsg('');
     const response = await restartDesktopRuntime();
     setRuntime(response?.status ?? null);
-    setDiagnosticMsg(response?.ok ? 'Runtime restarted.' : 'Runtime restart did not complete.');
+    setDiagnosticMsg(response?.ok ? t('settings.restartOk') : t('settings.restartFail'));
     if (response?.ok) {
       loadConfig().catch(() => {});
     }
@@ -112,28 +112,28 @@ export default function SettingsPanel() {
 
   const handleExportDiagnostics = async () => {
     const response = await exportDiagnostics();
-    if (response?.ok) setDiagnosticMsg(`Diagnostics exported: ${response.path}`);
+    if (response?.ok) setDiagnosticMsg(`${t('settings.exported')} ${response.path}`);
     else if (response) setDiagnosticMsg(response.path);
   };
 
   if (!config) {
     return (
       <div className={styles.panel}>
-        <h3 className={styles.heading}>Model Configuration</h3>
-        {status === 'error' ? <div className={styles.error}>{errorMsg}</div> : 'Loading config...'}
+        <h3 className={styles.heading}>{t('settings.title')}</h3>
+        {status === 'error' ? <div className={styles.error}>{errorMsg}</div> : t('settings.loading')}
       </div>
     );
   }
 
   return (
     <div className={styles.panel}>
-      <h3 className={styles.heading}>Model Configuration</h3>
+      <h3 className={styles.heading}>{t('settings.title')}</h3>
 
       <label className={styles.label}>
-        Provider
+        {t('settings.service')}
         <select
           value={provider}
-          onChange={(e) => setProvider(e.target.value)}
+          onChange={(event) => setProvider(event.target.value)}
           className={styles.input}
         >
           <option value="anthropic">Anthropic</option>
@@ -143,51 +143,51 @@ export default function SettingsPanel() {
       </label>
 
       <label className={styles.label}>
-        API Key
+        {t('settings.accessKey')}
         <div className={styles.keyRow}>
           <input
             type={showKey ? 'text' : 'password'}
             value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
+            onChange={(event) => setApiKey(event.target.value)}
             placeholder={config.api_key_masked || 'sk-...'}
             className={styles.input}
           />
           <button type="button" onClick={() => setShowKey(!showKey)} className={styles.toggleBtn}>
-            {showKey ? 'Hide' : 'Show'}
+            {showKey ? t('settings.hide') : t('settings.show')}
           </button>
         </div>
       </label>
 
       <label className={styles.label}>
-        Model
+        {t('settings.assistant')}
         <input
           type="text"
           value={model}
-          onChange={(e) => setModel(e.target.value)}
+          onChange={(event) => setModel(event.target.value)}
           placeholder={config.default_model || 'claude-sonnet-4-6'}
           className={styles.input}
         />
       </label>
 
       <label className={styles.label}>
-        API Base URL (optional)
+        {t('settings.advancedAddress')}
         <input
           type="text"
           value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
+          onChange={(event) => setBaseUrl(event.target.value)}
           placeholder={config.api_base_url || 'https://api.anthropic.com'}
           className={styles.input}
         />
       </label>
 
       <label className={styles.label}>
-        Max Output Tokens
+        最大输出 Token
         <input
           type="number"
           min={256}
           step={256}
           value={maxOutputTokens}
-          onChange={(e) => setMaxOutputTokens(Math.max(256, Number(e.target.value) || 256))}
+          onChange={(event) => setMaxOutputTokens(Math.max(256, Number(event.target.value) || 256))}
           placeholder={String(config.max_output_tokens || 4096)}
           className={styles.input}
         />
@@ -195,54 +195,52 @@ export default function SettingsPanel() {
 
       <div className={styles.actions}>
         <button onClick={handleTest} disabled={testing} className={styles.btn}>
-          {testing ? 'Testing...' : 'Test Connection'}
+          {testing ? t('settings.testing') : t('settings.test')}
         </button>
         <button
           onClick={handleSave}
           disabled={saving}
           className={`${styles.btn} ${styles.primary}`}
         >
-          {saving ? 'Saving...' : 'Save Config'}
+          {saving ? t('settings.saving') : t('settings.save')}
         </button>
       </div>
 
-      {status === 'saved' && (
-        <div className={styles.ok}>Configuration saved. Restart server to apply changes.</div>
-      )}
-      {status === 'test_ok' && <div className={styles.ok}>LLM connection test passed.</div>}
+      {status === 'saved' && <div className={styles.ok}>{t('settings.saved')}</div>}
+      {status === 'test_ok' && <div className={styles.ok}>{t('settings.testOk')}</div>}
       {status === 'test_fail' && <div className={styles.error}>{errorMsg}</div>}
       {status === 'error' && <div className={styles.error}>{errorMsg}</div>}
 
       {isDesktopApp() && (
         <section className={styles.runtimePanel}>
-          <h3 className={styles.heading}>Desktop Runtime</h3>
+          <h3 className={styles.heading}>{t('settings.desktopStatus')}</h3>
           <div className={styles.runtimeGrid}>
-            <span>Phase</span>
-            <strong>{runtime?.phase ?? 'unknown'}</strong>
-            <span>API</span>
-            <strong>{runtime?.apiBaseUrl ?? 'not ready'}</strong>
-            <span>Process</span>
-            <strong>{runtime?.pid ? `PID ${runtime.pid}` : 'not running'}</strong>
-            <span>Database</span>
-            <strong>{runtime?.pgStatus ?? 'unknown'}</strong>
-            <span>Config</span>
-            <strong>{runtime?.configPath ?? 'unknown'}</strong>
-            <span>Logs</span>
-            <strong>{runtime?.logPath ?? 'unknown'}</strong>
+            <span>{t('settings.phase')}</span>
+            <strong>{runtime?.phase ?? t('settings.unknown')}</strong>
+            <span>{t('settings.localAddress')}</span>
+            <strong>{runtime?.apiBaseUrl ?? t('settings.notReady')}</strong>
+            <span>{t('settings.process')}</span>
+            <strong>{runtime?.pid ? `PID ${runtime.pid}` : t('settings.notRunning')}</strong>
+            <span>{t('settings.localLibrary')}</span>
+            <strong>{runtime?.pgStatus ?? t('settings.unknown')}</strong>
+            <span>{t('settings.configFile')}</span>
+            <strong>{runtime?.configPath ?? t('settings.unknown')}</strong>
+            <span>{t('settings.reportFile')}</span>
+            <strong>{runtime?.logPath ?? t('settings.unknown')}</strong>
           </div>
           {runtime?.error && <div className={styles.error}>{runtime.error}</div>}
           <div className={styles.actions}>
             <button type="button" onClick={refreshRuntime} className={styles.btn}>
-              Refresh
+              {t('settings.refresh')}
             </button>
             <button type="button" onClick={handleRestartRuntime} className={styles.btn}>
-              Restart Runtime
+              {t('settings.restart')}
             </button>
             <button type="button" onClick={() => openDiagnosticsFolder()} className={styles.btn}>
-              Open Logs
+              {t('settings.openReports')}
             </button>
             <button type="button" onClick={handleExportDiagnostics} className={styles.btn}>
-              Export Diagnostics
+              {t('settings.exportReport')}
             </button>
           </div>
           {diagnosticMsg && <div className={styles.ok}>{diagnosticMsg}</div>}

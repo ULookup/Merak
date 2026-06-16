@@ -25,7 +25,6 @@ import SessionList from './Sidebar/SessionList';
 import SettingsPanel from './Sidebar/SettingsPanel';
 import PreferencesPanel from './SettingsPanel';
 import WorldSelector from './Sidebar/WorldSelector';
-import type { WorldAgent } from '../api/types';
 import styles from './WorldSidebar.module.css';
 
 interface WorldSidebarProps {
@@ -59,7 +58,7 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
   return (
     <aside className={`${styles.sidebar} ${open ? styles.sidebarOpen : ''}`}>
       {open && <div className={styles.overlay} onClick={onClose} />}
-      <button className={styles.closeBtn} onClick={onClose} aria-label="Close sidebar">
+      <button className={styles.closeBtn} onClick={onClose} aria-label="关闭侧边栏">
         <X size={16} aria-hidden="true" strokeWidth={2.4} />
       </button>
 
@@ -72,7 +71,7 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
         onKeyDown={(e) => { if (e.key === 'Enter') handleBackToDashboard(); }}>
         <ArrowLeft size={15} aria-hidden="true" strokeWidth={2.4} />
         <span className={styles.worldHeaderName}>
-          {currentWorld?.name ?? 'Select World'}
+          {currentWorld?.name ?? '选择世界'}
         </span>
       </div>
 
@@ -84,7 +83,7 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
       {/* Story Tree — from storyOverview (current arc / chapter / scene) */}
       {overview && (overview.current_arc || overview.current_chapter || overview.current_scene) && (
         <div className={styles.storyTreeSection}>
-          <div className={styles.storyTreeLabel}>Story Tree</div>
+          <div className={styles.storyTreeLabel}>故事结构</div>
           {overview.current_arc && (
             <div>
               <div className={styles.storyTreeItem}>
@@ -117,7 +116,7 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
       {/* Agent List — quick-switch between agents */}
       {state.agents.length > 0 && (
         <div className={styles.agentListSection}>
-          <div className={styles.agentListLabel}>Agents</div>
+          <div className={styles.agentListLabel}>角色 / 助手</div>
           {state.agents.map((agent) => {
             const kind = typeof agent.kind === 'string' ? agent.kind : '';
             async function handleAgentClick() {
@@ -128,8 +127,16 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
                   sessionId: res.session.id,
                   agentId: agent.id,
                 });
-              } catch (e) {
-                console.error('Failed to switch agent session:', e);
+              } catch {
+                dispatch({
+                  type: 'APPEND_MESSAGE',
+                  message: {
+                    id: `agent_switch_error_${Date.now()}`,
+                    kind: 'system',
+                    text: '无法打开这个 Agent 的会话，请稍后再试。',
+                    error: true,
+                  },
+                });
               }
             }
             return (
@@ -166,7 +173,7 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
         onKeyDown={(e) => { if (e.key === 'Enter') setSettingsOpen((prev) => !prev); }}
       >
         <Settings size={15} aria-hidden="true" strokeWidth={2.3} />
-        Settings
+        设置
       </div>
       {settingsOpen && (
         <>

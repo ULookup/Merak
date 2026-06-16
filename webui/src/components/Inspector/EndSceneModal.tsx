@@ -13,7 +13,13 @@ interface Props {
   onClose: () => void;
 }
 
-export default function EndSceneModal({ worldId, sceneId, sceneTitle, chapterId, onClose }: Props) {
+export default function EndSceneModal({
+  worldId,
+  sceneId,
+  sceneTitle,
+  chapterId: _chapterId,
+  onClose,
+}: Props) {
   const { state, dispatch } = useAppState();
   const [finalMarkdown, setFinalMarkdown] = useState('');
   const [submitting, setSubmitting] = useState(false);

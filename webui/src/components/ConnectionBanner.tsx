@@ -1,30 +1,19 @@
 import { isDesktopApp } from '../desktop';
 import type { ConnectionState } from '../hooks/useSSE';
+import { useI18n } from '../i18n';
 import styles from './ConnectionBanner.module.css';
 
 interface Props {
   state: ConnectionState;
 }
 
-const labels: Record<ConnectionState, string> = {
-  connecting: 'Connecting...',
-  connected: '',
-  reconnecting: 'Connection lost. Reconnecting...',
-  disconnected: 'Unable to connect. Check if the server is running.',
-};
-
-const desktopLabels: Record<ConnectionState, string> = {
-  connecting: 'Connecting to the local Merak runtime...',
-  connected: '',
-  reconnecting: 'Runtime connection was interrupted. Reconnecting...',
-  disconnected: 'Merak runtime is not reachable. Start the runtime service, then return here.',
-};
-
 export default function ConnectionBanner({ state }: Props) {
+  const { t } = useI18n();
+
   if (state === 'connected') return null;
 
   const desktop = isDesktopApp();
-  const label = desktop ? desktopLabels[state] : labels[state];
+  const label = t(`connection.${desktop ? 'desktop.' : ''}${state}`);
 
   return (
     <div
@@ -34,7 +23,7 @@ export default function ConnectionBanner({ state }: Props) {
       data-testid="connection-banner"
     >
       <span className={styles.message}>{label}</span>
-      {desktop && <span className={styles.meta}>Desktop</span>}
+      {desktop && <span className={styles.meta}>{t('connection.desktop')}</span>}
     </div>
   );
 }

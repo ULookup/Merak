@@ -12,70 +12,41 @@ import type { LucideIcon } from 'lucide-react';
 import type { StatusLabel } from '../api/types';
 import { useAppState } from '../AppState';
 import type { ConnectionState } from '../hooks/useSSE';
+import { useI18n } from '../i18n';
 import styles from './AgentStatusBar.module.css';
 
-const stageLabels: Array<{ id: StatusLabel; label: string; Icon: LucideIcon }> = [
-  { id: 'thinking', label: 'Thinking', Icon: Brain },
-  { id: 'acting', label: 'Acting', Icon: Wrench },
-  { id: 'observing', label: 'Observing', Icon: Eye },
-  { id: 'responding', label: 'Responding', Icon: MessageSquare },
+const stageLabels: Array<{ id: StatusLabel; key: string; Icon: LucideIcon }> = [
+  { id: 'thinking', key: 'status.stage.thinking', Icon: Brain },
+  { id: 'acting', key: 'status.stage.acting', Icon: Wrench },
+  { id: 'observing', key: 'status.stage.observing', Icon: Eye },
+  { id: 'responding', key: 'status.stage.responding', Icon: MessageSquare },
 ];
-
-const copy: Record<StatusLabel, { title: string; detail: string }> = {
-  idle: {
-    title: 'Ready',
-    detail: 'Start a run to stream reasoning, tools, and Markdown output.',
-  },
-  thinking: {
-    title: 'Thinking',
-    detail: 'The agent is planning before text or tool output appears.',
-  },
-  acting: {
-    title: 'Acting',
-    detail: 'A tool call or delegated step is in progress.',
-  },
-  observing: {
-    title: 'Observing',
-    detail: 'Tool results are being read back into the run.',
-  },
-  responding: {
-    title: 'Responding',
-    detail: 'Markdown output is streaming into the conversation.',
-  },
-  waiting_approval: {
-    title: 'Waiting Approval',
-    detail: 'A requested tool action needs a decision before the run continues.',
-  },
-};
 
 interface Props {
   connectionState?: ConnectionState;
 }
 
-function formatTokens(value: number) {
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K tokens`;
-  return `${value} tokens`;
+function formatContext(value: number, unit: string) {
+  const label = value >= 1000 ? `${(value / 1000).toFixed(1)}K` : `${value}`;
+  return `${label} ${unit}`;
 }
 
-function connectionLabel(value: ConnectionState | undefined) {
-  if (value === 'connected') return 'SSE connected';
-  return value ? `SSE ${value}` : 'SSE pending';
+function connectionLabel(value: ConnectionState | undefined, t: (key: string) => string) {
+  if (!value) return t('status.connection.pending');
+  return t(`status.connection.${value}`);
 }
 
 export default function AgentStatusBar({ connectionState }: Props) {
+  const { t } = useI18n();
   const { state } = useAppState();
   const status = state.status;
   const active = state.currentRun !== null || status !== 'idle';
-  const current = copy[status] ?? copy.idle;
   const tokenTotal = state.usage.inputTokens + state.usage.outputTokens;
-  const model = state.selectedModel || state.metadata?.model || 'Default model';
+  const model = state.selectedModel || state.metadata?.model || t('status.defaultAssistant');
   const runtimeFeatures = [
-    state.metadata?.memory?.enabled ? 'memory' : null,
-    state.metadata?.worldbuilding?.enabled ? 'world' : null,
-    state.metadata?.delegation_patterns?.length ? 'delegation' : null,
-    state.fallback.capabilities || state.fallback.workspaceFiles || state.fallback.storyOverview
-      ? 'preview'
-      : null,
+    state.metadata?.memory?.enabled ? t('status.feature.memory') : null,
+    state.metadata?.worldbuilding?.enabled ? t('status.feature.world') : null,
+    state.metadata?.delegation_patterns?.length ? t('status.feature.collaboration') : null,
   ].filter(Boolean);
 
   return (
@@ -95,8 +66,8 @@ export default function AgentStatusBar({ connectionState }: Props) {
           )}
         </span>
         <div className={styles.statusCopy}>
-          <strong>{current.title}</strong>
-          <span>{current.detail}</span>
+          <strong>{t(`status.${status}.title`)}</strong>
+          <span>{t(`status.${status}.detail`)}</span>
         </div>
       </div>
 
@@ -111,7 +82,7 @@ export default function AgentStatusBar({ connectionState }: Props) {
               aria-current={selected ? 'step' : undefined}
             >
               <Icon size={13} aria-hidden="true" strokeWidth={2.3} />
-              {stage.label}
+              {t(stage.key)}
             </span>
           );
         })}
@@ -120,7 +91,7 @@ export default function AgentStatusBar({ connectionState }: Props) {
       <div className={styles.meta}>
         <span>
           <Activity size={12} aria-hidden="true" />
-          {connectionLabel(connectionState)}
+          {connectionLabel(connectionState, t)}
         </span>
         <span>
           <Brain size={12} aria-hidden="true" />
@@ -128,7 +99,7 @@ export default function AgentStatusBar({ connectionState }: Props) {
         </span>
         <span>
           <Clock3 size={12} aria-hidden="true" />
-          {formatTokens(tokenTotal)}
+          {formatContext(tokenTotal, t('status.contextUnit'))}
         </span>
         {runtimeFeatures.length > 0 && (
           <span>

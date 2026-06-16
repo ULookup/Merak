@@ -8,20 +8,20 @@ import AgentPromptViewer from './AgentPromptViewer';
 import CreateAgentModal from './CreateAgentModal';
 
 const kindLabels: Record<string, string> = {
-  god: 'God',
-  map_manager: 'Manager',
-  history_manager: 'Manager',
-  magic_system_manager: 'Manager',
-  faction_manager: 'Manager',
-  individual: 'Character',
-  group: 'Group',
+  god: '总控助手',
+  map_manager: '设定助手',
+  history_manager: '设定助手',
+  magic_system_manager: '设定助手',
+  faction_manager: '设定助手',
+  individual: '角色',
+  group: '群体',
 };
 
 function groupKey(kind: string) {
-  if (kind === 'god') return 'God';
-  if (kind.includes('manager')) return 'Managers';
-  if (kind === 'group') return 'Groups';
-  return 'Characters';
+  if (kind === 'god') return '总控助手';
+  if (kind.includes('manager')) return '设定助手';
+  if (kind === 'group') return '群体';
+  return '角色';
 }
 
 export default function AgentsInspector() {
@@ -44,8 +44,8 @@ export default function AgentsInspector() {
     return (
       <>
         <section className={styles.section}>
-          <div className={styles.sectionTitle}>Character Voices</div>
-          <p className={styles.muted}>No agents loaded for this world.</p>
+          <div className={styles.sectionTitle}>角色声音</div>
+          <p className={styles.muted}>当前世界还没有角色。创建第一个角色后，工作台会用真实后端数据展示声音、提示词和知识边界。</p>
           {state.worldId && (
             <button
               className={styles.entryButton}
@@ -53,7 +53,7 @@ export default function AgentsInspector() {
               onClick={() => setShowCreateAgent(true)}
             >
               <UserPlus size={14} aria-hidden="true" />
-              Create First Character
+              创建第一个角色
             </button>
           )}
         </section>
@@ -83,9 +83,9 @@ export default function AgentsInspector() {
           <Users size={14} aria-hidden="true" strokeWidth={2.4} />
         </span>
         <div>
-          <div className={styles.sectionTitle}>Voice System</div>
-          <strong>{state.agents.length} active agents</strong>
-          <p>Grouped by narrative responsibility for fast delegation decisions.</p>
+          <div className={styles.sectionTitle}>声音系统</div>
+          <strong>{state.agents.length} 个可用角色 / 助手</strong>
+          <p>按叙事职责分组，方便判断该把任务交给哪个角色或工具助手。</p>
         </div>
       </section>
 
@@ -93,7 +93,7 @@ export default function AgentsInspector() {
         {state.worldId && (
           <button className={styles.ghostButton} onClick={() => setShowCreateAgent(true)}>
             <Plus size={14} aria-hidden="true" />
-            New Character
+            新建角色
           </button>
         )}
       </div>
@@ -129,8 +129,8 @@ export default function AgentsInspector() {
                   e.stopPropagation();
                   setPromptAgentId(agent.id);
                 }}
-                aria-label={`View prompt for ${agent.display_name || agent.name}`}
-                title="View system prompt"
+                aria-label={`查看 ${agent.display_name || agent.name} 的系统提示词`}
+                title="查看系统提示词"
               >
                 <Brain size={12} aria-hidden="true" />
               </button>
@@ -140,19 +140,19 @@ export default function AgentsInspector() {
       ))}
 
       <section className={styles.section}>
-        <div className={styles.sectionTitle}>Voice Diagnostics</div>
+        <div className={styles.sectionTitle}>声音诊断</div>
         <div className={styles.signalGrid}>
           <span>
             <Fingerprint size={14} aria-hidden="true" />
-            Fingerprints pending
+            指纹等待后端生成
           </span>
           <span>
             <Shield size={14} aria-hidden="true" />
-            Knowledge checks pending
+            知识边界等待检查
           </span>
           <span>
             <Brain size={14} aria-hidden="true" />
-            Prompt preview ready
+            系统提示词可查看
           </span>
         </div>
       </section>

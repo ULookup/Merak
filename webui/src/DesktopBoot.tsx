@@ -9,6 +9,7 @@ import {
   restartDesktopRuntime,
   type DesktopRuntimeStatus,
 } from './desktop';
+import { LanguageToggle, useI18n } from './i18n';
 import styles from './DesktopBoot.module.css';
 
 interface Props {
@@ -29,6 +30,7 @@ function needsFirstRunConfig(apiKeyMasked?: string) {
 }
 
 export default function DesktopBoot({ children }: Props) {
+  const { t } = useI18n();
   const desktop = isDesktopApp();
   const [phase, setPhase] = useState<BootPhase>(desktop ? 'checking' : 'ready');
   const [runtime, setRuntime] = useState<DesktopRuntimeStatus | null>(null);
@@ -96,11 +98,11 @@ export default function DesktopBoot({ children }: Props) {
   }, [desktop]);
 
   const statusLabel = useMemo(() => {
-    if (!runtime) return 'Preparing Merak runtime';
-    if (runtime.phase === 'ready') return 'Merak runtime is ready';
-    if (runtime.phase === 'failed') return 'Merak runtime needs attention';
-    return 'Starting Merak runtime';
-  }, [runtime]);
+    if (!runtime) return t('desktop.preparingTitle');
+    if (runtime.phase === 'ready') return t('desktop.readyTitle');
+    if (runtime.phase === 'failed') return t('desktop.failedTitle');
+    return t('desktop.startingTitle');
+  }, [runtime, t]);
 
   async function handleRestart() {
     setPhase('starting');
@@ -113,7 +115,7 @@ export default function DesktopBoot({ children }: Props) {
 
   async function handleExportDiagnostics() {
     const response = await exportDiagnostics();
-    if (response?.ok) setMessage(`Diagnostics exported to ${response.path}`);
+    if (response?.ok) setMessage(`${t('desktop.exported')} ${response.path}`);
     else if (response) setMessage(response.path);
   }
 
@@ -132,7 +134,7 @@ export default function DesktopBoot({ children }: Props) {
       setPhase(response?.ok ? 'ready' : 'failed');
       setRuntime(response?.status ?? null);
     } catch (error) {
-      setMessage(formatApiError(error, 'Configuration could not be saved.'));
+      setMessage(formatApiError(error, t('desktop.configError')));
     } finally {
       setSaving(false);
     }
@@ -145,18 +147,21 @@ export default function DesktopBoot({ children }: Props) {
   return (
     <main className={styles.shell}>
       <section className={styles.panel} aria-live="polite">
-        <div className={styles.brand}>MERAK</div>
-        <h1>{phase === 'configuring' ? 'Connect your model provider' : statusLabel}</h1>
+        <div className={styles.topbar}>
+          <div className={styles.brand}>MERAK</div>
+          <div className={styles.languageToggle}>
+            <LanguageToggle />
+          </div>
+        </div>
+        <h1>{phase === 'configuring' ? t('desktop.connectTitle') : statusLabel}</h1>
         {phase !== 'configuring' && (
-          <p>
-            Merak is starting its local Windows runtime, workspace storage, and desktop bridge.
-          </p>
+          <p>{t('desktop.startingCopy')}</p>
         )}
 
         {phase === 'configuring' ? (
           <div className={styles.form}>
             <label>
-              Provider
+              {t('desktop.service')}
               <select
                 value={form.provider}
                 onChange={(event) => setForm((prev) => ({ ...prev, provider: event.target.value }))}
@@ -167,16 +172,16 @@ export default function DesktopBoot({ children }: Props) {
               </select>
             </label>
             <label>
-              API Key
+              {t('desktop.accessKey')}
               <input
                 type="password"
                 value={form.apiKey}
                 onChange={(event) => setForm((prev) => ({ ...prev, apiKey: event.target.value }))}
-                placeholder="Paste your provider key"
+                placeholder={t('desktop.accessKeyPlaceholder')}
               />
             </label>
             <label>
-              Model
+              {t('desktop.assistant')}
               <input
                 value={form.model}
                 onChange={(event) => setForm((prev) => ({ ...prev, model: event.target.value }))}
@@ -184,7 +189,7 @@ export default function DesktopBoot({ children }: Props) {
               />
             </label>
             <label>
-              API Base URL
+              {t('desktop.advancedAddress')}
               <input
                 value={form.baseUrl}
                 onChange={(event) => setForm((prev) => ({ ...prev, baseUrl: event.target.value }))}
@@ -197,19 +202,19 @@ export default function DesktopBoot({ children }: Props) {
               onClick={handleSaveConfig}
               disabled={saving || form.apiKey.trim().length === 0}
             >
-              {saving ? 'Saving...' : 'Save and Start Workbench'}
+              {saving ? t('desktop.saving') : t('desktop.save')}
             </button>
           </div>
         ) : (
           <div className={styles.statusGrid}>
-            <span>Phase</span>
+            <span>{t('desktop.step')}</span>
             <strong>{runtime?.phase ?? phase}</strong>
-            <span>Runtime</span>
-            <strong>{runtime?.apiBaseUrl ?? 'Selecting local port'}</strong>
-            <span>Database</span>
-            <strong>{runtime?.pgStatus ?? 'Checking'}</strong>
-            <span>Logs</span>
-            <strong>{runtime?.logPath ?? 'Preparing log file'}</strong>
+            <span>{t('desktop.localAddress')}</span>
+            <strong>{runtime?.apiBaseUrl ?? t('desktop.selectingPort')}</strong>
+            <span>{t('desktop.localLibrary')}</span>
+            <strong>{runtime?.pgStatus ?? t('desktop.checking')}</strong>
+            <span>{t('desktop.reportFolder')}</span>
+            <strong>{runtime?.logPath ?? t('desktop.preparingReport')}</strong>
           </div>
         )}
 
@@ -217,13 +222,13 @@ export default function DesktopBoot({ children }: Props) {
           <>
             <div className={styles.actions}>
               <button type="button" onClick={handleRestart}>
-                Restart Runtime
+                {t('desktop.restart')}
               </button>
               <button type="button" onClick={() => openDiagnosticsFolder()}>
-                Open Logs
+                {t('desktop.openReports')}
               </button>
               <button type="button" onClick={handleExportDiagnostics}>
-                Export Diagnostics
+                {t('desktop.exportReport')}
               </button>
             </div>
             <pre className={styles.log}>{logs.slice(-12).join('\n')}</pre>

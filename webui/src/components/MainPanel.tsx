@@ -1,6 +1,7 @@
 import { CircleHelp, Menu, PanelRight } from 'lucide-react';
-import { useAppState } from '../AppState';
 import type { ConnectionState } from '../hooks/useSSE';
+import { useAppState } from '../AppState';
+import { LanguageToggle, useI18n } from '../i18n';
 import BrandMark from './BrandMark';
 import ChatTimeline from './ChatTimeline';
 import Composer from './Composer';
@@ -24,25 +25,26 @@ export default function MainPanel({
   connectionState = 'connecting',
 }: MainPanelProps) {
   const { state } = useAppState();
+  const { t } = useI18n();
 
   const currentAgent = state.agents.find((a) => a.id === state.agentId);
   const currentWorld = state.worlds.find((w) => w.id === state.worldId);
 
   const headerTitle = currentAgent
-    ? `${currentAgent.display_name || currentAgent.name} �� ${currentWorld?.name ?? ''}`
-    : 'Merak Workbench';
+    ? `${currentAgent.display_name || currentAgent.name} · ${currentWorld?.name ?? ''}`
+    : `Merak ${t('app.workbench')}`;
 
   const headerSubtitle = currentAgent
     ? (() => {
         const kind = currentAgent.kind;
-        if (kind === 'god' || kind === '0') return 'Omniscient �� 20 tools';
-        if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4')))
-          return 'Manager �� 1 tool';
-        return `Character �� 3 tools`;
+        if (kind === 'god' || kind === '0') return t('agent.god');
+        if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4'))) {
+          return t('agent.manager');
+        }
+        return t('agent.character');
       })()
-    : 'Worldbuilding agent runtime';
+    : t('composer.placeholder');
 
-  // Find active scene
   const activeScene = state.storyOverview?.current_scene ?? null;
 
   return (
@@ -51,7 +53,7 @@ export default function MainPanel({
         <button
           className={styles.iconBtn}
           onClick={onToggleSidebar}
-          aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          aria-label={sidebarOpen ? t('app.closeSidebar') : t('app.openSidebar')}
           data-testid="menu-btn"
         >
           <Menu size={18} aria-hidden="true" strokeWidth={2.2} />
@@ -65,7 +67,7 @@ export default function MainPanel({
             {headerSubtitle}
             {activeScene && (
               <span className={styles.activeSceneBadge}>
-                �� Scene: {activeScene.title ?? activeScene.id}
+                · {t('composer.scene')}: {activeScene.title ?? activeScene.id}
               </span>
             )}
           </div>
@@ -75,20 +77,23 @@ export default function MainPanel({
           className={`${styles.liveChip} ${connectionState === 'connected' ? styles.liveChipOn : ''}`}
         >
           <span className={styles.liveDot} />
-          {connectionState === 'connected' ? 'Live SSE' : connectionState}
+          {connectionState === 'connected' ? t('app.runtimeReady') : t('app.connecting')}
+        </div>
+        <div className={styles.languageToggle}>
+          <LanguageToggle />
         </div>
         <button
           className={styles.iconBtn}
           onClick={onOpenGuide}
-          aria-label="Open workbench guide"
-          title="Open workbench guide"
+          aria-label={t('app.openGuide')}
+          title={t('app.openGuide')}
         >
           <CircleHelp size={18} aria-hidden="true" strokeWidth={2.2} />
         </button>
         <button
           className={styles.iconBtn}
           onClick={onToggleInspector}
-          aria-label={inspectorOpen ? 'Close inspector' : 'Open inspector'}
+          aria-label={inspectorOpen ? t('app.closeInspector') : t('app.openInspector')}
           data-testid="inspector-btn"
         >
           <PanelRight size={18} aria-hidden="true" strokeWidth={2.2} />

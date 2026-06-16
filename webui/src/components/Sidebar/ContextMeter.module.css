@@ -4,8 +4,19 @@
   color: var(--muted);
 }
 
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 740;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
 .pct {
-  float: right;
   color: var(--ink);
   font-weight: 720;
 }
@@ -25,4 +36,9 @@
   background: #59616a;
   border-radius: inherit;
   transition: width 0.45s var(--ease);
+}
+
+.detail {
+  color: var(--muted-strong);
+  line-height: 1.45;
 }

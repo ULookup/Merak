@@ -151,18 +151,6 @@ async function fallbackRequest<T>(path: string, fallback: T): Promise<T> {
   }
 }
 
-async function fallbackMutation<T>(method: string, path: string, body: unknown, fallback: T) {
-  try {
-    return await request<T>(method, path, body);
-  } catch {
-    return fallback;
-  }
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
 const fallbackCapabilities: CapabilitiesResponse = {
   ok: true,
   fallback: true,
@@ -174,113 +162,6 @@ const fallbackCapabilities: CapabilitiesResponse = {
     editor_save: false,
   },
 };
-
-function fallbackOverview(worldId: string): StoryOverviewResponse {
-  return {
-    ok: true,
-    fallback: true,
-    overview: {
-      fallback: true,
-      current_arc: {
-        id: `arc_${worldId || 'preview'}`,
-        title: 'Frontier arc preview',
-        status: 'drafting',
-        purpose: 'Backend overview is pending; this preview keeps the workbench usable.',
-      },
-      current_chapter: {
-        id: `chapter_${worldId || 'preview'}`,
-        title: 'Chapter workspace',
-        number: 1,
-        status: 'drafting',
-        scene_count: 3,
-        updated_at: nowIso(),
-      },
-      current_scene: {
-        id: `scene_${worldId || 'preview'}`,
-        title: 'Next scene beat',
-        chapter_id: `chapter_${worldId || 'preview'}`,
-        world_time: 'Day 1 Dawn',
-        status: 'writing',
-        participant_ids: [],
-        updated_at: nowIso(),
-      },
-      agents: [],
-      foreshadowing: [
-        {
-          id: 'mock_foreshadowing_1',
-          content: 'A small clue waits to be paid off after the next conflict.',
-          status: 'open',
-          hint_level: 'visible',
-          tags: ['preview'],
-        },
-      ],
-      secrets: [
-        {
-          id: 'mock_secret_1',
-          title: 'Knowledge boundary preview',
-          truth: 'Only the author knows the full answer until the backend endpoint lands.',
-          public_version: 'Characters only see a partial explanation.',
-          stakes: 'Avoid accidental omniscience in generated scenes.',
-          status: 'active',
-          aware_character_ids: [],
-          suspicious_character_ids: [],
-        },
-      ],
-      world_time: 'Day 1 Dawn',
-    },
-  };
-}
-
-function fallbackFiles(sessionId?: string, worldId?: string): WorkspaceFileListResponse {
-  const stamp = nowIso();
-  const root = worldId ? `~/.merak/worlds/${worldId}/outputs` : '~/.merak/outputs';
-  return {
-    ok: true,
-    root,
-    fallback: true,
-    files: [
-      {
-        id: `mock_outline_${sessionId || 'session'}`,
-        path: `${root}/chapter-01-outline.md`,
-        name: 'chapter-01-outline.md',
-        ext: 'md',
-        mime: 'text/markdown',
-        size: 2480,
-        updated_at: stamp,
-        generated_by_run_id: undefined,
-        dirty: false,
-        fallback: true,
-      },
-      {
-        id: `mock_scene_${sessionId || 'session'}`,
-        path: `${root}/scene-beat-notes.md`,
-        name: 'scene-beat-notes.md',
-        ext: 'md',
-        mime: 'text/markdown',
-        size: 1260,
-        updated_at: stamp,
-        generated_by_run_id: undefined,
-        dirty: false,
-        fallback: true,
-      },
-    ],
-  };
-}
-
-function fallbackFileContent(path: string): WorkspaceFileContentResponse {
-  return {
-    ok: true,
-    fallback: true,
-    file: {
-      path,
-      encoding: 'utf-8',
-      updated_at: nowIso(),
-      version: 'mock-1',
-      fallback: true,
-      content: `# ${path.split('/').pop() || 'Draft'}\n\nThis is a local WebUI preview buffer. The backend file content endpoint is not implemented yet.\n\n- Review the scene goal.\n- Tighten character knowledge boundaries.\n- Save will remain local until /api/workspace/files/content is available.\n`,
-    },
-  };
-}
 
 export const api = {
   metadata: () => request<RuntimeMetadata>('GET', '/v1/runtime'),
@@ -296,16 +177,7 @@ export const api = {
   },
 
   archiveSession: (session: SessionSummary, archived: boolean) =>
-    fallbackMutation<ArchiveSessionResponse>(
-      'POST',
-      `/v1/sessions/${session.id}/archive`,
-      { archived },
-      {
-        ok: true,
-        fallback: true,
-        session: { ...session, archived_at: archived ? nowIso() : null },
-      },
-    ),
+    request<ArchiveSessionResponse>('POST', `/v1/sessions/${session.id}/archive`, { archived }),
 
   updateSession: (id: string, title: string) =>
     request<UpdateSessionResponse>('PATCH', `/v1/sessions/${id}`, { title }),
@@ -326,21 +198,7 @@ export const api = {
 
   getSession: (id: string) => request<SessionSummary>('GET', `/v1/sessions/${id}`),
 
-  getRun: (runId: string, sessionId = '') =>
-    fallbackRequest<RunDetailResponse>(`/v1/runs/${runId}`, {
-      ok: true,
-      fallback: true,
-      run: {
-        id: runId,
-        session_id: sessionId,
-        status: 'streaming',
-        model: '',
-        started_at: nowIso(),
-        input_tokens: 0,
-        output_tokens: 0,
-        tool_calls: [],
-      },
-    }),
+  getRun: (runId: string) => request<RunDetailResponse>('GET', `/v1/runs/${runId}`),
 
   events: (id: string, after = 0) =>
     request<{ events: unknown[] }>('GET', `/v1/sessions/${id}/events?after=${after}`),
@@ -377,17 +235,7 @@ export const api = {
   listWorlds: () => request<WorldListResponse>('GET', '/api/worldbuilding/worlds'),
 
   createWorld: (name: string, description = '') =>
-    fallbackMutation<UpdateWorldResponse>(
-      'POST',
-      '/api/worldbuilding/worlds',
-      { name, description },
-      {
-        ok: true,
-        world_id: `preview_world_${Date.now()}`,
-        name,
-        description,
-      },
-    ),
+    request<UpdateWorldResponse>('POST', '/api/worldbuilding/worlds', { name, description }),
 
   updateWorld: (id: string, name?: string, description?: string) =>
     request<UpdateWorldResponse>('PATCH', `/api/worldbuilding/worlds/${id}`, {
@@ -416,16 +264,15 @@ export const api = {
     }),
 
   getStoryOverview: (worldId: string, sessionId = '') =>
-    fallbackRequest<StoryOverviewResponse>(
+    request<StoryOverviewResponse>(
+      'GET',
       `/api/worldbuilding/${worldId}/overview${sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''}`,
-      fallbackOverview(worldId),
     ),
 
   listChapters: (worldId: string, status = '') => {
-    const chapter = fallbackOverview(worldId).overview.current_chapter;
-    return fallbackRequest<ChapterListResponse>(
+    return request<ChapterListResponse>(
+      'GET',
       `/api/worldbuilding/${worldId}/chapters${status ? `?status=${encodeURIComponent(status)}` : ''}`,
-      { ok: true, fallback: true, chapters: chapter ? [chapter] : [] },
     );
   },
 
@@ -440,10 +287,9 @@ export const api = {
     if (chapterId) params.set('chapter_id', chapterId);
     if (status) params.set('status', status);
     const query = params.toString();
-    const scene = fallbackOverview(worldId).overview.current_scene;
-    return fallbackRequest<SceneListResponse>(
+    return request<SceneListResponse>(
+      'GET',
       `/api/worldbuilding/${worldId}/scenes${query ? `?${query}` : ''}`,
-      { ok: true, fallback: true, scenes: scene ? [scene] : [] },
     );
   },
 
@@ -458,39 +304,23 @@ export const api = {
     for (const [key, value] of Object.entries(query)) {
       if (value) params.set(key, value);
     }
-    const fallback = fallbackFiles(query.session_id, query.world_id);
-    const term = query.q?.toLowerCase();
-    const type = query.type?.toLowerCase();
-    if (term || type) {
-      fallback.files = fallback.files.filter((file) => {
-        const matchesTerm =
-          !term || file.name.toLowerCase().includes(term) || file.path.toLowerCase().includes(term);
-        const matchesType = !type || type === 'all' || file.ext.toLowerCase() === type;
-        return matchesTerm && matchesType;
-      });
-    }
-    return fallbackRequest<WorkspaceFileListResponse>(
+    return request<WorkspaceFileListResponse>(
+      'GET',
       `/api/workspace/files${params.toString() ? `?${params}` : ''}`,
-      fallback,
     );
   },
 
   readWorkspaceFile: (path: string) =>
-    fallbackRequest<WorkspaceFileContentResponse>(
+    request<WorkspaceFileContentResponse>(
+      'GET',
       `/api/workspace/files/content?path=${encodeURIComponent(path)}`,
-      fallbackFileContent(path),
     ),
 
   saveWorkspaceFile: (path: string, content: string, version?: string) =>
-    fallbackMutation<SaveWorkspaceFileResponse>(
+    request<SaveWorkspaceFileResponse>(
       'PUT',
       '/api/workspace/files/content',
       { path, content, version },
-      {
-        ok: true,
-        fallback: true,
-        file: { path, updated_at: nowIso(), version: version ?? 'mock-1' },
-      },
     ),
 
   sseUrl: (id: string) => `${apiBase}/v1/sessions/${id}/events/stream`,

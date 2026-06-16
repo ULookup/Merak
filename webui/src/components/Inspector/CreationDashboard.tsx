@@ -150,6 +150,7 @@ export default function CreationDashboard() {
           <div className={styles.relationView}>
             <RelationGraph agents={state.agents} links={graphData.links} />
             <div className={styles.relationList}>
+              {relationsLoading && <p className={styles.empty}>正在整理人物关系...</p>}
               {state.agents.map(a => (
                 <div key={a.id} className={styles.relationAgent}>
                   <span className={styles.relAvatar}>

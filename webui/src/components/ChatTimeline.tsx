@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Message } from '../api/types';
 import { useAppState } from '../AppState';
 import type { ConnectionState } from '../hooks/useSSE';
+import { useI18n } from '../i18n';
 import AgentStatusBar from './AgentStatusBar';
 import ApprovalCell from './cells/ApprovalCell';
 import AssistantCell from './cells/AssistantCell';
@@ -62,6 +63,7 @@ interface ChatTimelineProps {
 }
 
 export default function ChatTimeline({ connectionState }: ChatTimelineProps) {
+  const { t } = useI18n();
   const { state } = useAppState();
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -84,11 +86,8 @@ export default function ChatTimeline({ connectionState }: ChatTimelineProps) {
                 <circle cx="64" cy="15" r="4" />
               </svg>
             </div>
-            <h2>Build the next scene</h2>
-            <p>
-              Start with a character voice, a world rule, or a scene beat. Runs stream through SSE
-              as Markdown, tools, approvals, and delegation events.
-            </p>
+            <h2>{t('timeline.emptyTitle')}</h2>
+            <p>{t('timeline.emptyCopy')}</p>
           </div>
         )}
         {state.messages.map(renderMessage)}

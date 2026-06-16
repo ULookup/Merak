@@ -1,15 +1,16 @@
 import { useEffect, useRef } from 'react';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { advancePipeline } from '../api/client';
-import type { CreativePhase } from '../api/types';
 import { AppStateProvider, useAppState } from '../AppState';
-import PipelineNavigator from '../components/Sidebar/PipelineNavigator';
+import type { CreativePhase } from '../api/types';
 
 vi.mock('../api/client', () => ({
   advancePipeline: vi.fn(),
   getPipelineState: vi.fn().mockResolvedValue({}),
 }));
+
+import PipelineNavigator from '../components/Sidebar/PipelineNavigator';
+import { advancePipeline } from '../api/client';
 
 const EMPTY_ARR: string[] = [];
 const NEXT_CHAR_CREATION: CreativePhase[] = ['character_creation'];
@@ -63,28 +64,28 @@ describe('PipelineNavigator', () => {
     vi.stubGlobal('alert', alertMock);
   });
 
-  it('renders phase list', () => {
+  it('renders localized phase list', () => {
     render(
       <AppStateProvider>
         <PipelineHarness />
       </AppStateProvider>,
     );
 
-    expect(screen.getByText('World')).toBeInTheDocument();
-    expect(screen.getByText('Characters')).toBeInTheDocument();
-    expect(screen.getByText('Plot')).toBeInTheDocument();
-    expect(screen.getByText('Scenes')).toBeInTheDocument();
-    expect(screen.getByText('Reflection')).toBeInTheDocument();
+    expect(screen.getByText('世界观构建')).toBeInTheDocument();
+    expect(screen.getByText('角色创建')).toBeInTheDocument();
+    expect(screen.getByText('情节架构')).toBeInTheDocument();
+    expect(screen.getByText('场景写作')).toBeInTheDocument();
+    expect(screen.getByText('复盘修订')).toBeInTheDocument();
   });
 
-  it('shows error banner when pipelineAdvanceError is set', () => {
+  it('shows localized error banner when pipelineAdvanceError is set', () => {
     render(
       <AppStateProvider>
         <PipelineHarness pipelineAdvanceError="Network error" />
       </AppStateProvider>,
     );
 
-    expect(screen.getByText(/Advance failed: Network error/)).toBeInTheDocument();
+    expect(screen.getByText((content, node) => node?.textContent === '推进失败：Network error')).toBeInTheDocument();
   });
 
   it('dismiss button clears error', async () => {
@@ -94,18 +95,16 @@ describe('PipelineNavigator', () => {
       </AppStateProvider>,
     );
 
-    expect(screen.getByText(/Advance failed: Test error/)).toBeInTheDocument();
+    const errorBanner = screen.getByText((content, node) => node?.textContent === '推进失败：Test error').parentElement!;
 
-    fireEvent.click(
-      within(screen.getByText(/Advance failed: Test error/).parentElement!).getByText('Dismiss'),
-    );
+    fireEvent.click(within(errorBanner).getByText('关闭'));
 
     await waitFor(() => {
-      expect(screen.queryByText(/Advance failed: Test error/)).toBeNull();
+      expect(screen.queryByText((content, node) => node?.textContent === '推进失败：Test error')).toBeNull();
     });
   });
 
-  it('shows alert on advance failure', async () => {
+  it('shows localized alert on advance failure', async () => {
     vi.mocked(advancePipeline).mockRejectedValue(new Error('Server error'));
     confirmMock.mockReturnValue(true);
 
@@ -115,10 +114,10 @@ describe('PipelineNavigator', () => {
       </AppStateProvider>,
     );
 
-    fireEvent.click(screen.getByText('Characters'));
+    fireEvent.click(screen.getByText('角色创建'));
 
     await waitFor(() => {
-      expect(alertMock).toHaveBeenCalledWith('Pipeline advance failed: Server error');
+      expect(alertMock).toHaveBeenCalledWith('阶段推进失败：Server error');
     });
   });
 });

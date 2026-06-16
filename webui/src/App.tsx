@@ -17,6 +17,7 @@ import ChapterReviewBanner from './components/ChapterReviewBanner';
 import ExportDialog from './components/ExportDialog';
 import DesktopBoot from './DesktopBoot';
 import { useSSE } from './hooks/useSSE';
+import { I18nProvider } from './i18n';
 
 function AppInner() {
   const { state, dispatch } = useAppState();
@@ -265,9 +266,11 @@ function AppInner() {
 export default function App() {
   return (
     <DesktopBoot>
-      <AppStateProvider>
-        <AppInner />
-      </AppStateProvider>
+      <I18nProvider>
+        <AppStateProvider>
+          <AppInner />
+        </AppStateProvider>
+      </I18nProvider>
     </DesktopBoot>
   );
 }

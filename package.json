@@ -1,6 +1,7 @@
 {
   "scripts": {
     "desktop:dev": "npm --prefix apps/desktop run dev",
+    "desktop:check": "npm --prefix apps/desktop run check",
     "desktop:build": "npm --prefix apps/desktop run build",
     "desktop:tauri": "npm --prefix apps/desktop run tauri"
   },

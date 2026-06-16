@@ -13,36 +13,37 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { api, formatApiError } from '../api/client';
 import { useAppState } from '../AppState';
+import { useI18n } from '../i18n';
 import styles from './Composer.module.css';
 import { useToast } from './Toast';
 
-const promptModes: Array<{ label: string; Icon: LucideIcon; template: string }> = [
+const promptModes: Array<{ key: string; Icon: LucideIcon; template: string }> = [
   {
-    label: 'Scene',
+    key: 'composer.scene',
     Icon: PenLine,
     template:
       'Draft the next scene.\n\nScene goal:\nCharacters present:\nConflict:\nWorld constraints:\nDesired ending beat:',
   },
   {
-    label: 'Character',
+    key: 'composer.character',
     Icon: Feather,
     template:
       'Develop a character voice card.\n\nName:\nRole in story:\nCore desire:\nDeep fear:\nSpeech pattern:\nKnowledge boundary:',
   },
   {
-    label: 'World Rule',
+    key: 'composer.worldRule',
     Icon: Globe2,
     template:
       'Add or refine a world rule.\n\nRule:\nWhy it matters:\nWho knows it:\nExceptions:\nScenes affected:',
   },
   {
-    label: 'Outline',
+    key: 'composer.outline',
     Icon: BookOpen,
     template:
       'Outline the next chapter.\n\nChapter purpose:\nOpening state:\nMajor turns:\nForeshadowing to plant/pay:\nClosing hook:',
   },
   {
-    label: 'Rewrite',
+    key: 'composer.rewrite',
     Icon: WandSparkles,
     template:
       'Rewrite the selected draft.\n\nKeep:\nChange:\nTone:\nContinuity constraints:\nTarget length:',
@@ -51,19 +52,22 @@ const promptModes: Array<{ label: string; Icon: LucideIcon; template: string }> 
 
 export default function Composer() {
   const { state, dispatch } = useAppState();
+  const { t } = useI18n();
   const { showToast } = useToast();
 
   const currentAgent = state.agents.find((a) => a.id === state.agentId);
 
   const placeholder = (() => {
-    if (!currentAgent) return 'Send a message...';
+    if (!currentAgent) return t('composer.placeholder');
     const kind = currentAgent.kind;
-    if (kind === 'god' || kind === '0') return 'Send instructions as God...';
-    if (kind === 'individual' || kind === 'group' || kind === '5' || kind === '6')
-      return `Speak as ${currentAgent.display_name || currentAgent.name}...`;
-    if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4')))
-      return `Query as ${currentAgent.display_name || currentAgent.name}...`;
-    return 'Send a message...';
+    if (kind === 'god' || kind === '0') return t('composer.placeholderGod');
+    if (kind === 'individual' || kind === 'group' || kind === '5' || kind === '6') {
+      return t('composer.placeholderCharacter');
+    }
+    if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4'))) {
+      return t('composer.placeholderManager');
+    }
+    return t('composer.placeholder');
   })();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -98,7 +102,7 @@ export default function Composer() {
     async (msg: string) => {
       if (!msg || sending) return;
       if (!state.sessionId) {
-        showToast('Waiting for session...', 'info');
+        showToast('正在等待会话建立...', 'info');
         return;
       }
       setSending(true);
@@ -178,8 +182,8 @@ export default function Composer() {
 
   return (
     <div className={styles.area}>
-      <div className={styles.modeRail} aria-label="Creative prompt modes">
-        <div className={styles.runModeToggle} role="group" aria-label="Run mode">
+      <div className={styles.modeRail} aria-label="创作提示模式">
+        <div className={styles.runModeToggle} role="group" aria-label="运行模式">
           <button
             type="button"
             className={runMode === 'single' ? styles.runModeActive : styles.runModeBtn}
@@ -187,7 +191,7 @@ export default function Composer() {
             disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
           >
             <Send size={13} aria-hidden="true" strokeWidth={2.3} />
-            Single
+            {t('composer.single')}
           </button>
           <button
             type="button"
@@ -196,27 +200,27 @@ export default function Composer() {
             disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
           >
             <UsersRound size={13} aria-hidden="true" strokeWidth={2.3} />
-            Delegate
+            {t('composer.delegate')}
           </button>
         </div>
-        {promptModes.map(({ label, Icon, template }) => (
+        {promptModes.map(({ key, Icon, template }) => (
           <button
-            key={label}
+            key={key}
             type="button"
             className={styles.modeBtn}
             onClick={() => insertMode(template)}
             disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
-            title={`Insert ${label} prompt`}
+            title={t(key)}
           >
             <Icon size={14} aria-hidden="true" strokeWidth={2.3} />
-            {label}
+            {t(key)}
           </button>
         ))}
       </div>
       {runMode === 'delegate' && (
-        <div className={styles.delegatePanel} aria-label="Delegate run options">
+        <div className={styles.delegatePanel} aria-label="Delegate 运行选项">
           <div className={styles.delegateGroup}>
-            <span>Pattern</span>
+            <span>模式</span>
             <div className={styles.choiceRow}>
               {availablePatterns.map((pattern) => (
                 <button
@@ -232,7 +236,7 @@ export default function Composer() {
             </div>
           </div>
           <label className={styles.delegateField}>
-            <span>Aggregation</span>
+            <span>汇总方式</span>
             <select value={aggregation} onChange={(e) => setAggregation(e.target.value)}>
               <option value="all_results">all_results</option>
               <option value="consensus">consensus</option>
@@ -240,7 +244,7 @@ export default function Composer() {
             </select>
           </label>
           <div className={styles.delegateGroup}>
-            <span>Agents</span>
+            <span>Agent</span>
             <div className={styles.agentChoices}>
               {state.agents.length === 0 ? (
                 <span className={styles.delegateHint}>当前世界没有可选 Agent。</span>
@@ -265,7 +269,7 @@ export default function Composer() {
           ref={ref}
           className={styles.input}
           data-testid="composer-input"
-          aria-label="Type a message"
+          aria-label="输入消息"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
@@ -278,10 +282,10 @@ export default function Composer() {
             className={styles.cancelBtn}
             onClick={cancel}
             data-testid="cancel-btn"
-            aria-label="Cancel run"
+            aria-label="取消运行"
           >
             <Square size={14} aria-hidden="true" strokeWidth={2.4} />
-            Cancel
+            {t('composer.cancel')}
           </button>
         ) : (
           <button
@@ -289,36 +293,25 @@ export default function Composer() {
             onClick={send}
             disabled={sending || !text.trim()}
             data-testid="send-btn"
-            aria-label="Send message"
+            aria-label="发送消息"
           >
             <Send size={14} aria-hidden="true" strokeWidth={2.4} />
-            {runMode === 'delegate' ? 'Start Delegate' : 'Send'}
+            {runMode === 'delegate' ? t('composer.startDelegate') : t('composer.send')}
           </button>
         )}
       </div>
       <div className={styles.feedbackRow}>
-        <button
-          className={styles.feedbackBtn}
-          onClick={() => doSend('继续写')}
-        >
+        <button className={styles.feedbackBtn} onClick={() => doSend('继续写')}>
           继续写
         </button>
-        <button
-          className={styles.feedbackBtn}
-          onClick={() => doSend('改一下')}
-        >
+        <button className={styles.feedbackBtn} onClick={() => doSend('改一下')}>
           改一下
         </button>
-        <button
-          className={styles.feedbackBtn}
-          onClick={() => doSend('说说想法')}
-        >
+        <button className={styles.feedbackBtn} onClick={() => doSend('说说想法')}>
           说说想法
         </button>
       </div>
-      <div className={styles.hint}>
-        Enter &middot; send &nbsp;|&nbsp; Shift+Enter &middot; newline
-      </div>
+      <div className={styles.hint}>{t('composer.hint')}</div>
     </div>
   );
 }
