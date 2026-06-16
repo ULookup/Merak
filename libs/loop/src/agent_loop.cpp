@@ -63,6 +63,8 @@ std::future<AgentResponse> AgentLoop::run(
             tool_failure_streak_.clear();
             turn_guard_.reset();
             stall_detector_.reset();
+            consecutive_read_only_rounds_ = 0;
+            consecutive_world_query_rounds_ = 0;
             consecutive_content_avoidance_ = 0;
 
             return run_loop(control);
@@ -72,6 +74,10 @@ std::future<AgentResponse> AgentLoop::run(
 std::future<AgentResponse> AgentLoop::resume(RunControl& control) {
     return std::async(std::launch::async,
         [this, &control]() -> AgentResponse {
+            // Detector state is cleared on resume (fresh turn starts).
+            // Counter fields (consecutive_read_only_rounds_ etc.) are
+            // intentionally preserved — they track behavior across the
+            // full session, not per-run.
             tool_failure_streak_.clear();
             turn_guard_.reset();
             stall_detector_.reset();
@@ -127,6 +133,11 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         std::vector<ToolCall> accumulated_tool_calls;
 
+        // Snapshot: if LLM streaming fails mid-flight, chunks already emitted
+        // via the callback would be duplicated by the retry. Save and restore
+        // the pre-attempt text length so only the successful response is kept.
+        const auto text_len_before_attempt = response.text.size();
+
         auto llm_future = llm_->chat(req,
             [&](StreamChunk chunk) {
                 auto token = control.cancellation_token();
@@ -145,6 +156,9 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
                 llm_response = llm_future.get();
                 break;
             } catch (const std::exception& e) {
+                // Restore text to pre-attempt state so retry doesn't duplicate
+                // partial chunks already emitted by the failed future.
+                response.text.resize(text_len_before_attempt);
                 attempt++;
                 int http_status = 0;
                 std::string msg = e.what();
@@ -631,10 +645,8 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
 void AgentLoop::maybe_compact(RunControl& control) {
     if (!config_.enable_compaction) return;
 
-    int total_tokens = 0;
-    for (auto& msg : session_history_) {
-        total_tokens += static_cast<int>(msg.content.size() / 3.5);
-    }
+    TokenCounter counter(config_.default_model);
+    int total_tokens = counter.count(session_history_);
 
     // Microcompact is handled by ContextOptimizer during pipeline assembly.
     // Here we trigger LLM-based compaction when token pressure is high.
