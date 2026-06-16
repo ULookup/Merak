@@ -3051,6 +3051,7 @@ std::future<ToolResult> DelegateToWriterTool::execute(ToolCall call, ToolExecuti
 
             if (!exec_ctx.world_id.empty()) sub_loop.set_active_world_id(exec_ctx.world_id);
             if (!exec_ctx.scene_id.empty()) sub_loop.set_active_scene_id(exec_ctx.scene_id);
+            if (!exec_ctx.caller_agent_id.empty()) sub_loop.set_caller_agent_id(exec_ctx.caller_agent_id);
 
             NullRunControl control;
             auto response = sub_loop.run(material_package, control).get();
