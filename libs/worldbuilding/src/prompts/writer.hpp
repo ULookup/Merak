@@ -8,11 +8,18 @@
 namespace merak::worldbuilding::prompts {
 
 inline std::string load_writer_prompt(const std::filesystem::path& prompts_dir = "config/prompts") {
-    std::ifstream file(prompts_dir / "worldbuilding" / "writer.md");
-    if (!file.is_open()) return "";
-    std::ostringstream ss;
-    ss << file.rdbuf();
-    return ss.str();
+    static std::string cached;
+    static bool loaded = false;
+    if (!loaded) {
+        std::ifstream file(prompts_dir / "worldbuilding" / "writer.md");
+        if (file.is_open()) {
+            std::ostringstream ss;
+            ss << file.rdbuf();
+            cached = ss.str();
+        }
+        loaded = true;
+    }
+    return cached;
 }
 
 } // namespace merak::worldbuilding::prompts

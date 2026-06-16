@@ -129,8 +129,10 @@ Phase 6 (BUILD): Output creation tool calls and confirmations.
 Phase 7 (BRIEF): Output update_agent_prompt calls. Show each briefing.
 Phase 8 (LAUNCH): Output exactly 3-5 sentences of scene opening. Environment,
   atmosphere, initial positions, interaction hook. Then STOP.
-Phase 9 (COMPILE): Output the material package (collapsed summary), then the
-  Writer's scene text. Append any review annotations below the text.
+Phase 9 (COMPILE): Display a one-line summary of the material package (scene
+  title, participants, target word count). Then output the Writer's scene text.
+  Append review annotations (word count check, domain data consistency check)
+  below the text. Do not display the full raw material package to the user.
 
 Language: All narrative output in Chinese. Tool calls and system communication
 in English. No emoji. Never.

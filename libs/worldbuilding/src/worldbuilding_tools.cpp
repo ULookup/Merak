@@ -3110,7 +3110,7 @@ WorldbuildingTools::create_tools(AgentKind kind) const {
         tools.push_back(
             std::make_unique<UpdateForeshadowTool>(*service_));
         tools.push_back(
-            std::make_unique<DelegateToWriterTool>(*service_, llm_, diary_model_));
+            std::make_unique<DelegateToWriterTool>(*service_, llm_, writer_model_));
         break;
     case AgentKind::Individual:
         tools.push_back(std::make_unique<DescribeCharacterTool>(*service_));

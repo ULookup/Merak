@@ -676,10 +676,12 @@ public:
     WorldbuildingTools(WorldbuildingService& service,
                        std::shared_ptr<LlmProvider> llm = nullptr,
                        int compression_threshold = 20,
-                       std::string diary_model = "")
+                       std::string diary_model = "",
+                       std::string writer_model = "claude-sonnet-4-6")
         : service_(&service), llm_(std::move(llm)),
           compression_threshold_(compression_threshold),
-          diary_model_(std::move(diary_model)) {}
+          diary_model_(std::move(diary_model)),
+          writer_model_(std::move(writer_model)) {}
 
     std::vector<ToolSpec> specs_for(AgentKind kind) const;
     std::vector<std::unique_ptr<Tool>>
@@ -690,6 +692,7 @@ private:
     std::shared_ptr<LlmProvider> llm_;
     int compression_threshold_ = 20;
     std::string diary_model_;
+    std::string writer_model_;
 };
 
 } // namespace merak::worldbuilding
