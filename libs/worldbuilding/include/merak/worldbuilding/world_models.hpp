@@ -17,7 +17,8 @@ enum class AgentKind {
     FactionManager,
     RelationManager,
     Individual,
-    Group
+    Group,
+    Writer
 };
 enum class ChapterStatus { Outline, Drafting, Completed, Revised };
 enum class SceneStatus { Draft, Writing, Completed };
@@ -28,9 +29,53 @@ enum class SecretStatus { Active, Exposed, Abandoned };
 enum class NarrativeTemplate { ThreeAct, FourAct, HerosJourney, Freeform };
 enum class KnowledgeState { Public, Secret, Unknown };
 
+struct StyleProfile {
+    std::string name = "自然文学风格";
+    std::string description = "自然、流畅的中文文学叙事，注重细节描写和情感表达";
+    int target_word_count_min = 800;
+    int target_word_count_max = 2000;
+    std::string default_pov = "third_person_close";
+    std::vector<std::string> taboos = {
+        "不使用 emoji",
+        "不使用网络用语",
+        "不过度使用形容词堆砌"
+    };
+    std::string example_passage;
+};
+
+inline void to_json(nlohmann::json& j, const StyleProfile& p) {
+    j = nlohmann::json{
+        {"name", p.name},
+        {"description", p.description},
+        {"target_word_count_min", p.target_word_count_min},
+        {"target_word_count_max", p.target_word_count_max},
+        {"default_pov", p.default_pov},
+        {"taboos", p.taboos},
+        {"example_passage", p.example_passage}
+    };
+}
+
+inline void from_json(const nlohmann::json& j, StyleProfile& p) {
+    if (j.contains("name")) j.at("name").get_to(p.name);
+    if (j.contains("description")) j.at("description").get_to(p.description);
+    if (j.contains("target_word_count_min")) j.at("target_word_count_min").get_to(p.target_word_count_min);
+    if (j.contains("target_word_count_max")) j.at("target_word_count_max").get_to(p.target_word_count_max);
+    if (j.contains("default_pov")) j.at("default_pov").get_to(p.default_pov);
+    if (j.contains("taboos")) j.at("taboos").get_to(p.taboos);
+    if (j.contains("example_passage")) j.at("example_passage").get_to(p.example_passage);
+}
+
 struct WorldMeta {
     std::string id, name, description, created_at, updated_at;
+    nlohmann::json config;
 };
+
+inline StyleProfile world_style_profile(const WorldMeta& meta) {
+    if (meta.config.contains("style_profile")) {
+        return meta.config["style_profile"].get<StyleProfile>();
+    }
+    return StyleProfile{};
+}
 
 struct WorldKnowledge {
     std::string id, category, content, created_at;
@@ -289,6 +334,8 @@ inline std::string to_string(AgentKind value) {
         return "individual";
     case AgentKind::Group:
         return "group";
+    case AgentKind::Writer:
+        return "writer";
     }
     return "individual";
 }

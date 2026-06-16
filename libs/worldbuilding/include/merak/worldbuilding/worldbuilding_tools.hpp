@@ -550,6 +550,27 @@ private:
     WorldbuildingService* svc_;
 };
 
+class DelegateToWriterTool : public Tool {
+public:
+    DelegateToWriterTool(WorldbuildingService& svc,
+                         std::shared_ptr<LlmProvider> llm,
+                         std::string default_model = "claude-sonnet-4-6")
+        : svc_(&svc), llm_(std::move(llm)),
+          default_model_(std::move(default_model)) {}
+    ToolSpec spec() const override;
+    ToolMeta meta() const override;
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<DelegateToWriterTool>(*svc_, llm_, default_model_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return true; }
+private:
+    WorldbuildingService* svc_;
+    std::shared_ptr<LlmProvider> llm_;
+    std::string default_model_;
+};
+
 // ====== RelationManager Tools ======
 
 class QuerySubgraphTool : public Tool {
@@ -655,10 +676,12 @@ public:
     WorldbuildingTools(WorldbuildingService& service,
                        std::shared_ptr<LlmProvider> llm = nullptr,
                        int compression_threshold = 20,
-                       std::string diary_model = "")
+                       std::string diary_model = "",
+                       std::string writer_model = "claude-sonnet-4-6")
         : service_(&service), llm_(std::move(llm)),
           compression_threshold_(compression_threshold),
-          diary_model_(std::move(diary_model)) {}
+          diary_model_(std::move(diary_model)),
+          writer_model_(std::move(writer_model)) {}
 
     std::vector<ToolSpec> specs_for(AgentKind kind) const;
     std::vector<std::unique_ptr<Tool>>
@@ -669,6 +692,7 @@ private:
     std::shared_ptr<LlmProvider> llm_;
     int compression_threshold_ = 20;
     std::string diary_model_;
+    std::string writer_model_;
 };
 
 } // namespace merak::worldbuilding
