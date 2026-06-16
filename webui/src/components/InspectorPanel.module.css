@@ -502,6 +502,20 @@
   text-transform: uppercase;
 }
 
+.fileDirtyBadge {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 7px;
+  border: 1px solid rgba(183, 121, 31, 0.28);
+  border-radius: 5px;
+  background: var(--amber-soft);
+  color: var(--brand-strong);
+  font-size: 10px;
+  font-weight: 820;
+  line-height: 1;
+  padding: 5px 6px;
+}
+
 .fileToolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 88px;
@@ -580,6 +594,9 @@
 }
 
 .editorHeader span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--muted-strong);
   background: var(--surface-muted);
   border: 1px solid var(--border);
@@ -588,6 +605,37 @@
   font-size: 10px;
   font-weight: 700;
   padding: 4px 6px;
+}
+
+.editorStatus {
+  min-height: 23px;
+}
+
+.editorHeader .editorStatusDirty {
+  border-color: rgba(183, 121, 31, 0.28);
+  background: var(--amber-soft);
+  color: var(--brand-strong);
+}
+
+.editorHeader .editorStatusSaved {
+  border-color: rgba(15, 118, 110, 0.24);
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--teal);
+}
+
+.editorHeader .editorStatusError {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: var(--ruby);
+}
+
+.editorMeta {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 1.4;
 }
 
 .editor {
@@ -612,12 +660,58 @@
   gap: 10px;
 }
 
+.editorButtonGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-strong);
+  color: var(--muted-strong);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 720;
+  padding: 8px 10px;
+  transition:
+    transform var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    opacity var(--duration-fast) var(--ease);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.secondaryButton:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.secondaryButton:disabled {
+  cursor: default;
+  opacity: 0.46;
+  transform: none;
+}
+
 .editorActions span {
   min-width: 0;
   color: var(--muted);
   font-size: 11px;
   font-weight: 680;
   overflow-wrap: anywhere;
+}
+
+.editorActions .editorErrorText {
+  color: var(--ruby);
 }
 
 .thread small,
@@ -648,6 +742,16 @@
 
   .editorHeader {
     flex-direction: column;
+  }
+
+  .editorActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .editorButtonGroup {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }
 

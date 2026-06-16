@@ -13,62 +13,66 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { api, formatApiError } from '../api/client';
 import { useAppState } from '../AppState';
-import { useI18n } from '../i18n';
 import styles from './Composer.module.css';
 import { useToast } from './Toast';
 
-const promptModes: Array<{ key: string; Icon: LucideIcon; template: string }> = [
+const promptModes: Array<{ label: string; Icon: LucideIcon; template: string }> = [
   {
-    key: 'composer.scene',
+    label: 'Scene',
     Icon: PenLine,
     template:
       'Draft the next scene.\n\nScene goal:\nCharacters present:\nConflict:\nWorld constraints:\nDesired ending beat:',
   },
   {
-    key: 'composer.character',
+    label: 'Character',
     Icon: Feather,
     template:
       'Develop a character voice card.\n\nName:\nRole in story:\nCore desire:\nDeep fear:\nSpeech pattern:\nKnowledge boundary:',
   },
   {
-    key: 'composer.worldRule',
+    label: 'World Rule',
     Icon: Globe2,
     template:
       'Add or refine a world rule.\n\nRule:\nWhy it matters:\nWho knows it:\nExceptions:\nScenes affected:',
   },
   {
-    key: 'composer.outline',
+    label: 'Outline',
     Icon: BookOpen,
     template:
       'Outline the next chapter.\n\nChapter purpose:\nOpening state:\nMajor turns:\nForeshadowing to plant/pay:\nClosing hook:',
   },
   {
-    key: 'composer.rewrite',
+    label: 'Rewrite',
     Icon: WandSparkles,
     template:
       'Rewrite the selected draft.\n\nKeep:\nChange:\nTone:\nContinuity constraints:\nTarget length:',
   },
 ];
 
+const feedbackPrompts = [
+  { label: '继续写', template: '继续写下一段，保持当前语气和节奏。' },
+  { label: '改一下', template: '请改写上一段，让表达更清晰、更有画面感。' },
+  { label: '说说想法', template: '先说说你的创作判断，再给出下一步建议。' },
+];
+
 export default function Composer() {
   const { state, dispatch } = useAppState();
-  const { t } = useI18n();
   const { showToast } = useToast();
-
   const currentAgent = state.agents.find((a) => a.id === state.agentId);
 
   const placeholder = (() => {
-    if (!currentAgent) return t('composer.placeholder');
+    if (!currentAgent) return 'Send a message...';
     const kind = currentAgent.kind;
-    if (kind === 'god' || kind === '0') return t('composer.placeholderGod');
+    if (kind === 'god' || kind === '0') return 'Send instructions as God...';
     if (kind === 'individual' || kind === 'group' || kind === '5' || kind === '6') {
-      return t('composer.placeholderCharacter');
+      return `Speak as ${currentAgent.display_name || currentAgent.name}...`;
     }
     if (kind && (kind.includes('manager') || (kind >= '1' && kind <= '4'))) {
-      return t('composer.placeholderManager');
+      return `Query as ${currentAgent.display_name || currentAgent.name}...`;
     }
-    return t('composer.placeholder');
+    return 'Send a message...';
   })();
+
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [runMode, setRunMode] = useState<'single' | 'delegate'>('single');
@@ -80,6 +84,10 @@ export default function Composer() {
   const availablePatterns = state.metadata?.delegation_patterns?.length
     ? state.metadata.delegation_patterns
     : ['fan_out', 'sequential', 'pipeline'];
+
+  const busy = state.status !== 'idle' && state.status !== 'waiting_approval';
+  const isRunning =
+    state.currentRun !== null && state.status !== 'idle' && state.status !== 'waiting_approval';
 
   function toggleAgent(agentId: string) {
     setSelectedAgentIds((current) =>
@@ -98,75 +106,68 @@ export default function Composer() {
     }
   }, [state.currentRun]);
 
-  const doSend = useCallback(
-    async (msg: string) => {
-      if (!msg || sending) return;
-      if (!state.sessionId) {
-        showToast('正在等待会话建立...', 'info');
-        return;
-      }
-      setSending(true);
-
-      try {
-        if (runMode === 'delegate') {
-          const agents = selectedAgentIds.length
-            ? selectedAgentIds
-            : state.agentId
-              ? [state.agentId]
-              : [];
-          if (agents.length === 0) {
-            showToast('请选择至少一个 Agent。', 'info');
-            return;
-          }
-          const res = await api.startDelegation(
-            state.sessionId,
-            delegationPattern,
-            agents,
-            msg,
-            aggregation,
-          );
-          dispatch({ type: 'SET_CURRENT_RUN', runId: res.parent_run_id });
-          dispatch({
-            type: 'APPEND_MESSAGE',
-            message: {
-              id: `delegation_${Date.now()}`,
-              kind: 'system',
-              text: `Delegate 已启动：${delegationPattern} · ${agents.length} Agent`,
-            },
-          });
-          showToast('Delegate Run 已启动。', 'success');
-        } else {
-          await api.startRun(state.sessionId, msg, state.selectedModel);
-        }
-      } catch (e) {
-        showToast(formatApiError(e), 'error');
-      } finally {
-        setSending(false);
-      }
-    },
-    [
-      aggregation,
-      delegationPattern,
-      dispatch,
-      runMode,
-      selectedAgentIds,
-      sending,
-      showToast,
-      state.agentId,
-      state.sessionId,
-      state.selectedModel,
-    ],
-  );
-
   const send = useCallback(async () => {
     const msg = text.trim();
-    if (!msg) return;
+    if (!msg || sending) return;
+    if (!state.sessionId) {
+      showToast('Waiting for session...', 'info');
+      return;
+    }
     setText('');
-    await doSend(msg);
-  }, [text, doSend]);
+    setSending(true);
 
-  const isRunning =
-    state.currentRun !== null && state.status !== 'idle' && state.status !== 'waiting_approval';
+    try {
+      if (runMode === 'delegate') {
+        const agents = selectedAgentIds.length
+          ? selectedAgentIds
+          : state.agentId
+            ? [state.agentId]
+            : [];
+        if (agents.length === 0) {
+          showToast('Select at least one agent before starting a delegate run.', 'info');
+          setText(msg);
+          return;
+        }
+        const res = await api.startDelegation(
+          state.sessionId,
+          delegationPattern,
+          agents,
+          msg,
+          aggregation,
+        );
+        dispatch({ type: 'SET_CURRENT_RUN', runId: res.parent_run_id });
+        dispatch({
+          type: 'APPEND_MESSAGE',
+          message: {
+            id: `delegation_${Date.now()}`,
+            kind: 'system',
+            text: `Delegate started: ${delegationPattern} / ${agents.length} agent${
+              agents.length === 1 ? '' : 's'
+            }`,
+          },
+        });
+        showToast('Delegate run started.', 'success');
+      } else {
+        await api.startRun(state.sessionId, msg, state.selectedModel);
+      }
+    } catch (e) {
+      showToast(formatApiError(e), 'error');
+    } finally {
+      setSending(false);
+    }
+  }, [
+    aggregation,
+    delegationPattern,
+    dispatch,
+    runMode,
+    selectedAgentIds,
+    sending,
+    showToast,
+    state.agentId,
+    state.sessionId,
+    state.selectedModel,
+    text,
+  ]);
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -182,45 +183,46 @@ export default function Composer() {
 
   return (
     <div className={styles.area}>
-      <div className={styles.modeRail} aria-label="创作提示模式">
-        <div className={styles.runModeToggle} role="group" aria-label="运行模式">
+      <div className={styles.modeRail} aria-label="Creative prompt modes">
+        <div className={styles.runModeToggle} role="group" aria-label="Run mode">
           <button
             type="button"
             className={runMode === 'single' ? styles.runModeActive : styles.runModeBtn}
             onClick={() => setRunMode('single')}
-            disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
+            disabled={busy}
           >
             <Send size={13} aria-hidden="true" strokeWidth={2.3} />
-            {t('composer.single')}
+            Single
           </button>
           <button
             type="button"
             className={runMode === 'delegate' ? styles.runModeActive : styles.runModeBtn}
             onClick={() => setRunMode('delegate')}
-            disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
+            disabled={busy}
           >
             <UsersRound size={13} aria-hidden="true" strokeWidth={2.3} />
-            {t('composer.delegate')}
+            Delegate
           </button>
         </div>
-        {promptModes.map(({ key, Icon, template }) => (
+        {promptModes.map(({ label, Icon, template }) => (
           <button
-            key={key}
+            key={label}
             type="button"
             className={styles.modeBtn}
             onClick={() => insertMode(template)}
-            disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
-            title={t(key)}
+            disabled={busy}
+            title={`Insert ${label} prompt`}
           >
             <Icon size={14} aria-hidden="true" strokeWidth={2.3} />
-            {t(key)}
+            {label}
           </button>
         ))}
       </div>
+
       {runMode === 'delegate' && (
-        <div className={styles.delegatePanel} aria-label="Delegate 运行选项">
+        <div className={styles.delegatePanel} aria-label="Delegate run options">
           <div className={styles.delegateGroup}>
-            <span>模式</span>
+            <span>Pattern</span>
             <div className={styles.choiceRow}>
               {availablePatterns.map((pattern) => (
                 <button
@@ -236,7 +238,7 @@ export default function Composer() {
             </div>
           </div>
           <label className={styles.delegateField}>
-            <span>汇总方式</span>
+            <span>Aggregation</span>
             <select value={aggregation} onChange={(e) => setAggregation(e.target.value)}>
               <option value="all_results">all_results</option>
               <option value="consensus">consensus</option>
@@ -244,10 +246,10 @@ export default function Composer() {
             </select>
           </label>
           <div className={styles.delegateGroup}>
-            <span>Agent</span>
+            <span>Agents</span>
             <div className={styles.agentChoices}>
               {state.agents.length === 0 ? (
-                <span className={styles.delegateHint}>当前世界没有可选 Agent。</span>
+                <span className={styles.delegateHint}>No agents are available in this world.</span>
               ) : (
                 state.agents.map((agent) => (
                   <label key={agent.id} className={styles.agentChoice}>
@@ -264,28 +266,29 @@ export default function Composer() {
           </div>
         </div>
       )}
+
       <div className={styles.box}>
         <textarea
           ref={ref}
           className={styles.input}
           data-testid="composer-input"
-          aria-label="输入消息"
+          aria-label="Type a message"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
           rows={2}
-          disabled={state.status !== 'idle' && state.status !== 'waiting_approval'}
+          disabled={busy}
         />
         {isRunning ? (
           <button
             className={styles.cancelBtn}
             onClick={cancel}
             data-testid="cancel-btn"
-            aria-label="取消运行"
+            aria-label="Cancel run"
           >
             <Square size={14} aria-hidden="true" strokeWidth={2.4} />
-            {t('composer.cancel')}
+            Cancel
           </button>
         ) : (
           <button
@@ -293,25 +296,27 @@ export default function Composer() {
             onClick={send}
             disabled={sending || !text.trim()}
             data-testid="send-btn"
-            aria-label="发送消息"
+            aria-label="Send message"
           >
             <Send size={14} aria-hidden="true" strokeWidth={2.4} />
-            {runMode === 'delegate' ? t('composer.startDelegate') : t('composer.send')}
+            {runMode === 'delegate' ? 'Start Delegate' : 'Send'}
           </button>
         )}
       </div>
-      <div className={styles.feedbackRow}>
-        <button className={styles.feedbackBtn} onClick={() => doSend('继续写')}>
-          继续写
-        </button>
-        <button className={styles.feedbackBtn} onClick={() => doSend('改一下')}>
-          改一下
-        </button>
-        <button className={styles.feedbackBtn} onClick={() => doSend('说说想法')}>
-          说说想法
-        </button>
+      <div className={styles.feedbackRow} aria-label="快捷反馈">
+        {feedbackPrompts.map((prompt) => (
+          <button
+            key={prompt.label}
+            type="button"
+            className={styles.feedbackBtn}
+            onClick={() => insertMode(prompt.template)}
+            disabled={busy}
+          >
+            {prompt.label}
+          </button>
+        ))}
       </div>
-      <div className={styles.hint}>{t('composer.hint')}</div>
+      <div className={styles.hint}>Enter &middot; send &nbsp;|&nbsp; Shift+Enter &middot; newline</div>
     </div>
   );
 }

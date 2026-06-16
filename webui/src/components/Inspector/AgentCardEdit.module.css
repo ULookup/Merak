@@ -2,25 +2,39 @@
   padding: 16px;
   overflow-y: auto;
   max-height: 100%;
+  background: var(--surface);
 }
 
 .header {
   margin-bottom: 16px;
 }
 
+.header span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .header h3 {
   margin: 0;
   font-size: 16px;
+  color: var(--ink);
+  line-height: 1.25;
 }
 
 .conflictBanner {
   padding: 10px 14px;
   margin-bottom: 14px;
-  background: #5a2a2a;
-  border: 1px solid #a44;
-  border-radius: 6px;
-  color: #fcc;
+  background: var(--ruby-soft);
+  border: 1px solid rgba(190, 18, 60, 0.22);
+  border-radius: 8px;
+  color: var(--ruby);
   font-size: 13px;
+  line-height: 1.45;
 }
 
 .form {
@@ -36,25 +50,33 @@
 }
 
 .field span {
+  font-weight: 700;
   font-size: 12px;
-  color: var(--text-secondary, #888);
+  color: var(--muted-strong);
 }
 
 .field input,
 .field textarea {
-  padding: 8px 10px;
-  border: 1px solid var(--border-color, #444);
-  border-radius: 4px;
-  background: var(--input-bg, #1a1a2e);
-  color: var(--text-primary, #ddd);
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-strong);
+  color: var(--ink);
   font-size: 13px;
   font-family: inherit;
+  line-height: 1.45;
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease);
 }
 
 .field input:focus,
 .field textarea:focus {
   outline: none;
-  border-color: var(--accent, #66f);
+  background: var(--surface);
+  border-color: var(--border-strong);
+  box-shadow: var(--ring);
 }
 
 .actions {
@@ -66,12 +88,24 @@
 
 .actions button {
   padding: 8px 16px;
-  border: 1px solid var(--border-color, #444);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-primary, #ddd);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
   cursor: pointer;
   font-size: 13px;
+  font-weight: 750;
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease),
+    opacity var(--duration-fast) var(--ease);
+}
+
+.actions button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--surface-muted);
+  transform: translateY(-1px);
 }
 
 .actions button:disabled {
@@ -80,6 +114,20 @@
 }
 
 .saveBtn {
-  background: var(--accent, #36f) !important;
-  border-color: var(--accent, #36f) !important;
+  background: var(--ink) !important;
+  border-color: var(--ink) !important;
+  color: #fff !important;
+}
+
+.saveBtn:hover:not(:disabled) {
+  background: var(--ink-soft) !important;
+  border-color: var(--ink-soft) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .field input,
+  .field textarea,
+  .actions button {
+    transition: none;
+  }
 }
