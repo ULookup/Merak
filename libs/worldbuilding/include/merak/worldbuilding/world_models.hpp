@@ -56,8 +56,8 @@ inline void to_json(nlohmann::json& j, const StyleProfile& p) {
 }
 
 inline void from_json(const nlohmann::json& j, StyleProfile& p) {
-    j.at("name").get_to(p.name);
-    j.at("description").get_to(p.description);
+    if (j.contains("name")) j.at("name").get_to(p.name);
+    if (j.contains("description")) j.at("description").get_to(p.description);
     if (j.contains("target_word_count_min")) j.at("target_word_count_min").get_to(p.target_word_count_min);
     if (j.contains("target_word_count_max")) j.at("target_word_count_max").get_to(p.target_word_count_max);
     if (j.contains("default_pov")) j.at("default_pov").get_to(p.default_pov);
