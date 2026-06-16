@@ -9,6 +9,12 @@
 #include <merak/llm_provider.hpp>
 #include <merak/worldbuilding/extraction_service.hpp>
 #include <merak/worldbuilding/ids.hpp>
+#include <merak/agent_loop.hpp>
+#include <merak/tool_registry.hpp>
+#include <merak/token_counter.hpp>
+#include <merak/compactor.hpp>
+#include <merak/memory_store.hpp>
+#include "prompts/writer.hpp"
 
 namespace merak::worldbuilding {
 
@@ -2964,6 +2970,104 @@ std::future<ToolResult> UpsertRelationTool::execute(ToolCall call, ToolExecution
     });
 }
 
+// ========== DelegateToWriterTool ==========
+
+ToolSpec DelegateToWriterTool::spec() const {
+    ToolSpec s;
+    s.name = "delegate_to_writer";
+    s.description = R"(Send a structured material package to the Writer Agent to produce polished scene prose. The material package must include: scene outline, character dialogue log, relevant domain data, and writing constraints (style, POV, word count, foreshadowing). Returns the Writer's scene text.)";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "material_package": {"type": "string", "description": "Complete scene material package in markdown format"}
+        },
+        "required": ["material_package"]
+    })";
+    return s;
+}
+
+ToolMeta DelegateToWriterTool::meta() const {
+    ToolMeta m;
+    m.name = "delegate_to_writer";
+    m.description = "Delegate scene prose writing to Writer Agent";
+    m.triggers = {"writer", "prose", "compile", "scene text"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 30;
+    return m;
+}
+
+std::future<ToolResult> DelegateToWriterTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = nlohmann::json::parse(call.arguments);
+            std::string material_package = args.value("material_package", "");
+
+            if (material_package.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "delegate_to_writer requires material_package parameter");
+                return result;
+            }
+
+            auto& tool = static_cast<DelegateToWriterTool&>(*self);
+
+            // Load Writer Agent prompt
+            auto writer_prompt = prompts::load_writer_prompt();
+            if (writer_prompt.empty()) {
+                result.output = error_response(ToolErrorCode::INTERNAL,
+                    "Writer Agent prompt (writer.md) not found");
+                return result;
+            }
+
+            // Create empty tool registry (Writer has zero tools)
+            auto sub_tools = std::make_shared<ToolRegistry>();
+
+            // Create memory store (fresh, no history)
+            auto memory = std::make_shared<MemoryStore>(MemoryConfig{}, nullptr);
+
+            // Create token counter and compactor
+            auto counter = std::make_shared<TokenCounter>();
+            auto comp = std::make_shared<Compactor>(tool.llm_, counter);
+
+            // Configure Writer Agent loop
+            AgentLoop::Config cfg;
+            cfg.system_prompt = writer_prompt;
+            cfg.max_turns = 1;           // Single-turn: Writer has no tools
+            cfg.default_model = tool.default_model_;
+            cfg.max_output_tokens = 8192; // Allow room for full scene prose
+            cfg.model_max_tokens = 128000;
+            cfg.enable_compaction = false;
+            cfg.enable_cache = true;
+
+            // Create sub-loop (no worldbuilding service needed — Writer has no tools)
+            AgentLoop sub_loop(cfg, tool.llm_, sub_tools, memory, comp,
+                               nullptr,  // no WorldbuildingService needed
+                               nullptr); // no skills registry needed
+
+            if (!exec_ctx.world_id.empty()) sub_loop.set_active_world_id(exec_ctx.world_id);
+            if (!exec_ctx.scene_id.empty()) sub_loop.set_active_scene_id(exec_ctx.scene_id);
+
+            NullRunControl control;
+            auto response = sub_loop.run(material_package, control).get();
+
+            result.output = ok_response({{"scene_text", response.text}});
+            result.is_error = false;
+
+        } catch (const std::exception& e) {
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("Writer Agent failed: ") + e.what());
+            result.is_error = true;
+        }
+
+        return result;
+    });
+}
+
 // ========== WorldbuildingTools Factory ==========
 
 std::vector<ToolSpec> WorldbuildingTools::specs_for(AgentKind kind) const {
@@ -3004,6 +3108,8 @@ WorldbuildingTools::create_tools(AgentKind kind) const {
             std::make_unique<AddRelationTool>(*service_));
         tools.push_back(
             std::make_unique<UpdateForeshadowTool>(*service_));
+        tools.push_back(
+            std::make_unique<DelegateToWriterTool>(*service_, llm_, diary_model_));
         break;
     case AgentKind::Individual:
         tools.push_back(std::make_unique<DescribeCharacterTool>(*service_));
