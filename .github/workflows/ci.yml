@@ -46,15 +46,18 @@ jobs:
 
       - name: Configure Conan profile
         run: |
+          PROFILE=~/.conan2/profiles/default
           if [ "${{ matrix.compiler }}" = "gcc" ]; then
-            conan profile set settings.compiler=gcc default
-            conan profile set settings.compiler.version=14 default
-            conan profile set settings.compiler.libcxx=libstdc++11 default
+            sed -i 's/^compiler=.*/compiler=gcc/' "$PROFILE"
+            sed -i 's/^compiler\.version=.*/compiler.version=14/' "$PROFILE"
+            grep -q '^compiler\.libcxx=' "$PROFILE" && sed -i 's/^compiler\.libcxx=.*/compiler.libcxx=libstdc++11/' "$PROFILE" || echo 'compiler.libcxx=libstdc++11' >> "$PROFILE"
           else
-            conan profile set settings.compiler=clang default
-            conan profile set settings.compiler.version=18 default
-            conan profile set settings.compiler.libcxx=libstdc++ default
+            sed -i 's/^compiler=.*/compiler=clang/' "$PROFILE"
+            sed -i 's/^compiler\.version=.*/compiler.version=18/' "$PROFILE"
+            grep -q '^compiler\.libcxx=' "$PROFILE" && sed -i 's/^compiler\.libcxx=.*/compiler.libcxx=libstdc++/' "$PROFILE" || echo 'compiler.libcxx=libstdc++' >> "$PROFILE"
           fi
+          echo "=== Profile ==="
+          cat "$PROFILE"
 
       - name: Cache Conan
         uses: actions/cache@v4
