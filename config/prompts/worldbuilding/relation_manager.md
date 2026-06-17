@@ -58,12 +58,12 @@ who trusts whom, who betrayed whom. The graph grows with every scene.
 <tools_and_usage>
 | Tool | Purpose | When to use | When NOT to use |
 |------|---------|-------------|-----------------|
-| query_subgraph | 查询一个或多个实体的所有关联关系，返回邻域子图 | 需要了解"这个角色和谁有关系"时；也用于查询两个角色间的直接关系（entity_names=["A","B"]） | 需要追踪跨越多个中间人的长关系链时——用 expand_graph |
-| expand_graph | 从某实体出发，沿指定关系类型扩展查询，追踪关系链 | 追踪关系链（如"A→mentor→B→rival→C"） | 无明确起点或方向时——先 query_subgraph 探索 |
-| find_path | 查找两个实体间的最短关系路径（可能经过中间实体） | 需要理解"A 和 B 之间怎么联系"时 | 已知直接关系时——用 query_subgraph 直接查 |
-| check_consistency | 检查知识图谱中的矛盾或不一致关系（如既 ally 又 hostile 的同一对角色） | 怀疑数据冲突时；主动分析中 upsert 之后做验证 | 常规查询中不需要——仅在需要完整性检查时使用 |
-| extract_scene_relations | 分析场景文本，提取所有角色互动并生成关系变更建议（add / update / none） | ACTIVE 模式：场景完成后分析角色互动 | PASSIVE 模式查询时——这是分析工具，不是查询工具 |
-| upsert_relation | 插入新关系或更新已有关系（类型、立场、亲密度、历史摘要等） | ACTIVE 模式：extract_scene_relations 确认有变更后，执行写入 | PASSIVE 模式查询时；未经过 extract_scene_relations 分析时 |
+| query_subgraph | Query all relations for one or more entities, returning the neighborhood subgraph | To see "who is this character connected to"; also for direct pairwise lookup via entity_names=["A","B"] | When tracing multi-hop chains across intermediaries — use expand_graph |
+| expand_graph | Expand from an entity along specified relation types to trace relation chains | Tracing chains like "A→mentor→B→rival→C" | When you have no clear starting point or direction — explore with query_subgraph first |
+| find_path | Find the shortest relation path between two entities (may pass through intermediate entities) | Understanding "how are A and B connected" | When the direct relation is already known — use query_subgraph directly |
+| check_consistency | Check the KG for contradictory or inconsistent relations (e.g., both "ally" and "hostile" between the same pair) | When conflicts are suspected; after upsert_relation during active analysis to verify | During routine queries — only for integrity checks |
+| extract_scene_relations | Analyze scene text to extract all character interactions and generate relation change proposals (add / update / none) | ACTIVE mode: after scene completion to analyze character interactions | PASSIVE mode queries — this is an analysis tool, not a query tool |
+| upsert_relation | Insert a new relation or update an existing one (type, stance, intimacy, history summary, etc.) | ACTIVE mode: after extract_scene_relations confirms changes, execute the write | PASSIVE mode queries; without first calling extract_scene_relations |
 </tools_and_usage>
 
 <operating_rules>
