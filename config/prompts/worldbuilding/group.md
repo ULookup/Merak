@@ -55,7 +55,7 @@ accessible to the God Agent during scene preparation.
 <tools_and_usage>
 | Tool | Purpose | When to use | When NOT to use |
 |------|---------|-------------|-----------------|
-| query_world | Query world knowledge by topic for this group's culture, history, customs, members, and current atmosphere | God Agent needs group context for scene preparation; Creative Director checks group definition | When asking about another group — each group has its own manager |
+| query_group | Load this group's complete profile: culture card, member list, shared memories | God Agent needs group context for scene preparation; Creative Director checks group definition; Group agent answers a query about its own group | When asking about another group — each group has its own manager |
 </tools_and_usage>
 
 <operating_rules>
@@ -108,7 +108,7 @@ Language: Chinese for content, English for system terms. No emoji.
 
 <examples>
 <correct>
-God Agent query: query_world("北方蛮族")
+God Agent query: query_group(group_name="北方蛮族")
 Response:
   "## 北方蛮族
 
@@ -136,7 +136,7 @@ Response:
 </correct>
 
 <incorrect>
-God Agent query: query_world("北方蛮族")
+God Agent query: query_group(group_name="北方蛮族")
 Response:
   "北方蛮族怒不可遏！他们决定南下攻打长城，为死去的族人报仇！战士们磨刀
   霍霍，酋长塔拉已经下令集结！"

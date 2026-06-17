@@ -391,15 +391,38 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
         }
     }
 
-    // Group manager — cultural context layer
+    // Group managers — cultural context layer, one per group
     {
-        auto kind = AgentKind::Group;
-        auto instances = tools_factory.create_tools(kind);
-        std::string key = to_string(kind);
-        for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
-        auto gp_prompt = prompts::load_group_prompt(prompts_dir_);
-        if (!gp_prompt.empty()) {
-            prep.behavior_constraints[key] = gp_prompt;
+        auto gp_prompt_template = prompts::load_group_prompt(prompts_dir_);
+
+        try {
+            auto all_agents = agents_.list_agents(world_id);
+            for (const auto& ag : all_agents) {
+                if (ag.kind != AgentKind::Group) continue;
+
+                auto instances = tools_factory.create_tools(AgentKind::Group);
+                for (auto& t : instances) {
+                    prep.tools_by_agent_id[ag.id].push_back(t->spec());
+                }
+
+                if (!gp_prompt_template.empty()) {
+                    std::string prompt = gp_prompt_template;
+                    size_t pos = 0;
+                    while ((pos = prompt.find("{{agent.name}}", pos)) != std::string::npos) {
+                        prompt.replace(pos, 15, ag.name);
+                        pos += ag.name.length();
+                    }
+                    prep.behavior_constraints[ag.id] = prompt;
+                }
+            }
+        } catch (...) {
+            // Fallback: single shared key for backward compatibility
+            auto instances = tools_factory.create_tools(AgentKind::Group);
+            std::string key = to_string(AgentKind::Group);
+            for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
+            if (!gp_prompt_template.empty()) {
+                prep.behavior_constraints[key] = gp_prompt_template;
+            }
         }
     }
 

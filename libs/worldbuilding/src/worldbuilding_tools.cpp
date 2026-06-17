@@ -1911,6 +1911,101 @@ std::future<ToolResult> QueryWorldTool::execute(ToolCall call, ToolExecutionCont
     });
 }
 
+// ========== QueryGroupTool ==========
+
+ToolSpec QueryGroupTool::spec() const {
+    ToolSpec s;
+    s.name = "query_group";
+    s.description = R"(Query a cultural group's complete profile: culture card, member list, shared memories, and atmosphere. Each Group agent manages one group — call query_group without arguments to load your own group's data, or pass group_name to query a specific group. Example: query_group() or query_group(group_name="北方蛮族"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "group_name": {"type": "string", "description": "Optional group name to query. If omitted, uses the calling agent's own group."}
+        },
+        "required": []
+    })";
+    return s;
+}
+
+ToolMeta QueryGroupTool::meta() const {
+    ToolMeta m;
+    m.name = "query_group";
+    m.description = "Query a group's culture card, members, and shared memories";
+    m.triggers = {"group", "culture", "query group", "group profile"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> QueryGroupTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = json::parse(call.arguments);
+            std::string group_name = args.value("group_name", "");
+
+            auto& svc = *static_cast<QueryGroupTool&>(*self).svc_;
+            std::string group_agent_id;
+
+            if (!group_name.empty()) {
+                // Search for group by name
+                auto agents = svc.agents().list_agents(exec_ctx.world_id);
+                for (const auto& ag : agents) {
+                    if (ag.kind == AgentKind::Group && ag.name == group_name) {
+                        group_agent_id = ag.id;
+                        break;
+                    }
+                }
+                if (group_agent_id.empty()) {
+                    result.output = error_response(ToolErrorCode::NOT_FOUND,
+                        "No group found with name '" + group_name + "'.");
+                    return result;
+                }
+            } else if (!exec_ctx.caller_agent_id.empty()) {
+                group_agent_id = exec_ctx.caller_agent_id;
+            } else {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "Provide group_name or call from within a Group agent context.");
+                return result;
+            }
+
+            auto group = svc.agents().load_group(group_agent_id);
+            auto agent = svc.agents().get_agent(group_agent_id);
+
+            // Resolve member names
+            json members = json::array();
+            for (const auto& mid : group.member_agent_ids) {
+                auto m = svc.agents().get_agent(mid);
+                members.push_back({
+                    {"agent_id", mid},
+                    {"name", m ? m->name : mid}
+                });
+            }
+
+            json data{
+                {"group_id", group_agent_id},
+                {"name", agent ? agent->name : group_agent_id},
+                {"culture_card", group.culture_card_markdown},
+                {"members", members},
+                {"member_count", group.member_agent_ids.size()},
+                {"shared_memory_ids", group.shared_memory_ids}
+            };
+            result.output = ok_response(data);
+
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("query_group internal error: ") + e.what());
+        }
+        return result;
+    });
+}
+
 // ========== UpdateAgentPromptTool ==========
 
 ToolSpec UpdateAgentPromptTool::spec() const {
@@ -3140,7 +3235,7 @@ WorldbuildingTools::create_tools(AgentKind kind) const {
         tools.push_back(std::make_unique<UpsertRelationTool>(*service_));
         break;
     case AgentKind::Group:
-        tools.push_back(std::make_unique<QueryWorldTool>(*service_));
+        tools.push_back(std::make_unique<QueryGroupTool>(*service_));
         break;
     case AgentKind::Writer:
         break;
