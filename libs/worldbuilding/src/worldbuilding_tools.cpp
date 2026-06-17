@@ -116,7 +116,7 @@ std::future<ToolResult> DescribeCharacterTool::execute(ToolCall call, ToolExecut
 ToolSpec SearchMyDiaryTool::spec() const {
     ToolSpec s;
     s.name = "search_my_diary";
-    s.description = R"(Search your own diary entries by keyword. Returns up to 5 matching entries with scene_name, world_time, and a content snippet (max 100 chars). Query must be at least 2 characters. Example: search_my_diary(童年))";
+    s.description = R"(Search your own diary entries by keyword. Returns up to 10 matching entries with scene_name, world_time, diary_id, and a content snippet (max 100 chars). Query must be at least 2 characters. Example: search_my_diary(童年))";
     s.source = "builtin";
     s.parameters_json = R"({
         "type": "object",
@@ -157,7 +157,7 @@ std::future<ToolResult> SearchMyDiaryTool::execute(ToolCall call, ToolExecutionC
 
             auto& svc = *static_cast<SearchMyDiaryTool&>(*self).svc_;
 
-            auto entries = svc.agents().search_diary(exec_ctx.caller_agent_id, query, 5);
+            auto entries = svc.agents().search_diary(exec_ctx.caller_agent_id, query, 10);
             if (entries.empty()) {
                 result.output = error_response(ToolErrorCode::EMPTY_RESULT,
                     "在你的日记中没有找到与 '" + query + "' 相关的内容。尝试更宽泛的词语。");
@@ -167,6 +167,7 @@ std::future<ToolResult> SearchMyDiaryTool::execute(ToolCall call, ToolExecutionC
             json arr = json::array();
             for (auto& e : entries) {
                 arr.push_back({
+                    {"diary_id", e.id},
                     {"scene_name", e.scene_id},
                     {"world_time", e.world_time},
                     {"content_snippet", make_snippet(e.content, 100)}
@@ -3361,6 +3362,8 @@ WorldbuildingTools::create_tools(AgentKind kind) const {
         tools.push_back(std::make_unique<LookAroundTool>(*service_));
         tools.push_back(std::make_unique<WriteMyDiaryTool>(*service_));
         tools.push_back(std::make_unique<CompressMyMemoryTool>(*service_, llm_, compression_threshold_, diary_model_));
+        tools.push_back(std::make_unique<ReadDiaryEntryTool>(*service_));
+        tools.push_back(std::make_unique<BrowseDiaryRangeTool>(*service_));
         break;
     case AgentKind::MapManager:
         tools.push_back(std::make_unique<QueryMapTool>(*service_));
