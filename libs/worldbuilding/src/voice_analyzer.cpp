@@ -27,7 +27,7 @@ int count_words(const std::string& text) {
 bool ends_with_question(const std::string& text) {
     auto trimmed = text;
     while (!trimmed.empty() && std::isspace(trimmed.back())) trimmed.pop_back();
-    return !trimmed.empty() && trimmed.back() == '？';
+    return trimmed.ends_with("？");
 }
 
 // Simple Chinese modifier words
@@ -111,9 +111,9 @@ nlohmann::json compute_tone_profile(const std::vector<std::string>& turns) {
         auto t = turn;
         while (!t.empty() && std::isspace(t.back())) t.pop_back();
         if (t.empty()) continue;
-        if (t.back() == '！') exclamation++;
-        else if (t.back() == '？') question++;
-        else if (t.back() == '…') ellipsis++;
+        if (t.ends_with("！")) exclamation++;
+        else if (t.ends_with("？")) question++;
+        else if (t.ends_with("…")) ellipsis++;
     }
 
     return nlohmann::json::object({

@@ -117,9 +117,9 @@ Foreshadowing detect_foreshadow_proposal(const std::string& markdown) {
             for (auto& p : weak_signals)
                 if (sentence.find(p) != std::string::npos) score += 1;
             // Questions suggest unresolved threads
-            if (sentence.find('？') != std::string::npos || sentence.find('?') != std::string::npos) score += 1;
+            if (sentence.find("？") != std::string::npos || sentence.find('?') != std::string::npos) score += 1;
             // Interrupted dialogue
-            if (sentence.find("——") != std::string::npos && sentence.find('？') == std::string::npos) score += 1;
+            if (sentence.find("——") != std::string::npos && sentence.find("？") == std::string::npos) score += 1;
 
             if (score > best_score) {
                 best_score = score;
