@@ -21,7 +21,10 @@ namespace merak::kg { class KnowledgeGraphProvider; }
 
 namespace merak::worldbuilding {
 
-struct DiaryCompactionResult;
+struct DiaryCompactionResult {
+    bool compressed = false;
+    std::string summary_id;
+};
 
 class WorldbuildingService;
 

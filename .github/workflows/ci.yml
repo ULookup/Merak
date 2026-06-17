@@ -33,7 +33,7 @@ jobs:
         if: matrix.compiler == 'clang'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq clang-18
+          sudo apt-get install -y -qq clang-18 libc++-18-dev libc++abi-18-dev
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/clang-18 100
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/clang++-18 100
           echo "CC=clang-18" >> $GITHUB_ENV
@@ -57,7 +57,7 @@ jobs:
           else
             sed -i 's/^compiler=.*/compiler=clang/' "$PROFILE"
             sed -i 's/^compiler\.version=.*/compiler.version=18/' "$PROFILE"
-            grep -q '^compiler\.libcxx=' "$PROFILE" && sed -i 's/^compiler\.libcxx=.*/compiler.libcxx=libstdc++/' "$PROFILE" || echo 'compiler.libcxx=libstdc++' >> "$PROFILE"
+            grep -q '^compiler\.libcxx=' "$PROFILE" && sed -i 's/^compiler\.libcxx=.*/compiler.libcxx=libc++/' "$PROFILE" || echo 'compiler.libcxx=libc++' >> "$PROFILE"
           fi
           grep -q '^compiler\.cppstd=' "$PROFILE" && sed -i 's/^compiler\.cppstd=.*/compiler.cppstd=23/' "$PROFILE" || echo 'compiler.cppstd=23' >> "$PROFILE"
           echo "=== Profile ==="

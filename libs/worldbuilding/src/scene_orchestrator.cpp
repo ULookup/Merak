@@ -524,11 +524,6 @@ SceneOrchestrator::route_direct_message(const std::string& world_id,
     return view;
 }
 
-struct DiaryCompactionResult {
-    bool compressed = false;
-    std::string summary_id;
-};
-
 std::future<DiaryCompactionResult> SceneOrchestrator::compact_agent_diaries(const std::string& agent_id) {
     return std::async(std::launch::async, [this, agent_id]() -> DiaryCompactionResult {
         DiaryCompactionResult result;
