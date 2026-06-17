@@ -1,7 +1,7 @@
-import { AlertTriangle, BookOpen, Clock3, Flag, GitBranch, KeyRound, Plus, Users } from 'lucide-react';
+import { AlertTriangle, BookOpen, ChevronRight, Clock3, Edit3, Flag, GitBranch, KeyRound, Plus, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
-import type { DiaryEntry, StoryScene, WorldDetail } from '../../api/types';
+import type { DiaryEntry, StoryChapter, StoryScene, WorldDetail } from '../../api/types';
 import { useAppState } from '../../AppState';
 import styles from '../InspectorPanel.module.css';
 import CreateForeshadowingModal from './CreateForeshadowingModal';
@@ -78,6 +78,10 @@ export default function StoryInspector() {
   const [showCreateSecret, setShowCreateSecret] = useState(false);
   const [showCreateScene, setShowCreateScene] = useState(false);
   const [worldDetail, setWorldDetail] = useState<WorldDetail | null>(null);
+  const [chapters, setChapters] = useState<StoryChapter[]>([]);
+  const [chaptersLoading, setChaptersLoading] = useState(false);
+  const [newWorldTime, setNewWorldTime] = useState('');
+  const [advancingTime, setAdvancingTime] = useState(false);
 
   useEffect(() => {
     if (!state.worldId) {
@@ -87,6 +91,21 @@ export default function StoryInspector() {
     api.getWorldDetail(state.worldId)
       .then((res) => setWorldDetail(res.world))
       .catch(() => setWorldDetail(null));
+  }, [state.worldId, state.storyVersion]);
+
+  useEffect(() => {
+    if (!state.worldId) return;
+    let cancelled = false;
+    setChaptersLoading(true);
+    api.listChapters(state.worldId)
+      .then((res) => {
+        if (!cancelled) setChapters(res.chapters ?? []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setChaptersLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [state.worldId, state.storyVersion]);
 
   const activeScene = (() => {
@@ -183,19 +202,42 @@ export default function StoryInspector() {
             </span>
           </div>
         )}
-        <div className={styles.timeUnavailable}>
+        <div className={styles.timeAdvance}>
           <div>
-            <strong>World time control</strong>
-            <span>{state.worldTime ? `Current: ${state.worldTime}` : 'Time not set'}</span>
+            <strong>世界时间</strong>
+            <span>{state.worldTime ? `当前：${state.worldTime}` : '时间未设定'}</span>
           </div>
-          <button
-            className={styles.ghostButton}
-            disabled
-            title="Backend endpoint not available yet: /time/advance"
-          >
-            <Clock3 size={14} aria-hidden="true" />
-            Advance unavailable
-          </button>
+          <div className={styles.timeAdvanceRow}>
+            <input
+              className={styles.timeInput}
+              type="text"
+              value={newWorldTime}
+              onChange={(e) => setNewWorldTime(e.target.value)}
+              placeholder="例如：第三章·清晨"
+              disabled={advancingTime}
+            />
+            <button
+              className={styles.ghostButton}
+              disabled={advancingTime || !newWorldTime.trim()}
+              onClick={async () => {
+                if (!state.worldId || !newWorldTime.trim()) return;
+                setAdvancingTime(true);
+                try {
+                  await api.advanceWorldTime(state.worldId, newWorldTime.trim());
+                  dispatch({ type: 'SET_STORY_VERSION' });
+                  setNewWorldTime('');
+                } catch {
+                  // Error handled by toast/global error
+                } finally {
+                  setAdvancingTime(false);
+                }
+              }}
+              title="推进世界时间"
+            >
+              <Clock3 size={14} aria-hidden="true" />
+              {advancingTime ? '推进中...' : '推进时间'}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -363,6 +405,55 @@ export default function StoryInspector() {
             <div className={styles.secret} key={item.id}>
               <strong>{item.title ?? item.content ?? item.id}</strong>
               <small>{item.public_version ?? item.stakes ?? item.truth ?? statusLabel(item.status)}</small>
+            </div>
+          ))
+        )}
+      </section>
+
+      {/* Chapters List */}
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <div className={styles.sectionTitle}>
+            <BookOpen size={14} aria-hidden="true" />
+            章节目录
+          </div>
+        </div>
+        {chaptersLoading ? (
+          <p className={styles.muted}>加载中...</p>
+        ) : chapters.length === 0 ? (
+          <p className={styles.muted}>暂无章节。</p>
+        ) : (
+          chapters.map((ch) => (
+            <div
+              className={styles.thread}
+              key={ch.id}
+              style={{ cursor: 'pointer' }}
+              onClick={() =>
+                dispatch({
+                  type: 'OPEN_CHAPTER_EDITOR',
+                  chapterId: ch.id,
+                  chapterTitle: `第${ch.number}章 ${ch.title}`,
+                })
+              }
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter')
+                  dispatch({
+                    type: 'OPEN_CHAPTER_EDITOR',
+                    chapterId: ch.id,
+                    chapterTitle: `第${ch.number}章 ${ch.title}`,
+                  });
+              }}
+            >
+              <span>
+                <Edit3 size={12} aria-hidden="true" style={{ marginRight: 6 }} />
+                第{ch.number}章 {ch.title}
+              </span>
+              <small>
+                {ch.status?.replace(/_/g, ' ') ?? 'draft'} · {ch.scene_count} 个场景
+                <ChevronRight size={12} aria-hidden="true" style={{ marginLeft: 4 }} />
+              </small>
             </div>
           ))
         )}

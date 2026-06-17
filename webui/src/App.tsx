@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { api } from './api/client';
 import styles from './App.module.css';
 import { AppStateProvider, useAppState, type AppState } from './AppState';
@@ -12,6 +13,8 @@ import { ToastProvider } from './components/Toast';
 import WorldDashboard from './components/WorldDashboard';
 import WorldOnboarding from './components/WorldOnboarding';
 import WorldSidebar from './components/WorldSidebar';
+import SettingsPage from './components/SettingsPage';
+import ChapterEditor from './components/ChapterEditor';
 import SetupWizard from './components/SetupWizard';
 import ChapterReviewBanner from './components/ChapterReviewBanner';
 import ExportDialog from './components/ExportDialog';
@@ -52,11 +55,12 @@ function AppInner() {
         dispatch({ type: 'SHOW_SETUP_WIZARD', show: true });
       }
 
-      const [metadataRes, worldsRes, sessionsRes, capabilitiesRes] = await Promise.allSettled([
+      const [metadataRes, worldsRes, sessionsRes, capabilitiesRes, prefsRes] = await Promise.allSettled([
         api.metadata(),
         api.listWorlds(),
         api.listSessions(),
         api.capabilities(),
+        api.getPreferences(),
       ]);
 
       if (metadataRes.status === 'fulfilled') {
@@ -73,6 +77,15 @@ function AppInner() {
           type: 'SET_CAPABILITIES',
           capabilities: capabilitiesRes.value.capabilities,
           fallback: capabilitiesRes.value.fallback,
+        });
+      }
+      if (prefsRes.status === 'fulfilled' && prefsRes.value) {
+        dispatch({
+          type: 'SET_USER_PREFERENCES',
+          prefs: {
+            default_genre: prefsRes.value.default_genre ?? '',
+            preferred_style: prefsRes.value.preferred_style ?? '轻松',
+          },
         });
       }
 
@@ -205,7 +218,34 @@ function AppInner() {
 
   const connState = useSSE(sseUrl, dispatch, state.lastSeq);
 
-  // Phase-based rendering
+  // Page-based rendering (overrides phase when navigating away from workbench)
+  if (state.currentPage === 'settings') {
+    return <SettingsPage />;
+  }
+
+  if (state.currentPage === 'editor' && state.activeEditorChapterId && state.worldId) {
+    return (
+      <div className={styles.editorOverlay}>
+        <div className={styles.editorHeader}>
+          <button
+            className={styles.editorBackBtn}
+            onClick={() => dispatch({ type: 'SET_PAGE', page: 'workbench' })}
+          >
+            <ArrowLeft size={15} aria-hidden="true" strokeWidth={2.3} />
+            返回工作台
+          </button>
+          <h1 className={styles.editorTitle}>
+            {state.activeEditorChapterTitle || '章节编辑'}
+          </h1>
+        </div>
+        <div className={styles.editorBody}>
+          <ChapterEditor chapterId={state.activeEditorChapterId} worldId={state.worldId} />
+        </div>
+      </div>
+    );
+  }
+
+  // Phase-based rendering (workbench page)
   if (!bootstrapped || state.appPhase === 'loading') {
     return <Skeleton />;
   }

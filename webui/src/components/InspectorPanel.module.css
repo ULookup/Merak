@@ -1192,3 +1192,51 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.timeAdvance {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--surface-muted);
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.timeAdvance strong {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.timeAdvance span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.timeAdvanceRow {
+  display: flex;
+  gap: 6px;
+}
+
+.timeInput {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.timeInput:focus {
+  outline: none;
+  border-color: var(--ink);
+  box-shadow: var(--ring);
+}
+
+.timeInput:disabled {
+  opacity: 0.5;
+}

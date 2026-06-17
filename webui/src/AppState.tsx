@@ -20,6 +20,7 @@ import type {
 } from './api/types';
 
 export type InspectorTab = 'story' | 'files' | 'agents' | 'run' | 'creation';
+export type AppPage = 'workbench' | 'settings' | 'editor';
 export type WorldbuildingStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface GeneratedFileEntry {
@@ -40,6 +41,9 @@ export interface RunTimelineItem {
 
 export interface AppState {
   appPhase: 'loading' | 'no_world' | 'no_agent' | 'ready';
+  currentPage: AppPage;
+  activeEditorChapterId: string | null;
+  activeEditorChapterTitle: string;
   agentId: string | null;
   sessionId: string;
   lastSeq: number;
@@ -105,6 +109,9 @@ export interface AppState {
 
 export const initialState: AppState = {
   appPhase: 'loading',
+  currentPage: 'workbench',
+  activeEditorChapterId: null,
+  activeEditorChapterTitle: '',
   agentId: null,
   sessionId: '',
   lastSeq: 0,
@@ -312,7 +319,10 @@ export type Action =
   | { type: 'SHOW_SETUP_WIZARD'; show: boolean }
   | { type: 'SET_CHAPTER_REVIEW'; review: ChapterReviewItem | null }
   | { type: 'SET_SHOW_EXPORT_DIALOG'; show: boolean }
-  | { type: 'SET_USER_PREFERENCES'; prefs: { default_genre: string; preferred_style: string } };
+  | { type: 'SET_USER_PREFERENCES'; prefs: { default_genre: string; preferred_style: string } }
+  | { type: 'SET_PAGE'; page: AppPage }
+  | { type: 'OPEN_CHAPTER_EDITOR'; chapterId: string; chapterTitle: string }
+  | { type: 'SET_PIPELINE_AUTO_ADVANCE'; value: boolean };
 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -717,6 +727,20 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'SET_USER_PREFERENCES':
       return { ...state, userPreferences: action.prefs };
+
+    case 'SET_PAGE':
+      return { ...state, currentPage: action.page };
+
+    case 'OPEN_CHAPTER_EDITOR':
+      return {
+        ...state,
+        currentPage: 'editor',
+        activeEditorChapterId: action.chapterId,
+        activeEditorChapterTitle: action.chapterTitle,
+      };
+
+    case 'SET_PIPELINE_AUTO_ADVANCE':
+      return { ...state, pipelineAutoAdvance: action.value };
 
     default:
       return state;

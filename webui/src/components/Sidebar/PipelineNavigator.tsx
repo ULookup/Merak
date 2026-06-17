@@ -111,11 +111,19 @@ export default function PipelineNavigator() {
       )}
       <div className={styles.titleRow}>
         <span className={styles.title}>故事流水线</span>
-        {state.pipelineAutoAdvance !== undefined && (
-          <span className={state.pipelineAutoAdvance ? styles.badgeAuto : styles.badgeManual}>
-            {state.pipelineAutoAdvance ? '自动' : '手动'}
-          </span>
-        )}
+        <button
+          type="button"
+          className={state.pipelineAutoAdvance ? styles.badgeAuto : styles.badgeManual}
+          onClick={() =>
+            dispatch({
+              type: 'SET_PIPELINE_AUTO_ADVANCE',
+              value: !state.pipelineAutoAdvance,
+            })
+          }
+          title={state.pipelineAutoAdvance ? '点击切换为手动推进' : '点击切换为自动推进'}
+        >
+          {state.pipelineAutoAdvance ? '自动' : '手动'}
+        </button>
       </div>
       <div className={styles.phases}>
         {PHASES.map((p, i) => {
