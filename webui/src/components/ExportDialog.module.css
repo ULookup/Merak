@@ -98,7 +98,7 @@
   margin-top: 12px;
   padding: 10px;
   border-radius: 6px;
-  background: var(--surface-alt);
-  color: #ef4444;
+  background: var(--surface-muted);
+  color: var(--ruby);
   font-size: 0.9rem;
 }

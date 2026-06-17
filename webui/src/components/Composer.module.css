@@ -220,7 +220,6 @@
   border-radius: 7px;
   padding: 7px;
   box-shadow: var(--shadow-md);
-  backdrop-filter: blur(12px);
   transform-origin: 50% 100%;
   transition:
     border-color var(--duration-med) var(--ease),
@@ -339,20 +338,30 @@
 }
 
 .feedbackBtn {
-  padding: 4px 12px;
-  font-size: 0.85rem;
+  padding: 5px 10px;
+  font-size: 12px;
   border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--surface-alt);
-  color: var(--text);
+  border-radius: var(--rounded-md);
+  background: var(--surface-strong);
+  color: var(--muted-strong);
   cursor: pointer;
-  transition: background 0.15s;
+  font-weight: 680;
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
 }
 
 .feedbackBtn:hover {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.feedbackBtn:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .hint {

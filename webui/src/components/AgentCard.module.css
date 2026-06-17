@@ -54,7 +54,7 @@
   font-size: 12px;
   font-weight: 850;
   background: var(--ink);
-  color: #fff;
+  color: var(--surface);
   border: none;
   border-radius: 7px;
   cursor: pointer;

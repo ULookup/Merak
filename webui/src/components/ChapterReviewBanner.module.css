@@ -94,7 +94,7 @@
 
 .error {
   font-size: 0.85rem;
-  color: #ef4444;
+  color: var(--ruby);
   text-align: center;
   padding: 8px 0;
 }

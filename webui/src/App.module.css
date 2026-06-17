@@ -47,7 +47,6 @@
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.82);
   box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(18px);
   animation: workspaceIn 560ms var(--ease-spring);
 }
 
