@@ -81,60 +81,130 @@ export class ApiError extends Error {
   }
 }
 
-export function formatApiError(error: unknown, fallback = '操作失败，请稍后重试。') {
+export function formatApiError(
+  error: unknown,
+  fallback = '操作失败，请稍后重试。',
+  t?: (key: string) => string,
+) {
   if (error instanceof ApiError) {
-    // Worldbuilding — world
-    if (error.code === 'world_not_found') return '世界不存在或已被删除。';
-    if (error.code === 'world_create_failed') return '创建世界失败，请检查名称是否重复。';
-    if (error.code === 'world_name_required') return '世界名称不能为空。';
+    if (t && error.code) {
+      const key = `error.${error.code}`;
+      const translated = t(key);
+      if (translated !== key) return translated;
+    }
+    switch (error.code) {
+      case 'version_conflict':
+        return '内容已在后端更新，请刷新后再保存。';
+      case 'file_conflict':
+        return '文件已被其他操作修改，请刷新后再保存。';
+      case 'session_not_found':
+        return '会话不存在，可能已被删除或归档。';
+      case 'session_busy':
+        return '会话正在进行中，请等待当前操作完成后再发送消息。';
+      case 'run_not_found':
+        return '运行记录不存在。';
+      case 'approval_not_found':
+        return '审批请求不存在或已过期。';
+      case 'invalid_request':
+        return error.message || '请求格式有误，请检查输入。';
+      case 'invalid_path':
+        return '文件路径不在允许的范围内。';
+      case 'file_not_found':
+        return '文件不存在或已被删除。';
+      case 'unsupported_file_type':
+        return '不支持该文件类型。';
 
-    // Worldbuilding — agent
-    if (error.code === 'agent_not_found') return '角色不存在或已被删除。';
-    if (error.code === 'agent_create_failed') return '创建角色失败，请检查必填字段。';
-    if (error.code === 'agent_version_conflict') return '角色信息已被其他操作更新，请刷新后再试。';
+      // World
+      case 'world_not_found':
+        return '世界不存在或已被删除。';
+      case 'world_create_failed':
+        return '创建世界失败，请检查名称是否重复。';
+      case 'world_name_required':
+        return '世界名称不能为空。';
 
-    // Worldbuilding — scene
-    if (error.code === 'scene_not_found') return '场景不存在或已被删除。';
-    if (error.code === 'scene_create_failed') return '创建场景失败，请确认章节存在。';
-    if (error.code === 'scene_end_failed') return '结束场景失败，场景可能已经结束。';
-    if (error.code === 'scene_status_invalid') return '场景当前状态不支持此操作。';
+      // Agent
+      case 'agent_not_found':
+        return '角色不存在或已被删除。';
+      case 'agent_create_failed':
+        return '创建角色失败，请检查必填字段。';
+      case 'agent_version_conflict':
+        return '角色信息已被其他操作更新，请刷新后再试。';
 
-    // Worldbuilding — chapter
-    if (error.code === 'chapter_not_found') return '章节不存在或已被删除。';
-    if (error.code === 'chapter_update_failed') return '章节更新失败，请刷新后再试。';
+      // Scene
+      case 'scene_not_found':
+        return '场景不存在或已被删除。';
+      case 'scene_create_failed':
+        return '创建场景失败，请确认章节存在。';
+      case 'scene_end_failed':
+        return '结束场景失败，场景可能已经结束。';
+      case 'scene_status_invalid':
+        return '场景当前状态不支持此操作。';
 
-    // Worldbuilding — diary
-    if (error.code === 'information_boundary_leak') return '日记内容包含角色不应知晓的信息，已被信息边界过滤。';
-    if (error.code === 'diary_write_failed') return '日记写入失败，请稍后重试。';
+      // Chapter
+      case 'chapter_not_found':
+        return '章节不存在或已被删除。';
+      case 'chapter_update_failed':
+        return '章节更新失败，请刷新后再试。';
 
-    // Worldbuilding — foreshadowing / secret
-    if (error.code === 'foreshadowing_not_found') return '伏笔不存在或已被删除。';
-    if (error.code === 'secret_not_found') return '秘密不存在或已被删除。';
-    if (error.code === 'secret_status_invalid') return '秘密当前状态不支持此操作。';
+      // Diary
+      case 'information_boundary_leak':
+        return '日记内容包含角色不应知晓的信息，已被信息边界过滤。';
+      case 'diary_write_failed':
+        return '日记写入失败，请稍后重试。';
 
-    // Pipeline
-    if (error.code === 'pipeline_not_available')
-      return '创作流水线暂不可用，请确认后端已启用 worldbuilding pipeline。';
-    if (error.code === 'pipeline_advance_blocked')
-      return '阶段推进被阻止：当前阶段条件未全部满足。请先完成当前阶段的所有要求。';
-    if (error.code === 'pipeline_phase_invalid') return '目标阶段无效，请确认阶段名称正确。';
+      // Foreshadowing / Secret
+      case 'foreshadow_not_found':
+        return '伏笔不存在，可能已被删除。';
+      case 'foreshadowing_not_found':
+        return '伏笔不存在或已被删除。';
+      case 'secret_not_found':
+        return '秘密不存在或已被删除。';
+      case 'secret_status_invalid':
+        return '秘密当前状态不支持此操作。';
 
-    // Image service
-    if (error.code === 'image_service_not_available')
-      return '图片服务未启用，请确认后端 Image Service 已初始化。';
-    if (error.code === 'image_upload_failed') return '图片上传失败，请确认文件格式和大小符合要求。';
-    if (error.code === 'invalid_image_type') return '图片类型必须是头像或人设图。';
-    if (error.code === 'image_not_found') return '图片不存在或已被删除。';
+      // Pipeline
+      case 'pipeline_not_available':
+        return '创作流水线暂不可用，请确认后端已启用 worldbuilding pipeline。';
+      case 'pipeline_advance_blocked':
+        return '阶段推进被阻止：当前阶段条件未全部满足。请先完成当前阶段的所有要求。';
+      case 'pipeline_phase_invalid':
+        return '目标阶段无效，请确认阶段名称正确。';
+      case 'workflow_not_found':
+        return '指定的 Pipeline 工作流不存在。';
 
-    // General
-    if (error.code === 'version_conflict') return '内容已在后端更新，请刷新后再保存。';
-    if (error.code === 'file_conflict') return '文件已被其他操作修改，请刷新后再保存。';
-    if (error.code === 'test_failed') return `连接测试失败：${error.message}`;
-    if (error.code === 'test_unavailable') return '连接测试暂不可用，请检查后端配置。';
+      // Image service
+      case 'image_service_not_available':
+        return '图片服务未启用，请确认后端 Image Service 已初始化。';
+      case 'image_upload_failed':
+        return '图片上传失败，请确认文件格式和大小符合要求。';
+      case 'invalid_image_type':
+        return '图片类型必须是头像或人设图。';
+      case 'image_not_found':
+        return '图片不存在或已被删除。';
 
-    return error.message || fallback;
+      // Config
+      case 'config_load_failed':
+        return '配置加载失败，请检查后端服务状态。';
+      case 'config_save_failed':
+        return '配置保存失败，请稍后重试。';
+      case 'title_generation_failed':
+        return '标题生成失败，请稍后重试。';
+      case 'test_failed':
+        return `连接测试失败：${error.message}`;
+      case 'test_unavailable':
+        return '连接测试暂不可用，请检查后端配置。';
+
+      // General
+      case 'missing_param':
+        return error.message || '缺少必要参数，请检查输入。';
+      case 'database_error':
+        return '数据库操作失败，请稍后重试。';
+
+      default:
+        return error.message || (t ? t('error.unknown') : fallback);
+    }
   }
-  return error instanceof Error ? error.message : fallback;
+  return error instanceof Error ? error.message : (t ? t('error.unknown') : fallback);
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
