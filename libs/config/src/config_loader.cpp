@@ -264,6 +264,8 @@ void ConfigLoader::apply_env_overrides(Config& cfg) {
     if (auto* v = env_str("MERAK_DIARY_MODEL")) cfg.memory.diary_model = v;
     if (auto* v = env_str("MERAK_WRITER_MODEL")) cfg.memory.writer_model = v;
     if (auto* v = env_str("MERAK_COMPACTION_MODEL")) cfg.memory.compaction_model = v;
+    if (auto v = env_int("MERAK_COMPRESSION_TRIGGER_THRESHOLD"))
+        cfg.memory.compression_trigger_threshold = *v;
     if (auto* v = env_str("MERAK_DB_CONNECTION")) cfg.memory.db_connection = v;
     if (auto* v = env_str("MERAK_KG_ENABLED")) cfg.knowledge_graph.enabled = (std::string(v) == "1" || std::string(v) == "true");
     if (auto* v = env_str("MERAK_KG_NEO4J_URI")) cfg.knowledge_graph.neo4j_uri = v;
