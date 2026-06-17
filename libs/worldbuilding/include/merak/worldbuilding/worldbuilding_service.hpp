@@ -96,6 +96,8 @@ public:
     ForeshadowingStore& foreshadowing() noexcept { return foreshadowing_; }
     SecretStore& secrets() noexcept { return secrets_; }
     VoiceAnalyzer& voice() noexcept { return voice_; }
+    SceneOrchestrator& orchestrator() noexcept { return orchestrator_; }
+    const SceneOrchestrator& orchestrator() const noexcept { return orchestrator_; }
 
     // Preview builders (no DB write)
     nlohmann::json build_scene_preview(const std::string& world_id, const nlohmann::json& params);
