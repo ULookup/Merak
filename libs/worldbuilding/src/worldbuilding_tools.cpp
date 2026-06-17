@@ -2084,6 +2084,76 @@ ToolSpec WriteMyDiaryTool::spec() const {
     return s;
 }
 
+// ========== Information Boundary Filter ==========
+
+namespace {
+
+struct BoundaryResult {
+    bool passed = true;
+    std::string reason;
+};
+
+BoundaryResult check_information_boundary(
+    const ToolExecutionContext& exec_ctx,
+    const std::string& content,
+    const std::optional<Scene>& scene_opt,
+    WorldbuildingService& svc)
+{
+    BoundaryResult result;
+    const auto& agent_id = exec_ctx.caller_agent_id;
+
+    // Rule 1: Scene participation check
+    if (scene_opt.has_value()) {
+        bool is_participant = std::find(
+            scene_opt->participant_ids.begin(),
+            scene_opt->participant_ids.end(),
+            agent_id) != scene_opt->participant_ids.end();
+        if (!is_participant) {
+            result.passed = false;
+            result.reason = "你未参与此场景，无法为其写日记。";
+            return result;
+        }
+    }
+
+    // Rule 2: Knowledge scope check
+    if (scene_opt.has_value()) {
+        auto knowledge = svc.secrets().scene_asymmetry(exec_ctx.world_id, *scene_opt);
+        auto it = std::find_if(knowledge.begin(), knowledge.end(),
+            [&](const auto& kv) { return kv.character_id == agent_id; });
+        if (it != knowledge.end()) {
+            std::set<std::string> unknown_holders;
+            for (const auto& secret : it->unknown_secrets) {
+                unknown_holders.insert(secret.holder_id);
+            }
+            for (const auto& holder_id : unknown_holders) {
+                auto holder = svc.agents().get_agent(holder_id);
+                if (holder && content.find(holder->name) != std::string::npos) {
+                    result.passed = false;
+                    result.reason = "日记内容提及了 '" + holder->name
+                        + "'，但你的角色不应知道与其相关的秘密。";
+                    return result;
+                }
+            }
+        }
+    }
+
+    // Rule 3: Secret leak check
+    if (scene_opt.has_value()) {
+        auto risks = svc.secrets().check_leak_risk(exec_ctx.world_id, *scene_opt, content);
+        for (const auto& risk : risks) {
+            if (risk.character_id == agent_id) {
+                result.passed = false;
+                result.reason = "日记内容包含你不应知晓的信息: " + risk.reason;
+                return result;
+            }
+        }
+    }
+
+    return result;
+}
+
+} // anonymous namespace
+
 ToolMeta WriteMyDiaryTool::meta() const {
     ToolMeta m;
     m.name = "write_my_diary";
@@ -2139,6 +2209,19 @@ std::future<ToolResult> WriteMyDiaryTool::execute(ToolCall call, ToolExecutionCo
             std::string world_time;
             auto scene_opt = svc.narrative().get_scene(exec_ctx.world_id, scene_id);
             if (scene_opt) world_time = scene_opt->world_time;
+
+            // 信息边界检查
+            {
+                auto boundary = check_information_boundary(exec_ctx, content, scene_opt, svc);
+                if (!boundary.passed) {
+                    result.is_error = true;
+                    result.output = nlohmann::json{
+                        {"ok", false},
+                        {"error", {{"code", "INFORMATION_BOUNDARY_VIOLATION"}, {"message", boundary.reason}}}
+                    }.dump();
+                    return result;
+                }
+            }
 
             // Check leak risk based on the diary content (spec step 2)
             int leak_risk_level = 0;
