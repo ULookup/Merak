@@ -1,8 +1,9 @@
+import appStyles from '../App.module.css';
 import styles from './Skeleton.module.css';
 
 export default function Skeleton() {
   return (
-    <div className={styles.layout}>
+    <div className={appStyles.layout}>
       {/* Sidebar skeleton */}
       <aside className={styles.sidebar}>
         <div className={styles.sbSection}>
