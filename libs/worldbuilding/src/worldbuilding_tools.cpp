@@ -2259,6 +2259,7 @@ std::future<ToolResult> CompressMyMemoryTool::execute(ToolCall call, ToolExecuti
             auto summary_json = nlohmann::json::parse(llm_response.text);
 
             MemorySummary summary;
+            summary.id = make_id("summary");
             summary.agent_id = agent_id;
             summary.summary = summary_json.value("summary", llm_response.text);
             summary.period_start = diaries.front().world_time;

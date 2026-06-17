@@ -79,6 +79,10 @@ static std::optional<Config> parse_config_file(const std::string& filepath) {
                 cfg.memory.diary_context_limit = mem["diary_context_limit"].get<int>();
             if (mem.contains("diary_max_tokens"))
                 cfg.memory.diary_max_tokens = mem["diary_max_tokens"].get<int>();
+            if (mem.contains("compaction_model"))
+                cfg.memory.compaction_model = mem["compaction_model"].get<std::string>();
+            if (mem.contains("compression_trigger_threshold"))
+                cfg.memory.compression_trigger_threshold = mem["compression_trigger_threshold"].get<int>();
         }
 
         if (j.contains("knowledge_graph")) {
@@ -191,6 +195,10 @@ void ConfigLoader::merge(Config& base, const Config& override_cfg) {
     if (override_cfg.memory.diary_compression_threshold > 0) base.memory.diary_compression_threshold = override_cfg.memory.diary_compression_threshold;
     if (override_cfg.memory.diary_context_limit > 0) base.memory.diary_context_limit = override_cfg.memory.diary_context_limit;
     if (override_cfg.memory.diary_max_tokens > 0) base.memory.diary_max_tokens = override_cfg.memory.diary_max_tokens;
+    if (!override_cfg.memory.compaction_model.empty())
+        base.memory.compaction_model = override_cfg.memory.compaction_model;
+    if (override_cfg.memory.compression_trigger_threshold > 0)
+        base.memory.compression_trigger_threshold = override_cfg.memory.compression_trigger_threshold;
 
     if (override_cfg.knowledge_graph.enabled) base.knowledge_graph.enabled = true;
     if (!override_cfg.knowledge_graph.neo4j_uri.empty()) base.knowledge_graph.neo4j_uri = override_cfg.knowledge_graph.neo4j_uri;
@@ -255,6 +263,7 @@ void ConfigLoader::apply_env_overrides(Config& cfg) {
 
     if (auto* v = env_str("MERAK_DIARY_MODEL")) cfg.memory.diary_model = v;
     if (auto* v = env_str("MERAK_WRITER_MODEL")) cfg.memory.writer_model = v;
+    if (auto* v = env_str("MERAK_COMPACTION_MODEL")) cfg.memory.compaction_model = v;
     if (auto* v = env_str("MERAK_DB_CONNECTION")) cfg.memory.db_connection = v;
     if (auto* v = env_str("MERAK_KG_ENABLED")) cfg.knowledge_graph.enabled = (std::string(v) == "1" || std::string(v) == "true");
     if (auto* v = env_str("MERAK_KG_NEO4J_URI")) cfg.knowledge_graph.neo4j_uri = v;
