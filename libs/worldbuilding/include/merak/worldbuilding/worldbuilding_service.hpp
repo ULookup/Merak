@@ -135,6 +135,8 @@ public:
     // Diary context limit config
     int diary_context_limit() const { return diary_context_limit_; }
     void set_diary_context_limit(int limit) { diary_context_limit_ = limit; }
+    int compression_trigger_threshold() const { return compression_trigger_threshold_; }
+    void set_compression_trigger_threshold(int n) { compression_trigger_threshold_ = n; }
 
     // Chapter review
     struct ForeshadowingItem {
@@ -188,7 +190,8 @@ private:
     void delete_pending_creation(const std::string& creation_id);
 
     std::function<void(std::string, std::string, nlohmann::json)> entity_event_handler_;
-    int diary_context_limit_ = 5;
+    int diary_context_limit_ = 20;
+    int compression_trigger_threshold_ = 5;
 };
 
 } // namespace merak::worldbuilding
