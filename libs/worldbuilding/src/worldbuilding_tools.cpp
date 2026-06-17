@@ -183,6 +183,165 @@ std::future<ToolResult> SearchMyDiaryTool::execute(ToolCall call, ToolExecutionC
     });
 }
 
+// ========== ReadDiaryEntryTool ==========
+
+ToolSpec ReadDiaryEntryTool::spec() const {
+    ToolSpec s;
+    s.name = "read_diary_entry";
+    s.description = R"(Read the full content of a specific diary entry by its diary_id. Use this when you see an interesting entry in the diary index and want to read the full details. Example: read_diary_entry(diary_id="diary_abc123"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "diary_id": {"type": "string", "description": "Diary entry ID from the diary index"}
+        },
+        "required": ["diary_id"]
+    })";
+    return s;
+}
+
+ToolMeta ReadDiaryEntryTool::meta() const {
+    ToolMeta m;
+    m.name = "read_diary_entry";
+    m.description = "Read the full content of a specific diary entry";
+    m.triggers = {"diary", "memory", "read diary", "review"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> ReadDiaryEntryTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = nlohmann::json::parse(call.arguments);
+            std::string diary_id = args.value("diary_id", "");
+
+            if (diary_id.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT, "缺少必填字段：diary_id。");
+                return result;
+            }
+
+            auto& svc = *static_cast<ReadDiaryEntryTool&>(*self).svc_;
+            auto entry = svc.agents().get_diary(diary_id);
+
+            if (!entry.has_value()) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND, "未找到日记条目: " + diary_id);
+                return result;
+            }
+
+            nlohmann::json data{
+                {"diary_id", entry->id},
+                {"scene_id", entry->scene_id},
+                {"world_time", entry->world_time},
+                {"mood", entry->mood},
+                {"content", entry->content},
+                {"created_at", entry->created_at}
+            };
+            result.output = ok_response(data);
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("read_diary_entry 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
+// ========== BrowseDiaryRangeTool ==========
+
+ToolSpec BrowseDiaryRangeTool::spec() const {
+    ToolSpec s;
+    s.name = "browse_diary_range";
+    s.description = R"(Browse diary entries within a world-time date range. Returns a preview list with diary_id, date, and snippet. The from_date and to_date should use world time format like '第3日晨' or '第5日晚'. Example: browse_diary_range(from_date="第1日", to_date="第3日"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "from_date": {"type": "string", "description": "Start date in world time format, e.g. '第3日晨'"},
+            "to_date": {"type": "string", "description": "End date in world time format, e.g. '第5日晚'"},
+            "limit": {"type": "integer", "description": "Max entries to return", "default": 10}
+        },
+        "required": ["from_date", "to_date"]
+    })";
+    return s;
+}
+
+ToolMeta BrowseDiaryRangeTool::meta() const {
+    ToolMeta m;
+    m.name = "browse_diary_range";
+    m.description = "Browse diary entries within a date range";
+    m.triggers = {"diary", "memory", "browse", "timeline"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> BrowseDiaryRangeTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = nlohmann::json::parse(call.arguments);
+            std::string from_str = args.value("from_date", "");
+            std::string to_str = args.value("to_date", "");
+            int limit = args.value("limit", 10);
+
+            if (from_str.empty() || to_str.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "缺少必填字段：from_date 和 to_date。");
+                return result;
+            }
+
+            auto from = WorldTime::parse(from_str);
+            auto to = WorldTime::parse(to_str);
+            if (!from || !to) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "日期格式无效。格式示例：'第3日晨', '第5日晚'");
+                return result;
+            }
+
+            auto& svc = *static_cast<BrowseDiaryRangeTool&>(*self).svc_;
+            const auto& agent_id = exec_ctx.caller_agent_id;
+            auto all_entries = svc.agents().recent_diary_headers(agent_id, 100);
+
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& e : all_entries) {
+                auto entry_time = WorldTime::parse(e.world_time);
+                if (entry_time && *from <= *entry_time && *entry_time <= *to) {
+                    arr.push_back({
+                        {"diary_id", e.id},
+                        {"world_time", e.world_time},
+                        {"mood", e.mood},
+                        {"content_preview", e.content}
+                    });
+                    if ((int)arr.size() >= limit) break;
+                }
+            }
+
+            if (arr.empty()) {
+                result.output = error_response(ToolErrorCode::EMPTY_RESULT,
+                    "在指定范围内没有找到日记。");
+                return result;
+            }
+
+            result.output = ok_response({{"entries", arr}, {"count", arr.size()}});
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("browse_diary_range 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
 // ========== LookAroundTool ==========
 
 ToolSpec LookAroundTool::spec() const {
