@@ -566,6 +566,7 @@ std::future<CompactionResult> SceneOrchestrator::compact_agent_diaries(const std
             auto summary_json = nlohmann::json::parse(llm_response.text);
 
             MemorySummary summary;
+            summary.id = make_id("summary");
             summary.agent_id = agent_id;
             summary.summary = summary_json.value("summary", llm_response.text);
             summary.period_start = diaries.front().world_time;
@@ -578,6 +579,7 @@ std::future<CompactionResult> SceneOrchestrator::compact_agent_diaries(const std
             result.compressed = true;
         } catch (...) {
             MemorySummary summary;
+            summary.id = make_id("summary");
             summary.agent_id = agent_id;
             summary.summary = llm_response.text;
             summary.period_start = diaries.front().world_time;
