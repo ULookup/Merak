@@ -6,6 +6,7 @@
 #include "prompts/character.hpp"
 #include "prompts/creative_director.hpp"
 #include "prompts/domain_manager.hpp"
+#include "prompts/relation_manager.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -368,13 +369,24 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
     // Manager tools and behavior constraints.
     auto dm_prompt = prompts::load_domain_manager_prompt(prompts_dir_);
     for (auto kind : {AgentKind::MapManager, AgentKind::HistoryManager,
-                       AgentKind::MagicSystemManager, AgentKind::FactionManager,
-                       AgentKind::RelationManager}) {
+                       AgentKind::MagicSystemManager, AgentKind::FactionManager}) {
         auto instances = tools_factory.create_tools(kind);
         std::string key = to_string(kind);
         for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
         if (!dm_prompt.empty()) {
             prep.behavior_constraints[key] = dm_prompt;
+        }
+    }
+
+    // RelationManager gets its own prompt with KG tool semantics
+    {
+        auto kind = AgentKind::RelationManager;
+        auto instances = tools_factory.create_tools(kind);
+        std::string key = to_string(kind);
+        for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
+        auto rm_prompt = prompts::load_relation_manager_prompt(prompts_dir_);
+        if (!rm_prompt.empty()) {
+            prep.behavior_constraints[key] = rm_prompt;
         }
     }
 
