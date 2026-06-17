@@ -250,6 +250,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
     // Narrative
     server.Get(R"(/api/worldbuilding/([^/]+)/overview)",
         [this](const auto& req, auto& res) { handle_overview(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/tree)",
+        [this](const auto& req, auto& res) { handle_chapter_tree(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/chapters)",
         [this](const auto& req, auto& res) { handle_list_chapters(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+))",
@@ -781,6 +783,67 @@ void WorldbuildingHttpHandler::handle_list_chapters(const httplib::Request& req,
         json_response(res, {{"ok", true}, {"chapters", arr}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400, "invalid_request");
+    }
+}
+
+void WorldbuildingHttpHandler::handle_chapter_tree(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+
+        if (!service_->worlds().get_world(wid)) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+
+        auto arcs = service_->narrative().list_arcs(wid);
+        auto chapters = service_->narrative().list_chapters(wid);
+
+        // Group chapters by arc_id
+        std::unordered_map<std::string, nlohmann::json> chapters_by_arc;
+        nlohmann::json orphan_chapters = nlohmann::json::array();
+
+        for (const auto& ch : chapters) {
+            nlohmann::json ch_json = chapter_json(ch);
+            if (ch.arc_id.has_value() && !ch.arc_id->empty()) {
+                chapters_by_arc[*ch.arc_id].push_back(ch_json);
+            } else {
+                orphan_chapters.push_back(ch_json);
+            }
+        }
+
+        auto sort_by_number = [](const nlohmann::json& a, const nlohmann::json& b) {
+            return a.value("number", 0) < b.value("number", 0);
+        };
+
+        nlohmann::json tree = nlohmann::json::array();
+        for (const auto& arc : arcs) {
+            auto it = chapters_by_arc.find(arc.id);
+            auto chapter_arr = it != chapters_by_arc.end() ? it->second : nlohmann::json::array();
+            std::sort(chapter_arr.begin(), chapter_arr.end(), sort_by_number);
+
+            nlohmann::json arc_node{
+                {"id", arc.id},
+                {"title", arc.title},
+                {"status", arc.status},
+                {"chapters", chapter_arr}
+            };
+            tree.push_back(arc_node);
+        }
+
+        if (!orphan_chapters.empty()) {
+            std::sort(orphan_chapters.begin(), orphan_chapters.end(), sort_by_number);
+            nlohmann::json uncategorized{
+                {"id", ""},
+                {"title", "Uncategorized"},
+                {"status", ""},
+                {"chapters", orphan_chapters}
+            };
+            tree.push_back(uncategorized);
+        }
+
+        json_response(res, {{"ok", true}, {"tree", tree}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
     }
 }
 
