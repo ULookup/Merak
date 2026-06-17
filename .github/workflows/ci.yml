@@ -39,6 +39,9 @@ jobs:
           echo "CC=clang-18" >> $GITHUB_ENV
           echo "CXX=clang++-18" >> $GITHUB_ENV
 
+      - name: Setup CMake (pin for libpqxx compat)
+        run: pip install "cmake>=3.28,<3.31"
+
       - name: Setup Conan
         run: |
           pip install "conan>=2.0,<3.0"
