@@ -409,7 +409,7 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                     std::string prompt = gp_prompt_template;
                     size_t pos = 0;
                     while ((pos = prompt.find("{{agent.name}}", pos)) != std::string::npos) {
-                        prompt.replace(pos, 15, ag.name);
+                        prompt.replace(pos, 14, ag.name);
                         pos += ag.name.length();
                     }
                     prep.behavior_constraints[ag.id] = prompt;

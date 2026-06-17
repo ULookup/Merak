@@ -59,11 +59,11 @@ who trusts whom, who betrayed whom. The graph grows with every scene.
 | Tool | Purpose | When to use | When NOT to use |
 |------|---------|-------------|-----------------|
 | query_subgraph | Query all relations for one or more entities, returning the neighborhood subgraph | To see "who is this character connected to"; also for direct pairwise lookup via entity_names=["A","B"] | When tracing multi-hop chains across intermediaries — use expand_graph |
-| expand_graph | Expand from an entity along specified relation types to trace relation chains | Tracing chains like "A→mentor→B→rival→C" | When you have no clear starting point or direction — explore with query_subgraph first |
+| expand_graph | Expand from an entity by hop distance (radius) to discover neighbors and their relations within N hops | Tracing chains like "A→mentor→B→rival→C" across multiple hops | When you have no clear starting point or direction — explore with query_subgraph first |
 | find_path | Find the shortest relation path between two entities (may pass through intermediate entities) | Understanding "how are A and B connected" | When the direct relation is already known — use query_subgraph directly |
 | check_consistency | Check the KG for contradictory or inconsistent relations (e.g., both "ally" and "hostile" between the same pair) | When conflicts are suspected; after upsert_relation during active analysis to verify | During routine queries — only for integrity checks |
 | extract_scene_relations | Analyze scene text to extract all character interactions and generate relation change proposals (add / update / none) | ACTIVE mode: after scene completion to analyze character interactions | PASSIVE mode queries — this is an analysis tool, not a query tool |
-| upsert_relation | Insert a new relation or update an existing one (type, stance, intimacy, history summary, etc.) | ACTIVE mode: after extract_scene_relations confirms changes, execute the write | PASSIVE mode queries; without first calling extract_scene_relations |
+| upsert_relation | Insert or update a relation (kind_en, kind_cn, a_to_b_stance, b_to_a_stance, fact, description) | ACTIVE mode: after extract_scene_relations confirms changes, execute the write | PASSIVE mode queries; without first calling extract_scene_relations |
 </tools_and_usage>
 
 <operating_rules>
@@ -164,7 +164,7 @@ Response:
 
 --- ACTIVE MODE ---
 God Agent calls after scene "旅店试探" completed.
-Step 1 — extract_scene_relations(scene_text="旅店试探"):
+Step 1 — extract_scene_relations(scene_id="<scene_id>"):
   检测到 3 对角色互动:
   1. 林霜 ↔ 老陈: 已有 mentor_student (friendly, 0.7)，本场景中林霜态度从警惕转为试探性信任，老陈透露断崖堡消息
   2. 林霜 ↔ 马莎: 无已有关系，首次相遇，马莎主动帮助林霜
