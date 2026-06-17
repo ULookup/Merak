@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
@@ -22,7 +21,6 @@ import ModelSelector from './Sidebar/ModelSelector';
 import PipelineNavigator from './Sidebar/PipelineNavigator';
 import WorkflowMonitor from './Sidebar/WorkflowMonitor';
 import SessionList from './Sidebar/SessionList';
-import SettingsPanel from './Sidebar/SettingsPanel';
 import WorldSelector from './Sidebar/WorldSelector';
 import styles from './WorldSidebar.module.css';
 
@@ -44,7 +42,6 @@ function AgentIcon({ kind }: { kind: string }) {
 
 export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps) {
   const { state, dispatch } = useAppState();
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const currentWorld = state.worlds.find((w) => w.id === state.worldId);
 
@@ -166,15 +163,14 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
 
       <div
         className={styles.settingsTrigger}
-        onClick={() => setSettingsOpen((prev) => !prev)}
+        onClick={() => dispatch({ type: 'SET_PAGE', page: 'settings' })}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter') setSettingsOpen((prev) => !prev); }}
+        onKeyDown={(e) => { if (e.key === 'Enter') dispatch({ type: 'SET_PAGE', page: 'settings' }); }}
       >
         <Settings size={15} aria-hidden="true" strokeWidth={2.3} />
         Settings
       </div>
-      {settingsOpen && <SettingsPanel />}
     </aside>
   );
 }
