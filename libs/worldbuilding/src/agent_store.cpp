@@ -704,8 +704,8 @@ AgentStore::recent_diary_headers(const std::string& agent_id, int max_entries) c
             .scene_id = res.get(i, 2),
             .world_time = res.get(i, 3),
             .content = res.get(i, 4),  // 前80字符 preview
-            .mood = res.get(i, 5),
             .created_at = res.get(i, 6),
+            .mood = res.get(i, 5),
         });
     }
     return entries;
