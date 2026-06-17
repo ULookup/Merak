@@ -269,3 +269,10 @@
     display: block;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .brandSection,
+  .sessionItem {
+    animation: none;
+  }
+}

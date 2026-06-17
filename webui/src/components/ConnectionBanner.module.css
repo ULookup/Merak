@@ -12,26 +12,26 @@
 }
 
 .connecting {
-  background: #f3f3f1;
+  background: var(--surface-muted);
   border-bottom-color: var(--border);
   color: var(--muted-strong);
 }
 
 .reconnecting {
-  background: #f7f7f5;
+  background: var(--surface-strong);
   border-bottom-color: var(--border-strong);
   color: var(--ink-soft);
 }
 
 .disconnected {
-  background: #fff1f2;
+  background: var(--ruby-soft);
   border-bottom-color: #fecaca;
-  color: #be123c;
+  color: var(--ruby);
 }
 
 .desktop {
   justify-content: space-between;
-  background: #f6f8fa;
+  background: var(--surface-muted);
   border-bottom-color: var(--border);
   color: var(--muted-strong);
   text-align: left;

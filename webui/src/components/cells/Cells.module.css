@@ -31,7 +31,6 @@
   border-bottom-left-radius: 4px;
   position: relative;
   overflow: hidden;
-  backdrop-filter: blur(10px);
   transform-origin: 0 100%;
 }
 

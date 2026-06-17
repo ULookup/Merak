@@ -279,3 +279,9 @@
     min-height: 0;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .step_active svg {
+    animation: none;
+  }
+}

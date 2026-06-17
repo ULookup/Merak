@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { api } from './api/client';
 import styles from './App.module.css';
 import { AppStateProvider, useAppState, type AppState } from './AppState';
 import ConnectionBanner from './components/ConnectionBanner';
 import ErrorBoundary from './components/ErrorBoundary';
-import HelpDrawer from './components/HelpDrawer';
 import InspectorPanel from './components/InspectorPanel';
 import MainPanel from './components/MainPanel';
 import Skeleton from './components/Skeleton';
@@ -15,12 +14,14 @@ import WorldOnboarding from './components/WorldOnboarding';
 import WorldSidebar from './components/WorldSidebar';
 import SettingsPage from './components/SettingsPage';
 import ChapterEditor from './components/ChapterEditor';
-import SetupWizard from './components/SetupWizard';
-import ChapterReviewBanner from './components/ChapterReviewBanner';
-import ExportDialog from './components/ExportDialog';
 import DesktopBoot from './DesktopBoot';
 import { useSSE } from './hooks/useSSE';
 import { I18nProvider } from './i18n';
+
+const HelpDrawer = lazy(() => import('./components/HelpDrawer'));
+const SetupWizard = lazy(() => import('./components/SetupWizard'));
+const ChapterReviewBanner = lazy(() => import('./components/ChapterReviewBanner'));
+const ExportDialog = lazy(() => import('./components/ExportDialog'));
 
 export function shouldReportWorldbuildingPartialFailure(
   overviewLoaded: boolean,
@@ -254,7 +255,7 @@ function AppInner() {
     return (
       <ToastProvider>
         <WorldOnboarding onOpenGuide={() => setHelpOpen(true)} />
-        <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
+        <Suspense>{helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}</Suspense>
       </ToastProvider>
     );
   }
@@ -263,7 +264,7 @@ function AppInner() {
     return (
       <ToastProvider>
         <WorldDashboard onOpenGuide={() => setHelpOpen(true)} />
-        <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
+        <Suspense>{helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}</Suspense>
       </ToastProvider>
     );
   }
@@ -288,45 +289,51 @@ function AppInner() {
             />
           </div>
         </ErrorBoundary>
-        <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
+        <Suspense><HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} /></Suspense>
         <ErrorBoundary>
           <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
         </ErrorBoundary>
       </div>
 
       {/* Setup Wizard — shown when LLM is not configured */}
-      {state.showSetupWizard && (
-        <SetupWizard onComplete={() => dispatch({ type: 'SET_LLM_CONFIGURED', configured: true })} />
-      )}
+      <Suspense>
+        {state.showSetupWizard && (
+          <SetupWizard onComplete={() => dispatch({ type: 'SET_LLM_CONFIGURED', configured: true })} />
+        )}
+      </Suspense>
 
       {/* Chapter Review Banner — shown after chapter completion */}
-      {state.chapterReview && state.worldId && (
-        <ChapterReviewBanner
-          worldId={state.worldId}
-          chapterId={state.chapterReview.chapter_id}
-          chapterTitle={state.chapterReview.title}
-          onNewChapter={() => {
-            dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
-            if (state.sessionId) {
-              api.startRun(state.sessionId, '开始写下一章', state.selectedModel).catch(() => {});
-            }
-          }}
-          onRevise={() => {
-            dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
-          }}
-          onExport={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: true })}
-          onClose={() => dispatch({ type: 'SET_CHAPTER_REVIEW', review: null })}
-        />
-      )}
+      <Suspense>
+        {state.chapterReview && state.worldId && (
+          <ChapterReviewBanner
+            worldId={state.worldId}
+            chapterId={state.chapterReview.chapter_id}
+            chapterTitle={state.chapterReview.title}
+            onNewChapter={() => {
+              dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
+              if (state.sessionId) {
+                api.startRun(state.sessionId, '开始写下一章', state.selectedModel).catch(() => {});
+              }
+            }}
+            onRevise={() => {
+              dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
+            }}
+            onExport={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: true })}
+            onClose={() => dispatch({ type: 'SET_CHAPTER_REVIEW', review: null })}
+          />
+        )}
+      </Suspense>
 
       {/* Export Dialog */}
-      {state.showExportDialog && state.worldId && (
-        <ExportDialog
-          worldId={state.worldId}
-          chapters={[] /* TODO: populate from full chapter list when available in state */}
-          onClose={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: false })}
-        />
-      )}
+      <Suspense>
+        {state.showExportDialog && state.worldId && (
+          <ExportDialog
+            worldId={state.worldId}
+            chapters={[] /* TODO: populate from full chapter list when available in state */}
+            onClose={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: false })}
+          />
+        )}
+      </Suspense>
     </ToastProvider>
   );
 }
