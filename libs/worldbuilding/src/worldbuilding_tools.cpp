@@ -3140,6 +3140,7 @@ WorldbuildingTools::create_tools(AgentKind kind) const {
         tools.push_back(std::make_unique<UpsertRelationTool>(*service_));
         break;
     case AgentKind::Group:
+        tools.push_back(std::make_unique<QueryWorldTool>(*service_));
         break;
     case AgentKind::Writer:
         break;
