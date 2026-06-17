@@ -7,6 +7,7 @@
 #include "prompts/creative_director.hpp"
 #include "prompts/domain_manager.hpp"
 #include "prompts/relation_manager.hpp"
+#include "prompts/group.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -387,6 +388,18 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
         auto rm_prompt = prompts::load_relation_manager_prompt(prompts_dir_);
         if (!rm_prompt.empty()) {
             prep.behavior_constraints[key] = rm_prompt;
+        }
+    }
+
+    // Group manager — cultural context layer
+    {
+        auto kind = AgentKind::Group;
+        auto instances = tools_factory.create_tools(kind);
+        std::string key = to_string(kind);
+        for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
+        auto gp_prompt = prompts::load_group_prompt(prompts_dir_);
+        if (!gp_prompt.empty()) {
+            prep.behavior_constraints[key] = gp_prompt;
         }
     }
 
