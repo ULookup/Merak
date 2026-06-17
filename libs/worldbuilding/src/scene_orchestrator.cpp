@@ -6,6 +6,8 @@
 #include "prompts/character.hpp"
 #include "prompts/creative_director.hpp"
 #include "prompts/domain_manager.hpp"
+#include "prompts/relation_manager.hpp"
+#include "prompts/group.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -368,13 +370,59 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
     // Manager tools and behavior constraints.
     auto dm_prompt = prompts::load_domain_manager_prompt(prompts_dir_);
     for (auto kind : {AgentKind::MapManager, AgentKind::HistoryManager,
-                       AgentKind::MagicSystemManager, AgentKind::FactionManager,
-                       AgentKind::RelationManager}) {
+                       AgentKind::MagicSystemManager, AgentKind::FactionManager}) {
         auto instances = tools_factory.create_tools(kind);
         std::string key = to_string(kind);
         for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
         if (!dm_prompt.empty()) {
             prep.behavior_constraints[key] = dm_prompt;
+        }
+    }
+
+    // RelationManager gets its own prompt with KG tool semantics
+    {
+        auto kind = AgentKind::RelationManager;
+        auto instances = tools_factory.create_tools(kind);
+        std::string key = to_string(kind);
+        for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
+        auto rm_prompt = prompts::load_relation_manager_prompt(prompts_dir_);
+        if (!rm_prompt.empty()) {
+            prep.behavior_constraints[key] = rm_prompt;
+        }
+    }
+
+    // Group managers — cultural context layer, one per group
+    {
+        auto gp_prompt_template = prompts::load_group_prompt(prompts_dir_);
+
+        try {
+            auto all_agents = agents_.list_agents(world_id);
+            for (const auto& ag : all_agents) {
+                if (ag.kind != AgentKind::Group) continue;
+
+                auto instances = tools_factory.create_tools(AgentKind::Group);
+                for (auto& t : instances) {
+                    prep.tools_by_agent_id[ag.id].push_back(t->spec());
+                }
+
+                if (!gp_prompt_template.empty()) {
+                    std::string prompt = gp_prompt_template;
+                    size_t pos = 0;
+                    while ((pos = prompt.find("{{agent.name}}", pos)) != std::string::npos) {
+                        prompt.replace(pos, 14, ag.name);
+                        pos += ag.name.length();
+                    }
+                    prep.behavior_constraints[ag.id] = prompt;
+                }
+            }
+        } catch (...) {
+            // Fallback: single shared key for backward compatibility
+            auto instances = tools_factory.create_tools(AgentKind::Group);
+            std::string key = to_string(AgentKind::Group);
+            for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
+            if (!gp_prompt_template.empty()) {
+                prep.behavior_constraints[key] = gp_prompt_template;
+            }
         }
     }
 
