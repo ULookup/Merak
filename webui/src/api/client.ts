@@ -83,16 +83,55 @@ export class ApiError extends Error {
 
 export function formatApiError(error: unknown, fallback = '操作失败，请稍后重试。') {
   if (error instanceof ApiError) {
-    if (error.code === 'version_conflict') return '内容已在后端更新，请刷新后再保存。';
-    if (error.code === 'file_conflict') return '文件已被其他操作修改，请刷新后再保存。';
+    // Worldbuilding — world
+    if (error.code === 'world_not_found') return '世界不存在或已被删除。';
+    if (error.code === 'world_create_failed') return '创建世界失败，请检查名称是否重复。';
+    if (error.code === 'world_name_required') return '世界名称不能为空。';
+
+    // Worldbuilding — agent
+    if (error.code === 'agent_not_found') return '角色不存在或已被删除。';
+    if (error.code === 'agent_create_failed') return '创建角色失败，请检查必填字段。';
+    if (error.code === 'agent_version_conflict') return '角色信息已被其他操作更新，请刷新后再试。';
+
+    // Worldbuilding — scene
+    if (error.code === 'scene_not_found') return '场景不存在或已被删除。';
+    if (error.code === 'scene_create_failed') return '创建场景失败，请确认章节存在。';
+    if (error.code === 'scene_end_failed') return '结束场景失败，场景可能已经结束。';
+    if (error.code === 'scene_status_invalid') return '场景当前状态不支持此操作。';
+
+    // Worldbuilding — chapter
+    if (error.code === 'chapter_not_found') return '章节不存在或已被删除。';
+    if (error.code === 'chapter_update_failed') return '章节更新失败，请刷新后再试。';
+
+    // Worldbuilding — diary
+    if (error.code === 'information_boundary_leak') return '日记内容包含角色不应知晓的信息，已被信息边界过滤。';
+    if (error.code === 'diary_write_failed') return '日记写入失败，请稍后重试。';
+
+    // Worldbuilding — foreshadowing / secret
+    if (error.code === 'foreshadowing_not_found') return '伏笔不存在或已被删除。';
+    if (error.code === 'secret_not_found') return '秘密不存在或已被删除。';
+    if (error.code === 'secret_status_invalid') return '秘密当前状态不支持此操作。';
+
+    // Pipeline
     if (error.code === 'pipeline_not_available')
-      return 'Pipeline 暂不可用，请确认后端已启用 worldbuilding pipeline。';
+      return '创作流水线暂不可用，请确认后端已启用 worldbuilding pipeline。';
+    if (error.code === 'pipeline_advance_blocked')
+      return '阶段推进被阻止：当前阶段条件未全部满足。请先完成当前阶段的所有要求。';
+    if (error.code === 'pipeline_phase_invalid') return '目标阶段无效，请确认阶段名称正确。';
+
+    // Image service
     if (error.code === 'image_service_not_available')
       return '图片服务未启用，请确认后端 Image Service 已初始化。';
+    if (error.code === 'image_upload_failed') return '图片上传失败，请确认文件格式和大小符合要求。';
     if (error.code === 'invalid_image_type') return '图片类型必须是头像或人设图。';
     if (error.code === 'image_not_found') return '图片不存在或已被删除。';
+
+    // General
+    if (error.code === 'version_conflict') return '内容已在后端更新，请刷新后再保存。';
+    if (error.code === 'file_conflict') return '文件已被其他操作修改，请刷新后再保存。';
     if (error.code === 'test_failed') return `连接测试失败：${error.message}`;
     if (error.code === 'test_unavailable') return '连接测试暂不可用，请检查后端配置。';
+
     return error.message || fallback;
   }
   return error instanceof Error ? error.message : fallback;
