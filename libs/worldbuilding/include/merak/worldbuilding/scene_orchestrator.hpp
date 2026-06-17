@@ -21,7 +21,7 @@ namespace merak::kg { class KnowledgeGraphProvider; }
 
 namespace merak::worldbuilding {
 
-struct CompactionResult;
+struct DiaryCompactionResult;
 
 class WorldbuildingService;
 
@@ -94,7 +94,7 @@ private:
     std::shared_ptr<TokenCounter> token_counter_;
     std::string compaction_model_;
 
-    std::future<CompactionResult> compact_agent_diaries(const std::string& agent_id);
+    std::future<DiaryCompactionResult> compact_agent_diaries(const std::string& agent_id);
 };
 
 } // namespace merak::worldbuilding

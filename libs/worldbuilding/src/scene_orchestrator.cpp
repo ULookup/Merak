@@ -524,15 +524,20 @@ SceneOrchestrator::route_direct_message(const std::string& world_id,
     return view;
 }
 
-struct CompactionResult {
+struct DiaryCompactionResult {
     bool compressed = false;
     std::string summary_id;
 };
 
-std::future<CompactionResult> SceneOrchestrator::compact_agent_diaries(const std::string& agent_id) {
-    return std::async(std::launch::async, [this, agent_id]() -> CompactionResult {
-        CompactionResult result;
+std::future<DiaryCompactionResult> SceneOrchestrator::compact_agent_diaries(const std::string& agent_id) {
+    return std::async(std::launch::async, [this, agent_id]() -> DiaryCompactionResult {
+        DiaryCompactionResult result;
         result.compressed = false;
+
+        if (!compaction_llm_) {
+            spdlog::warn("compact_agent_diaries: compaction_llm_ not set, skipping");
+            return result;
+        }
 
         auto diaries = agents_.uncompressed_diaries(agent_id, 20);
         if ((int)diaries.size() < compression_trigger_threshold_) {
@@ -561,6 +566,13 @@ std::future<CompactionResult> SceneOrchestrator::compact_agent_diaries(const std
 
         auto llm_future = compaction_llm_->chat(req, [](StreamChunk){}, nullptr);
         auto llm_response = llm_future.get();
+
+        if (token_counter_) {
+            int prompt_tokens = token_counter_->count(prompt.str());
+            int response_tokens = token_counter_->count(llm_response.text);
+            spdlog::info("compact_agent_diaries for {}: {} diaries, prompt={} tokens, response={} tokens",
+                agent_id, diaries.size(), prompt_tokens, response_tokens);
+        }
 
         try {
             auto summary_json = nlohmann::json::parse(llm_response.text);

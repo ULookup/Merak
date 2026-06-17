@@ -2257,7 +2257,8 @@ BoundaryResult check_information_boundary(
     const ToolExecutionContext& exec_ctx,
     const std::string& content,
     const std::optional<Scene>& scene_opt,
-    WorldbuildingService& svc)
+    WorldbuildingService& svc,
+    const std::vector<LeakRisk>& risks)
 {
     BoundaryResult result;
     const auto& agent_id = exec_ctx.caller_agent_id;
@@ -2297,15 +2298,12 @@ BoundaryResult check_information_boundary(
         }
     }
 
-    // Rule 3: Secret leak check
-    if (scene_opt.has_value()) {
-        auto risks = svc.secrets().check_leak_risk(exec_ctx.world_id, *scene_opt, content);
-        for (const auto& risk : risks) {
-            if (risk.character_id == agent_id) {
-                result.passed = false;
-                result.reason = "日记内容包含你不应知晓的信息: " + risk.reason;
-                return result;
-            }
+    // Rule 3: Secret leak check (risks pre-computed by caller)
+    for (const auto& risk : risks) {
+        if (risk.character_id == agent_id) {
+            result.passed = false;
+            result.reason = "日记内容包含你不应知晓的信息: " + risk.reason;
+            return result;
         }
     }
 
@@ -2370,9 +2368,15 @@ std::future<ToolResult> WriteMyDiaryTool::execute(ToolCall call, ToolExecutionCo
             auto scene_opt = svc.narrative().get_scene(exec_ctx.world_id, scene_id);
             if (scene_opt) world_time = scene_opt->world_time;
 
+            // Compute leak risks once; used by both boundary check and leak_risk_level
+            std::vector<LeakRisk> risks;
+            if (scene_opt) {
+                risks = svc.secrets().check_leak_risk(exec_ctx.world_id, *scene_opt, content);
+            }
+
             // 信息边界检查
             {
-                auto boundary = check_information_boundary(exec_ctx, content, scene_opt, svc);
+                auto boundary = check_information_boundary(exec_ctx, content, scene_opt, svc, risks);
                 if (!boundary.passed) {
                     result.is_error = true;
                     result.output = nlohmann::json{
@@ -2385,10 +2389,7 @@ std::future<ToolResult> WriteMyDiaryTool::execute(ToolCall call, ToolExecutionCo
 
             // Check leak risk based on the diary content (spec step 2)
             int leak_risk_level = 0;
-            if (scene_opt) {
-                auto risks = svc.secrets().check_leak_risk(exec_ctx.world_id, *scene_opt, content);
-                if (!risks.empty()) leak_risk_level = 1;
-            }
+            if (!risks.empty()) leak_risk_level = 1;
 
             DiaryEntry entry;
             entry.id = make_id("diary");
