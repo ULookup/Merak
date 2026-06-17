@@ -60,6 +60,11 @@ struct MemoryConfig {
     int diary_compression_threshold = 20;
     int diary_context_limit = 5;
     int diary_max_tokens = 500;
+
+    // 压缩专用模型，空时回退到父级默认值
+    std::string compaction_model;
+    // 自动压缩的最小未压缩日记数
+    int compression_trigger_threshold = 5;
 };
 
 // ——— MCP Server 配置 ———
