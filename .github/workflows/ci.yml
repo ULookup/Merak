@@ -59,6 +59,7 @@ jobs:
             sed -i 's/^compiler\.version=.*/compiler.version=18/' "$PROFILE"
             grep -q '^compiler\.libcxx=' "$PROFILE" && sed -i 's/^compiler\.libcxx=.*/compiler.libcxx=libstdc++/' "$PROFILE" || echo 'compiler.libcxx=libstdc++' >> "$PROFILE"
           fi
+          grep -q '^compiler\.cppstd=' "$PROFILE" && sed -i 's/^compiler\.cppstd=.*/compiler.cppstd=23/' "$PROFILE" || echo 'compiler.cppstd=23' >> "$PROFILE"
           echo "=== Profile ==="
           cat "$PROFILE"
 
@@ -73,7 +74,7 @@ jobs:
         run: conan install . --build=missing -s build_type=${{ matrix.build_type }}
 
       - name: CMake configure
-        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/${{ matrix.build_type }}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX"
+        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/${{ matrix.build_type }}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_CXX_STANDARD=23
 
       - name: CMake build
         run: cmake --build build -j$(nproc)
