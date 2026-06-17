@@ -21,6 +21,8 @@ namespace merak::kg { class KnowledgeGraphProvider; }
 
 namespace merak::worldbuilding {
 
+struct CompactionResult;
+
 class WorldbuildingService;
 
 struct CharacterContextView {
