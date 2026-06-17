@@ -113,20 +113,36 @@
 }
 
 .badgeAuto {
+  cursor: pointer;
+  border: none;
   font-size: 10px;
+  font-weight: 600;
   background: var(--surface, #fff);
   border: 1px solid var(--border, #e0dfdc);
   color: var(--ink, #171717);
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: 999px;
+  transition: background 120ms ease;
+}
+
+.badgeAuto:hover {
+  background: var(--surface-muted, #f3f3f1);
 }
 
 .badgeManual {
+  cursor: pointer;
+  border: none;
   font-size: 10px;
+  font-weight: 600;
   background: var(--amber-soft, #fff4d6);
   color: var(--amber, #a35c00);
-  padding: 1px 6px;
+  padding: 2px 8px;
   border-radius: 999px;
+  transition: background 120ms ease;
+}
+
+.badgeManual:hover {
+  filter: brightness(0.95);
 }
 
 .clickable {
