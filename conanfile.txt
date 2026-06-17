@@ -1,5 +1,5 @@
 [requires]
-boost/1.84.0
+boost/1.86.0
 nlohmann_json/3.11.3
 spdlog/1.13.0
 libpqxx/7.10.5
