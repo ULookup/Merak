@@ -9,9 +9,13 @@
 #include <merak/tool_spec.hpp>
 
 #include <filesystem>
+#include <future>
 #include <map>
 #include <string>
 #include <vector>
+
+#include <merak/llm_provider.hpp>
+#include <merak/token_counter.hpp>
 
 namespace merak::kg { class KnowledgeGraphProvider; }
 
@@ -40,6 +44,7 @@ struct SceneWrapUp {
     std::vector<Foreshadowing> proposed_foreshadowing;
     std::vector<LeakRisk> leak_risks;
     ForeshadowStats chapter_foreshadow_stats;
+    std::vector<std::string> compressed_memories;  // 新增: summary_id from auto-compression
 };
 
 class SceneOrchestrator {
@@ -65,6 +70,12 @@ public:
                           const std::string& target_agent_id,
                           const std::string& message) const;
 
+    // 新增: 注入压缩依赖
+    void set_compaction_trigger_threshold(int n) { compression_trigger_threshold_ = n; }
+    void set_compaction_model(std::string m) { compaction_model_ = std::move(m); }
+    void set_compaction_llm(std::shared_ptr<LlmProvider> llm) { compaction_llm_ = std::move(llm); }
+    void set_token_counter(std::shared_ptr<TokenCounter> tc) { token_counter_ = std::move(tc); }
+
 private:
     WorldStore& worlds_;
     AgentStore& agents_;
@@ -74,6 +85,14 @@ private:
     VoiceAnalyzer& voice_;
     merak::kg::KnowledgeGraphProvider* kg_provider_ = nullptr;
     std::filesystem::path prompts_dir_ = "config/prompts";
+
+    // 新增: 自动压缩配置
+    int compression_trigger_threshold_ = 5;
+    std::shared_ptr<LlmProvider> compaction_llm_;
+    std::shared_ptr<TokenCounter> token_counter_;
+    std::string compaction_model_;
+
+    std::future<CompactionResult> compact_agent_diaries(const std::string& agent_id);
 };
 
 } // namespace merak::worldbuilding
