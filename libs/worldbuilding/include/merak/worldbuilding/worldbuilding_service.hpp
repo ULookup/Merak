@@ -168,6 +168,8 @@ public:
                                  const std::string& title,
                                  const std::string& author);
 
+    nlohmann::json get_dashboard(const std::string& world_id) const;
+
 private:
     std::filesystem::path root_;
     WorldStore worlds_;

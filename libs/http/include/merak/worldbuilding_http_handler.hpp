@@ -39,6 +39,7 @@ private:
     void handle_list_agents(const httplib::Request&, httplib::Response&);
     void handle_create_agent(const httplib::Request&, httplib::Response&);
     void handle_get_agent(const httplib::Request&, httplib::Response&);
+    void handle_delete_agent(const httplib::Request&, httplib::Response&);
 
     // Narrative
     void handle_overview(const httplib::Request&, httplib::Response&);
@@ -48,6 +49,10 @@ private:
     void handle_list_scenes(const httplib::Request&, httplib::Response&);
     void handle_scene_new(const httplib::Request&, httplib::Response&);
     void handle_scene_end(const httplib::Request&, httplib::Response&);
+    void handle_get_scene(const httplib::Request&, httplib::Response&);
+    void handle_delete_scene(const httplib::Request&, httplib::Response&);
+    void handle_delete_chapter(const httplib::Request&, httplib::Response&);
+    void handle_reorder_chapters(const httplib::Request&, httplib::Response&);
 
     // Time
     void handle_time_now(const httplib::Request&, httplib::Response&);
@@ -56,10 +61,47 @@ private:
     // Foreshadowing
     void handle_foreshadow_list(const httplib::Request&, httplib::Response&);
     void handle_foreshadow_plant(const httplib::Request&, httplib::Response&);
+    void handle_delete_foreshadowing(const httplib::Request&, httplib::Response&);
 
     // Secret
     void handle_secret_list(const httplib::Request&, httplib::Response&);
     void handle_secret_create(const httplib::Request&, httplib::Response&);
+    void handle_delete_secret(const httplib::Request&, httplib::Response&);
+
+    // Locations
+    void handle_list_locations(const httplib::Request&, httplib::Response&);
+    void handle_get_location(const httplib::Request&, httplib::Response&);
+    void handle_create_location(const httplib::Request&, httplib::Response&);
+    void handle_delete_location(const httplib::Request&, httplib::Response&);
+
+    // Knowledge
+    void handle_list_knowledge(const httplib::Request&, httplib::Response&);
+    void handle_create_knowledge(const httplib::Request&, httplib::Response&);
+    void handle_update_knowledge(const httplib::Request&, httplib::Response&);
+    void handle_delete_knowledge(const httplib::Request&, httplib::Response&);
+
+    // Factions
+    void handle_list_factions(const httplib::Request&, httplib::Response&);
+    void handle_get_faction(const httplib::Request&, httplib::Response&);
+    void handle_create_faction(const httplib::Request&, httplib::Response&);
+    void handle_update_faction(const httplib::Request&, httplib::Response&);
+    void handle_delete_faction(const httplib::Request&, httplib::Response&);
+
+    // Dashboard
+    void handle_dashboard(const httplib::Request&, httplib::Response&);
+
+    // File links
+    void handle_list_file_links(const httplib::Request&, httplib::Response&);
+    void handle_create_file_link(const httplib::Request&, httplib::Response&);
+    void handle_delete_file_link(const httplib::Request&, httplib::Response&);
+
+    // Preview builders (Agent-driven)
+    void handle_build_preview(const httplib::Request&, httplib::Response&);
+
+    // Pending creations (Agent-driven)
+    void handle_store_pending_creation(const httplib::Request&, httplib::Response&);
+    void handle_get_pending_creation(const httplib::Request&, httplib::Response&);
+    void handle_resolve_creation(const httplib::Request&, httplib::Response&);
 
     // Agent prompt
     void handle_load_agent_prompt(const httplib::Request&, httplib::Response&);

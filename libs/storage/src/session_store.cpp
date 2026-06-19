@@ -210,6 +210,11 @@ void SessionStore::initialize() {
     exec("CREATE INDEX IF NOT EXISTS idx_approvals_run ON approvals(run_id)");
     exec("CREATE INDEX IF NOT EXISTS idx_checkpoints_run ON run_checkpoints(run_id, turn_index DESC)");
     exec("CREATE INDEX IF NOT EXISTS idx_events_session_seq ON runtime_events(session_id, seq)");
+
+    // Add expires_at column for ephemeral sessions (safe migration)
+    try {
+        exec("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ");
+    } catch (...) {}
 }
 
 // --- Session CRUD ---
@@ -677,6 +682,30 @@ std::optional<std::string> SessionStore::get_plan() const {
     std::lock_guard lock(plan_mutex_);
     if (plan_text_.empty()) return std::nullopt;
     return plan_text_;
+}
+
+int SessionStore::cleanup_expired_sessions(int older_than_hours) {
+    if (!conn_) return 0;
+    std::lock_guard lock(mutex_);
+    auto& conn = require_connection();
+    pqxx::work txn(conn);
+    auto result = txn.exec_params(
+        "DELETE FROM sessions WHERE expires_at IS NOT NULL AND expires_at < now() - $1::interval",
+        std::to_string(older_than_hours) + " hours");
+    int count = result.affected_rows();
+    txn.commit();
+    return count;
+}
+
+void SessionStore::set_session_ephemeral(const std::string& session_id, int ttl_minutes) {
+    if (!conn_) return;
+    std::lock_guard lock(mutex_);
+    auto& conn = require_connection();
+    pqxx::work txn(conn);
+    txn.exec_params(
+        "UPDATE sessions SET expires_at = now() + $1::interval WHERE id = $2",
+        std::to_string(ttl_minutes) + " minutes", session_id);
+    txn.commit();
 }
 
 } // namespace merak

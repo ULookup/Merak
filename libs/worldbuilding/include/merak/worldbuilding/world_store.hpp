@@ -45,6 +45,35 @@ public:
     std::optional<Location> get_location(const std::string& world_id,
                                          const std::string& location_id) const;
     std::vector<Location> list_locations(const std::string& world_id) const;
+    bool update_location(const std::string& world_id, const std::string& location_id,
+                         const nlohmann::json& fields);
+    bool delete_location(const std::string& world_id, const std::string& location_id);
+
+    // Knowledge mutations
+    bool update_knowledge(const std::string& world_id, const std::string& knowledge_id,
+                          const nlohmann::json& fields);
+    bool delete_knowledge(const std::string& world_id, const std::string& knowledge_id);
+
+    // Faction
+    Faction add_faction(const std::string& world_id, Faction faction);
+    std::optional<Faction> get_faction(const std::string& world_id, const std::string& faction_id) const;
+    std::vector<Faction> list_factions(const std::string& world_id) const;
+    bool update_faction(const std::string& world_id, const std::string& faction_id,
+                        const nlohmann::json& fields);
+    bool delete_faction(const std::string& world_id, const std::string& faction_id);
+
+    // Agent operation results
+    void store_agent_result(const std::string& world_id, const std::string& operation_type,
+                            const nlohmann::json& result);
+    std::optional<nlohmann::json> get_agent_result(const std::string& world_id,
+                                                    const std::string& operation_type) const;
+
+    // File-world links
+    void add_file_link(const std::string& world_id, const std::string& file_path,
+                       const std::string& target_type, const std::string& target_id);
+    bool remove_file_link(const std::string& world_id, const std::string& file_path,
+                          const std::string& target_type, const std::string& target_id);
+    nlohmann::json list_file_links(const std::string& world_id) const;
 
     std::vector<AgentRecord> list_agents(const std::string& world_id) const;
     std::filesystem::path world_path(const std::string& world_id) const;

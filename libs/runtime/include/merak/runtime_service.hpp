@@ -125,6 +125,8 @@ public:
     void register_session_world(const std::string& session_id, const std::string& world_id);
     void unregister_session_world(const std::string& session_id);
     size_t world_session_count(const std::string& world_id) const;
+    void set_session_ephemeral(const std::string& session_id, int ttl_minutes = 60);
+    int cleanup_expired_sessions(int older_than_hours = 24);
 
 private:
     class Control;

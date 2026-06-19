@@ -47,6 +47,8 @@ public:
     std::vector<Foreshadowing>
     final_act_reminders(const std::string& world_id) const;
 
+    bool delete_foreshadowing(const std::string& world_id, const std::string& id);
+
 private:
     void initialize();
 

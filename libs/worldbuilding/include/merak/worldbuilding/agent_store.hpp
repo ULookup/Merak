@@ -30,6 +30,7 @@ public:
 
     std::optional<AgentRecord> get_agent(const std::string& agent_id) const;
     std::vector<AgentRecord> list_agents(const std::string& world_id) const;
+    bool delete_agent(const std::string& agent_id);
 
     CharacterCard load_character_card(const std::string& agent_id) const;
     CharacterCard update_character_card(const std::string& agent_id,

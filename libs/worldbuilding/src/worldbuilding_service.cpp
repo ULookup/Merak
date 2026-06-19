@@ -724,4 +724,167 @@ WorldbuildingService::export_chapters(const std::string& world_id,
     return {file_path.string(), total_chars};
 }
 
+nlohmann::json WorldbuildingService::get_dashboard(const std::string& world_id) const {
+    auto world = worlds_.get_world(world_id);
+    if (!world) {
+        throw std::runtime_error("World not found: " + world_id);
+    }
+
+    nlohmann::json dash;
+
+    // World info
+    dash["world"] = {
+        {"id", world->id},
+        {"name", world->name},
+        {"description", world->description},
+        {"created_at", world->created_at},
+        {"updated_at", world->updated_at}
+    };
+
+    // Agent counts by kind
+    auto agents = worlds_.list_agents(world_id);
+    std::map<std::string, int> agent_by_kind;
+    for (const auto& a : agents) {
+        agent_by_kind[to_string(a.kind)]++;
+    }
+    dash["agents"] = {
+        {"total", agents.size()},
+        {"by_kind", agent_by_kind}
+    };
+
+    // Chapters
+    auto chapters = narrative_.list_chapters(world_id);
+    int chapters_completed = 0;
+    int chapters_drafting = 0;
+    int chapters_outline = 0;
+    int chapters_revised = 0;
+    for (const auto& ch : chapters) {
+        if (ch.status == "completed") ++chapters_completed;
+        else if (ch.status == "drafting") ++chapters_drafting;
+        else if (ch.status == "outline") ++chapters_outline;
+        else if (ch.status == "revised") ++chapters_revised;
+    }
+    dash["chapters"] = {
+        {"total", chapters.size()},
+        {"completed", chapters_completed},
+        {"drafting", chapters_drafting},
+        {"outline", chapters_outline},
+        {"revised", chapters_revised},
+    };
+
+    // Scenes
+    auto scenes = narrative_.list_scenes(world_id);
+    int scenes_completed = 0;
+    int scenes_writing = 0;
+    int scenes_draft = 0;
+    for (const auto& s : scenes) {
+        if (s.status == "completed") ++scenes_completed;
+        else if (s.status == "writing") ++scenes_writing;
+        else if (s.status == "draft") ++scenes_draft;
+    }
+    dash["scenes"] = {
+        {"total", scenes.size()},
+        {"completed", scenes_completed},
+        {"writing", scenes_writing},
+        {"draft", scenes_draft},
+    };
+
+    // Arcs
+    auto arcs = narrative_.list_arcs(world_id);
+    dash["arcs"] = {
+        {"total", arcs.size()},
+        {"items", nlohmann::json::array()}
+    };
+    for (const auto& a : arcs) {
+        dash["arcs"]["items"].push_back({
+            {"id", a.id}, {"title", a.title}, {"purpose", a.purpose},
+            {"status", a.status}
+        });
+    }
+
+    // Locations
+    auto locations = worlds_.list_locations(world_id);
+    dash["locations"] = {{"total", locations.size()}};
+
+    // Knowledge items
+    auto knowledge = worlds_.get_world_knowledge(world_id, "");
+    std::map<std::string, int> knowledge_by_category;
+    for (const auto& k : knowledge) {
+        knowledge_by_category[k.category]++;
+    }
+    dash["knowledge"] = {
+        {"total", knowledge.size()},
+        {"by_category", knowledge_by_category}
+    };
+
+    // Factions
+    auto factions = worlds_.list_factions(world_id);
+    dash["factions"] = {{"total", factions.size()}};
+
+    // Secrets
+    auto active_secrets = secrets_.list(world_id, SecretStatus::Active);
+    auto exposed_secrets = secrets_.list(world_id, SecretStatus::Exposed);
+    auto abandoned_secrets = secrets_.list(world_id, SecretStatus::Abandoned);
+    dash["secrets"] = {
+        {"active", active_secrets.size()},
+        {"exposed", exposed_secrets.size()},
+        {"abandoned", abandoned_secrets.size()},
+        {"total", active_secrets.size() + exposed_secrets.size() + abandoned_secrets.size()}
+    };
+
+    // Foreshadowing stats
+    auto fs_stats = foreshadowing_.stats(world_id);
+    dash["foreshadowing"] = {
+        {"open", fs_stats.open},
+        {"paid", fs_stats.paid},
+        {"abandoned", fs_stats.abandoned}
+    };
+
+    // File links
+    auto file_links = worlds_.list_file_links(world_id);
+    dash["file_links"] = {{"total", file_links.is_array() ? file_links.size() : 0}};
+
+    // Reminders — open foreshadowings that need attention
+    auto open_fs = foreshadowing_.list(world_id, ForeshadowStatus::Open);
+    nlohmann::json reminders = nlohmann::json::array();
+    for (const auto& fs : open_fs) {
+        reminders.push_back({
+            {"type", "foreshadowing"},
+            {"id", fs.id},
+            {"content", fs.content},
+            {"pay_off_idea", fs.pay_off_idea}
+        });
+    }
+    // Active secrets as reminders
+    for (const auto& s : active_secrets) {
+        reminders.push_back({
+            {"type", "secret"},
+            {"id", s.id},
+            {"holder_id", s.holder_id},
+            {"truth", s.truth},
+            {"stakes", s.stakes}
+        });
+    }
+    dash["reminders"] = reminders;
+
+    // Completion percentages
+    double chapter_pct = chapters.empty() ? 0.0 :
+        (100.0 * (chapters_completed + chapters_revised) / chapters.size());
+    double scene_pct = scenes.empty() ? 0.0 :
+        (100.0 * scenes_completed / scenes.size());
+    double fs_pct = (fs_stats.open + fs_stats.paid + fs_stats.abandoned) == 0 ? 0.0 :
+        (100.0 * fs_stats.paid / (fs_stats.open + fs_stats.paid + fs_stats.abandoned));
+    double secret_resolved_pct = (active_secrets.size() + exposed_secrets.size() + abandoned_secrets.size()) == 0 ? 0.0 :
+        (100.0 * exposed_secrets.size() / (active_secrets.size() + exposed_secrets.size() + abandoned_secrets.size()));
+
+    dash["progress"] = {
+        {"chapter_completion_pct", chapter_pct},
+        {"scene_completion_pct", scene_pct},
+        {"foreshadowing_paid_pct", fs_pct},
+        {"secret_exposed_pct", secret_resolved_pct}
+    };
+
+    return dash;
+}
+
 } // namespace merak::worldbuilding

@@ -93,6 +93,9 @@ public:
     void set_plan(const std::string& plan_text);
     std::optional<std::string> get_plan() const;
 
+    int cleanup_expired_sessions(int older_than_hours = 24);
+    void set_session_ephemeral(const std::string& session_id, int ttl_minutes = 60);
+
     void save_checkpoint(const std::string& id, const std::string& run_id,
                          int turn_index, const std::string& turn_state,
                          int64_t input_tokens, int64_t output_tokens,

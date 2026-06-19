@@ -851,4 +851,12 @@ void RuntimeService::resume_after_restarted_approval(RunRecord run,ApprovalRecor
     auto loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_("")));loop->restore_history(std::move(history));configure_loop_for_run(*loop,run);{std::lock_guard lock(session_loops_mutex_);if(session_loops_.count(run.session_id))spdlog::warn("Resume after restart: overwriting existing session loop for {}",run.session_id);session_loops_[run.session_id]=loop;}
     std::thread([self=shared_from_this(),run,control,token,loop]()mutable{try{loop->resume(*control).get();if(token->cancelled()){self->store_->update_run_status(run.id,RunStatus::Cancelled);self->emit(run.session_id,run.id,"run_cancelled");}else{self->store_->update_run_status(run.id,RunStatus::Completed);self->emit(run.session_id,run.id,"run_completed");}}catch(const std::exception&e){self->store_->update_run_status(run.id,RunStatus::Failed,e.what());self->emit(run.session_id,run.id,"run_failed",{{"error",e.what()}});}std::lock_guard lock(self->mutex_);self->tokens_.erase(run.id);self->controls_.erase(run.id);}).detach();
 }
+void RuntimeService::set_session_ephemeral(const std::string& session_id, int ttl_minutes) {
+    store_->set_session_ephemeral(session_id, ttl_minutes);
+}
+
+int RuntimeService::cleanup_expired_sessions(int older_than_hours) {
+    return store_->cleanup_expired_sessions(older_than_hours);
+}
+
 } // namespace merak

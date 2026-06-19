@@ -214,6 +214,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_get_agent(req, res); });
     server.Patch(R"(/api/worldbuilding/([^/]+)/agents/([^/]+))",
         [this](const auto& req, auto& res) { handle_patch_agent(req, res); });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/agents/([^/]+))",
+        [this](const auto& req, auto& res) { handle_delete_agent(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries)",
         [this](const auto& req, auto& res) { handle_agent_diary_list(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries)",
@@ -258,6 +260,10 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_get_chapter(req, res); });
     server.Patch(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+))",
         [this](const auto& req, auto& res) { handle_patch_chapter(req, res); });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+))",
+        [this](const auto& req, auto& res) { handle_delete_chapter(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/chapters/reorder)",
+        [this](const auto& req, auto& res) { handle_reorder_chapters(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+)/review)",
         [this](const auto& req, auto& res) { handle_chapter_review(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/export)",
@@ -266,8 +272,12 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_list_scenes(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes)",
         [this](const auto& req, auto& res) { handle_scene_new(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+))",
+        [this](const auto& req, auto& res) { handle_get_scene(req, res); });
     server.Patch(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+))",
         [this](const auto& req, auto& res) { handle_patch_scene(req, res); });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+))",
+        [this](const auto& req, auto& res) { handle_delete_scene(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/end)",
         [this](const auto& req, auto& res) { handle_scene_end(req, res); });
 
@@ -284,6 +294,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_foreshadow_plant(req, res); });
     server.Patch(R"(/api/worldbuilding/([^/]+)/foreshadowing/([^/]+))",
         [this](const auto& req, auto& res) { handle_patch_foreshadow(req, res); });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/foreshadowing/([^/]+))",
+        [this](const auto& req, auto& res) { handle_delete_foreshadowing(req, res); });
 
     // Secret
     server.Get(R"(/api/worldbuilding/([^/]+)/secrets)",
@@ -292,6 +304,76 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_secret_create(req, res); });
     server.Patch(R"(/api/worldbuilding/([^/]+)/secrets/([^/]+))",
         [this](const auto& req, auto& res) { handle_patch_secret(req, res); });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/secrets/([^/]+))",
+        [this](const auto& req, auto& res) { handle_delete_secret(req, res); });
+
+    // Locations
+    server.Get(R"(/api/worldbuilding/([^/]+)/locations)",
+        [this](const auto& req, auto& res) { handle_list_locations(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/locations/([^/]+))",
+        [this](const auto& req, auto& res) { handle_get_location(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/locations)",
+        [this](const auto& req, auto& res) { handle_create_location(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/locations/([^/]+))",
+        [this](const auto& req, auto& res) {
+            std::string world_id = req.matches[1];
+            std::string loc_id = req.matches[2];
+            try {
+                auto body = nlohmann::json::parse(req.body);
+                auto fields = body.at("fields");
+                bool ok = service_->worlds().update_location(world_id, loc_id, fields);
+                if (!ok) { error_response(res, "Location not found", 404, "location_not_found"); return; }
+                json_response(res, {{"ok", true}});
+            } catch (const std::exception& e) { error_response(res, e.what(), 400); }
+        });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/locations/([^/]+))",
+        [this](const auto& req, auto& res) { handle_delete_location(req, res); });
+
+    // Knowledge
+    server.Get(R"(/api/worldbuilding/([^/]+)/knowledge)",
+        [this](const auto& req, auto& res) { handle_list_knowledge(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/knowledge)",
+        [this](const auto& req, auto& res) { handle_create_knowledge(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/knowledge/([^/]+))",
+        [this](const auto& req, auto& res) { handle_update_knowledge(req, res); });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/knowledge/([^/]+))",
+        [this](const auto& req, auto& res) { handle_delete_knowledge(req, res); });
+
+    // Factions
+    server.Get(R"(/api/worldbuilding/([^/]+)/factions)",
+        [this](const auto& req, auto& res) { handle_list_factions(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/factions/([^/]+))",
+        [this](const auto& req, auto& res) { handle_get_faction(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/factions)",
+        [this](const auto& req, auto& res) { handle_create_faction(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/factions/([^/]+))",
+        [this](const auto& req, auto& res) { handle_update_faction(req, res); });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/factions/([^/]+))",
+        [this](const auto& req, auto& res) { handle_delete_faction(req, res); });
+
+    // Dashboard
+    server.Post(R"(/api/worldbuilding/([^/]+)/dashboard)",
+        [this](const auto& req, auto& res) { handle_dashboard(req, res); });
+
+    // File links
+    server.Get(R"(/api/worldbuilding/([^/]+)/files)",
+        [this](const auto& req, auto& res) { handle_list_file_links(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/files)",
+        [this](const auto& req, auto& res) { handle_create_file_link(req, res); });
+    server.Delete(R"(/api/worldbuilding/([^/]+)/files/([^/]+))",
+        [this](const auto& req, auto& res) { handle_delete_file_link(req, res); });
+
+    // ─── Preview builders (Agent-driven) ───
+    server.Post(R"(/api/worldbuilding/([^/]+)/previews/([^/]+))",
+        [this](const auto& req, auto& res) { handle_build_preview(req, res); });
+
+    // ─── Pending creations (Agent-driven) ───
+    server.Post(R"(/api/worldbuilding/([^/]+)/creations)",
+        [this](const auto& req, auto& res) { handle_store_pending_creation(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/creations/([^/]+))",
+        [this](const auto& req, auto& res) { handle_get_pending_creation(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/creations/([^/]+)/resolve)",
+        [this](const auto& req, auto& res) { handle_resolve_creation(req, res); });
 
     // ─── Pipeline endpoints ───
     server.Get(R"(/api/worldbuilding/([^/]+)/pipeline/state)",
@@ -544,7 +626,10 @@ void WorldbuildingHttpHandler::handle_create_world(const httplib::Request& req, 
 void WorldbuildingHttpHandler::handle_delete_world(const httplib::Request& req, httplib::Response& res) {
     try {
         std::string world_id = req.matches[1];
-        service_->worlds().delete_world(world_id);
+        if (!service_->worlds().delete_world(world_id)) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
         json_response(res, {{"deleted", world_id}}, 200);
     } catch (const std::exception& e) {
         error_response(res, e.what());
@@ -1742,6 +1827,529 @@ void WorldbuildingHttpHandler::handle_export_chapters(const httplib::Request& re
         });
     } catch (const std::exception& e) {
         error_response(res, e.what(), 500, "export_failed");
+    }
+}
+
+// --- Delete agent ---
+
+void WorldbuildingHttpHandler::handle_delete_agent(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string aid = req.matches[2];
+    try {
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        service_->agents().delete_agent(aid);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Delete chapter / scene ---
+
+void WorldbuildingHttpHandler::handle_delete_chapter(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string cid = req.matches[2];
+    try {
+        if (!service_->narrative().delete_chapter(wid, cid)) {
+            error_response(res, "Chapter not found", 404, "chapter_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_delete_scene(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string sid = req.matches[2];
+    try {
+        if (!service_->narrative().delete_scene(wid, sid)) {
+            error_response(res, "Scene not found", 404, "scene_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_scene(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string sid = req.matches[2];
+        auto scene = service_->narrative().get_scene(wid, sid);
+        if (!scene) {
+            error_response(res, "Scene not found", 404, "scene_not_found");
+            return;
+        }
+        nlohmann::json j{
+            {"id", scene->id},
+            {"title", scene->title},
+            {"chapter_id", scene->chapter_id},
+            {"world_time", scene->world_time},
+            {"narrative", scene->narrative},
+            {"status", worldbuilding::to_string(scene->status)},
+            {"participant_ids", scene->participant_ids},
+            {"plot_goal", scene->plot_goal},
+            {"emotional_goal", scene->emotional_goal},
+            {"information_goal", scene->information_goal},
+            {"external_conflict", scene->external_conflict},
+            {"internal_conflict", scene->internal_conflict},
+            {"foreshadowing_ids", scene->foreshadowing_ids},
+            {"style_overrides", scene->style_overrides}
+        };
+        if (scene->section_id) j["section_id"] = *scene->section_id;
+        else j["section_id"] = nullptr;
+        if (scene->location_id) j["location_id"] = *scene->location_id;
+        else j["location_id"] = nullptr;
+        if (scene->pov_character_id) j["pov_character_id"] = *scene->pov_character_id;
+        else j["pov_character_id"] = nullptr;
+        if (scene->hidden_conflict) j["hidden_conflict"] = *scene->hidden_conflict;
+        else j["hidden_conflict"] = nullptr;
+        json_response(res, {{"ok", true}, {"scene", j}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_reorder_chapters(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        auto order = body.at("order");
+        bool ok = service_->narrative().reorder_chapters(wid, order);
+        if (!ok) {
+            error_response(res, "Reorder failed", 400);
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Delete foreshadowing / secret ---
+
+void WorldbuildingHttpHandler::handle_delete_foreshadowing(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string fid = req.matches[2];
+    try {
+        bool ok = service_->foreshadowing().delete_foreshadowing(wid, fid);
+        if (!ok) {
+            error_response(res, "Foreshadowing not found", 404, "foreshadow_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_delete_secret(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string sid = req.matches[2];
+    try {
+        bool ok = service_->secrets().delete_secret(wid, sid);
+        if (!ok) {
+            error_response(res, "Secret not found", 404, "secret_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Location handlers ---
+
+void WorldbuildingHttpHandler::handle_list_locations(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto locations = service_->worlds().list_locations(wid);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& loc : locations) {
+            arr.push_back({
+                {"id", loc.id}, {"name", loc.name}, {"description", loc.description},
+                {"region", loc.region}, {"parent_location_id", loc.parent_location_id.has_value()
+                    ? nlohmann::json(*loc.parent_location_id) : nlohmann::json(nullptr)},
+                {"created_at", loc.created_at}
+            });
+        }
+        json_response(res, {{"ok", true}, {"locations", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_location(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string lid = req.matches[2];
+        auto loc = service_->worlds().get_location(wid, lid);
+        if (!loc) {
+            error_response(res, "Location not found", 404, "location_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"location", {
+            {"id", loc->id}, {"name", loc->name}, {"description", loc->description},
+            {"region", loc->region}, {"parent_location_id", loc->parent_location_id.has_value()
+                ? nlohmann::json(*loc->parent_location_id) : nlohmann::json(nullptr)},
+            {"created_at", loc->created_at}
+        }}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_create_location(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        worldbuilding::Location loc;
+        loc.name = body.at("name").get<std::string>();
+        loc.description = body.value("description", "");
+        loc.region = body.value("region", "");
+        if (body.contains("parent_location_id") && !body["parent_location_id"].is_null())
+            loc.parent_location_id = body["parent_location_id"].get<std::string>();
+        auto created = service_->worlds().add_location(wid, loc);
+        json_response(res, {{"ok", true}, {"location_id", created.id}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_delete_location(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string lid = req.matches[2];
+    try {
+        bool ok = service_->worlds().delete_location(wid, lid);
+        if (!ok) {
+            error_response(res, "Location not found", 404, "location_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Knowledge handlers ---
+
+void WorldbuildingHttpHandler::handle_list_knowledge(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string category = req.has_param("category") ? req.get_param_value("category") : "";
+        auto items = service_->worlds().get_world_knowledge(wid, category);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& k : items) {
+            arr.push_back({
+                {"id", k.id}, {"category", k.category}, {"content", k.content},
+                {"tags", k.tags}, {"aliases", k.aliases}, {"related_ids", k.related_ids},
+                {"created_at", k.created_at}
+            });
+        }
+        json_response(res, {{"ok", true}, {"knowledge", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_create_knowledge(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        worldbuilding::WorldKnowledge item;
+        item.category = body.at("category").get<std::string>();
+        item.content = body.at("content").get<std::string>();
+        if (body.contains("tags") && body["tags"].is_array())
+            for (const auto& t : body["tags"]) item.tags.push_back(t.get<std::string>());
+        if (body.contains("aliases") && body["aliases"].is_array())
+            for (const auto& a : body["aliases"]) item.aliases.push_back(a.get<std::string>());
+        if (body.contains("related_ids") && body["related_ids"].is_array())
+            for (const auto& r : body["related_ids"]) item.related_ids.push_back(r.get<std::string>());
+        service_->worlds().add_world_knowledge(wid, item);
+        json_response(res, {{"ok", true}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_update_knowledge(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string kid = req.matches[2];
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        auto fields = body.at("fields");
+        bool ok = service_->worlds().update_knowledge(wid, kid, fields);
+        if (!ok) {
+            error_response(res, "Knowledge not found", 404, "knowledge_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_delete_knowledge(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string kid = req.matches[2];
+    try {
+        bool ok = service_->worlds().delete_knowledge(wid, kid);
+        if (!ok) {
+            error_response(res, "Knowledge not found", 404, "knowledge_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Faction handlers ---
+
+void WorldbuildingHttpHandler::handle_list_factions(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto factions = service_->worlds().list_factions(wid);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& f : factions) {
+            arr.push_back({
+                {"id", f.id}, {"world_id", f.world_id}, {"name", f.name},
+                {"description", f.description}, {"goals", f.goals},
+                {"member_agent_ids", f.member_agent_ids},
+                {"rival_faction_ids", f.rival_faction_ids},
+                {"created_at", f.created_at}, {"updated_at", f.updated_at}
+            });
+        }
+        json_response(res, {{"ok", true}, {"factions", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_faction(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string fid = req.matches[2];
+        auto faction = service_->worlds().get_faction(wid, fid);
+        if (!faction) {
+            error_response(res, "Faction not found", 404, "faction_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"faction", {
+            {"id", faction->id}, {"world_id", faction->world_id}, {"name", faction->name},
+            {"description", faction->description}, {"goals", faction->goals},
+            {"member_agent_ids", faction->member_agent_ids},
+            {"rival_faction_ids", faction->rival_faction_ids},
+            {"created_at", faction->created_at}, {"updated_at", faction->updated_at}
+        }}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_create_faction(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        worldbuilding::Faction faction;
+        faction.name = body.at("name").get<std::string>();
+        faction.description = body.value("description", "");
+        faction.goals = body.value("goals", "");
+        if (body.contains("member_agent_ids") && body["member_agent_ids"].is_array())
+            for (const auto& m : body["member_agent_ids"])
+                faction.member_agent_ids.push_back(m.get<std::string>());
+        if (body.contains("rival_faction_ids") && body["rival_faction_ids"].is_array())
+            for (const auto& r : body["rival_faction_ids"])
+                faction.rival_faction_ids.push_back(r.get<std::string>());
+        auto created = service_->worlds().add_faction(wid, faction);
+        json_response(res, {{"ok", true}, {"faction_id", created.id}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_update_faction(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string fid = req.matches[2];
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        auto fields = body.at("fields");
+        bool ok = service_->worlds().update_faction(wid, fid, fields);
+        if (!ok) {
+            error_response(res, "Faction not found", 404, "faction_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_delete_faction(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string fid = req.matches[2];
+    try {
+        bool ok = service_->worlds().delete_faction(wid, fid);
+        if (!ok) {
+            error_response(res, "Faction not found", 404, "faction_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Dashboard ---
+
+void WorldbuildingHttpHandler::handle_dashboard(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto dash = service_->get_dashboard(wid);
+        json_response(res, {{"ok", true}, {"dashboard", dash}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- File links ---
+
+void WorldbuildingHttpHandler::handle_list_file_links(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto links = service_->worlds().list_file_links(wid);
+        json_response(res, {{"ok", true}, {"files", links}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_create_file_link(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        service_->worlds().add_file_link(wid,
+            body.at("file_path").get<std::string>(),
+            body.at("target_type").get<std::string>(),
+            body.at("target_id").get<std::string>());
+        json_response(res, {{"ok", true}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_delete_file_link(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string file_path = req.matches[2];
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        bool ok = service_->worlds().remove_file_link(wid, file_path,
+            body.at("target_type").get<std::string>(),
+            body.at("target_id").get<std::string>());
+        if (!ok) {
+            error_response(res, "File link not found", 404, "file_link_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Preview builders (Agent-driven) ---
+
+void WorldbuildingHttpHandler::handle_build_preview(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string tool_name = req.matches[2];
+        auto body = nlohmann::json::parse(req.body);
+        auto params = body.value("params", body);
+
+        nlohmann::json preview;
+        if (tool_name == "create_scene")
+            preview = service_->build_scene_preview(wid, params);
+        else if (tool_name == "create_chapter")
+            preview = service_->build_chapter_preview(wid, params);
+        else if (tool_name == "create_arc")
+            preview = service_->build_arc_preview(wid, params);
+        else if (tool_name == "create_secret")
+            preview = service_->build_secret_preview(wid, params);
+        else if (tool_name == "add_world_knowledge")
+            preview = service_->build_world_knowledge_preview(wid, params);
+        else if (tool_name == "add_location")
+            preview = service_->build_location_preview(wid, params);
+        else {
+            error_response(res, "Unknown preview tool: " + tool_name, 400, "unknown_tool");
+            return;
+        }
+
+        json_response(res, {{"ok", true}, {"preview", preview}, {"tool_name", tool_name}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Pending creations (Agent-driven) ---
+
+void WorldbuildingHttpHandler::handle_store_pending_creation(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        auto creation_id = service_->store_pending_creation(
+            wid,
+            body.at("tool_name").get<std::string>(),
+            body.at("params"),
+            body.at("preview"));
+        json_response(res, {{"ok", true}, {"creation_id", creation_id}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_pending_creation(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string creation_id = req.matches[2];
+        auto pending = service_->get_pending_creation(creation_id);
+        if (!pending) {
+            error_response(res, "Pending creation not found", 404, "creation_not_found");
+            return;
+        }
+        json_response(res, {
+            {"ok", true},
+            {"creation", {
+                {"creation_id", pending->creation_id},
+                {"tool_name", pending->tool_name},
+                {"world_id", pending->world_id},
+                {"params", pending->params},
+                {"preview", pending->preview}
+            }}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_resolve_creation(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string creation_id = req.matches[2];
+        auto body = nlohmann::json::parse(req.body);
+        auto decision = body.at("decision").get<std::string>();
+        auto modifications = body.value("modifications", nlohmann::json::object());
+        auto result = service_->resolve_creation(creation_id, decision, modifications);
+        json_response(res, {{"ok", true}, {"result", result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
     }
 }
 

@@ -454,4 +454,21 @@ SecretStore::check_leak_risk(const std::string& world_id,
     return risks;
 }
 
+bool SecretStore::delete_secret(const std::string& world_id, const std::string& id) {
+    ensure_world_exists(worlds_, world_id);
+    const auto path = worlds_.world_path(world_id) / "secrets" / (id + ".json");
+    if (!std::filesystem::exists(path)) return false;
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
+    try {
+        conn.execute("DELETE FROM secrets WHERE id = $1", {id});
+        std::filesystem::remove(path);
+        conn.exec("COMMIT");
+    } catch (...) {
+        try { conn.exec("ROLLBACK"); } catch (...) {}
+        throw;
+    }
+    return true;
+}
+
 } // namespace merak::worldbuilding

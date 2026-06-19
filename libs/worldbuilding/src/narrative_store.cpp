@@ -163,13 +163,26 @@ nlohmann::json scene_json(const Scene& scene, bool is_flashback = false) {
                         {"narrative", scene.narrative},
                         {"participant_ids", scene.participant_ids},
                         {"status", to_string(scene.status)},
-                        {"is_flashback", is_flashback}};
+                        {"is_flashback", is_flashback},
+                        {"plot_goal", scene.plot_goal},
+                        {"emotional_goal", scene.emotional_goal},
+                        {"information_goal", scene.information_goal},
+                        {"external_conflict", scene.external_conflict},
+                        {"internal_conflict", scene.internal_conflict},
+                        {"foreshadowing_ids", scene.foreshadowing_ids},
+                        {"style_overrides", scene.style_overrides}};
     json["section_id"] = scene.section_id.has_value() ?
                              nlohmann::json(*scene.section_id) :
                              nlohmann::json(nullptr);
     json["location_id"] = scene.location_id.has_value() ?
                               nlohmann::json(*scene.location_id) :
                               nlohmann::json(nullptr);
+    json["pov_character_id"] = scene.pov_character_id.has_value() ?
+                                  nlohmann::json(*scene.pov_character_id) :
+                                  nlohmann::json(nullptr);
+    json["hidden_conflict"] = scene.hidden_conflict.has_value() ?
+                                 nlohmann::json(*scene.hidden_conflict) :
+                                 nlohmann::json(nullptr);
     return json;
 }
 
@@ -189,6 +202,24 @@ Scene scene_from_json(const nlohmann::json& json) {
     scene.participant_ids =
         json.at("participant_ids").get<std::vector<std::string>>();
     scene.status = scene_status_from_string(json.at("status").get<std::string>());
+    // New fields
+    if (!json.value("pov_character_id", nlohmann::json(nullptr)).is_null()) {
+        scene.pov_character_id = json["pov_character_id"].get<std::string>();
+    }
+    scene.plot_goal = json.value("plot_goal", "");
+    scene.emotional_goal = json.value("emotional_goal", "");
+    scene.information_goal = json.value("information_goal", "");
+    scene.external_conflict = json.value("external_conflict", "");
+    scene.internal_conflict = json.value("internal_conflict", "");
+    if (!json.value("hidden_conflict", nlohmann::json(nullptr)).is_null()) {
+        scene.hidden_conflict = json["hidden_conflict"].get<std::string>();
+    }
+    if (json.contains("foreshadowing_ids") && json["foreshadowing_ids"].is_array()) {
+        scene.foreshadowing_ids = json["foreshadowing_ids"].get<std::vector<std::string>>();
+    }
+    if (json.contains("style_overrides") && json["style_overrides"].is_object()) {
+        scene.style_overrides = json["style_overrides"];
+    }
     return scene;
 }
 
@@ -584,6 +615,15 @@ bool NarrativeStore::patch_scene(const std::string& world_id,
     if (fields.contains("narrative")) json["narrative"] = fields["narrative"];
     if (fields.contains("location_id")) json["location_id"] = fields["location_id"];
     if (fields.contains("pitch")) json["narrative"] = fields["pitch"];
+    if (fields.contains("pov_character_id")) json["pov_character_id"] = fields["pov_character_id"];
+    if (fields.contains("plot_goal")) json["plot_goal"] = fields["plot_goal"];
+    if (fields.contains("emotional_goal")) json["emotional_goal"] = fields["emotional_goal"];
+    if (fields.contains("information_goal")) json["information_goal"] = fields["information_goal"];
+    if (fields.contains("external_conflict")) json["external_conflict"] = fields["external_conflict"];
+    if (fields.contains("internal_conflict")) json["internal_conflict"] = fields["internal_conflict"];
+    if (fields.contains("hidden_conflict")) json["hidden_conflict"] = fields["hidden_conflict"];
+    if (fields.contains("foreshadowing_ids")) json["foreshadowing_ids"] = fields["foreshadowing_ids"];
+    if (fields.contains("style_overrides")) json["style_overrides"] = fields["style_overrides"];
 
     write_json(path, json);
 
@@ -612,6 +652,14 @@ bool NarrativeStore::patch_scene(const std::string& world_id,
     if (fields.contains("location_id")) {
         set_parts.push_back("location = $" + std::to_string(param_idx++));
         params.push_back(fields["location_id"].get<std::string>());
+    }
+    if (fields.contains("pov_character_id")) {
+        set_parts.push_back("pov_character_id = $" + std::to_string(param_idx++));
+        params.push_back(fields["pov_character_id"].get<std::string>());
+    }
+    if (fields.contains("plot_goal")) {
+        set_parts.push_back("pitch = $" + std::to_string(param_idx++));
+        params.push_back(fields["plot_goal"].get<std::string>());
     }
 
     if (set_parts.empty()) return true;
@@ -822,6 +870,74 @@ NarrativeStore::list_chapters(const std::string& world_id,
     return out;
 }
 
+bool NarrativeStore::reorder_chapters(const std::string& world_id, const nlohmann::json& order) {
+    if (!order.is_array()) return false;
+    ensure_world_exists(worlds_, world_id);
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
+    try {
+        for (const auto& item : order) {
+            std::string id = item["id"].get<std::string>();
+            int number = item["number"].get<int>();
+            conn.execute("UPDATE chapters SET position = $1 WHERE id = $2 AND world_id = $3",
+                        {std::to_string(number), id, world_id});
+        }
+        conn.exec("COMMIT");
+    } catch (...) {
+        try { conn.exec("ROLLBACK"); } catch (...) {}
+        throw;
+    }
+    return true;
+}
+
+CharacterAppearances
+NarrativeStore::find_character_appearances(const std::string& world_id,
+                                            const std::string& agent_id) const {
+    CharacterAppearances result;
+    result.chapters = nlohmann::json::array();
+    result.scenes = nlohmann::json::array();
+    PgConn conn(*pool_);
+    // Find scenes where agent participates
+    auto scene_res = conn.query(
+        "SELECT id, name, COALESCE(chapter_id, ''), status FROM scenes s "
+        "WHERE world_id = $1 AND participants LIKE $2",
+        {world_id, "%\"" + agent_id + "\"%"});
+    std::set<std::string> chapter_ids;
+    for (int i = 0; i < scene_res.ntuples(); i++) {
+        nlohmann::json scene;
+        scene["id"] = scene_res.get(i, 0);
+        scene["title"] = scene_res.get(i, 1);
+        scene["chapter_id"] = scene_res.get(i, 2);
+        scene["status"] = scene_res.get(i, 3);
+        result.scenes.push_back(scene);
+        if (!scene_res.get(i, 2).empty()) chapter_ids.insert(scene_res.get(i, 2));
+    }
+    if (!chapter_ids.empty()) {
+        std::vector<std::string> id_params;
+        std::string placeholders;
+        int n = 2; // $1 is world_id
+        for (const auto& cid : chapter_ids) {
+            if (!placeholders.empty()) placeholders += ", ";
+            placeholders += "$" + std::to_string(n++);
+            id_params.push_back(cid);
+        }
+        std::string sql =
+            "SELECT id, name, (SELECT COUNT(*) FROM scenes WHERE chapter_id = chapters.id) "
+            "FROM chapters WHERE world_id = $1 AND id IN (" + placeholders + ") ORDER BY position";
+        std::vector<std::string> params = {world_id};
+        params.insert(params.end(), id_params.begin(), id_params.end());
+        auto ch_res = conn.query(sql, params);
+        for (int i = 0; i < ch_res.ntuples(); i++) {
+            nlohmann::json ch;
+            ch["id"] = ch_res.get(i, 0);
+            ch["title"] = ch_res.get(i, 1);
+            ch["scene_count"] = std::stoi(ch_res.get(i, 2).empty() ? "0" : ch_res.get(i, 2));
+            result.chapters.push_back(ch);
+        }
+    }
+    return result;
+}
+
 std::vector<SceneSummary>
 NarrativeStore::list_scenes(const std::string& world_id,
                             const std::optional<std::string>& chapter_id,
@@ -860,6 +976,130 @@ NarrativeStore::list_scenes(const std::string& world_id,
         out.push_back(std::move(scene));
     }
     return out;
+}
+
+bool NarrativeStore::delete_chapter(const std::string& world_id, const std::string& chapter_id) {
+    ensure_world_exists(worlds_, world_id);
+    const auto path = worlds_.world_path(world_id) / "chapters" / (chapter_id + ".json");
+    if (!std::filesystem::exists(path)) return false;
+
+    // Read chapter before deletion to get arc linkage
+    auto chapter_json = read_json(path);
+    std::optional<std::string> arc_id;
+    int chapter_number = 0;
+    try {
+        if (!chapter_json.at("arc_id").is_null())
+            arc_id = chapter_json.at("arc_id").get<std::string>();
+        chapter_number = chapter_json.value("number", 0);
+    } catch (...) {}
+
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
+    try {
+        // Delete all scenes belonging to this chapter
+        conn.execute("DELETE FROM scenes WHERE chapter_id = $1 AND world_id = $2",
+                     {chapter_id, world_id});
+        conn.execute("DELETE FROM chapters WHERE id = $1 AND world_id = $2",
+                     {chapter_id, world_id});
+        // Remove scene JSON files for this chapter
+        auto scenes_dir = worlds_.world_path(world_id) / "scenes";
+        if (std::filesystem::exists(scenes_dir)) {
+            for (const auto& entry : std::filesystem::directory_iterator(scenes_dir)) {
+                if (!entry.is_regular_file() || entry.path().extension() != ".json")
+                    continue;
+                try {
+                    auto sj = read_json(entry.path());
+                    if (sj.value("chapter_id", "") == chapter_id) {
+                        std::filesystem::remove(entry.path());
+                    }
+                } catch (...) {}
+            }
+        }
+        std::filesystem::remove(path);
+
+        // Remove chapter number from parent arc
+        if (arc_id.has_value() && !arc_id->empty()) {
+            const auto arc_path = worlds_.world_path(world_id) / "arcs" / (*arc_id + ".json");
+            if (std::filesystem::exists(arc_path)) {
+                try {
+                    auto arc_j = read_json(arc_path);
+                    auto chapter_numbers = arc_j.value("chapter_numbers",
+                        std::vector<int>{});
+                    chapter_numbers.erase(
+                        std::remove(chapter_numbers.begin(), chapter_numbers.end(), chapter_number),
+                        chapter_numbers.end());
+                    arc_j["chapter_numbers"] = chapter_numbers;
+                    write_json(arc_path, arc_j);
+                } catch (...) {}
+            }
+        }
+
+        conn.exec("COMMIT");
+    } catch (...) {
+        try { conn.exec("ROLLBACK"); } catch (...) {}
+        throw;
+    }
+    return true;
+}
+
+bool NarrativeStore::delete_scene(const std::string& world_id, const std::string& scene_id) {
+    ensure_world_exists(worlds_, world_id);
+    const auto path = worlds_.world_path(world_id) / "scenes" / (scene_id + ".json");
+    if (!std::filesystem::exists(path)) return false;
+
+    // Read scene before deletion to get parent linkage
+    std::string chapter_id;
+    std::optional<std::string> section_id;
+    try {
+        auto scene_json = read_json(path);
+        chapter_id = scene_json.value("chapter_id", "");
+        if (scene_json.contains("section_id") && !scene_json["section_id"].is_null())
+            section_id = scene_json["section_id"].get<std::string>();
+    } catch (...) {}
+
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
+    try {
+        conn.execute("DELETE FROM scenes WHERE id = $1 AND world_id = $2",
+                     {scene_id, world_id});
+        std::filesystem::remove(path);
+        conn.exec("COMMIT");
+    } catch (...) {
+        try { conn.exec("ROLLBACK"); } catch (...) {}
+        throw;
+    }
+
+    // Remove scene_id from parent chapter's scene_ids array
+    if (!chapter_id.empty()) {
+        const auto chapter_path = worlds_.world_path(world_id) / "chapters" / (chapter_id + ".json");
+        if (std::filesystem::exists(chapter_path)) {
+            try {
+                auto ch_j = read_json(chapter_path);
+                auto scene_ids = ch_j.value("scene_ids", std::vector<std::string>{});
+                scene_ids.erase(std::remove(scene_ids.begin(), scene_ids.end(), scene_id),
+                               scene_ids.end());
+                ch_j["scene_ids"] = scene_ids;
+                write_json(chapter_path, ch_j);
+            } catch (...) {}
+        }
+    }
+
+    // Remove scene_id from parent section's scene_ids array
+    if (section_id.has_value() && !section_id->empty()) {
+        const auto section_path = worlds_.world_path(world_id) / "sections" / (*section_id + ".json");
+        if (std::filesystem::exists(section_path)) {
+            try {
+                auto sec_j = read_json(section_path);
+                auto scene_ids = sec_j.value("scene_ids", std::vector<std::string>{});
+                scene_ids.erase(std::remove(scene_ids.begin(), scene_ids.end(), scene_id),
+                               scene_ids.end());
+                sec_j["scene_ids"] = scene_ids;
+                write_json(section_path, sec_j);
+            } catch (...) {}
+        }
+    }
+
+    return true;
 }
 
 } // namespace merak::worldbuilding

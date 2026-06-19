@@ -395,6 +395,23 @@ ForeshadowingStore::chapter_summary(const std::string& world_id,
     return result;
 }
 
+bool ForeshadowingStore::delete_foreshadowing(const std::string& world_id, const std::string& id) {
+    ensure_world_exists(worlds_, world_id);
+    const auto path = worlds_.world_path(world_id) / "foreshadows" / (id + ".json");
+    if (!std::filesystem::exists(path)) return false;
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
+    try {
+        conn.execute("DELETE FROM foreshadowings WHERE id = $1", {id});
+        std::filesystem::remove(path);
+        conn.exec("COMMIT");
+    } catch (...) {
+        try { conn.exec("ROLLBACK"); } catch (...) {}
+        throw;
+    }
+    return true;
+}
+
 std::vector<Foreshadowing>
 ForeshadowingStore::final_act_reminders(const std::string& world_id) const {
     ensure_world_exists(worlds_, world_id);
