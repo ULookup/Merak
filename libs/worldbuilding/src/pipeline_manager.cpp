@@ -997,9 +997,40 @@ void PipelineManager::retreat_to_phase(const std::string& world_id,
         return;
     }
 
+    // 2b. Validate that retreat is allowed by the current phase definition
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        if (it != worlds_.end()) {
+            const auto* wf = get_workflow(it->second.workflow_name);
+            if (wf) {
+                const auto* phase_def = wf->get_phase(old_phase);
+                if (phase_def) {
+                    auto target_str = to_string(*target);
+                    if (std::find(phase_def->allowed_retreat.begin(),
+                                  phase_def->allowed_retreat.end(), target_str) ==
+                        phase_def->allowed_retreat.end()) {
+                        spdlog::warn("PipelineManager: retreat_to_phase - phase '{}' from '{}' "
+                                     "not in allowed_retreat for world '{}'",
+                                     target_str, to_string(old_phase), world_id);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
     // 3. Retreat current_phase to target phase
     state.current_phase = *target;
     state.last_updated = current_iso_timestamp();
+
+    // Clear scene-level refs when retreating to pre-scene phases
+    if (*target == CreativePhase::DirectionSelection ||
+        *target == CreativePhase::Worldbuilding ||
+        *target == CreativePhase::CharacterCreation ||
+        *target == CreativePhase::PlotArchitecture) {
+        state.active_scene_id = std::nullopt;
+    }
 
     // 4. Reset current_conditions stored in extra
     state.extra["current_conditions"] = nlohmann::json::object();
