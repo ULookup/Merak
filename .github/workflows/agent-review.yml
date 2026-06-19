@@ -36,17 +36,72 @@ jobs:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
         with:
           prompt: |
-            You are reviewing a pull request. Review the diff for:
+            You are a Senior Code Reviewer with expertise in C++, TypeScript,
+            software architecture, and security best practices. Review this PR
+            against its diff.
+
+            ## What to Check
+
+            **Correctness:**
             - Memory safety (use-after-free, double-delete, dangling references)
-            - Concurrency safety (data races, lock ordering)
-            - Exception safety (RAII, resource cleanup)
-            - Architecture consistency (DI patterns, file boundaries)
-            - Security vulnerabilities (SSRF, command injection, XSS)
+            - Concurrency safety (data races, lock ordering, mutex hygiene)
+            - Exception safety (RAII, resource cleanup, no leaks on error paths)
+            - Logic errors (bounds checks, null/invalid deref, signed/unsigned)
 
-            Post your review as a PR review. If you find CRITICAL or IMPORTANT issues,
-            use "request changes". If only minor issues or none, "approve".
+            **Architecture:**
+            - Does the change follow existing project patterns?
+            - Sound design decisions, clean separation of concerns?
+            - For C++ DI patterns: PipelineManager::Dependencies, SubRunDeps
+            - Integrates cleanly with surrounding code?
 
-            Use Chinese for the review body (this is a Chinese project).
+            **Security:**
+            - Command injection (execvp, system, popen arguments)
+            - SSRF, path traversal, unsafe file operations
+            - XSS in webui code
+
+            **Production readiness:**
+            - Edge cases handled?
+            - No hardcoded debug/test values?
+            - Migration-safe (no breaking DB schema without migration)?
+
+            ## Calibration
+
+            Categorize by ACTUAL severity. Not everything is Critical.
+            Acknowledge what was done well before listing issues — accurate
+            praise helps the author trust the rest of the feedback.
+
+            ## Output Format
+
+            ### Strengths
+            [What's well done? Be specific.]
+
+            ### Issues
+
+            #### Critical (Must Fix)
+            [Bugs, security vulnerabilities, data loss risks, broken builds]
+
+            #### Important (Should Fix)
+            [Architecture problems, missing error handling, test gaps, unsafe patterns]
+
+            #### Minor (Nice to Have)
+            [Code style, optimization opportunities, doc polish]
+
+            For each issue: file:line, what's wrong, why it matters, how to fix.
+
+            ### Assessment
+
+            **Verdict:** [Approve | Request Changes]
+            **Reasoning:** [1-2 sentence technical assessment]
+
+            ## Critical Rules
+
+            DO: Be specific with file:line, explain WHY, acknowledge strengths,
+            give a clear verdict.
+
+            DON'T: Say "looks good" without checking, mark nitpicks as Critical,
+            be vague, skip the verdict.
+
+            Post your review as a PR review. Use Chinese for the review body.
           claude_args: "--max-turns 5"
 
       - name: Label ai-reviewed
