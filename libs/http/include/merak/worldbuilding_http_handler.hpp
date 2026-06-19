@@ -128,6 +128,11 @@ private:
     void handle_get_generated_scenes(const httplib::Request&, httplib::Response&);
     void handle_apply_generated_scenes(const httplib::Request&, httplib::Response&);
 
+    // Agent-driven: generate outline
+    void handle_start_generate_outline(const httplib::Request&, httplib::Response&);
+    void handle_get_generated_outline(const httplib::Request&, httplib::Response&);
+    void handle_apply_generated_outline(const httplib::Request&, httplib::Response&);
+
     std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;
     mutable std::mutex pending_runs_mutex_;
 

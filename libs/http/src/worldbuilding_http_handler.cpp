@@ -455,6 +455,14 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
     server.Post(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+)/generated-scenes/apply)",
         [this](const auto& req, auto& res) { handle_apply_generated_scenes(req, res); });
 
+    // ─── Agent-driven: generate outline ───
+    server.Post(R"(/api/worldbuilding/([^/]+)/generate-outline)",
+        [this](const auto& req, auto& res) { handle_start_generate_outline(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/generated-outline)",
+        [this](const auto& req, auto& res) { handle_get_generated_outline(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/generated-outline/apply)",
+        [this](const auto& req, auto& res) { handle_apply_generated_outline(req, res); });
+
     // ─── Pipeline endpoints ───
     server.Get(R"(/api/worldbuilding/([^/]+)/pipeline/state)",
         [this](const auto& req, auto& res) {
@@ -2556,6 +2564,78 @@ void WorldbuildingHttpHandler::handle_apply_generated_scenes(const httplib::Requ
             idx++;
         }
         json_response(res, {{"ok", true}, {"scene_ids", scene_ids}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent-driven: generate outline ---
+
+void WorldbuildingHttpHandler::handle_start_generate_outline(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        int chapter_count = body.value("chapter_count", 8);
+        std::string tmpl = body.value("template", "three_act");
+        std::string task = "生成故事大纲：" + std::to_string(chapter_count) + "章，模板=" + tmpl
+            + "。产出 arcs 数组，每个 arc 含 title、purpose、chapters（每章含 title、pitch、suggested_pov）。";
+        start_agent_run(req, res, wid, task, "generated_outline");
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_generated_outline(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto result = service_->worlds().get_agent_result(wid, "generated_outline");
+        if (!result) {
+            error_response(res, "Outline not yet generated", 404, "result_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"outline", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_apply_generated_outline(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto result = service_->worlds().get_agent_result(wid, "generated_outline");
+        if (!result) {
+            error_response(res, "No generated outline to apply", 404, "result_not_found");
+            return;
+        }
+        nlohmann::json arcs_data = result->is_array() ? *result : (*result)["arcs"];
+        if (!arcs_data.is_array()) {
+            error_response(res, "Outline result does not contain arcs array", 400);
+            return;
+        }
+        nlohmann::json arc_ids = nlohmann::json::array();
+        nlohmann::json chapter_ids = nlohmann::json::array();
+        int chapter_number = 1;
+        for (const auto& arc_data : arcs_data) {
+            worldbuilding::Arc arc;
+            arc.title = arc_data.value("title", "未命名弧");
+            arc.purpose = arc_data.value("purpose", "");
+            arc.status = "outline";
+            auto created_arc = service_->create_arc(wid, arc);
+            arc_ids.push_back(created_arc.id);
+            if (arc_data.contains("chapters") && arc_data["chapters"].is_array()) {
+                for (const auto& ch_data : arc_data["chapters"]) {
+                    worldbuilding::Chapter chapter;
+                    chapter.title = ch_data.value("title", "未命名章节");
+                    chapter.pitch = ch_data.value("pitch", "");
+                    chapter.number = chapter_number++;
+                    chapter.arc_id = created_arc.id;
+                    chapter.status = worldbuilding::ChapterStatus::Outline;
+                    auto created_ch = service_->create_chapter(wid, chapter);
+                    chapter_ids.push_back(created_ch.id);
+                }
+            }
+        }
+        json_response(res, {{"ok", true}, {"arc_ids", arc_ids}, {"chapter_ids", chapter_ids}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
