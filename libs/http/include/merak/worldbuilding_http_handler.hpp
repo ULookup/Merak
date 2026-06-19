@@ -115,6 +115,10 @@ private:
                          const std::string& operation_type);
     void capture_agent_result(const std::string& run_id);
 
+    // Agent-driven: suggestions
+    void handle_start_suggestions(const httplib::Request&, httplib::Response&);
+    void handle_get_suggestions(const httplib::Request&, httplib::Response&);
+
     std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;
     mutable std::mutex pending_runs_mutex_;
 

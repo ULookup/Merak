@@ -435,6 +435,12 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
     server.Post(R"(/api/worldbuilding/([^/]+)/creations/([^/]+)/resolve)",
         [this](const auto& req, auto& res) { handle_resolve_creation(req, res); });
 
+    // ─── Agent-driven generation ───
+    server.Post(R"(/api/worldbuilding/([^/]+)/suggestions)",
+        [this](const auto& req, auto& res) { handle_start_suggestions(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/suggestions)",
+        [this](const auto& req, auto& res) { handle_get_suggestions(req, res); });
+
     // ─── Pipeline endpoints ───
     server.Get(R"(/api/worldbuilding/([^/]+)/pipeline/state)",
         [this](const auto& req, auto& res) {
@@ -2408,6 +2414,34 @@ void WorldbuildingHttpHandler::handle_resolve_creation(const httplib::Request& r
         auto modifications = body.value("modifications", nlohmann::json::object());
         auto result = service_->resolve_creation(creation_id, decision, modifications);
         json_response(res, {{"ok", true}, {"result", result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent-driven: suggestions ---
+
+void WorldbuildingHttpHandler::handle_start_suggestions(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        std::string category = body.value("category", "all");
+        std::string task = "分析世界设定，找出 " + category + " 类别的缺口，产出结构化建议列表。";
+        start_agent_run(req, res, wid, task, "suggestions");
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_suggestions(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto result = service_->worlds().get_agent_result(wid, "suggestions");
+        if (!result) {
+            error_response(res, "Suggestions not yet generated", 404, "result_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"suggestions", *result}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
