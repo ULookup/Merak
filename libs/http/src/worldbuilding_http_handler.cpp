@@ -445,6 +445,14 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
     server.Post(R"(/api/worldbuilding/([^/]+)/time/advance)",
         [this](const auto& req, auto& res) { handle_time_advance(req, res); });
 
+    // Timeline
+    server.Get(R"(/api/worldbuilding/([^/]+)/timeline/events/([^/]+))",
+        [this](const auto& req, auto& res) { handle_timeline_event_get(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/timeline)",
+        [this](const auto& req, auto& res) { handle_timeline_list(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/timeline/advance)",
+        [this](const auto& req, auto& res) { handle_timeline_advance(req, res); });
+
     // Foreshadowing
     server.Get(R"(/api/worldbuilding/([^/]+)/foreshadowing)",
         [this](const auto& req, auto& res) { handle_foreshadow_list(req, res); });
@@ -1368,6 +1376,152 @@ void WorldbuildingHttpHandler::handle_time_advance(const httplib::Request& req, 
         error_response(res, e.what());
     }
 }
+
+// --- Timeline handlers ---
+
+void WorldbuildingHttpHandler::handle_timeline_list(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto world = service_->worlds().get_world(wid);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+        auto events = service_->narrative().list_timeline_events(wid);
+
+        // Determine current time from last event
+        int day = 1;
+        int period = 0;
+        std::string label = "\xe7\xac\xac\xe4\xb8\x80\xe6\x97\xa5\xe6\x99\xa8"; // "first day morning"
+        if (!events.empty()) {
+            auto last_time = worldbuilding::WorldTime::parse(events.back().world_time);
+            if (last_time.has_value()) {
+                day = last_time->day;
+                period = last_time->period;
+                label = last_time->label;
+            }
+        }
+
+        nlohmann::json events_arr = nlohmann::json::array();
+        for (const auto& e : events) {
+            events_arr.push_back({
+                {"id", e.id},
+                {"world_time", e.world_time},
+                {"description", e.description},
+                {"recorded_by", e.recorded_by},
+                {"affected_character_ids", e.affected_character_ids},
+                {"related_scene_ids", e.related_scene_ids}
+            });
+        }
+
+        json_response(res, {
+            {"ok", true},
+            {"current_time", {
+                {"day", day},
+                {"period", period},
+                {"label", label}
+            }},
+            {"events", events_arr}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what());
+    }
+}
+
+void WorldbuildingHttpHandler::handle_timeline_event_get(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string eid = req.matches[2];
+        auto world = service_->worlds().get_world(wid);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+        auto event = service_->narrative().get_timeline_event(wid, eid);
+        if (!event.has_value()) {
+            error_response(res, "Timeline event not found", 404, "event_not_found");
+            return;
+        }
+
+        // Resolve recorded_by_name
+        std::string recorded_by_name = event->recorded_by;
+        if (!event->recorded_by.empty()) {
+            auto agent = service_->agents().get_agent(event->recorded_by);
+            if (agent.has_value()) {
+                recorded_by_name = agent->name;
+            }
+        }
+
+        nlohmann::json event_json = {
+            {"id", event->id},
+            {"world_time", event->world_time},
+            {"description", event->description},
+            {"recorded_by", event->recorded_by},
+            {"recorded_by_name", recorded_by_name},
+            {"affected_character_ids", event->affected_character_ids},
+            {"related_scene_ids", event->related_scene_ids}
+        };
+
+        json_response(res, {{"ok", true}, {"event", event_json}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what());
+    }
+}
+
+void WorldbuildingHttpHandler::handle_timeline_advance(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        std::string time_label = body.at("time_label");
+
+        // Validate world exists
+        auto world = service_->worlds().get_world(wid);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+
+        // Parse and validate the new time format
+        auto parsed_new = worldbuilding::WorldTime::parse(time_label);
+        if (!parsed_new.has_value()) {
+            error_response(res, "Invalid time_label format: " + time_label, 400, "invalid_time_format");
+            return;
+        }
+
+        // Forward-only validation: new_time must be strictly after current world time
+        auto events = service_->narrative().list_timeline_events(wid);
+        if (!events.empty()) {
+            const auto& last_event = events.back();
+            auto parsed_current = worldbuilding::WorldTime::parse(last_event.world_time);
+            if (parsed_current.has_value() && *parsed_new <= *parsed_current) {
+                error_response(res,
+                    "Time can only advance forward. Current world time: " +
+                        last_event.world_time + ", requested: " + time_label,
+                    400, "time_not_forward");
+                return;
+            }
+        }
+
+        worldbuilding::TimelineEvent event;
+        event.world_time = parsed_new->label;
+        event.description = body.value("description", "Time advanced");
+        event.recorded_by = body.value("recorded_by", "user");
+
+        auto recorded = service_->narrative().advance_time(wid, std::move(event));
+
+        json_response(res, {
+            {"ok", true},
+            {"new_time", {
+                {"day", parsed_new->day},
+                {"period", parsed_new->period},
+                {"label", parsed_new->label}
+            }}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what());
+    }
+}
+
 
 // --- Foreshadowing handlers ---
 

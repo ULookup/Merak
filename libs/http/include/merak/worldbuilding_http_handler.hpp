@@ -66,6 +66,11 @@ private:
     void handle_time_now(const httplib::Request&, httplib::Response&);
     void handle_time_advance(const httplib::Request&, httplib::Response&);
 
+    // Timeline
+    void handle_timeline_list(const httplib::Request&, httplib::Response&);
+    void handle_timeline_event_get(const httplib::Request&, httplib::Response&);
+    void handle_timeline_advance(const httplib::Request&, httplib::Response&);
+
     // Foreshadowing
     void handle_foreshadow_list(const httplib::Request&, httplib::Response&);
     void handle_foreshadow_plant(const httplib::Request&, httplib::Response&);
