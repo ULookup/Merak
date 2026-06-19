@@ -115,10 +115,6 @@ ConditionResult eval_orphaned_foreshadowing(const ConditionDef& cond,
                                               const PipelineState& state,
                                               pqxx::connection& conn);
 
-ConditionResult eval_scene_completeness(const ConditionDef& cond,
-                                         const PipelineState& state,
-                                         pqxx::connection& conn);
-
 ConditionResult eval_character_consistency(const ConditionDef& cond,
                                             const PipelineState& state,
                                             pqxx::connection& conn);
