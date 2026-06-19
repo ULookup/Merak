@@ -25,6 +25,7 @@ const HelpDrawer = lazy(() => import('./components/HelpDrawer'));
 const SetupWizard = lazy(() => import('./components/SetupWizard'));
 const ChapterReviewBanner = lazy(() => import('./components/ChapterReviewBanner'));
 const ExportDialog = lazy(() => import('./components/ExportDialog'));
+const OverviewPage = lazy(() => import('./pages/OverviewPage'));
 
 export function shouldReportWorldbuildingPartialFailure(
   overviewLoaded: boolean,
@@ -270,6 +271,18 @@ function AppInner() {
           </Suspense>,
         )}
       </ToastProvider>
+    );
+  }
+
+  if (state.currentPage === 'overview' && state.worldId) {
+    return inDesktopShell(
+      <Suspense fallback={<Skeleton />}>
+        <OverviewPage
+          worldId={state.worldId}
+          sessions={state.sessions}
+          onNavigate={(page) => dispatch({ type: 'SET_PAGE', page })}
+        />
+      </Suspense>,
     );
   }
 
