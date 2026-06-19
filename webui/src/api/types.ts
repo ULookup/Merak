@@ -682,3 +682,49 @@ export interface ExportResult {
   file_path: string;
   total_chars: number;
 }
+
+export interface ResourceListResponse<T> {
+  ok?: boolean;
+  items?: T[];
+}
+
+export interface LocationItem {
+  id: string;
+  name: string;
+  description?: string;
+  version?: number;
+}
+
+export interface KnowledgeItem {
+  id: string;
+  title: string;
+  content?: string;
+  tags?: string[];
+  version?: number;
+}
+
+export interface FactionItem {
+  id: string;
+  name: string;
+  description?: string;
+  version?: number;
+}
+
+export interface TimelineEvent {
+  id: string;
+  title: string;
+  world_time?: string;
+  description?: string;
+}
+
+export interface GraphEntity {
+  id: string;
+  type: string;
+  name: string;
+}
+
+export interface WorldFileLink {
+  file_path: string;
+  entity_type?: string;
+  entity_id?: string;
+}

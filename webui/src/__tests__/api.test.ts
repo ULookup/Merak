@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { filesApi, worldbuildingApi } from '../api';
 import { request } from '../api/http';
 
 describe('api client', () => {
@@ -206,5 +207,31 @@ describe('api client', () => {
         body: JSON.stringify({ world_time: 'Day 2 Dawn' }),
       }),
     );
+  });
+
+  it('reorders chapters with the documented body', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    await worldbuildingApi.reorderChapters('w 1', ['c1', 'c2']);
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      expect.stringContaining('/api/worldbuilding/w%201/chapters/reorder'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ chapter_ids: ['c1', 'c2'] }),
+      }),
+    );
+  });
+
+  it('encodes a linked file path when deleting it', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    await filesApi.unlinkWorldFile('w1', '章节/第一章.md');
+
+    expect(vi.mocked(fetch).mock.calls[0][0]).toContain(encodeURIComponent('章节/第一章.md'));
   });
 });
