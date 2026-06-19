@@ -1,4 +1,4 @@
-import { useId, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import styles from './ResourceList.module.css';
 
 export type ResourceListProps<T> = {
@@ -21,7 +21,15 @@ export default function ResourceList<T>({
   className,
 }: ResourceListProps<T>) {
   const listId = useId();
+  const listRef = useRef<HTMLDivElement>(null);
+  const optionRefs = useRef<Array<HTMLDivElement | null>>([]);
   const selectedIndex = items.findIndex((item) => getId(item) === selectedId);
+
+  useEffect(() => {
+    if (selectedIndex >= 0) {
+      optionRefs.current[selectedIndex]?.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [selectedIndex]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (items.length === 0) return;
@@ -51,6 +59,7 @@ export default function ResourceList<T>({
 
   return (
     <div
+      ref={listRef}
       className={[styles.list, className].filter(Boolean).join(' ')}
       role="listbox"
       aria-label={ariaLabel}
@@ -63,12 +72,18 @@ export default function ResourceList<T>({
         const selected = id === selectedId;
         return (
           <div
+            ref={(node) => {
+              optionRefs.current[index] = node;
+            }}
             className={`${styles.option} ${selected ? styles.selected : ''}`}
             id={`${listId}-option-${index}`}
             key={id}
             role="option"
             aria-selected={selected}
-            onClick={() => onSelect(id)}
+            onClick={() => {
+              listRef.current?.focus();
+              onSelect(id);
+            }}
           >
             {renderItem(item)}
           </div>

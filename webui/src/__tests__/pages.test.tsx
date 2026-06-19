@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import DetailPane from '../components/layout/DetailPane';
@@ -24,11 +25,14 @@ function deferred<T>(): Deferred<T> {
 function ResourceHarness({
   resourceKey,
   loader,
+  onRender,
 }: {
   resourceKey: string;
   loader: (signal: AbortSignal) => Promise<string>;
+  onRender?: (key: string, data: string | null) => void;
 }) {
   const resource = useResource(resourceKey, loader);
+  onRender?.(resourceKey, resource.data);
   return (
     <div>
       <output aria-label="status">{resource.status}</output>
@@ -42,6 +46,24 @@ function ResourceHarness({
 }
 
 describe('useResource', () => {
+  it('does not expose data from the previous key during the new key render', async () => {
+    const renders: Array<{ key: string; data: string | null }> = [];
+    const loader = vi
+      .fn()
+      .mockResolvedValueOnce('first data')
+      .mockReturnValue(new Promise(() => {}));
+    const onRender = (key: string, data: string | null) => renders.push({ key, data });
+    const view = render(
+      <ResourceHarness resourceKey="first" loader={loader} onRender={onRender} />,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText('data')).toHaveTextContent('first data'));
+    const renderCountBeforeKeyChange = renders.length;
+    view.rerender(<ResourceHarness resourceKey="second" loader={loader} onRender={onRender} />);
+
+    expect(renders[renderCountBeforeKeyChange]).toEqual({ key: 'second', data: null });
+  });
+
   it('aborts the previous request when the resource key changes', async () => {
     const first = deferred<string>();
     const second = deferred<string>();
@@ -127,6 +149,57 @@ describe('ResourceList', () => {
     { id: 'a', name: 'A' },
     { id: 'b', name: 'B' },
   ];
+
+  function SelectableList({ initialId = 'a' }: { initialId?: string }) {
+    const [selectedId, setSelectedId] = useState(initialId);
+    return (
+      <ResourceList
+        items={items}
+        selectedId={selectedId}
+        getId={(item) => item.id}
+        renderItem={(item) => item.name}
+        onSelect={setSelectedId}
+      />
+    );
+  }
+
+  it('scrolls keyboard-selected options into view', () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    render(<SelectableList />);
+    scrollIntoView.mockClear();
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'End' });
+
+    expect(screen.getByRole('option', { name: 'B' })).toHaveAttribute('aria-selected', 'true');
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+
+    scrollIntoView.mockClear();
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Home' });
+    expect(screen.getByRole('option', { name: 'A' })).toHaveAttribute('aria-selected', 'true');
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+
+    scrollIntoView.mockClear();
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'ArrowDown' });
+    expect(screen.getByRole('option', { name: 'B' })).toHaveAttribute('aria-selected', 'true');
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+
+    delete HTMLElement.prototype.scrollIntoView;
+  });
+
+  it('focuses the listbox when an option is clicked', () => {
+    render(<SelectableList />);
+
+    fireEvent.click(screen.getByRole('option', { name: 'B' }));
+
+    const listbox = screen.getByRole('listbox');
+    expect(listbox).toHaveFocus();
+    fireEvent.keyDown(listbox, { key: 'ArrowUp' });
+    expect(screen.getByRole('option', { name: 'A' })).toHaveAttribute('aria-selected', 'true');
+  });
 
   it('selects the next item with the keyboard and exposes the selected option', () => {
     const onSelect = vi.fn();

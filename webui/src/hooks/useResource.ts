@@ -7,7 +7,7 @@ export type ResourceState<T> = {
   retry(): void;
 };
 
-type ResourceSnapshot<T> = Omit<ResourceState<T>, 'retry'>;
+type ResourceSnapshot<T> = Omit<ResourceState<T>, 'retry'> & { key: string };
 
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
@@ -24,6 +24,7 @@ export function useResource<T>(
   loader: (signal: AbortSignal) => Promise<T>,
 ): ResourceState<T> {
   const [snapshot, setSnapshot] = useState<ResourceSnapshot<T>>({
+    key,
     status: 'loading',
     data: null,
     error: null,
@@ -39,6 +40,7 @@ export function useResource<T>(
     previousKeyRef.current = key;
 
     setSnapshot((previous) => ({
+      key,
       status: 'loading',
       data: keyChanged ? null : previous.data,
       error: null,
@@ -48,11 +50,12 @@ export function useResource<T>(
       try {
         const data = await loaderRef.current(controller.signal);
         if (!controller.signal.aborted) {
-          setSnapshot({ status: 'ready', data, error: null });
+          setSnapshot({ key, status: 'ready', data, error: null });
         }
       } catch (error) {
         if (!controller.signal.aborted && !isAbortError(error)) {
           setSnapshot((previous) => ({
+            key,
             status: 'error',
             data: previous.data,
             error: toError(error),
@@ -65,5 +68,14 @@ export function useResource<T>(
   }, [key, retryVersion]);
 
   const retryResource = useCallback(() => retry(), []);
-  return { ...snapshot, retry: retryResource };
+  if (snapshot.key !== key) {
+    return { status: 'loading', data: null, error: null, retry: retryResource };
+  }
+
+  return {
+    status: snapshot.status,
+    data: snapshot.data,
+    error: snapshot.error,
+    retry: retryResource,
+  };
 }
