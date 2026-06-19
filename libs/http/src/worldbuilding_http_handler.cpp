@@ -5,6 +5,8 @@
 #include <merak/worldbuilding/pipeline_manager.hpp>
 #include <merak/worldbuilding/ids.hpp>
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -418,6 +420,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_export_chapters(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/export-full)",
         [this](const auto& req, auto& res) { handle_export_full(req, res); });
+    server.Post("/api/worldbuilding/import",
+        [this](const auto& req, auto& res) { handle_import_snapshot(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/scenes)",
         [this](const auto& req, auto& res) { handle_list_scenes(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes)",
@@ -2412,6 +2416,89 @@ void WorldbuildingHttpHandler::handle_export_full(const httplib::Request& req, h
         });
     } catch (const std::exception& e) {
         error_response(res, e.what(), 500, "export_failed");
+    }
+}
+
+void WorldbuildingHttpHandler::handle_import_snapshot(const httplib::Request& req, httplib::Response& res) {
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        if (!body.contains("snapshot")) {
+            error_response(res, "missing required field: snapshot", 400, "missing_field");
+            return;
+        }
+        const auto& snapshot = body["snapshot"];
+        std::optional<std::string> target_name;
+        if (body.contains("target_name") && body["target_name"].is_string()) {
+            target_name = body["target_name"].get<std::string>();
+        }
+
+        auto result = service_->import_snapshot(snapshot, target_name);
+
+        // Import images if image_service_ is available and snapshot has agents
+        int images_imported = 0;
+        if (image_service_ && snapshot.contains("payload")) {
+            const auto& payload = snapshot["payload"];
+            if (payload.contains("agents") && payload["agents"].is_array()) {
+                for (const auto& agent_json : payload["agents"]) {
+                    if (!agent_json.contains("id") || !agent_json.contains("images")) continue;
+                    if (!agent_json["images"].is_array()) continue;
+
+                    std::string old_agent_id = agent_json["id"].get<std::string>();
+                    auto it = result.id_mapping.find(old_agent_id);
+                    if (it == result.id_mapping.end()) continue;
+                    std::string new_agent_id = it->second;
+
+                    for (const auto& img_json : agent_json["images"]) {
+                        if (!img_json.contains("data") || img_json["data"].is_null()) continue;
+                        std::string data_uri = img_json["data"].get<std::string>();
+                        // Only import inline images (skip external references)
+                        if (data_uri.empty() || data_uri.find("data:") != 0) continue;
+
+                        // Parse data URI: data:<mime_type>;base64,<data>
+                        auto comma_pos = data_uri.find(',');
+                        if (comma_pos == std::string::npos) continue;
+                        std::string header = data_uri.substr(0, comma_pos);
+                        std::string b64_data = data_uri.substr(comma_pos + 1);
+
+                        std::string mime_type = img_json.value("mime_type", "image/png");
+                        // Extract mime from header: "data:image/png;base64"
+                        auto colon_pos = header.find(':');
+                        auto semi_pos = header.find(';');
+                        if (colon_pos != std::string::npos && semi_pos != std::string::npos) {
+                            mime_type = header.substr(colon_pos + 1, semi_pos - colon_pos - 1);
+                        }
+
+                        auto decoded = worldbuilding::base64_decode(b64_data);
+                        if (!decoded || decoded->empty()) continue;
+
+                        try {
+                            image_service_->upload(
+                                result.world_id,
+                                new_agent_id,
+                                img_json.value("image_type", "avatar"),
+                                img_json.value("original_name", "imported"),
+                                mime_type,
+                                *decoded);
+                            images_imported++;
+                        } catch (const std::exception& e) {
+                            spdlog::warn("import_snapshot: failed to import image for agent {}: {}",
+                                         new_agent_id, e.what());
+                        }
+                    }
+                }
+            }
+        }
+
+        nlohmann::json response = {
+            {"ok", true},
+            {"world_id", result.world_id},
+            {"id_mapping", result.id_mapping},
+            {"images_imported", images_imported}
+        };
+        json_response(res, response, 201);
+
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 500, "import_failed");
     }
 }
 

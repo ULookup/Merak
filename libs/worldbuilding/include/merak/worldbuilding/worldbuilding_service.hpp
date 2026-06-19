@@ -181,6 +181,14 @@ public:
                                         bool include_diaries = false,
                                         bool include_memories = false);
 
+    struct ImportResult {
+        std::string world_id;
+        std::unordered_map<std::string, std::string> id_mapping;  // old_id -> new_id
+    };
+
+    ImportResult import_snapshot(const nlohmann::json& snapshot,
+                                 const std::optional<std::string>& target_name = std::nullopt);
+
     nlohmann::json get_dashboard(const std::string& world_id) const;
 
 private:

@@ -4,6 +4,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -1209,6 +1210,636 @@ WorldbuildingService::export_world_snapshot(const std::string& world_id,
     };
 
     return snap;
+}
+
+WorldbuildingService::ImportResult
+WorldbuildingService::import_snapshot(const nlohmann::json& snapshot,
+                                       const std::optional<std::string>& target_name) {
+    ImportResult result;
+    auto& id_map = result.id_mapping;
+
+    // Remap helpers
+    auto remap = [&](const std::string& old_id) -> std::string {
+        if (old_id.empty()) return old_id;
+        auto it = id_map.find(old_id);
+        return it != id_map.end() ? it->second : old_id;
+    };
+
+    auto remap_vec = [&](const std::vector<std::string>& ids) -> std::vector<std::string> {
+        std::vector<std::string> out;
+        for (const auto& id : ids) out.push_back(remap(id));
+        return out;
+    };
+
+    auto remap_json_arr = [&](const nlohmann::json& arr) -> std::vector<std::string> {
+        std::vector<std::string> out;
+        if (arr.is_array()) {
+            for (const auto& id : arr) {
+                if (id.is_string()) out.push_back(remap(id.get<std::string>()));
+            }
+        }
+        return out;
+    };
+
+    const auto& source = snapshot.value("source", nlohmann::json::object());
+    const auto& payload = snapshot.value("payload", nlohmann::json::object());
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 1: Create world
+    // ═══════════════════════════════════════════════════════════════
+    std::string imported_name = source.value("name", "Imported World");
+    std::string world_name = target_name.value_or(imported_name + " (imported)");
+    std::string world_desc = source.value("description", "");
+    auto world = worlds_.create_world(world_name, world_desc);
+    result.world_id = world.id;
+
+    std::string old_world_id = source.value("world_id", "");
+    if (!old_world_id.empty()) id_map[old_world_id] = world.id;
+
+    spdlog::info("import_snapshot: created world {} <- {}", world.id, old_world_id);
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 2: Create locations (two-pass for parent_location_id)
+    // ═══════════════════════════════════════════════════════════════
+    std::vector<std::pair<std::string, std::string>> loc_parent_fixup;
+
+    if (payload.contains("locations") && payload["locations"].is_array()) {
+        for (const auto& lj : payload["locations"]) {
+            Location loc;
+            loc.name = lj.value("name", "Unnamed Location");
+            loc.description = lj.value("description", "");
+            loc.region = lj.value("region", "");
+
+            auto created = worlds_.add_location(world.id, std::move(loc));
+            std::string old_id = lj.value("id", "");
+            if (!old_id.empty()) id_map[old_id] = created.id;
+
+            if (lj.contains("parent_location_id") && !lj["parent_location_id"].is_null()
+                && lj["parent_location_id"].is_string()) {
+                loc_parent_fixup.emplace_back(created.id, lj["parent_location_id"].get<std::string>());
+            }
+        }
+
+        for (const auto& [new_id, old_parent] : loc_parent_fixup) {
+            std::string new_parent = remap(old_parent);
+            if (!new_parent.empty()) {
+                worlds_.update_location(world.id, new_id,
+                                        {{"parent_location_id", new_parent}});
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 3: Create individual agents + managers (groups deferred)
+    // ═══════════════════════════════════════════════════════════════
+    struct PendingGroup {
+        nlohmann::json data;
+        std::string old_id;
+    };
+    std::vector<PendingGroup> pending_groups;
+
+    if (payload.contains("agents") && payload["agents"].is_array()) {
+        for (const auto& aj : payload["agents"]) {
+            std::string kind_str = aj.value("kind", "individual");
+            std::string name = aj.value("name", "Unnamed");
+            std::string old_id = aj.value("id", "");
+
+            if (kind_str == "group") {
+                pending_groups.push_back({aj, old_id});
+                continue;
+            }
+
+            AgentRecord agent;
+            // Determine if this is a manager kind (not individual/group)
+            bool is_manager =
+                kind_str == "god" || kind_str == "writer" ||
+                kind_str == "map_manager" || kind_str == "history_manager" ||
+                kind_str == "magic_system_manager" || kind_str == "faction_manager" ||
+                kind_str == "relation_manager";
+
+            if (!is_manager) {
+                // Individual or unknown — create as character
+                CharacterCard card;
+                if (aj.contains("card") && aj["card"].is_object()) {
+                    const auto& cj = aj["card"];
+                    card.name = cj.value("name", name);
+                    card.gender = cj.value("gender", "");
+                    card.race = cj.value("race", "");
+                    card.identity = cj.value("identity", "");
+                    card.emotional_tendency = cj.value("emotional_tendency", "");
+                    card.speaking_style = cj.value("speaking_style", "");
+                    card.core_desire = cj.value("core_desire", "");
+                    card.deep_fear = cj.value("deep_fear", "");
+                    card.daily_goal = cj.value("daily_goal", "");
+                    card.background = cj.value("background", "");
+                    card.knowledge_scope = cj.value("knowledge_scope", "");
+                    card.appearance = cj.value("appearance", "");
+                    card.age = cj.value("age", 0);
+                    card.version = cj.value("version", 1);
+                    if (cj.contains("core_traits") && cj["core_traits"].is_array()) {
+                        for (const auto& t : cj["core_traits"])
+                            if (t.is_string()) card.core_traits.push_back(t.get<std::string>());
+                    }
+                    if (cj.contains("taboo_topics") && cj["taboo_topics"].is_array()) {
+                        for (const auto& t : cj["taboo_topics"])
+                            if (t.is_string()) card.taboo_topics.push_back(t.get<std::string>());
+                    }
+                    if (cj.contains("relations"))
+                        card.relations = cj["relations"];
+                } else {
+                    card.name = name;
+                }
+                agent = agents_.create_character(world.id, std::move(card));
+                sync_entity_to_kg({agent.name, merak::kg::EntityType::Agent,
+                                   agent.id, agent.world_id, agent.created_at});
+            } else {
+                // Manager kind
+                AgentKind kind = AgentKind::God;
+                if (kind_str == "god") kind = AgentKind::God;
+                else if (kind_str == "writer") kind = AgentKind::Writer;
+                else if (kind_str == "map_manager") kind = AgentKind::MapManager;
+                else if (kind_str == "history_manager") kind = AgentKind::HistoryManager;
+                else if (kind_str == "magic_system_manager") kind = AgentKind::MagicSystemManager;
+                else if (kind_str == "faction_manager") kind = AgentKind::FactionManager;
+                else if (kind_str == "relation_manager") kind = AgentKind::RelationManager;
+
+                agent = agents_.create_manager(world.id, kind, name, "");
+            }
+
+            if (!old_id.empty()) id_map[old_id] = agent.id;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 4: Create groups
+    // ═══════════════════════════════════════════════════════════════
+    for (auto& pg : pending_groups) {
+        std::string name = pg.data.value("name", "Unnamed Group");
+        std::string culture_card;
+        if (pg.data.contains("card") && pg.data["card"].is_object()) {
+            culture_card = pg.data["card"].value("background", "");
+        }
+        // Empty member list — group members are not serialized in the snapshot
+        auto agent = agents_.create_group(world.id, name, culture_card, {});
+        if (!pg.old_id.empty()) id_map[pg.old_id] = agent.id;
+        sync_entity_to_kg({agent.name, merak::kg::EntityType::Organization,
+                           agent.id, agent.world_id, agent.created_at});
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 5: Import relations
+    // ═══════════════════════════════════════════════════════════════
+    if (payload.contains("agents") && payload["agents"].is_array()) {
+        for (const auto& aj : payload["agents"]) {
+            std::string old_agent_id = aj.value("id", "");
+            if (!aj.contains("relations") || !aj["relations"].is_array()) continue;
+
+            for (const auto& rj : aj["relations"]) {
+                RelationEntry rel;
+                rel.agent_id = remap(rj.value("agent_id", ""));
+                rel.target_id = remap(rj.value("target_id", ""));
+                rel.relation_type = rj.value("relation_type", "");
+                rel.description = rj.value("description", "");
+                rel.intimacy = rj.value("intimacy", 0);
+                if (rj.contains("key_events") && rj["key_events"].is_array()) {
+                    for (const auto& ke : rj["key_events"])
+                        if (ke.is_string()) rel.key_events.push_back(ke.get<std::string>());
+                }
+                if (!rel.agent_id.empty() && !rel.target_id.empty()) {
+                    try {
+                        agents_.upsert_relation(std::move(rel));
+                    } catch (const std::exception& e) {
+                        spdlog::warn("import_snapshot: failed to upsert relation {}->{}: {}",
+                                     rel.agent_id, rel.target_id, e.what());
+                    }
+                }
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 6: Import arcs
+    // ═══════════════════════════════════════════════════════════════
+    if (payload.contains("arcs") && payload["arcs"].is_array()) {
+        for (const auto& aj : payload["arcs"]) {
+            Arc arc;
+            arc.title = aj.value("title", "");
+            arc.purpose = aj.value("purpose", "");
+            arc.status = aj.value("status", "");
+
+            auto created = narrative_.create_arc(world.id, std::move(arc));
+            std::string old_id = aj.value("id", "");
+            if (!old_id.empty()) id_map[old_id] = created.id;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 7: Import chapters
+    // ═══════════════════════════════════════════════════════════════
+    struct ChapterSceneBatch {
+        std::string new_chapter_id;
+        nlohmann::json scenes_json;
+    };
+    std::vector<ChapterSceneBatch> chapter_scenes;
+
+    if (payload.contains("chapters") && payload["chapters"].is_array()) {
+        for (const auto& cj : payload["chapters"]) {
+            Chapter ch;
+            ch.title = cj.value("title", "Untitled Chapter");
+            ch.pitch = cj.value("pitch", "");
+            ch.notes = cj.value("notes", "");
+            ch.content = cj.value("content", "");
+            ch.number = cj.value("number", 0);
+
+            // Remap arc_id
+            if (cj.contains("arc_id") && !cj["arc_id"].is_null() && cj["arc_id"].is_string()) {
+                ch.arc_id = remap(cj["arc_id"].get<std::string>());
+            }
+
+            // Parse status
+            std::string status_str = cj.value("status", "outline");
+            if (status_str == "drafting") ch.status = ChapterStatus::Drafting;
+            else if (status_str == "completed") ch.status = ChapterStatus::Completed;
+            else if (status_str == "revised") ch.status = ChapterStatus::Revised;
+            else ch.status = ChapterStatus::Outline;
+
+            if (cj.contains("emotional_curve"))
+                ch.emotional_curve = cj["emotional_curve"];
+
+            auto created = narrative_.create_chapter(world.id, std::move(ch));
+            std::string old_id = cj.value("id", "");
+            if (!old_id.empty()) id_map[old_id] = created.id;
+
+            // Collect scenes for later creation
+            if (cj.contains("scenes") && cj["scenes"].is_array()) {
+                chapter_scenes.push_back({created.id, cj["scenes"]});
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 8: Import scenes
+    // ═══════════════════════════════════════════════════════════════
+    for (const auto& cs : chapter_scenes) {
+        for (const auto& sj : cs.scenes_json) {
+            Scene scene;
+            scene.title = sj.value("title", "Untitled Scene");
+            scene.chapter_id = cs.new_chapter_id;
+            scene.world_time = sj.value("world_time", "");
+            scene.narrative = sj.value("narrative", "");
+
+            // Remap location_id
+            if (sj.contains("location_id") && !sj["location_id"].is_null()
+                && sj["location_id"].is_string()) {
+                scene.location_id = remap(sj["location_id"].get<std::string>());
+            }
+            // Remap section_id
+            if (sj.contains("section_id") && !sj["section_id"].is_null()
+                && sj["section_id"].is_string()) {
+                scene.section_id = remap(sj["section_id"].get<std::string>());
+            }
+            // Remap participant_ids
+            scene.participant_ids = remap_json_arr(sj.value("participant_ids", nlohmann::json::array()));
+            // Remap pov_character_id
+            if (sj.contains("pov_character_id") && !sj["pov_character_id"].is_null()
+                && sj["pov_character_id"].is_string()) {
+                scene.pov_character_id = remap(sj["pov_character_id"].get<std::string>());
+            }
+
+            scene.plot_goal = sj.value("plot_goal", "");
+            scene.emotional_goal = sj.value("emotional_goal", "");
+            scene.information_goal = sj.value("information_goal", "");
+            scene.external_conflict = sj.value("external_conflict", "");
+            scene.internal_conflict = sj.value("internal_conflict", "");
+            if (sj.contains("hidden_conflict") && !sj["hidden_conflict"].is_null()
+                && sj["hidden_conflict"].is_string()) {
+                scene.hidden_conflict = sj["hidden_conflict"].get<std::string>();
+            }
+
+            // Parse status
+            std::string s_status_str = sj.value("status", "draft");
+            if (s_status_str == "writing") scene.status = SceneStatus::Writing;
+            else if (s_status_str == "completed") scene.status = SceneStatus::Completed;
+            else scene.status = SceneStatus::Draft;
+
+            if (sj.contains("style_overrides"))
+                scene.style_overrides = sj["style_overrides"];
+
+            try {
+                auto created = narrative_.create_scene(world.id, std::move(scene));
+                std::string old_id = sj.value("id", "");
+                if (!old_id.empty()) id_map[old_id] = created.id;
+            } catch (const std::exception& e) {
+                spdlog::warn("import_snapshot: failed to create scene: {}", e.what());
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 9: Import diaries
+    // ═══════════════════════════════════════════════════════════════
+    if (payload.contains("agents") && payload["agents"].is_array()) {
+        for (const auto& aj : payload["agents"]) {
+            if (!aj.contains("diaries") || !aj["diaries"].is_array()) continue;
+            std::string new_agent_id = remap(aj.value("id", ""));
+            if (new_agent_id.empty()) continue;
+
+            for (const auto& dj : aj["diaries"]) {
+                std::string old_diary_id = dj.value("id", "");
+                std::string new_diary_id = make_id("diary");
+
+                DiaryEntry entry;
+                entry.id = new_diary_id;
+                entry.agent_id = new_agent_id;
+                entry.scene_id = remap(dj.value("scene_id", ""));
+                entry.world_time = dj.value("world_time", "");
+                entry.content = dj.value("content", "");
+                entry.mood = dj.value("mood", "");
+                entry.status = dj.value("status", "completed");
+                entry.leak_risk_level = dj.value("leak_risk_level", 0);
+                entry.tokens_used = dj.value("tokens_used", 0);
+
+                try {
+                    agents_.append_diary_entry(std::move(entry));
+                    if (!old_diary_id.empty()) id_map[old_diary_id] = new_diary_id;
+                } catch (const std::exception& e) {
+                    spdlog::warn("import_snapshot: failed to import diary: {}", e.what());
+                }
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 10: Import memory summaries
+    // ═══════════════════════════════════════════════════════════════
+    if (payload.contains("agents") && payload["agents"].is_array()) {
+        for (const auto& aj : payload["agents"]) {
+            if (!aj.contains("memory_summaries") || !aj["memory_summaries"].is_array()) continue;
+            std::string new_agent_id = remap(aj.value("id", ""));
+            if (new_agent_id.empty()) continue;
+
+            for (const auto& mj : aj["memory_summaries"]) {
+                std::string new_summary_id = make_id("summary");
+
+                MemorySummary summary;
+                summary.id = new_summary_id;
+                summary.agent_id = new_agent_id;
+                summary.period_start = mj.value("period_start", "");
+                summary.period_end = mj.value("period_end", "");
+                summary.summary = mj.value("summary", "");
+
+                // Remap source diary IDs if present
+                if (mj.contains("source_diary_ids") && mj["source_diary_ids"].is_array()) {
+                    for (const auto& did : mj["source_diary_ids"])
+                        if (did.is_string()) summary.source_diary_ids.push_back(remap(did.get<std::string>()));
+                }
+
+                try {
+                    agents_.write_memory_summary(std::move(summary));
+                    std::string old_summary_id = mj.value("id", "");
+                    if (!old_summary_id.empty()) id_map[old_summary_id] = new_summary_id;
+                } catch (const std::exception& e) {
+                    spdlog::warn("import_snapshot: failed to import memory summary: {}", e.what());
+                }
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 11: Import factions (two-pass for rival_faction_ids)
+    // ═══════════════════════════════════════════════════════════════
+    std::vector<std::pair<std::string, std::vector<std::string>>> faction_rival_fixup;
+
+    if (payload.contains("factions") && payload["factions"].is_array()) {
+        for (const auto& fj : payload["factions"]) {
+            Faction faction;
+            faction.name = fj.value("name", "Unnamed Faction");
+            faction.description = fj.value("description", "");
+            faction.goals = fj.value("goals", "");
+            faction.member_agent_ids = remap_json_arr(fj.value("member_agent_ids", nlohmann::json::array()));
+
+            auto created = worlds_.add_faction(world.id, std::move(faction));
+            std::string old_id = fj.value("id", "");
+            if (!old_id.empty()) id_map[old_id] = created.id;
+
+            // Remember rival fixup
+            if (fj.contains("rival_faction_ids") && fj["rival_faction_ids"].is_array()) {
+                std::vector<std::string> old_rivals;
+                for (const auto& rid : fj["rival_faction_ids"])
+                    if (rid.is_string()) old_rivals.push_back(rid.get<std::string>());
+                if (!old_rivals.empty())
+                    faction_rival_fixup.emplace_back(created.id, std::move(old_rivals));
+            }
+        }
+
+        // Fixup rival_faction_ids
+        for (const auto& [new_id, old_rivals] : faction_rival_fixup) {
+            std::vector<std::string> new_rivals = remap_vec(old_rivals);
+            // Remove empty strings from remapping failures
+            new_rivals.erase(std::remove(new_rivals.begin(), new_rivals.end(), ""), new_rivals.end());
+            if (!new_rivals.empty()) {
+                worlds_.update_faction(world.id, new_id,
+                                       {{"rival_faction_ids", new_rivals}});
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 12: Import knowledge
+    // ═══════════════════════════════════════════════════════════════
+    if (payload.contains("knowledge") && payload["knowledge"].is_array()) {
+        for (const auto& kj : payload["knowledge"]) {
+            WorldKnowledge wk;
+            wk.id = make_id("wk");
+            wk.category = kj.value("category", "other");
+            wk.content = kj.value("content", "");
+            wk.created_at = kj.value("created_at", now_iso_utc());
+
+            if (kj.contains("tags") && kj["tags"].is_array()) {
+                for (const auto& t : kj["tags"])
+                    if (t.is_string()) wk.tags.push_back(t.get<std::string>());
+            }
+            if (kj.contains("aliases") && kj["aliases"].is_array()) {
+                for (const auto& a : kj["aliases"])
+                    if (a.is_string()) wk.aliases.push_back(a.get<std::string>());
+            }
+            wk.related_ids = remap_json_arr(kj.value("related_ids", nlohmann::json::array()));
+
+            worlds_.add_world_knowledge(world.id, wk);
+            std::string old_id = kj.value("id", "");
+            if (!old_id.empty()) id_map[old_id] = wk.id;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 13: Import foreshadowing
+    // ═══════════════════════════════════════════════════════════════
+    // Two-pass: create first, then fixup cross-references
+    struct ForeshadowFixup {
+        std::string new_id;
+        std::vector<std::string> old_related_fs_ids;
+        std::vector<std::string> old_related_secret_ids;
+    };
+    std::vector<ForeshadowFixup> fs_fixups;
+
+    if (payload.contains("foreshadowing") && payload["foreshadowing"].is_array()) {
+        for (const auto& fj : payload["foreshadowing"]) {
+            Foreshadowing fs;
+            fs.content = fj.value("content", "");
+            fs.pay_off_idea = fj.value("pay_off_idea", "");
+
+            // Remap planted_at (chapter/scene ID)
+            if (fj.contains("planted_at") && !fj["planted_at"].is_null()
+                && fj["planted_at"].is_string()) {
+                fs.planted_at = remap(fj["planted_at"].get<std::string>());
+            }
+            if (fj.contains("paid_at") && !fj["paid_at"].is_null()
+                && fj["paid_at"].is_string()) {
+                fs.paid_at = remap(fj["paid_at"].get<std::string>());
+            }
+
+            // Parse status
+            std::string fs_status = fj.value("status", "open");
+            if (fs_status == "paid") fs.status = ForeshadowStatus::Paid;
+            else if (fs_status == "abandoned") fs.status = ForeshadowStatus::Abandoned;
+            else fs.status = ForeshadowStatus::Open;
+
+            // Parse hint_level
+            std::string hl = fj.value("hint_level", "visible");
+            if (hl == "subtle") fs.hint_level = ForeshadowHintLevel::Subtle;
+            else if (hl == "obvious") fs.hint_level = ForeshadowHintLevel::Obvious;
+            else fs.hint_level = ForeshadowHintLevel::Visible;
+
+            // Parse created_by
+            std::string cb = fj.value("created_by", "author");
+            if (cb == "god_agent_detected") fs.created_by = ForeshadowCreatedBy::GodAgentDetected;
+            else fs.created_by = ForeshadowCreatedBy::Author;
+
+            if (fj.contains("tags") && fj["tags"].is_array()) {
+                for (const auto& t : fj["tags"])
+                    if (t.is_string()) fs.tags.push_back(t.get<std::string>());
+            }
+
+            auto created = foreshadowing_.plant(world.id, std::move(fs));
+            std::string old_id = fj.value("id", "");
+            if (!old_id.empty()) id_map[old_id] = created.id;
+
+            // Collect cross-refs for fixup
+            ForeshadowFixup ff;
+            ff.new_id = created.id;
+            if (fj.contains("related_foreshadowing_ids") && fj["related_foreshadowing_ids"].is_array()) {
+                for (const auto& rid : fj["related_foreshadowing_ids"]) {
+                    if (rid.is_string()) ff.old_related_fs_ids.push_back(rid.get<std::string>());
+                }
+            }
+            if (fj.contains("related_secret_ids") && fj["related_secret_ids"].is_array()) {
+                for (const auto& sid : fj["related_secret_ids"]) {
+                    if (sid.is_string()) ff.old_related_secret_ids.push_back(sid.get<std::string>());
+                }
+            }
+            if (!ff.old_related_fs_ids.empty() || !ff.old_related_secret_ids.empty()) {
+                fs_fixups.push_back(std::move(ff));
+            }
+        }
+
+        // Fixup foreshadowing cross-refs (secrets may not be imported yet, so this is best-effort)
+        for (const auto& ff : fs_fixups) {
+            nlohmann::json patch;
+            if (!ff.old_related_fs_ids.empty()) {
+                patch["related_foreshadowing_ids"] = remap_vec(ff.old_related_fs_ids);
+            }
+            if (!ff.old_related_secret_ids.empty()) {
+                patch["related_secret_ids"] = remap_vec(ff.old_related_secret_ids);
+            }
+            if (!patch.empty()) {
+                foreshadowing_.patch(world.id, ff.new_id, patch);
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 14: Import secrets
+    // ═══════════════════════════════════════════════════════════════
+    if (payload.contains("secrets") && payload["secrets"].is_array()) {
+        for (const auto& sj : payload["secrets"]) {
+            Secret secret;
+            secret.truth = sj.value("truth", "");
+            secret.public_version = sj.value("public_version", "");
+            secret.stakes = sj.value("stakes", "");
+
+            // Remap holder_id (agent)
+            secret.holder_id = remap(sj.value("holder_id", ""));
+
+            // Remap character vectors
+            secret.aware_character_ids =
+                remap_json_arr(sj.value("aware_character_ids", nlohmann::json::array()));
+            secret.suspicious_character_ids =
+                remap_json_arr(sj.value("suspicious_character_ids", nlohmann::json::array()));
+            secret.related_foreshadowing_ids =
+                remap_json_arr(sj.value("related_foreshadowing_ids", nlohmann::json::array()));
+
+            if (sj.contains("planted_at") && !sj["planted_at"].is_null()
+                && sj["planted_at"].is_string()) {
+                secret.planted_at = remap(sj["planted_at"].get<std::string>());
+            }
+            if (sj.contains("exposed_at") && !sj["exposed_at"].is_null()
+                && sj["exposed_at"].is_string()) {
+                secret.exposed_at = remap(sj["exposed_at"].get<std::string>());
+            }
+
+            // Parse status
+            std::string sec_status = sj.value("status", "active");
+            if (sec_status == "exposed") secret.status = SecretStatus::Exposed;
+            else if (sec_status == "abandoned") secret.status = SecretStatus::Abandoned;
+            else secret.status = SecretStatus::Active;
+
+            if (sj.contains("believed_truths"))
+                secret.believed_truths = sj["believed_truths"];
+
+            auto created = secrets_.create(world.id, std::move(secret));
+            std::string old_id = sj.value("id", "");
+            if (!old_id.empty()) id_map[old_id] = created.id;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 15: Import timeline events
+    // ═══════════════════════════════════════════════════════════════
+    if (payload.contains("timeline") && payload["timeline"].is_array()) {
+        for (const auto& tj : payload["timeline"]) {
+            TimelineEvent event;
+            event.world_time = tj.value("world_time", "");
+            event.description = tj.value("description", "");
+            event.recorded_by = remap(tj.value("recorded_by", ""));
+            event.affected_character_ids =
+                remap_json_arr(tj.value("affected_character_ids", nlohmann::json::array()));
+            event.related_scene_ids =
+                remap_json_arr(tj.value("related_scene_ids", nlohmann::json::array()));
+
+            try {
+                narrative_.record_timeline_event(world.id, std::move(event));
+            } catch (const std::exception& e) {
+                spdlog::warn("import_snapshot: failed to record timeline event: {}", e.what());
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Step 16: Store import metadata in world config
+    // ═══════════════════════════════════════════════════════════════
+    {
+        nlohmann::json meta;
+        meta["imported_from"] = old_world_id;
+        meta["imported_at"] = now_iso_utc();
+        meta["schema_version"] = snapshot.value("schema_version", "unknown");
+        meta["snapshot_id"] = snapshot.value("snapshot_id", "unknown");
+        worlds_.update_world_config(world.id, meta);
+    }
+
+    spdlog::info("import_snapshot: imported {} entities into world {}",
+                 id_map.size(), world.id);
+
+    return result;
 }
 
 } // namespace merak::worldbuilding
