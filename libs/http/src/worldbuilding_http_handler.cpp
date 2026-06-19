@@ -9,6 +9,7 @@
 #include <fstream>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <unordered_map>
 
 namespace merak {
@@ -267,6 +268,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_update_world(req, res); });
 
     // Agents
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/search)",
+        [this](const auto& req, auto& res) { handle_search_agents(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/agents)",
         [this](const auto& req, auto& res) { handle_list_agents(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/agents)",
@@ -2691,6 +2694,38 @@ void WorldbuildingHttpHandler::handle_get_rewrite_result(const httplib::Request&
             return;
         }
         json_response(res, {{"ok", true}, {"rewrite_result", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_search_agents(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        worldbuilding::AgentStore::SearchCriteria criteria;
+        criteria.q = req.has_param("q") ? req.get_param_value("q") : "";
+        criteria.identity = req.has_param("identity") ? req.get_param_value("identity") : "";
+        criteria.race = req.has_param("race") ? req.get_param_value("race") : "";
+        if (req.has_param("traits") && !req.get_param_value("traits").empty()) {
+            std::string traits_str = req.get_param_value("traits");
+            std::istringstream iss(traits_str);
+            std::string token;
+            while (std::getline(iss, token, ',')) {
+                if (!token.empty()) criteria.traits.push_back(token);
+            }
+        }
+        auto results = service_->agents().search_agents(wid, criteria);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& a : results) {
+            nlohmann::json agent_obj = {
+                {"id", a.id},
+                {"name", a.name},
+                {"display_name", a.display_name},
+                {"kind", worldbuilding::to_string(a.kind)}
+            };
+            arr.push_back(agent_obj);
+        }
+        json_response(res, {{"ok", true}, {"agents", arr}, {"total", results.size()}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }

@@ -39,6 +39,7 @@ private:
 
     // Agent
     void handle_list_agents(const httplib::Request&, httplib::Response&);
+    void handle_search_agents(const httplib::Request&, httplib::Response&);
     void handle_create_agent(const httplib::Request&, httplib::Response&);
     void handle_get_agent(const httplib::Request&, httplib::Response&);
     void handle_delete_agent(const httplib::Request&, httplib::Response&);
