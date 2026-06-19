@@ -7,6 +7,7 @@
 #include <merak/storage/image_service.hpp>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace merak {
 
@@ -102,6 +103,18 @@ private:
     void handle_store_pending_creation(const httplib::Request&, httplib::Response&);
     void handle_get_pending_creation(const httplib::Request&, httplib::Response&);
     void handle_resolve_creation(const httplib::Request&, httplib::Response&);
+
+    // Agent-driven generation infrastructure
+    struct PendingAgentRun {
+        std::string world_id;
+        std::string operation_type;
+    };
+    void start_agent_run(const httplib::Request& req, httplib::Response& res,
+                         const std::string& world_id, const std::string& task_description,
+                         const std::string& operation_type);
+    void capture_agent_result(const std::string& run_id);
+
+    std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;
 
     // Agent prompt
     void handle_load_agent_prompt(const httplib::Request&, httplib::Response&);

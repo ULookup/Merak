@@ -177,6 +177,58 @@ nlohmann::json image_json(const ImageRecord& img) {
 
 } // namespace
 
+void WorldbuildingHttpHandler::start_agent_run(
+    const httplib::Request& req, httplib::Response& res,
+    const std::string& world_id, const std::string& task_description,
+    const std::string& operation_type) {
+    if (!runtime_) {
+        error_response(res, "Runtime service not available", 503, "runtime_unavailable");
+        return;
+    }
+    try {
+        auto session = runtime_->create_session("", world_id, "god_agent");
+        runtime_->set_session_ephemeral(session.id, 30);
+        auto run = runtime_->start_run(session.id, task_description, "");
+
+        pending_agent_runs_[run.id] = {world_id, operation_type};
+
+        json_response(res, {
+            {"ok", true},
+            {"session_id", session.id},
+            {"run_id", run.id}
+        }, 202);
+    } catch (const RuntimeError& e) {
+        int status = e.code() == "session_busy" ? 409 : 400;
+        error_response(res, e.what(), status, e.code());
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::capture_agent_result(const std::string& run_id) {
+    auto it = pending_agent_runs_.find(run_id);
+    if (it == pending_agent_runs_.end()) return;
+    try {
+        auto run = runtime_->get_run(run_id);
+        if (!run || run->status != RunStatus::Completed) return;
+
+        nlohmann::json messages = nlohmann::json::array();
+        for (const auto& e : runtime_->events_after(run->session_id, 0)) {
+            if (e.run_id == run_id && e.type == "message_appended") {
+                messages.push_back({
+                    {"role", e.payload.value("role", "")},
+                    {"content", e.payload.value("content", "")}
+                });
+            }
+        }
+        service_->worlds().store_agent_result(it->second.world_id,
+                                               it->second.operation_type, messages);
+    } catch (...) {
+        // Best-effort caching; don't crash
+    }
+    pending_agent_runs_.erase(it);
+}
+
 WorldbuildingHttpHandler::WorldbuildingHttpHandler(
     std::shared_ptr<worldbuilding::WorldbuildingService> service,
     std::shared_ptr<RuntimeService> runtime)
