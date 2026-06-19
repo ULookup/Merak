@@ -1,4 +1,12 @@
-import { BookOpen, Clock3, Files, MessageSquarePlus, PanelsTopLeft, Users } from 'lucide-react';
+import {
+  BookOpen,
+  Clock3,
+  Files,
+  MessageSquarePlus,
+  PanelsTopLeft,
+  Settings,
+  Users,
+} from 'lucide-react';
 import { api } from '../api/client';
 import type {
   SessionSummary,
@@ -22,13 +30,14 @@ interface OverviewPageProps {
 }
 
 interface OverviewData {
-  agents: WorldAgent[];
-  chapters: StoryChapter[];
-  scenes: StoryScene[];
-  files: WorkspaceFile[];
+  agents: WorldAgent[] | null;
+  chapters: StoryChapter[] | null;
+  scenes: StoryScene[] | null;
+  files: WorkspaceFile[] | null;
   overview: StoryOverview | null;
   dashboard: DashboardData | null;
   dashboardFailed: boolean;
+  failedLists: Array<'agents' | 'chapters' | 'scenes' | 'files'>;
 }
 
 async function loadOverview(worldId: string): Promise<OverviewData> {
@@ -47,16 +56,22 @@ async function loadOverview(worldId: string): Promise<OverviewData> {
   }
 
   return {
-    agents: agents.status === 'fulfilled' ? (agents.value.agents ?? []) : [],
-    chapters: chapters.status === 'fulfilled' ? (chapters.value.chapters ?? []) : [],
-    scenes: scenes.status === 'fulfilled' ? (scenes.value.scenes ?? []) : [],
-    files: files.status === 'fulfilled' ? (files.value.files ?? []) : [],
+    agents: agents.status === 'fulfilled' ? (agents.value.agents ?? []) : null,
+    chapters: chapters.status === 'fulfilled' ? (chapters.value.chapters ?? []) : null,
+    scenes: scenes.status === 'fulfilled' ? (scenes.value.scenes ?? []) : null,
+    files: files.status === 'fulfilled' ? (files.value.files ?? []) : null,
     overview: overview.status === 'fulfilled' ? overview.value.overview : null,
     dashboard:
       dashboard.status === 'fulfilled'
         ? ((dashboard.value.dashboard as DashboardData | undefined) ?? null)
         : null,
     dashboardFailed: dashboard.status === 'rejected',
+    failedLists: [
+      ...(agents.status === 'rejected' ? (['agents'] as const) : []),
+      ...(chapters.status === 'rejected' ? (['chapters'] as const) : []),
+      ...(scenes.status === 'rejected' ? (['scenes'] as const) : []),
+      ...(files.status === 'rejected' ? (['files'] as const) : []),
+    ],
   };
 }
 
@@ -87,13 +102,16 @@ export default function OverviewPage({ worldId, sessions, onNavigate }: Overview
     .filter((session) => session.world_id === worldId && !session.archived_at)
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     .slice(0, 3);
-  const incompleteChapters = data.chapters.filter(
-    (chapter) => !['completed', 'revised'].includes(chapter.status),
-  );
-  const incompleteScenes = data.scenes.filter((scene) => scene.status !== 'completed');
-  const isEmpty =
-    metrics.characterCount + metrics.chapterCount + metrics.sceneCount + metrics.fileCount === 0 &&
-    activeSessions.length === 0;
+  const incompleteChapters =
+    data.chapters?.filter((chapter) => !['completed', 'revised'].includes(chapter.status)) ?? null;
+  const incompleteScenes = data.scenes?.filter((scene) => scene.status !== 'completed') ?? null;
+  const metricValues = [
+    metrics.characterCount,
+    metrics.chapterCount,
+    metrics.sceneCount,
+    metrics.fileCount,
+  ];
+  const isEmpty = metricValues.every((value) => value === 0) && activeSessions.length === 0;
 
   if (isEmpty) {
     return (
@@ -103,11 +121,11 @@ export default function OverviewPage({ worldId, sessions, onNavigate }: Overview
           <h1>Your world is ready for its first details</h1>
           <p>Add a character or chapter to begin shaping this world.</p>
           <div className={styles.emptyActions}>
-            <button type="button" onClick={() => onNavigate('characters')}>
-              View characters
+            <button type="button" onClick={() => onNavigate('sessions')}>
+              Open sessions
             </button>
-            <button type="button" onClick={() => onNavigate('chapters')}>
-              View chapters
+            <button type="button" onClick={() => onNavigate('settings')}>
+              Settings
             </button>
           </div>
         </section>
@@ -115,28 +133,32 @@ export default function OverviewPage({ worldId, sessions, onNavigate }: Overview
     );
   }
 
+  const sourceCopy = (source: 'dashboard' | 'list' | 'overview' | null, listLabel: string) =>
+    source === 'dashboard'
+      ? 'Counted from the worldbuilding dashboard.'
+      : source === 'overview'
+        ? 'Counted from the story overview.'
+        : `Counted from the ${listLabel}.`;
   const metricCards = [
-    ['Characters', metrics.characterCount, 'Counted from the world character list.', Users],
     [
-      'Chapters',
-      metrics.chapterCount,
-      'Counted from the chapter list or dashboard aggregate.',
-      BookOpen,
+      'Characters',
+      metrics.characterCount,
+      sourceCopy(metrics.characterSource, 'world character list'),
+      Users,
     ],
-    [
-      'Scenes',
-      metrics.sceneCount,
-      'Counted from the scene list or dashboard aggregate.',
-      PanelsTopLeft,
-    ],
-    ['Files', metrics.fileCount, 'Counted from workspace files linked to this world.', Files],
-  ] as const;
+    ['Chapters', metrics.chapterCount, sourceCopy(metrics.chapterSource, 'chapter list'), BookOpen],
+    ['Scenes', metrics.sceneCount, sourceCopy(metrics.sceneSource, 'scene list'), PanelsTopLeft],
+    ['Files', metrics.fileCount, sourceCopy(metrics.fileSource, 'workspace file list'), Files],
+  ].filter((card): card is [string, number, string, typeof Users] => card[1] !== null);
 
   return (
     <main className={styles.page}>
-      {data.dashboardFailed && (
+      {(data.dashboardFailed || data.failedLists.length > 0) && (
         <div className={styles.notice} role="status">
-          Dashboard summary is unavailable. Showing derived resource counts.
+          {data.dashboardFailed && 'Dashboard summary is unavailable. '}
+          {data.failedLists.length > 0
+            ? 'Some overview data is unavailable. Available sections use verified sources.'
+            : 'Showing derived resource counts.'}
         </div>
       )}
 
@@ -180,23 +202,34 @@ export default function OverviewPage({ worldId, sessions, onNavigate }: Overview
           <header>
             <h2>Current progress</h2>
           </header>
-          <ProgressRow
-            label="Chapter completion"
-            value={metrics.chapterCompletionPercent}
-            detail={`${metrics.completedChapterCount} of ${metrics.chapterCount} chapters`}
-          />
-          <ProgressRow
-            label="Scene completion"
-            value={metrics.sceneCompletionPercent}
-            detail={`${metrics.completedSceneCount} of ${metrics.sceneCount} scenes`}
-          />
+          {metrics.chapterCompletionPercent !== null &&
+            metrics.completedChapterCount !== null &&
+            metrics.chapterCount !== null && (
+              <ProgressRow
+                label="Chapter completion"
+                value={metrics.chapterCompletionPercent}
+                detail={`${metrics.completedChapterCount} of ${metrics.chapterCount} chapters`}
+              />
+            )}
+          {metrics.sceneCompletionPercent !== null &&
+            metrics.completedSceneCount !== null &&
+            metrics.sceneCount !== null && (
+              <ProgressRow
+                label="Scene completion"
+                value={metrics.sceneCompletionPercent}
+                detail={`${metrics.completedSceneCount} of ${metrics.sceneCount} scenes`}
+              />
+            )}
+          {metrics.chapterCompletionPercent === null && metrics.sceneCompletionPercent === null && (
+            <p className={styles.muted}>Progress sources are unavailable.</p>
+          )}
         </section>
 
         <section className={styles.panel}>
           <header>
             <h2>Reminders</h2>
           </header>
-          {incompleteChapters.slice(0, 3).map((chapter) => (
+          {incompleteChapters?.slice(0, 3).map((chapter) => (
             <button
               className={styles.reminder}
               key={chapter.id}
@@ -209,7 +242,7 @@ export default function OverviewPage({ worldId, sessions, onNavigate }: Overview
               </span>
             </button>
           ))}
-          {incompleteScenes.slice(0, 3).map((scene) => (
+          {incompleteScenes?.slice(0, 3).map((scene) => (
             <button className={styles.reminder} key={scene.id} onClick={() => onNavigate('scenes')}>
               <Clock3 size={17} aria-hidden="true" />
               <span>
@@ -218,9 +251,18 @@ export default function OverviewPage({ worldId, sessions, onNavigate }: Overview
               </span>
             </button>
           ))}
-          {!incompleteChapters.length && !incompleteScenes.length && (
-            <p className={styles.muted}>No incomplete chapters or scenes.</p>
+          {incompleteChapters === null && incompleteScenes === null && (
+            <p className={styles.muted}>Reminder sources are unavailable.</p>
           )}
+          {(incompleteChapters === null) !== (incompleteScenes === null) && (
+            <p className={styles.muted}>Some reminder sources are unavailable.</p>
+          )}
+          {incompleteChapters !== null &&
+            incompleteScenes !== null &&
+            !incompleteChapters.length &&
+            !incompleteScenes.length && (
+              <p className={styles.muted}>No incomplete chapters or scenes.</p>
+            )}
         </section>
 
         <section className={styles.panel}>
@@ -232,17 +274,9 @@ export default function OverviewPage({ worldId, sessions, onNavigate }: Overview
               <MessageSquarePlus aria-hidden="true" />
               Sessions
             </button>
-            <button aria-label="View characters" onClick={() => onNavigate('characters')}>
-              <Users aria-hidden="true" />
-              Characters
-            </button>
-            <button onClick={() => onNavigate('chapters')}>
-              <BookOpen aria-hidden="true" />
-              Chapters
-            </button>
-            <button onClick={() => onNavigate('files')}>
-              <Files aria-hidden="true" />
-              Files
+            <button onClick={() => onNavigate('settings')}>
+              <Settings aria-hidden="true" />
+              Settings
             </button>
           </div>
         </section>

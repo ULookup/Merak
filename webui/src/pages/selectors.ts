@@ -4,23 +4,27 @@ type StatusItem = Countable & { status?: string };
 export type DashboardData = Record<string, unknown>;
 
 export interface WorldMetricInput {
-  agents: Countable[];
-  chapters: StatusItem[];
-  scenes: StatusItem[];
-  files: Countable[];
+  agents: Countable[] | null;
+  chapters: StatusItem[] | null;
+  scenes: StatusItem[] | null;
+  files: Countable[] | null;
   overview: { agents?: Countable[] } | null;
   dashboard: DashboardData | null;
 }
 
 export interface WorldMetrics {
-  characterCount: number;
-  chapterCount: number;
-  completedChapterCount: number;
-  sceneCount: number;
-  completedSceneCount: number;
-  fileCount: number;
-  chapterCompletionPercent: number;
-  sceneCompletionPercent: number;
+  characterCount: number | null;
+  chapterCount: number | null;
+  completedChapterCount: number | null;
+  sceneCount: number | null;
+  completedSceneCount: number | null;
+  fileCount: number | null;
+  chapterCompletionPercent: number | null;
+  sceneCompletionPercent: number | null;
+  characterSource: 'dashboard' | 'list' | 'overview' | null;
+  chapterSource: 'dashboard' | 'list' | null;
+  sceneSource: 'dashboard' | 'list' | null;
+  fileSource: 'dashboard' | 'list' | null;
 }
 
 function nestedNumber(source: DashboardData | null, group: string, key: string) {
@@ -35,18 +39,28 @@ function percentage(completed: number, total: number) {
 }
 
 export function selectWorldMetrics(input: WorldMetricInput): WorldMetrics {
-  const derivedAgents = input.agents.length || input.overview?.agents?.length || 0;
-  const derivedCompletedChapters = input.chapters.filter((item) =>
+  const dashboardCharacters = nestedNumber(input.dashboard, 'agents', 'total');
+  const dashboardChapters = nestedNumber(input.dashboard, 'chapters', 'total');
+  const dashboardCompletedChapters = nestedNumber(input.dashboard, 'chapters', 'completed');
+  const dashboardRevisedChapters = nestedNumber(input.dashboard, 'chapters', 'revised');
+  const dashboardScenes = nestedNumber(input.dashboard, 'scenes', 'total');
+  const dashboardCompletedScenes = nestedNumber(input.dashboard, 'scenes', 'completed');
+  const dashboardFiles = nestedNumber(input.dashboard, 'file_links', 'total');
+  const derivedCompletedChapters = input.chapters?.filter((item) =>
     ['completed', 'revised'].includes(item.status ?? ''),
   ).length;
-  const derivedCompletedScenes = input.scenes.filter((item) => item.status === 'completed').length;
-  const characterCount = nestedNumber(input.dashboard, 'agents', 'total') ?? derivedAgents;
-  const chapterCount = nestedNumber(input.dashboard, 'chapters', 'total') ?? input.chapters.length;
+  const derivedCompletedScenes = input.scenes?.filter((item) => item.status === 'completed').length;
+  const characterCount =
+    dashboardCharacters ?? input.agents?.length ?? input.overview?.agents?.length ?? null;
+  const chapterCount = dashboardChapters ?? input.chapters?.length ?? null;
   const completedChapterCount =
-    nestedNumber(input.dashboard, 'chapters', 'completed') ?? derivedCompletedChapters;
-  const sceneCount = nestedNumber(input.dashboard, 'scenes', 'total') ?? input.scenes.length;
-  const completedSceneCount =
-    nestedNumber(input.dashboard, 'scenes', 'completed') ?? derivedCompletedScenes;
+    dashboardCompletedChapters !== null
+      ? dashboardCompletedChapters + (dashboardRevisedChapters ?? 0)
+      : (derivedCompletedChapters ?? null);
+  const sceneCount = dashboardScenes ?? input.scenes?.length ?? null;
+  const completedSceneCount = dashboardCompletedScenes ?? derivedCompletedScenes ?? null;
+  const chapterPercent = nestedNumber(input.dashboard, 'progress', 'chapter_completion_pct');
+  const scenePercent = nestedNumber(input.dashboard, 'progress', 'scene_completion_pct');
 
   return {
     characterCount,
@@ -54,12 +68,27 @@ export function selectWorldMetrics(input: WorldMetricInput): WorldMetrics {
     completedChapterCount,
     sceneCount,
     completedSceneCount,
-    fileCount: input.files.length,
+    fileCount: dashboardFiles ?? input.files?.length ?? null,
     chapterCompletionPercent:
-      nestedNumber(input.dashboard, 'progress', 'chapter_completion_pct') ??
-      percentage(completedChapterCount, chapterCount),
+      chapterPercent ??
+      (completedChapterCount !== null && chapterCount !== null
+        ? percentage(completedChapterCount, chapterCount)
+        : null),
     sceneCompletionPercent:
-      nestedNumber(input.dashboard, 'progress', 'scene_completion_pct') ??
-      percentage(completedSceneCount, sceneCount),
+      scenePercent ??
+      (completedSceneCount !== null && sceneCount !== null
+        ? percentage(completedSceneCount, sceneCount)
+        : null),
+    characterSource:
+      dashboardCharacters !== null
+        ? 'dashboard'
+        : input.agents !== null
+          ? 'list'
+          : input.overview?.agents
+            ? 'overview'
+            : null,
+    chapterSource: dashboardChapters !== null ? 'dashboard' : input.chapters ? 'list' : null,
+    sceneSource: dashboardScenes !== null ? 'dashboard' : input.scenes ? 'list' : null,
+    fileSource: dashboardFiles !== null ? 'dashboard' : input.files ? 'list' : null,
   };
 }

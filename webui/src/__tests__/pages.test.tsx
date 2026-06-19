@@ -316,12 +316,40 @@ describe('Overview selectors', () => {
       chapterCompletionPercent: 67,
     });
   });
+
+  it('counts revised dashboard chapters as completed progress', () => {
+    expect(
+      selectWorldMetrics({
+        agents: [],
+        chapters: null,
+        scenes: [],
+        files: [],
+        overview: null,
+        dashboard: {
+          chapters: { total: 1, completed: 0, revised: 1 },
+          progress: { chapter_completion_pct: 100 },
+        },
+      }),
+    ).toMatchObject({
+      chapterCount: 1,
+      completedChapterCount: 1,
+      chapterCompletionPercent: 100,
+    });
+  });
 });
 
 describe('Overview page', () => {
   const navigate = vi.fn();
 
-  function mockResources({ dashboardFails = false, empty = false } = {}) {
+  function mockResources({
+    dashboardFails = false,
+    empty = false,
+    failedLists = [],
+  }: {
+    dashboardFails?: boolean;
+    empty?: boolean;
+    failedLists?: Array<'agents' | 'chapters' | 'scenes' | 'files'>;
+  } = {}) {
     vi.mocked(api.listAgents).mockResolvedValue({
       ok: true,
       agents: empty ? [] : [{ id: 'a', name: 'Lin', display_name: 'Lin', kind: 'character' }],
@@ -357,6 +385,18 @@ describe('Overview page', () => {
         ? Promise.reject(new Error('Dashboard unavailable'))
         : Promise.resolve({ ok: true, dashboard: empty ? {} : dashboard }),
     );
+    if (failedLists.includes('agents')) {
+      vi.mocked(api.listAgents).mockRejectedValue(new Error('Agents unavailable'));
+    }
+    if (failedLists.includes('chapters')) {
+      vi.mocked(api.listChapters).mockRejectedValue(new Error('Chapters unavailable'));
+    }
+    if (failedLists.includes('scenes')) {
+      vi.mocked(api.listScenes).mockRejectedValue(new Error('Scenes unavailable'));
+    }
+    if (failedLists.includes('files')) {
+      vi.mocked(api.listWorkspaceFiles).mockRejectedValue(new Error('Files unavailable'));
+    }
   }
 
   it('Overview renders API-backed metrics, sessions, reminders, and quick links', async () => {
@@ -382,8 +422,16 @@ describe('Overview page', () => {
 
     expect(await screen.findByText('Night planning')).toBeDefined();
     expect(screen.getByText('The First Light')).toBeDefined();
-    expect(screen.getByRole('button', { name: 'View characters' })).toBeDefined();
-    expect(screen.getByTitle('Counted from the world character list.')).toHaveTextContent('1');
+    expect(screen.getByRole('button', { name: 'Sessions' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'View characters' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Chapters' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Files' })).toBeNull();
+    expect(screen.getByText('Characters').closest('article')).toHaveAttribute(
+      'title',
+      'Counted from the worldbuilding dashboard.',
+    );
+    expect(screen.getByText('Characters').closest('article')).toHaveTextContent('1');
   });
 
   it('Overview falls back to derived resource counts when dashboard fails', async () => {
@@ -393,6 +441,38 @@ describe('Overview page', () => {
     expect(await screen.findByText(/Dashboard summary is unavailable\./)).toBeDefined();
     expect(screen.getByTitle('Counted from the world character list.')).toHaveTextContent('1');
     expect(screen.getByText('The First Light')).toBeDefined();
+  });
+
+  it('Overview does not turn failed lists into an empty world when dashboard also fails', async () => {
+    mockResources({
+      dashboardFails: true,
+      empty: true,
+      failedLists: ['agents', 'chapters', 'scenes', 'files'],
+    });
+    render(<OverviewPage worldId="world-1" sessions={[]} onNavigate={navigate} />);
+
+    expect(await screen.findByText(/Some overview data is unavailable\./)).toBeDefined();
+    expect(
+      screen.queryByRole('heading', { name: 'Your world is ready for its first details' }),
+    ).toBeNull();
+    expect(screen.getByText('Characters')).toBeDefined();
+    expect(screen.queryByText('Chapters')).toBeNull();
+    expect(screen.queryByText('Scenes')).toBeNull();
+    expect(screen.queryByText('Files')).toBeNull();
+    expect(screen.getByText('Reminder sources are unavailable.')).toBeDefined();
+  });
+
+  it('Overview omits only a failed metric and shows a partial warning', async () => {
+    mockResources({ failedLists: ['files'] });
+    render(<OverviewPage worldId="world-1" sessions={[]} onNavigate={navigate} />);
+
+    expect(await screen.findByText(/Some overview data is unavailable\./)).toBeDefined();
+    expect(screen.getByText('Characters')).toBeDefined();
+    expect(screen.getByText('Chapters')).toBeDefined();
+    expect(screen.queryByText('Files')).toBeNull();
+    expect(
+      screen.queryByRole('heading', { name: 'Your world is ready for its first details' }),
+    ).toBeNull();
   });
 
   it('Overview shows an honest empty state for an empty world', async () => {
