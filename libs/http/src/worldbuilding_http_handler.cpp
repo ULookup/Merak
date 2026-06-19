@@ -436,6 +436,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_delete_scene(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/end)",
         [this](const auto& req, auto& res) { handle_scene_end(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/extraction-result)",
+        [this](const auto& req, auto& res) { handle_scene_extraction_result(req, res); });
 
     // Time
     server.Get(R"(/api/worldbuilding/([^/]+)/time)",
@@ -3262,6 +3264,41 @@ void WorldbuildingHttpHandler::handle_get_rewrite_result(const httplib::Request&
             return;
         }
         json_response(res, {{"ok", true}, {"rewrite_result", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_scene_extraction_result(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string sid = req.matches[2];
+
+        auto world = service_->worlds().get_world(wid);
+        if (!world) {
+            error_response(res, "World not found", 404);
+            return;
+        }
+
+        auto scene = service_->narrative().get_scene(wid, sid);
+        if (!scene) {
+            error_response(res, "Scene not found", 404);
+            return;
+        }
+
+        auto result = service_->worlds().get_agent_result(wid, "extraction_" + sid);
+        nlohmann::json candidates = nlohmann::json::array();
+        if (result && result->contains("candidates") && (*result)["candidates"].is_array()) {
+            for (const auto& c : (*result)["candidates"]) {
+                nlohmann::json candidate;
+                if (c.contains("relation")) candidate["relation"] = c["relation"];
+                if (c.contains("status")) candidate["status"] = c["status"];
+                if (c.contains("evidence")) candidate["evidence"] = c["evidence"];
+                if (c.contains("change_summary")) candidate["change_summary"] = c["change_summary"];
+                candidates.push_back(candidate);
+            }
+        }
+        json_response(res, {{"ok", true}, {"candidates", candidates}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }

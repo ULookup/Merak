@@ -150,6 +150,9 @@ private:
     void handle_character_appearances(const httplib::Request&, httplib::Response&);
     void handle_get_rewrite_result(const httplib::Request&, httplib::Response&);
 
+    // KG extraction result
+    void handle_scene_extraction_result(const httplib::Request&, httplib::Response&);
+
     std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;
     mutable std::mutex pending_runs_mutex_;
 
