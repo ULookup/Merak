@@ -262,7 +262,9 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                 try {
                     auto agent = agents_.get_agent(pid);
                     if (agent) participant_names.push_back(agent->name);
-                } catch (...) {}
+                } catch (const std::exception& e) {
+                    spdlog::debug("get_agent for KG participant names skipped: {}", e.what());
+                }
             }
             if (participant_names.size() > 1) {
                 try {
@@ -272,7 +274,9 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                     if (!md.empty()) {
                         god << md << "\n";
                     }
-                } catch (...) {}
+                } catch (const std::exception& e) {
+                    spdlog::debug("KG query_subgraph skipped: {}", e.what());
+                }
             }
         }
 
@@ -297,7 +301,8 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
         try {
             auto card = agents_.load_character_card(pid);
             prompt << card_to_prompt(card);
-        } catch (...) {
+        } catch (const std::exception& e) {
+            spdlog::debug("load_character_card({}) skipped: {}", pid, e.what());
             // Agent may be a manager or group; skip card for non-characters
             prompt << "代理人: " << pid << "\n";
         }
@@ -333,7 +338,8 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                     view.loaded_memory_refs.push_back(d.id);
                 }
             }
-        } catch (...) {
+        } catch (const std::exception& e) {
+            spdlog::debug("diary index loading skipped: {}", e.what());
         }
 
         // Group shared memory: if agent is a group member, load shared refs
@@ -342,7 +348,8 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
             for (const auto& ref : shared) {
                 view.loaded_memory_refs.push_back(ref);
             }
-        } catch (...) {
+        } catch (const std::exception& e) {
+            spdlog::debug("shared_memory_refs_for skipped: {}", e.what());
         }
 
         // Append character behavior prompt
@@ -455,7 +462,8 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
         for (const auto& pid : scene.participant_ids) {
             try {
                 voice_.update(pid, dialogue_lines);
-            } catch (...) {
+            } catch (const std::exception& e) {
+                spdlog::debug("voice fingerprint update skipped: {}", e.what());
             }
         }
     }
@@ -479,7 +487,8 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
             try {
                 auto planted = foreshadowing_.plant(world_id, proposal);
                 wrap.proposed_foreshadowing.push_back(planted);
-            } catch (...) {
+            } catch (const std::exception& e) {
+                spdlog::debug("foreshadowing proposal plant skipped: {}", e.what());
             }
         }
     }
@@ -550,7 +559,8 @@ SceneOrchestrator::route_direct_message(const std::string& world_id,
                 for (const auto& ref : group.shared_memory_ids) {
                     view.loaded_memory_refs.push_back(ref);
                 }
-            } catch (...) {
+            } catch (const std::exception& e) {
+                spdlog::debug("group member card load({}) skipped: {}", member_id, e.what());
                 view.system_prompt = "群体 " + agent->name + " 成员 " + member_id;
             }
         } else {
@@ -564,7 +574,8 @@ SceneOrchestrator::route_direct_message(const std::string& world_id,
             prompt << card_to_prompt(card) << "\n";
             prompt << "## 用户消息\n" << message;
             view.system_prompt = prompt.str();
-        } catch (...) {
+        } catch (const std::exception& e) {
+            spdlog::debug("individual card load({}) skipped: {}", target_agent_id, e.what());
             view.system_prompt = "代理人 " + target_agent_id + ":\n" + message;
         }
     }

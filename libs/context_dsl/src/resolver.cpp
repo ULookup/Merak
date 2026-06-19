@@ -1,5 +1,6 @@
 #include <merak/dsl/resolver.hpp>
 
+#include <merak/utilities.hpp>
 #include <merak/kg/kg_provider.hpp>
 #include <merak/worldbuilding/agent_store.hpp>
 #include <merak/worldbuilding/foreshadowing_store.hpp>
@@ -437,11 +438,7 @@ ResolvedContent Resolver::resolve(const DslRef& ref) {
 
         int limit = 5;
         if (auto limit_str = param("limit"); !limit_str.empty()) {
-            try {
-                limit = std::stoi(limit_str);
-            } catch (...) {
-                limit = 5;
-            }
+            limit = safe_stoi(limit_str).value_or(5);
         }
 
         auto entries = svc_.agents().recent_diary(target_agent, limit);

@@ -2,6 +2,7 @@
 
 #include <merak/worldbuilding/ids.hpp>
 #include <merak/worldbuilding/pg_helpers.hpp>
+#include <merak/utilities.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -358,8 +359,11 @@ Chapter NarrativeStore::create_chapter(const std::string& world_id,
                                             "chapters" / chapter.id /
                                             "sections");
         conn.exec("COMMIT");
-    } catch (...) {
-        try { conn.exec("ROLLBACK"); } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::error("NarrativeStore::create_chapter failed: {}", e.what());
+        try { conn.exec("ROLLBACK"); } catch (const std::exception& re) {
+            spdlog::critical("ROLLBACK also failed: {}", re.what());
+        }
         throw;
     }
     return chapter;
@@ -450,8 +454,11 @@ Scene NarrativeStore::create_scene(const std::string& world_id, Scene scene) {
                        (scene.id + ".json"),
                    scene_json(scene));
         conn.exec("COMMIT");
-    } catch (...) {
-        try { conn.exec("ROLLBACK"); } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::error("NarrativeStore::create_scene failed: {}", e.what());
+        try { conn.exec("ROLLBACK"); } catch (const std::exception& re) {
+            spdlog::critical("ROLLBACK also failed: {}", re.what());
+        }
         throw;
     }
 
@@ -846,11 +853,8 @@ NarrativeStore::list_scenes(const std::string& world_id,
         scene.chapter_id = res.get(i, 2);
         scene.world_time = res.get(i, 3);
         scene.status = res.get(i, 4);
-        try {
-            scene.participant_ids =
-                nlohmann::json::parse(res.get(i, 5)).get<std::vector<std::string>>();
-        } catch (...) {
-            scene.participant_ids = {};
+        if (auto j = safe_json_parse(res.get(i, 5))) {
+            scene.participant_ids = j->get<std::vector<std::string>>();
         }
         scene.updated_at = res.get(i, 6);
         out.push_back(std::move(scene));
