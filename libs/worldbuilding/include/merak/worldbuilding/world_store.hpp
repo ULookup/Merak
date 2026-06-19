@@ -75,7 +75,8 @@ public:
                           const std::string& target_type, const std::string& target_id);
     nlohmann::json list_file_links(const std::string& world_id) const;
 
-    std::vector<AgentRecord> list_agents(const std::string& world_id) const;
+    std::vector<AgentRecord> list_agents(const std::string& world_id,
+                                         const std::optional<std::string>& kind = std::nullopt) const;
     std::filesystem::path world_path(const std::string& world_id) const;
 
 private:
