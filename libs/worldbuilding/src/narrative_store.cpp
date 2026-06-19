@@ -970,4 +970,57 @@ NarrativeStore::list_scenes(const std::string& world_id,
     return out;
 }
 
+bool NarrativeStore::delete_chapter(const std::string& world_id, const std::string& chapter_id) {
+    ensure_world_exists(worlds_, world_id);
+    const auto path = worlds_.world_path(world_id) / "chapters" / (chapter_id + ".json");
+    if (!std::filesystem::exists(path)) return false;
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
+    try {
+        // Delete all scenes belonging to this chapter
+        conn.execute("DELETE FROM scenes WHERE chapter_id = $1 AND world_id = $2",
+                     {chapter_id, world_id});
+        conn.execute("DELETE FROM chapters WHERE id = $1 AND world_id = $2",
+                     {chapter_id, world_id});
+        // Remove scene JSON files for this chapter
+        auto scenes_dir = worlds_.world_path(world_id) / "scenes";
+        if (std::filesystem::exists(scenes_dir)) {
+            for (const auto& entry : std::filesystem::directory_iterator(scenes_dir)) {
+                if (!entry.is_regular_file() || entry.path().extension() != ".json")
+                    continue;
+                try {
+                    auto scene_json = read_json(entry.path());
+                    if (scene_json.value("chapter_id", "") == chapter_id) {
+                        std::filesystem::remove(entry.path());
+                    }
+                } catch (...) {}
+            }
+        }
+        std::filesystem::remove(path);
+        conn.exec("COMMIT");
+    } catch (...) {
+        try { conn.exec("ROLLBACK"); } catch (...) {}
+        throw;
+    }
+    return true;
+}
+
+bool NarrativeStore::delete_scene(const std::string& world_id, const std::string& scene_id) {
+    ensure_world_exists(worlds_, world_id);
+    const auto path = worlds_.world_path(world_id) / "scenes" / (scene_id + ".json");
+    if (!std::filesystem::exists(path)) return false;
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
+    try {
+        conn.execute("DELETE FROM scenes WHERE id = $1 AND world_id = $2",
+                     {scene_id, world_id});
+        std::filesystem::remove(path);
+        conn.exec("COMMIT");
+    } catch (...) {
+        try { conn.exec("ROLLBACK"); } catch (...) {}
+        throw;
+    }
+    return true;
+}
+
 } // namespace merak::worldbuilding

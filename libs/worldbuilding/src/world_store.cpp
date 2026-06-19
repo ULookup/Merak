@@ -447,7 +447,51 @@ WorldStore::world_path(const std::string& world_id) const {
     return data_root_ / "worlds" / world_id;
 }
 
-// ─── Location delete ───
+// ─── Location update / delete ───
+
+bool WorldStore::update_location(const std::string& world_id, const std::string& location_id,
+                                  const nlohmann::json& fields) {
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
+    auto check = conn.query("SELECT id FROM locations WHERE id = $1 AND world_id = $2",
+                            {location_id, world_id});
+    if (check.ntuples() == 0) { conn.exec("ROLLBACK"); return false; }
+
+    std::vector<std::string> set_parts;
+    std::vector<std::string> params;
+    int n = 1;
+
+    if (fields.contains("name")) {
+        set_parts.push_back("name = $" + std::to_string(n++));
+        params.push_back(fields["name"].get<std::string>());
+    }
+    if (fields.contains("description")) {
+        set_parts.push_back("description = $" + std::to_string(n++));
+        params.push_back(fields["description"].get<std::string>());
+    }
+    if (fields.contains("region")) {
+        set_parts.push_back("region = $" + std::to_string(n++));
+        params.push_back(fields["region"].get<std::string>());
+    }
+    if (fields.contains("parent_location_id")) {
+        set_parts.push_back("parent_location_id = $" + std::to_string(n++));
+        params.push_back(fields["parent_location_id"].is_null()
+            ? "" : fields["parent_location_id"].get<std::string>());
+    }
+
+    if (set_parts.empty()) { conn.exec("ROLLBACK"); return true; }
+
+    std::string sql = "UPDATE locations SET ";
+    for (size_t i = 0; i < set_parts.size(); i++) {
+        if (i > 0) sql += ", ";
+        sql += set_parts[i];
+    }
+    sql += " WHERE id = $" + std::to_string(n++);
+    params.push_back(location_id);
+    conn.execute(sql, params);
+    conn.exec("COMMIT");
+    return true;
+}
 
 bool WorldStore::delete_location(const std::string& world_id, const std::string& location_id) {
     PgConn conn(*pool_);

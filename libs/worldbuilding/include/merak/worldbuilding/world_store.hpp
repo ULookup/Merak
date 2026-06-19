@@ -43,6 +43,8 @@ public:
     std::optional<Location> get_location(const std::string& world_id,
                                          const std::string& location_id) const;
     std::vector<Location> list_locations(const std::string& world_id) const;
+    bool update_location(const std::string& world_id, const std::string& location_id,
+                         const nlohmann::json& fields);
     bool delete_location(const std::string& world_id, const std::string& location_id);
 
     // Knowledge mutations

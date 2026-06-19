@@ -92,6 +92,9 @@ public:
     CharacterAppearances find_character_appearances(const std::string& world_id,
                                                      const std::string& agent_id) const;
 
+    bool delete_chapter(const std::string& world_id, const std::string& chapter_id);
+    bool delete_scene(const std::string& world_id, const std::string& scene_id);
+
 private:
     void initialize();
 
