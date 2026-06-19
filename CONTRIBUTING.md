@@ -163,8 +163,8 @@ feat(worldbuilding): add timeline event recording endpoint
 1. Rebase on the target version branch before submitting
 2. Open a PR against the version branch (e.g. `v0.1`), not `main`
 3. Your PR should: pass CI, include screenshots for UI changes, follow the PR template
-4. At least one maintainer approval required
-5. Merged via Squash Merge
+4. Wait for maintainer review. Only the maintainer can merge. Do not merge your own PR.
+5. Approved PRs are squash-merged by the maintainer
 
 ## AI-Generated Code
 
@@ -349,18 +349,18 @@ feat(worldbuilding): add timeline event recording endpoint
 1. 提交前 rebase 到目标版本分支
 2. PR 目标为版本分支（如 `v0.1`），而非 `main`
 3. 你的 PR 应：通过 CI、UI 变更附带截图、参考 PR 模板
-4. 至少一位维护者 Review 通过后方可合并
-5. 合并使用 Squash Merge
+4. 等待维护者 Review。合并只能由维护者执行，不要自行合并。
+5. 通过后由维护者 Squash Merge
 
 ## AI 生成代码
 
 欢迎 AI 辅助编写的代码。如果你的 PR 部分或全部由 AI 工具生成：
 
-- **你对其负责。** 逐行阅读代码，确保理解每一行。如果你解释不了，就别提交。
+- **要对自己的代码负责，就像对待自己的二次元老婆一样。** 阅读代码，确保理解大致每一行。如果你解释不了，就请吃我一肘，Man！
 - 推送前自行 Review AI 的输出。在维护者发现之前，自己先把幻觉干掉。
-- 确保 CI 绿灯再请求 Review。
+- 确保 CI 全部通过后再请求 Review。
 
-> **请不要把 AI 生成的设计文档、计划文档或头脑风暴笔记推上来。** 我们信任 AI 写代码，但路线图还是交给人吧。
+> **请不要把 AI 生成的设计文档、计划文档或任何给AI看的中间文档推上来。** 孩子们，这不好笑。
 
 ## Code Review
 
