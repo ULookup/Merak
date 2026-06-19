@@ -1,7 +1,7 @@
 .page {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
+  position: relative;
+  width: 100%;
+  height: 100%;
   background: var(--page);
   display: flex;
   flex-direction: column;
@@ -9,8 +9,14 @@
 }
 
 @keyframes pageIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .header {
@@ -34,7 +40,9 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 120ms ease, transform 120ms ease;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
 }
 
 .backBtn:hover {
@@ -93,7 +101,9 @@
   color: var(--ink);
   width: 100%;
   box-sizing: border-box;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .input:focus,
@@ -147,7 +157,7 @@
   flex-shrink: 0;
 }
 
-.toggleSwitch[aria-checked="true"] {
+.toggleSwitch[aria-checked='true'] {
   background: var(--ink);
 }
 
@@ -162,7 +172,7 @@
   transition: transform 150ms var(--ease-spring);
 }
 
-.toggleSwitch[aria-checked="true"] .toggleKnob {
+.toggleSwitch[aria-checked='true'] .toggleKnob {
   transform: translateX(18px);
 }
 
@@ -186,7 +196,9 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 120ms ease, transform 120ms ease;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
 }
 
 .btn:hover:not(:disabled) {

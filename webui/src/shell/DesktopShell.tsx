@@ -5,24 +5,20 @@ import { useAppState } from '../AppState';
 import merakLogo from '../assets/merak-logo.svg';
 import { useI18n } from '../i18n';
 import styles from './DesktopShell.module.css';
-import { desktopPages, writeStoredDesktopPage } from './navigation';
+import { desktopPages } from './navigation';
 
 interface DesktopShellProps {
   page: AppPage;
   onNavigate: (page: AppPage) => void;
   children: ReactNode;
+  overlays?: ReactNode;
 }
 
-export default function DesktopShell({ page, onNavigate, children }: DesktopShellProps) {
+export default function DesktopShell({ page, onNavigate, children, overlays }: DesktopShellProps) {
   const { state, dispatch } = useAppState();
   const { t } = useI18n();
   const selectedWorld = state.worlds.find((world) => world.id === state.worldId);
   const worldName = selectedWorld?.name || t('shell.noWorld');
-
-  function navigate(nextPage: AppPage) {
-    writeStoredDesktopPage(nextPage);
-    onNavigate(nextPage);
-  }
 
   return (
     <div className={styles.shell}>
@@ -50,7 +46,7 @@ export default function DesktopShell({ page, onNavigate, children }: DesktopShel
               type="button"
               className={styles.navButton}
               aria-current={page === pageId ? 'page' : undefined}
-              onClick={() => navigate(pageId)}
+              onClick={() => onNavigate(pageId)}
             >
               <Icon size={16} aria-hidden="true" strokeWidth={2} />
               <span>{label}</span>
@@ -81,8 +77,11 @@ export default function DesktopShell({ page, onNavigate, children }: DesktopShel
             <ChevronDown size={14} aria-hidden="true" />
           </label>
         </header>
-        <main className={styles.content}>{children}</main>
+        <main className={styles.content}>
+          <div className={styles.pageContent}>{children}</div>
+        </main>
       </div>
+      {overlays}
     </div>
   );
 }

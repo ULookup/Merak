@@ -1,9 +1,8 @@
 .dashboard {
-  min-height: 100vh;
+  min-height: 100%;
   padding: 28px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(247, 247, 245, 0.95)),
-    var(--color-bg);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(247, 247, 245, 0.95)), var(--color-bg);
   overflow: auto;
 }
 
@@ -279,7 +278,12 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 14%, rgba(255, 255, 255, 0.72) 44%, transparent 68%);
+  background: linear-gradient(
+    105deg,
+    transparent 14%,
+    rgba(255, 255, 255, 0.72) 44%,
+    transparent 68%
+  );
   opacity: 0;
   transform: translateX(-42%);
   transition:

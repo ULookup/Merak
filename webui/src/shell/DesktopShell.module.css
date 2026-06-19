@@ -82,6 +82,8 @@
   flex-direction: column;
   gap: 3px;
   padding-top: 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .navButton {
@@ -151,14 +153,11 @@
   overflow: hidden;
 }
 
-/* Legacy phase views previously owned the viewport; the shell now owns it. */
-.content.content > * {
-  position: relative;
-  inset: auto;
-  z-index: auto;
+.pageContent {
   width: 100%;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .srOnly {

@@ -1,4 +1,11 @@
-import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useReducer,
+  type Dispatch,
+  type ReactNode,
+} from 'react';
 import type {
   ChapterReviewItem,
   ConditionState,
@@ -20,7 +27,7 @@ import type {
   WorldAgent,
   WorldSummary,
 } from './api/types';
-import { readStoredDesktopPage } from './shell/navigation';
+import { readStoredDesktopPage, writeStoredDesktopPage } from './shell/navigation';
 
 export type InspectorTab = 'story' | 'files' | 'agents' | 'run' | 'creation';
 export type AppPage =
@@ -1215,10 +1222,14 @@ const AppContext = createContext<{
 } | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState, (baseState) => ({
+  const [state, baseDispatch] = useReducer(reducer, initialState, (baseState) => ({
     ...baseState,
     currentPage: readStoredDesktopPage(),
   }));
+  const dispatch = useCallback<Dispatch<Action>>((action) => {
+    if (action.type === 'SET_PAGE') writeStoredDesktopPage(action.page);
+    baseDispatch(action);
+  }, []);
   return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>;
 }
 

@@ -220,10 +220,11 @@ function AppInner() {
 
   const connState = useSSE(sseUrl, dispatch, state.lastSeq);
 
-  const inDesktopShell = (children: ReactNode) => (
+  const inDesktopShell = (children: ReactNode, overlays?: ReactNode) => (
     <DesktopShell
       page={state.currentPage}
       onNavigate={(page) => dispatch({ type: 'SET_PAGE', page })}
+      overlays={overlays}
     >
       {children}
     </DesktopShell>
@@ -260,110 +261,120 @@ function AppInner() {
   }
 
   if (state.appPhase === 'no_world') {
-    return inDesktopShell(
+    return (
       <ToastProvider>
-        <WorldOnboarding onOpenGuide={() => setHelpOpen(true)} />
-        <Suspense>
-          {helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}
-        </Suspense>
-      </ToastProvider>,
+        {inDesktopShell(
+          <WorldOnboarding onOpenGuide={() => setHelpOpen(true)} />,
+          <Suspense>
+            {helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}
+          </Suspense>,
+        )}
+      </ToastProvider>
     );
   }
 
   if (state.appPhase === 'no_agent') {
-    return inDesktopShell(
+    return (
       <ToastProvider>
-        <WorldDashboard onOpenGuide={() => setHelpOpen(true)} />
-        <Suspense>
-          {helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}
-        </Suspense>
-      </ToastProvider>,
+        {inDesktopShell(
+          <WorldDashboard onOpenGuide={() => setHelpOpen(true)} />,
+          <Suspense>
+            {helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}
+          </Suspense>,
+        )}
+      </ToastProvider>
     );
   }
 
   // appPhase === 'ready': three-column Workbench
-  return inDesktopShell(
+  return (
     <ToastProvider>
-      <div className={styles.layout}>
-        <ErrorBoundary>
-          <WorldSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        </ErrorBoundary>
-        <ErrorBoundary>
-          <div className={styles.workspace}>
-            <ConnectionBanner state={connState} />
-            <MainPanel
-              onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
-              onToggleInspector={() => setInspectorOpen((prev) => !prev)}
-              onOpenGuide={() => setHelpOpen(true)}
-              sidebarOpen={sidebarOpen}
-              inspectorOpen={inspectorOpen}
-              connectionState={connState}
+      {inDesktopShell(
+        <div className={styles.layout}>
+          <ErrorBoundary>
+            <WorldSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <div className={styles.workspace}>
+              <ConnectionBanner state={connState} />
+              <MainPanel
+                onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+                onToggleInspector={() => setInspectorOpen((prev) => !prev)}
+                onOpenGuide={() => setHelpOpen(true)}
+                sidebarOpen={sidebarOpen}
+                inspectorOpen={inspectorOpen}
+                connectionState={connState}
+              />
+            </div>
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
+          </ErrorBoundary>
+        </div>,
+        <>
+          <Suspense>
+            <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
+          </Suspense>
+
+          {/* Setup Wizard — shown when LLM is not configured */}
+          <Suspense>
+            {state.showSetupWizard && (
+              <SetupWizard
+                onComplete={() => dispatch({ type: 'SET_LLM_CONFIGURED', configured: true })}
+              />
+            )}
+          </Suspense>
+
+          {/* Chapter Review Banner — shown after chapter completion */}
+          <Suspense>
+            {state.chapterReview && state.worldId && (
+              <ChapterReviewBanner
+                worldId={state.worldId}
+                chapterId={state.chapterReview.chapter_id}
+                chapterTitle={state.chapterReview.title}
+                onNewChapter={() => {
+                  dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
+                  if (state.sessionId) {
+                    api
+                      .startRun(state.sessionId, '开始写下一章', state.selectedModel)
+                      .catch(() => {});
+                  }
+                }}
+                onRevise={() => {
+                  dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
+                }}
+                onExport={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: true })}
+                onClose={() => dispatch({ type: 'SET_CHAPTER_REVIEW', review: null })}
+              />
+            )}
+          </Suspense>
+
+          {state.pendingAsk && (
+            <AskUserPrompt
+              request={state.pendingAsk}
+              onResolved={(callId) => dispatch({ type: 'RESOLVE_ASK', callId })}
             />
-          </div>
-        </ErrorBoundary>
-        <Suspense>
-          <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
-        </Suspense>
-        <ErrorBoundary>
-          <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
-        </ErrorBoundary>
-      </div>
+          )}
+          {state.pendingCreation && (
+            <CreationRequestDialog
+              request={state.pendingCreation}
+              onResolved={(creationId) => dispatch({ type: 'RESOLVE_CREATION', creationId })}
+            />
+          )}
 
-      {/* Setup Wizard — shown when LLM is not configured */}
-      <Suspense>
-        {state.showSetupWizard && (
-          <SetupWizard
-            onComplete={() => dispatch({ type: 'SET_LLM_CONFIGURED', configured: true })}
-          />
-        )}
-      </Suspense>
-
-      {/* Chapter Review Banner — shown after chapter completion */}
-      <Suspense>
-        {state.chapterReview && state.worldId && (
-          <ChapterReviewBanner
-            worldId={state.worldId}
-            chapterId={state.chapterReview.chapter_id}
-            chapterTitle={state.chapterReview.title}
-            onNewChapter={() => {
-              dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
-              if (state.sessionId) {
-                api.startRun(state.sessionId, '开始写下一章', state.selectedModel).catch(() => {});
-              }
-            }}
-            onRevise={() => {
-              dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
-            }}
-            onExport={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: true })}
-            onClose={() => dispatch({ type: 'SET_CHAPTER_REVIEW', review: null })}
-          />
-        )}
-      </Suspense>
-
-      {state.pendingAsk && (
-        <AskUserPrompt
-          request={state.pendingAsk}
-          onResolved={(callId) => dispatch({ type: 'RESOLVE_ASK', callId })}
-        />
+          {/* Export Dialog */}
+          <Suspense>
+            {state.showExportDialog && state.worldId && (
+              <ExportDialog
+                worldId={state.worldId}
+                chapters={[] /* TODO: populate from full chapter list when available in state */}
+                onClose={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: false })}
+              />
+            )}
+          </Suspense>
+        </>,
       )}
-      {state.pendingCreation && (
-        <CreationRequestDialog
-          request={state.pendingCreation}
-          onResolved={(creationId) => dispatch({ type: 'RESOLVE_CREATION', creationId })}
-        />
-      )}
-
-      {/* Export Dialog */}
-      <Suspense>
-        {state.showExportDialog && state.worldId && (
-          <ExportDialog
-            worldId={state.worldId}
-            chapters={[] /* TODO: populate from full chapter list when available in state */}
-            onClose={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: false })}
-          />
-        )}
-      </Suspense>
-    </ToastProvider>,
+    </ToastProvider>
   );
 }
 
