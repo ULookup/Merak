@@ -65,7 +65,7 @@ export const worldbuildingApi = {
 
   reorderChapters: (worldId: string, chapterIds: string[]) =>
     request<OkResponse>('POST', resourcePath(worldId, 'chapters/reorder'), {
-      chapter_ids: chapterIds,
+      order: chapterIds,
     }),
 
   deleteLocation: (worldId: string, locationId: string) =>

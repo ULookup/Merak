@@ -220,18 +220,40 @@ describe('api client', () => {
       expect.stringContaining('/api/worldbuilding/w%201/chapters/reorder'),
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ chapter_ids: ['c1', 'c2'] }),
+        body: JSON.stringify({ order: ['c1', 'c2'] }),
       }),
     );
   });
 
-  it('encodes a linked file path when deleting it', async () => {
+  it('requires target metadata when deleting a linked file', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({ ok: true }), { status: 200 }),
     );
 
-    await filesApi.unlinkWorldFile('w1', '章节/第一章.md');
+    const unlinkWithoutTarget = filesApi.unlinkWorldFile as (
+      worldId: string,
+      filePath: string,
+    ) => Promise<unknown>;
+
+    await expect(unlinkWithoutTarget('w1', '章节/第一章.md')).rejects.toThrow(
+      'File link target is required',
+    );
+  });
+
+  it('encodes a linked file path and target when deleting it', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    await filesApi.unlinkWorldFile('w1', '章节/第一章.md', {
+      entity_type: 'chapter',
+      entity_id: 'c1',
+    });
 
     expect(vi.mocked(fetch).mock.calls[0][0]).toContain(encodeURIComponent('章节/第一章.md'));
+    expect(vi.mocked(fetch).mock.calls[0][1]).toMatchObject({
+      method: 'DELETE',
+      body: JSON.stringify({ target_type: 'chapter', target_id: 'c1' }),
+    });
   });
 });
