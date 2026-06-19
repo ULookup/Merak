@@ -16,6 +16,8 @@ export default function CreationRequestDialog({ request, onResolved }: Props) {
     request.preview ? JSON.stringify(request.preview, null, 2) : '',
   );
   const dialogRef = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef(request.id);
+  requestIdRef.current = request.id;
   useDialogFocus(dialogRef);
 
   useEffect(() => {
@@ -28,6 +30,7 @@ export default function CreationRequestDialog({ request, onResolved }: Props) {
     if (submitting) return;
     setSubmitting(true);
     setError(null);
+    const submittedCreationId = request.id;
     try {
       let parsedModifications: Record<string, unknown> | undefined;
       if (decision === 'allow' && modifications.trim()) {
@@ -40,9 +43,11 @@ export default function CreationRequestDialog({ request, onResolved }: Props) {
       await api.resolveCreation(request.id, decision, parsedModifications);
       onResolved(request.id);
     } catch (cause) {
-      setError(formatApiError(cause, 'Could not resolve the creation request.'));
+      if (requestIdRef.current === submittedCreationId) {
+        setError(formatApiError(cause, 'Could not resolve the creation request.'));
+      }
     } finally {
-      setSubmitting(false);
+      if (requestIdRef.current === submittedCreationId) setSubmitting(false);
     }
   }
 

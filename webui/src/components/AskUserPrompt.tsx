@@ -55,6 +55,8 @@ export default function AskUserPrompt({ request, onResolved }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const requestIdRef = useRef(request.callId);
+  requestIdRef.current = request.callId;
   useDialogFocus(dialogRef);
 
   useEffect(() => {
@@ -82,13 +84,16 @@ export default function AskUserPrompt({ request, onResolved }: Props) {
     if (!answer || submitting) return;
     setSubmitting(true);
     setError(null);
+    const submittedCallId = request.callId;
     try {
       await api.respondToAsk(request.runId, request.callId, answer);
       onResolved(request.callId);
     } catch (cause) {
-      setError(formatApiError(cause, 'Could not send your response.'));
+      if (requestIdRef.current === submittedCallId) {
+        setError(formatApiError(cause, 'Could not send your response.'));
+      }
     } finally {
-      setSubmitting(false);
+      if (requestIdRef.current === submittedCallId) setSubmitting(false);
     }
   }
 

@@ -911,6 +911,7 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         ...state,
         pendingCreation: {
           id: (p.creation_id as string) ?? '',
+          runId: (p.run_id as string) || state.currentRun || '',
           toolName: (p.tool as string) ?? '',
           ...(p.preview && typeof p.preview === 'object'
             ? { preview: p.preview as Record<string, unknown> }
@@ -1142,7 +1143,7 @@ function clearPendingForTerminalRun(state: AppState, runId: string): AppState {
   return {
     ...state,
     pendingAsk: state.pendingAsk?.runId === runId ? null : state.pendingAsk,
-    pendingCreation: state.currentRun === runId ? null : state.pendingCreation,
+    pendingCreation: state.pendingCreation?.runId === runId ? null : state.pendingCreation,
   };
 }
 

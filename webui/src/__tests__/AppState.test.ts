@@ -17,7 +17,7 @@ describe('AppState reducer', () => {
         question: 'Old question',
         multiSelect: false,
       },
-      pendingCreation: { id: 'old-creation', toolName: 'create_scene' },
+      pendingCreation: { id: 'old-creation', runId: 'old-run', toolName: 'create_scene' },
     });
     const next = reducer(prev, { type: 'SET_SESSION', sessionId: 'new-id' });
     expect(next.sessionId).toBe('new-id');
@@ -245,11 +245,17 @@ describe('AppState reducer', () => {
     const creationFrame = {
       seq: 11,
       type: 'creation_requested',
-      payload: { creation_id: 'creation_1', tool: 'create_scene', preview: { title: 'Arrival' } },
+      payload: {
+        run_id: 'r1',
+        creation_id: 'creation_1',
+        tool: 'create_scene',
+        preview: { title: 'Arrival' },
+      },
     };
     const requested = reducer(asked, { type: 'APPLY_SSE', frame: creationFrame });
     expect(requested.pendingCreation).toEqual({
       id: 'creation_1',
+      runId: 'r1',
       toolName: 'create_scene',
       preview: { title: 'Arrival' },
     });
@@ -270,7 +276,7 @@ describe('AppState reducer', () => {
 
   it('retains a creation request when its resolving SSE result fails', () => {
     const prev = state({
-      pendingCreation: { id: 'creation_1', toolName: 'create_scene' },
+      pendingCreation: { id: 'creation_1', runId: 'run_1', toolName: 'create_scene' },
       lastSeq: 4,
     });
     const next = reducer(prev, {
@@ -292,7 +298,7 @@ describe('AppState reducer', () => {
         question: 'New question',
         multiSelect: false,
       },
-      pendingCreation: { id: 'creation_2', toolName: 'create_scene' },
+      pendingCreation: { id: 'creation_2', runId: 'run_2', toolName: 'create_scene' },
     });
     expect(reducer(prev, { type: 'RESOLVE_ASK', callId: 'call_1' }).pendingAsk).toEqual(
       prev.pendingAsk,
@@ -313,7 +319,7 @@ describe('AppState reducer', () => {
           question: 'Question',
           multiSelect: false,
         },
-        pendingCreation: { id: 'creation_1', toolName: 'create_scene' },
+        pendingCreation: { id: 'creation_1', runId: 'run_1', toolName: 'create_scene' },
       });
       const next = reducer(prev, {
         type: 'APPLY_SSE',
@@ -333,7 +339,7 @@ describe('AppState reducer', () => {
         question: 'Question',
         multiSelect: false,
       },
-      pendingCreation: { id: 'creation_2', toolName: 'create_scene' },
+      pendingCreation: { id: 'creation_2', runId: 'run_2', toolName: 'create_scene' },
     });
     const next = reducer(prev, {
       type: 'APPLY_SSE',
@@ -341,6 +347,29 @@ describe('AppState reducer', () => {
     });
     expect(next.pendingAsk).toEqual(prev.pendingAsk);
     expect(next.pendingCreation).toEqual(prev.pendingCreation);
+  });
+
+  it('retains a creation from another run even when currentRun matches the terminal event', () => {
+    const pendingCreation = { id: 'creation_2', runId: 'run_2', toolName: 'create_scene' };
+    const next = reducer(state({ currentRun: 'run_1', pendingCreation }), {
+      type: 'APPLY_SSE',
+      frame: { seq: 8, type: 'run_completed', payload: { run_id: 'run_1' } },
+    });
+    expect(next.pendingCreation).toEqual(pendingCreation);
+  });
+
+  it('clears a creation matching the terminal run even when currentRun has moved on', () => {
+    const next = reducer(
+      state({
+        currentRun: 'run_3',
+        pendingCreation: { id: 'creation_2', runId: 'run_2', toolName: 'create_scene' },
+      }),
+      {
+        type: 'APPLY_SSE',
+        frame: { seq: 8, type: 'run_failed', payload: { run_id: 'run_2', error: 'stopped' } },
+      },
+    );
+    expect(next.pendingCreation).toBeNull();
   });
 
   it('ignores duplicate and stale nonzero SSE frames before applying their effects', () => {

@@ -14,6 +14,7 @@ export interface PendingAsk {
 
 export interface PendingCreation {
   id: string;
+  runId: string;
   toolName: string;
   preview?: Record<string, unknown>;
 }

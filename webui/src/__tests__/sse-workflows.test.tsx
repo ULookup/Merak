@@ -123,6 +123,47 @@ describe('interactive SSE workflows', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('ignores completion from a replaced ask while the new request is submitting', async () => {
+    let rejectOld!: (error: Error) => void;
+    let resolveNew!: () => void;
+    apiMocks.respondToAsk
+      .mockReturnValueOnce(
+        new Promise<void>((_resolve, reject) => {
+          rejectOld = reject;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          resolveNew = resolve;
+        }),
+      );
+    const onResolved = vi.fn();
+    const { rerender } = render(
+      <AskUserPrompt
+        request={{ runId: 'run_1', callId: 'call_1', question: 'Old?', multiSelect: false }}
+        onResolved={onResolved}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Your response'), { target: { value: 'Old answer' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send response' }));
+    rerender(
+      <AskUserPrompt
+        request={{ runId: 'run_2', callId: 'call_2', question: 'New?', multiSelect: false }}
+        onResolved={onResolved}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Your response'), { target: { value: 'New answer' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send response' }));
+
+    rejectOld(new Error('Old failure'));
+    await waitFor(() => expect(apiMocks.respondToAsk).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Sending...' })).toBeDisabled();
+
+    resolveNew();
+    await waitFor(() => expect(onResolved).toHaveBeenCalledWith('call_2'));
+  });
+
   it.each([
     ['Allow', 'allow'],
     ['Deny', 'deny'],
@@ -131,7 +172,12 @@ describe('interactive SSE workflows', () => {
     const onResolved = vi.fn();
     render(
       <CreationRequestDialog
-        request={{ id: 'creation_1', toolName: 'create_scene', preview: { title: 'Arrival' } }}
+        request={{
+          id: 'creation_1',
+          runId: 'run_1',
+          toolName: 'create_scene',
+          preview: { title: 'Arrival' },
+        }}
         onResolved={onResolved}
       />,
     );
@@ -151,7 +197,12 @@ describe('interactive SSE workflows', () => {
     apiMocks.resolveCreation.mockRejectedValueOnce(new Error('Old failure'));
     const { rerender } = render(
       <CreationRequestDialog
-        request={{ id: 'creation_1', toolName: 'create_scene', preview: { title: 'Old' } }}
+        request={{
+          id: 'creation_1',
+          runId: 'run_1',
+          toolName: 'create_scene',
+          preview: { title: 'Old' },
+        }}
         onResolved={vi.fn()}
       />,
     );
@@ -159,12 +210,56 @@ describe('interactive SSE workflows', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Old failure');
     rerender(
       <CreationRequestDialog
-        request={{ id: 'creation_2', toolName: 'create_scene', preview: { title: 'New' } }}
+        request={{
+          id: 'creation_2',
+          runId: 'run_2',
+          toolName: 'create_scene',
+          preview: { title: 'New' },
+        }}
         onResolved={vi.fn()}
       />,
     );
     expect(screen.getByLabelText('Proposed values')).toHaveValue('{\n  "title": "New"\n}');
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('ignores completion from a replaced creation while the new request is submitting', async () => {
+    let rejectOld!: (error: Error) => void;
+    let resolveNew!: () => void;
+    apiMocks.resolveCreation
+      .mockReturnValueOnce(
+        new Promise<void>((_resolve, reject) => {
+          rejectOld = reject;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise<void>((resolve) => {
+          resolveNew = resolve;
+        }),
+      );
+    const onResolved = vi.fn();
+    const { rerender } = render(
+      <CreationRequestDialog
+        request={{ id: 'creation_1', runId: 'run_1', toolName: 'create_scene' }}
+        onResolved={onResolved}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+    rerender(
+      <CreationRequestDialog
+        request={{ id: 'creation_2', runId: 'run_2', toolName: 'create_scene' }}
+        onResolved={onResolved}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+
+    rejectOld(new Error('Old failure'));
+    await waitFor(() => expect(apiMocks.resolveCreation).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Submitting...' })).toBeDisabled();
+
+    resolveNew();
+    await waitFor(() => expect(onResolved).toHaveBeenCalledWith('creation_2'));
   });
 
   it.each([
@@ -190,7 +285,12 @@ describe('interactive SSE workflows', () => {
           )
         : render(
             <CreationRequestDialog
-              request={{ id: 'creation_1', toolName: 'create_scene', preview: { title: 'One' } }}
+              request={{
+                id: 'creation_1',
+                runId: 'run_1',
+                toolName: 'create_scene',
+                preview: { title: 'One' },
+              }}
               onResolved={vi.fn()}
             />,
           );
@@ -216,7 +316,7 @@ describe('interactive SSE workflows', () => {
     const onResolved = vi.fn();
     render(
       <CreationRequestDialog
-        request={{ id: 'creation_1', toolName: 'create_scene' }}
+        request={{ id: 'creation_1', runId: 'run_1', toolName: 'create_scene' }}
         onResolved={onResolved}
       />,
     );
