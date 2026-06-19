@@ -342,7 +342,7 @@ Run: `npm test -- --run src/__tests__/shell.test.tsx`
 
 Expected: FAIL because the desktop shell is missing.
 
-- [ ] **Step 3: Implement navigation metadata and lazy outlet**
+- [ ] **Step 3: Implement navigation metadata and shell composition**
 
 ```ts
 export const desktopPages = [
@@ -354,13 +354,13 @@ export const desktopPages = [
 ] as const;
 ```
 
-Use `<button>` navigation with `aria-current="page"` rather than fake URLs. Persist the selected page in `localStorage` only after validating it against `desktopPages`. Lazy-load every page component in `App.tsx`.
+Use `<button>` navigation with `aria-current="page"` rather than fake URLs. Persist the selected page in `localStorage` only after validating it against `desktopPages`. `DesktopShell` receives the existing phase content through `children`; Tasks 6-11 register each page component with `lazy()` when that real page is introduced, so this task never imports nonexistent modules or adds placeholder pages.
 
 - [ ] **Step 4: Run shell, reducer, and build checks**
 
 Run: `npm test -- --run src/__tests__/shell.test.tsx src/__tests__/AppState.test.ts && npm run build`
 
-Expected: PASS; build output contains separate page chunks.
+Expected: PASS; App renders the existing workbench inside the shell without importing nonexistent page modules.
 
 - [ ] **Step 5: Commit the desktop shell**
 
