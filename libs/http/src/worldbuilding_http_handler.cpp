@@ -441,6 +441,11 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
     server.Get(R"(/api/worldbuilding/([^/]+)/suggestions)",
         [this](const auto& req, auto& res) { handle_get_suggestions(req, res); });
 
+    server.Post(R"(/api/worldbuilding/([^/]+)/check-consistency)",
+        [this](const auto& req, auto& res) { handle_start_consistency_check(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/check-consistency)",
+        [this](const auto& req, auto& res) { handle_get_consistency_check(req, res); });
+
     // ─── Pipeline endpoints ───
     server.Get(R"(/api/worldbuilding/([^/]+)/pipeline/state)",
         [this](const auto& req, auto& res) {
@@ -2442,6 +2447,35 @@ void WorldbuildingHttpHandler::handle_get_suggestions(const httplib::Request& re
             return;
         }
         json_response(res, {{"ok", true}, {"suggestions", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent-driven: consistency check ---
+
+void WorldbuildingHttpHandler::handle_start_consistency_check(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        std::string scope = body.value("scope", "all");
+        std::string task = "检查世界一致性，范围：" + scope + "。按 narrative_rules.md 规则检查矛盾（如角色死亡后出场、时间线冲突、阵营关系矛盾），产出结构化冲突列表。";
+        start_agent_run(req, res, wid, task, "consistency_check");
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_consistency_check(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto result = service_->worlds().get_agent_result(wid, "consistency_check");
+        if (!result) {
+            error_response(res, "Consistency check not yet generated", 404, "result_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"conflicts", (*result)["conflicts"]},
+                            {"generated_at", (*result)["generated_at"]}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }

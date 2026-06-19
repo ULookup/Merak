@@ -119,6 +119,10 @@ private:
     void handle_start_suggestions(const httplib::Request&, httplib::Response&);
     void handle_get_suggestions(const httplib::Request&, httplib::Response&);
 
+    // Agent-driven: consistency check
+    void handle_start_consistency_check(const httplib::Request&, httplib::Response&);
+    void handle_get_consistency_check(const httplib::Request&, httplib::Response&);
+
     std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;
     mutable std::mutex pending_runs_mutex_;
 
