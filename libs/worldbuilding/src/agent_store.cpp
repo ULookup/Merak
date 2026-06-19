@@ -487,6 +487,32 @@ AgentStore::list_agents(const std::string& world_id) const {
     return worlds_.list_agents(world_id);
 }
 
+bool AgentStore::delete_agent(const std::string& agent_id) {
+    auto record = get_agent(agent_id);
+    if (!record) return false;
+    PgConn conn(*pool_);
+    conn.exec("BEGIN");
+    try {
+        conn.execute("DELETE FROM character_cards WHERE agent_id = $1", {agent_id});
+        conn.execute("DELETE FROM agent_diaries WHERE agent_id = $1", {agent_id});
+        conn.execute("DELETE FROM memory_summaries WHERE agent_id = $1", {agent_id});
+        conn.execute("DELETE FROM agent_relations WHERE agent_id = $1 OR target_id = $2",
+                     {agent_id, agent_id});
+        conn.execute("DELETE FROM agent_prompts WHERE agent_id = $1", {agent_id});
+        conn.execute("DELETE FROM agent_metadata WHERE agent_id = $1", {agent_id});
+        conn.execute("DELETE FROM agents WHERE id = $1", {agent_id});
+        conn.exec("COMMIT");
+    } catch (...) {
+        try { conn.exec("ROLLBACK"); } catch (...) {}
+        throw;
+    }
+    auto path = worlds_.world_path(record->world_id) / "agents" / agent_id;
+    if (std::filesystem::exists(path)) {
+        std::filesystem::remove_all(path);
+    }
+    return true;
+}
+
 CharacterCard
 AgentStore::load_character_card(const std::string& agent_id) const {
     return parse_character_card_markdown(

@@ -60,6 +60,8 @@ public:
                     const Scene& scene,
                     const std::string& draft_text) const;
 
+    bool delete_secret(const std::string& world_id, const std::string& id);
+
 private:
     void initialize();
 
