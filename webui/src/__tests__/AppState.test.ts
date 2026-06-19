@@ -11,7 +11,12 @@ describe('AppState reducer', () => {
     const prev = state({
       messages: [{ id: 'm1', kind: 'user', text: 'hi' }],
       lastSeq: 5,
-      pendingAsk: { runId: 'old-run', question: 'Old question' },
+      pendingAsk: {
+        runId: 'old-run',
+        callId: 'old-call',
+        question: 'Old question',
+        multiSelect: false,
+      },
       pendingCreation: { id: 'old-creation', toolName: 'create_scene' },
     });
     const next = reducer(prev, { type: 'SET_SESSION', sessionId: 'new-id' });
@@ -233,8 +238,9 @@ describe('AppState reducer', () => {
       callId: 'call_1',
       question: 'Choose POV',
       choices: ['First person', 'Third person'],
+      multiSelect: false,
     });
-    expect(reducer(asked, { type: 'RESOLVE_ASK' }).pendingAsk).toBeNull();
+    expect(reducer(asked, { type: 'RESOLVE_ASK', callId: 'call_1' }).pendingAsk).toBeNull();
 
     const creationFrame = {
       seq: 11,
@@ -257,7 +263,84 @@ describe('AppState reducer', () => {
         },
       }).pendingCreation,
     ).toBeNull();
-    expect(reducer(requested, { type: 'RESOLVE_CREATION' }).pendingCreation).toBeNull();
+    expect(
+      reducer(requested, { type: 'RESOLVE_CREATION', creationId: 'creation_1' }).pendingCreation,
+    ).toBeNull();
+  });
+
+  it('retains a creation request when its resolving SSE result fails', () => {
+    const prev = state({
+      pendingCreation: { id: 'creation_1', toolName: 'create_scene' },
+      lastSeq: 4,
+    });
+    const next = reducer(prev, {
+      type: 'APPLY_SSE',
+      frame: {
+        seq: 5,
+        type: 'creation_resolved',
+        payload: { creation_id: 'creation_1', result: { ok: false } },
+      },
+    });
+    expect(next.pendingCreation).toEqual(prev.pendingCreation);
+  });
+
+  it('does not let stale local resolutions clear newer requests', () => {
+    const prev = state({
+      pendingAsk: {
+        runId: 'run_2',
+        callId: 'call_2',
+        question: 'New question',
+        multiSelect: false,
+      },
+      pendingCreation: { id: 'creation_2', toolName: 'create_scene' },
+    });
+    expect(reducer(prev, { type: 'RESOLVE_ASK', callId: 'call_1' }).pendingAsk).toEqual(
+      prev.pendingAsk,
+    );
+    expect(
+      reducer(prev, { type: 'RESOLVE_CREATION', creationId: 'creation_1' }).pendingCreation,
+    ).toEqual(prev.pendingCreation);
+  });
+
+  it.each(['run_completed', 'run_failed', 'run_cancelled', 'run_interrupted'])(
+    'clears matching pending requests on %s',
+    (type) => {
+      const prev = state({
+        currentRun: 'run_1',
+        pendingAsk: {
+          runId: 'run_1',
+          callId: 'call_1',
+          question: 'Question',
+          multiSelect: false,
+        },
+        pendingCreation: { id: 'creation_1', toolName: 'create_scene' },
+      });
+      const next = reducer(prev, {
+        type: 'APPLY_SSE',
+        frame: { seq: 8, type, payload: { run_id: 'run_1' } },
+      });
+      expect(next.pendingAsk).toBeNull();
+      expect(next.pendingCreation).toBeNull();
+    },
+  );
+
+  it('keeps newer pending requests when an older run terminates', () => {
+    const prev = state({
+      currentRun: 'run_2',
+      pendingAsk: {
+        runId: 'run_2',
+        callId: 'call_2',
+        question: 'Question',
+        multiSelect: false,
+      },
+      pendingCreation: { id: 'creation_2', toolName: 'create_scene' },
+    });
+    const next = reducer(prev, {
+      type: 'APPLY_SSE',
+      frame: { seq: 8, type: 'run_completed', payload: { run_id: 'run_1' } },
+    });
+    expect(next.pendingAsk).toEqual(prev.pendingAsk);
+    expect(next.pendingCreation).toEqual(prev.pendingCreation);
   });
 
   it('ignores duplicate and stale nonzero SSE frames before applying their effects', () => {
@@ -273,7 +356,12 @@ describe('AppState reducer', () => {
       type: 'APPLY_SSE',
       frame: { ...askFrame, seq: 0 },
     });
-    expect(zeroSeq.pendingAsk).toEqual({ runId: 'r1', question: 'Choose POV' });
+    expect(zeroSeq.pendingAsk).toEqual({
+      runId: 'r1',
+      callId: '',
+      question: 'Choose POV',
+      multiSelect: false,
+    });
     expect(zeroSeq.lastSeq).toBe(10);
   });
 

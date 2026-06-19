@@ -6,10 +6,10 @@ export interface SseFrame {
 
 export interface PendingAsk {
   runId: string;
-  callId?: string;
+  callId: string;
   question: string;
   choices?: string[];
-  multiSelect?: boolean;
+  multiSelect: boolean;
 }
 
 export interface PendingCreation {

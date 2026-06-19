@@ -314,8 +314,8 @@ export type Action =
   | { type: 'COMMIT_ACTIVE' }
   | { type: 'SET_STORY_VERSION' }
   | { type: 'APPLY_SSE'; frame: SseFrame }
-  | { type: 'RESOLVE_ASK' }
-  | { type: 'RESOLVE_CREATION' }
+  | { type: 'RESOLVE_ASK'; callId: string }
+  | { type: 'RESOLVE_CREATION'; creationId: string }
   | { type: 'SET_PIPELINE_CONDITIONS'; conditions: ConditionState[] }
   | { type: 'SET_PIPELINE_VIEW'; view: Partial<PipelineViewData> }
   | { type: 'DISMISS_PHASE_PROMPT' }
@@ -697,10 +697,12 @@ export function reducer(state: AppState, action: Action): AppState {
     }
 
     case 'RESOLVE_ASK':
-      return { ...state, pendingAsk: null };
+      return state.pendingAsk?.callId === action.callId ? { ...state, pendingAsk: null } : state;
 
     case 'RESOLVE_CREATION':
-      return { ...state, pendingCreation: null };
+      return state.pendingCreation?.id === action.creationId
+        ? { ...state, pendingCreation: null }
+        : state;
 
     case 'SET_PIPELINE_CONDITIONS':
       return { ...state, pipelineConditions: action.conditions };
@@ -896,10 +898,10 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         ...state,
         pendingAsk: {
           runId: (p.run_id as string) || state.currentRun || '',
-          ...(typeof p.call_id === 'string' && p.call_id ? { callId: p.call_id } : {}),
+          callId: (p.call_id as string) ?? '',
           question: (p.question as string) ?? '',
           ...(choices?.length ? { choices } : {}),
-          ...(typeof p.multi_select === 'boolean' ? { multiSelect: p.multi_select } : {}),
+          multiSelect: p.multi_select === true,
         },
       };
     }
@@ -916,10 +918,12 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         },
       };
 
-    case 'creation_resolved':
-      return state.pendingCreation?.id === p.creation_id || !p.creation_id
-        ? reducer(state, { type: 'RESOLVE_CREATION' })
-        : state;
+    case 'creation_resolved': {
+      const result = p.result as Record<string, unknown> | undefined;
+      if (result?.ok === false) return state;
+      const creationId = (p.creation_id as string) ?? '';
+      return reducer(state, { type: 'RESOLVE_CREATION', creationId });
+    }
 
     case 'usage_updated':
       return reducer(state, {
@@ -937,7 +941,8 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         message: { id: msgId(), kind: 'system', text: `${type} — ${JSON.stringify(p)}` },
       });
 
-    case 'run_completed':
+    case 'run_completed': {
+      state = clearPendingForTerminalRun(state, (p.run_id as string) || state.currentRun || '');
       return reducer(
         reducer(reducer(state, { type: 'COMMIT_ACTIVE' }), {
           type: 'SET_CURRENT_RUN',
@@ -945,10 +950,12 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         }),
         { type: 'SET_STATUS', status: 'idle' },
       );
+    }
 
     case 'run_failed':
     case 'run_cancelled':
     case 'run_interrupted':
+      state = clearPendingForTerminalRun(state, (p.run_id as string) || state.currentRun || '');
       state = reducer(reducer(state, { type: 'COMMIT_ACTIVE' }), {
         type: 'SET_CURRENT_RUN',
         runId: null,
@@ -1128,6 +1135,15 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
     default:
       return state;
   }
+}
+
+function clearPendingForTerminalRun(state: AppState, runId: string): AppState {
+  if (!runId) return state;
+  return {
+    ...state,
+    pendingAsk: state.pendingAsk?.runId === runId ? null : state.pendingAsk,
+    pendingCreation: state.currentRun === runId ? null : state.pendingCreation,
+  };
 }
 
 function generatedFilesFromText(text: string): GeneratedFileEntry[] {

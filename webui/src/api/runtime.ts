@@ -76,7 +76,7 @@ export const runtimeApi = {
       decision: allow ? 'allow' : 'deny',
     }),
   cancelRun: (id: string) => request<CancelRunResponse>('POST', `/v1/runs/${id}/cancel`),
-  respondToAsk: (runId: string, response: string, callId = runId) =>
+  respondToAsk: (runId: string, callId: string, response: string) =>
     request<AskResponse>('POST', `/v1/runs/${runId}/ask-response`, {
       call_id: callId,
       response,

@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, formatApiError } from '../api/client';
 import type { PendingCreation } from '../api/types';
+import { useDialogFocus } from './AskUserPrompt';
 import styles from './AskUserPrompt.module.css';
 
 interface Props {
   request: PendingCreation;
-  onResolved: () => void;
+  onResolved: (creationId: string) => void;
 }
 
 export default function CreationRequestDialog({ request, onResolved }: Props) {
@@ -14,6 +15,14 @@ export default function CreationRequestDialog({ request, onResolved }: Props) {
   const [modifications, setModifications] = useState(
     request.preview ? JSON.stringify(request.preview, null, 2) : '',
   );
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef);
+
+  useEffect(() => {
+    setSubmitting(false);
+    setError(null);
+    setModifications(request.preview ? JSON.stringify(request.preview, null, 2) : '');
+  }, [request.id]);
 
   async function resolve(decision: 'allow' | 'deny') {
     if (submitting) return;
@@ -29,7 +38,7 @@ export default function CreationRequestDialog({ request, onResolved }: Props) {
         parsedModifications = parsed as Record<string, unknown>;
       }
       await api.resolveCreation(request.id, decision, parsedModifications);
-      onResolved();
+      onResolved(request.id);
     } catch (cause) {
       setError(formatApiError(cause, 'Could not resolve the creation request.'));
     } finally {
@@ -40,6 +49,7 @@ export default function CreationRequestDialog({ request, onResolved }: Props) {
   return (
     <div
       className={styles.overlay}
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="creation-title"

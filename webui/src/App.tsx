@@ -333,13 +333,13 @@ function AppInner() {
       {state.pendingAsk && (
         <AskUserPrompt
           request={state.pendingAsk}
-          onResolved={() => dispatch({ type: 'RESOLVE_ASK' })}
+          onResolved={(callId) => dispatch({ type: 'RESOLVE_ASK', callId })}
         />
       )}
       {state.pendingCreation && (
         <CreationRequestDialog
           request={state.pendingCreation}
-          onResolved={() => dispatch({ type: 'RESOLVE_CREATION' })}
+          onResolved={(creationId) => dispatch({ type: 'RESOLVE_CREATION', creationId })}
         />
       )}
 
