@@ -136,6 +136,9 @@ private:
 
     // Agent-driven: scene rewrite
     void handle_start_rewrite_scene(const httplib::Request&, httplib::Response&);
+
+    // Character appearances
+    void handle_character_appearances(const httplib::Request&, httplib::Response&);
     void handle_get_rewrite_result(const httplib::Request&, httplib::Response&);
 
     std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;

@@ -10,6 +10,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <map>
 #include <unordered_map>
 
 namespace merak {
@@ -288,6 +289,10 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_agent_relations(req, res); });
     server.Get(R"(/api/worldbuilding/agents/([^/]+)/prompt)",
         [this](const auto& req, auto& res) { handle_load_agent_prompt(req, res); });
+
+    // Character appearances
+    server.Get(R"(/api/worldbuilding/([^/]+)/characters/([^/]+)/appearances)",
+        [this](const auto& req, auto& res) { handle_character_appearances(req, res); });
 
     // Image routes
     server.Get(R"(/api/worldbuilding/images/([^/]+))",
@@ -2726,6 +2731,52 @@ void WorldbuildingHttpHandler::handle_search_agents(const httplib::Request& req,
             arr.push_back(agent_obj);
         }
         json_response(res, {{"ok", true}, {"agents", arr}, {"total", results.size()}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_character_appearances(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent || agent->world_id != wid) {
+            error_response(res, "Character not found", 404, "agent_not_found");
+            return;
+        }
+        auto appearances = service_->narrative().find_character_appearances(wid, aid);
+        // Group scenes by chapter
+        std::map<std::string, nlohmann::json> chapter_map;
+        std::map<std::string, std::string> chapter_titles;
+        std::map<std::string, int> chapter_numbers;
+        for (const auto& ch : appearances.chapters) {
+            std::string ch_id = ch["id"];
+            chapter_titles[ch_id] = ch.value("title", "");
+            chapter_numbers[ch_id] = ch.value("scene_count", 0);
+            chapter_map[ch_id] = nlohmann::json::array();
+        }
+        for (const auto& sc : appearances.scenes) {
+            std::string ch_id = sc.value("chapter_id", "");
+            // C++17: use find() instead of contains()
+            if (chapter_map.find(ch_id) != chapter_map.end()) {
+                chapter_map[ch_id].push_back({
+                    {"scene_id", sc["id"]},
+                    {"scene_title", sc["title"]}
+                });
+            }
+        }
+        nlohmann::json chapter_list = nlohmann::json::array();
+        for (auto& kv : chapter_map) {
+            const auto& ch_id = kv.first;
+            chapter_list.push_back({
+                {"chapter_id", ch_id},
+                {"chapter_title", chapter_titles[ch_id]},
+                {"chapter_number", chapter_numbers[ch_id]},
+                {"scenes", kv.second}
+            });
+        }
+        json_response(res, {{"ok", true}, {"character_id", aid}, {"appearances", chapter_list}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
