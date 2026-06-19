@@ -186,6 +186,7 @@ private:
 
     // Export
     void handle_export_chapters(const httplib::Request&, httplib::Response&);
+    void handle_export_full(const httplib::Request&, httplib::Response&);
 
     // PATCH routes for narrative entities
     void handle_patch_scene(const httplib::Request&, httplib::Response&);

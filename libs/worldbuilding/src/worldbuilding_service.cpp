@@ -886,5 +886,329 @@ nlohmann::json WorldbuildingService::get_dashboard(const std::string& world_id) 
 
     return dash;
 }
+WorldbuildingService::WorldSnapshot
+WorldbuildingService::export_world_snapshot(const std::string& world_id,
+                                             bool include_diaries,
+                                             bool include_memories) {
+    auto world = worlds_.get_world(world_id);
+    if (!world) {
+        throw std::runtime_error("World not found: " + world_id);
+    }
+
+    WorldSnapshot snap;
+    snap.schema_version = "1.0";
+    snap.snapshot_id = make_id("snap");
+    snap.exported_at = now_iso_utc();
+
+    snap.source = {
+        {"world_id", world->id},
+        {"name", world->name},
+        {"description", world->description}
+    };
+
+    nlohmann::json& p = snap.payload;
+
+    // ── Agents ──
+    auto agent_list = worlds_.list_agents(world_id);
+    nlohmann::json agents_arr = nlohmann::json::array();
+    for (const auto& a : agent_list) {
+        nlohmann::json aj;
+        aj["id"] = a.id;
+        aj["world_id"] = a.world_id;
+        aj["name"] = a.name;
+        aj["display_name"] = a.display_name;
+        aj["kind"] = to_string(a.kind);
+        aj["created_at"] = a.created_at;
+        aj["updated_at"] = a.updated_at;
+
+        // CharacterCard
+        auto card = agents_.load_character_card(a.id);
+        nlohmann::json card_json;
+        card_json["name"] = card.name;
+        card_json["gender"] = card.gender;
+        card_json["race"] = card.race;
+        card_json["identity"] = card.identity;
+        card_json["emotional_tendency"] = card.emotional_tendency;
+        card_json["speaking_style"] = card.speaking_style;
+        card_json["core_desire"] = card.core_desire;
+        card_json["deep_fear"] = card.deep_fear;
+        card_json["daily_goal"] = card.daily_goal;
+        card_json["background"] = card.background;
+        card_json["knowledge_scope"] = card.knowledge_scope;
+        card_json["appearance"] = card.appearance;
+        card_json["age"] = card.age;
+        card_json["version"] = card.version;
+        card_json["core_traits"] = card.core_traits;
+        card_json["taboo_topics"] = card.taboo_topics;
+        card_json["relations"] = card.relations;
+        card_json["updated_at"] = card.updated_at;
+        aj["card"] = card_json;
+
+        // Diaries (if requested)
+        if (include_diaries) {
+            auto diaries = agents_.recent_diary(a.id, 1000);
+            nlohmann::json diary_arr = nlohmann::json::array();
+            for (const auto& d : diaries) {
+                diary_arr.push_back({
+                    {"id", d.id},
+                    {"agent_id", d.agent_id},
+                    {"scene_id", d.scene_id},
+                    {"world_time", d.world_time},
+                    {"content", d.content},
+                    {"created_at", d.created_at},
+                    {"mood", d.mood},
+                    {"status", d.status},
+                    {"leak_risk_level", d.leak_risk_level},
+                    {"tokens_used", d.tokens_used}
+                });
+            }
+            aj["diaries"] = diary_arr;
+        }
+
+        // Memory summaries (if requested)
+        if (include_memories) {
+            auto summaries = agents_.recent_summaries(a.id, 100);
+            nlohmann::json summary_arr = nlohmann::json::array();
+            for (const auto& s : summaries) {
+                summary_arr.push_back({
+                    {"id", s.id},
+                    {"agent_id", s.agent_id},
+                    {"period_start", s.period_start},
+                    {"period_end", s.period_end},
+                    {"summary", s.summary},
+                    {"created_at", s.created_at},
+                    {"source_diary_ids", s.source_diary_ids}
+                });
+            }
+            aj["memory_summaries"] = summary_arr;
+        }
+
+        // Relations
+        auto relations = agents_.relations_for(a.id);
+        nlohmann::json rel_arr = nlohmann::json::array();
+        for (const auto& r : relations) {
+            rel_arr.push_back({
+                {"agent_id", r.agent_id},
+                {"target_id", r.target_id},
+                {"relation_type", r.relation_type},
+                {"description", r.description},
+                {"intimacy", r.intimacy},
+                {"key_events", r.key_events},
+                {"updated_at", r.updated_at}
+            });
+        }
+        aj["relations"] = rel_arr;
+
+        agents_arr.push_back(aj);
+    }
+    p["agents"] = agents_arr;
+
+    // ── Chapters with Scenes ──
+    auto chapter_list = narrative_.list_chapters(world_id);
+    nlohmann::json chapters_arr = nlohmann::json::array();
+    for (const auto& ch_summary : chapter_list) {
+        auto ch = narrative_.get_chapter(world_id, ch_summary.id);
+        if (!ch) continue;
+        nlohmann::json cj;
+        cj["id"] = ch->id;
+        cj["title"] = ch->title;
+        cj["pitch"] = ch->pitch;
+        cj["notes"] = ch->notes;
+        cj["content"] = ch->content;
+        cj["number"] = ch->number;
+        cj["arc_id"] = ch->arc_id.has_value() ? nlohmann::json(*ch->arc_id) : nlohmann::json(nullptr);
+        cj["status"] = to_string(ch->status);
+        cj["emotional_curve"] = ch->emotional_curve;
+        cj["scene_ids"] = ch->scene_ids;
+        cj["foreshadowing_planted"] = ch->foreshadowing_planted;
+        cj["foreshadowing_paid"] = ch->foreshadowing_paid;
+
+        // Scenes for this chapter
+        auto scene_list = narrative_.list_scenes(world_id, ch->id);
+        nlohmann::json scenes_arr = nlohmann::json::array();
+        for (const auto& s_summary : scene_list) {
+            auto s = narrative_.get_scene(world_id, s_summary.id);
+            if (!s) continue;
+            nlohmann::json sj;
+            sj["id"] = s->id;
+            sj["title"] = s->title;
+            sj["chapter_id"] = s->chapter_id;
+            sj["world_time"] = s->world_time;
+            sj["narrative"] = s->narrative;
+            sj["section_id"] = s->section_id.has_value() ? nlohmann::json(*s->section_id) : nlohmann::json(nullptr);
+            sj["location_id"] = s->location_id.has_value() ? nlohmann::json(*s->location_id) : nlohmann::json(nullptr);
+            sj["participant_ids"] = s->participant_ids;
+            sj["status"] = to_string(s->status);
+            sj["pov_character_id"] = s->pov_character_id.has_value() ? nlohmann::json(*s->pov_character_id) : nlohmann::json(nullptr);
+            sj["plot_goal"] = s->plot_goal;
+            sj["emotional_goal"] = s->emotional_goal;
+            sj["information_goal"] = s->information_goal;
+            sj["external_conflict"] = s->external_conflict;
+            sj["internal_conflict"] = s->internal_conflict;
+            sj["hidden_conflict"] = s->hidden_conflict.has_value() ? nlohmann::json(*s->hidden_conflict) : nlohmann::json(nullptr);
+            sj["foreshadowing_ids"] = s->foreshadowing_ids;
+            sj["style_overrides"] = s->style_overrides;
+            scenes_arr.push_back(sj);
+        }
+        cj["scenes"] = scenes_arr;
+        chapters_arr.push_back(cj);
+    }
+    p["chapters"] = chapters_arr;
+
+    // ── Arcs ──
+    auto arc_list = narrative_.list_arcs(world_id);
+    nlohmann::json arcs_arr = nlohmann::json::array();
+    for (const auto& arc : arc_list) {
+        arcs_arr.push_back({
+            {"id", arc.id},
+            {"title", arc.title},
+            {"purpose", arc.purpose},
+            {"status", arc.status},
+            {"updated_at", arc.updated_at}
+        });
+    }
+    p["arcs"] = arcs_arr;
+
+    // ── Locations ──
+    auto locations = worlds_.list_locations(world_id);
+    nlohmann::json loc_arr = nlohmann::json::array();
+    for (const auto& loc : locations) {
+        nlohmann::json lj{
+            {"id", loc.id},
+            {"name", loc.name},
+            {"description", loc.description},
+            {"region", loc.region},
+            {"created_at", loc.created_at}
+        };
+        lj["parent_location_id"] = loc.parent_location_id.has_value()
+            ? nlohmann::json(*loc.parent_location_id) : nlohmann::json(nullptr);
+        loc_arr.push_back(lj);
+    }
+    p["locations"] = loc_arr;
+
+    // ── Factions ──
+    auto factions = worlds_.list_factions(world_id);
+    nlohmann::json fac_arr = nlohmann::json::array();
+    for (const auto& f : factions) {
+        fac_arr.push_back({
+            {"id", f.id},
+            {"world_id", f.world_id},
+            {"name", f.name},
+            {"description", f.description},
+            {"goals", f.goals},
+            {"member_agent_ids", f.member_agent_ids},
+            {"rival_faction_ids", f.rival_faction_ids},
+            {"created_at", f.created_at},
+            {"updated_at", f.updated_at}
+        });
+    }
+    p["factions"] = fac_arr;
+
+    // ── Knowledge ──
+    auto knowledge = worlds_.get_world_knowledge(world_id, "");
+    nlohmann::json kn_arr = nlohmann::json::array();
+    for (const auto& k : knowledge) {
+        kn_arr.push_back({
+            {"id", k.id},
+            {"category", k.category},
+            {"content", k.content},
+            {"created_at", k.created_at},
+            {"tags", k.tags},
+            {"aliases", k.aliases},
+            {"related_ids", k.related_ids}
+        });
+    }
+    p["knowledge"] = kn_arr;
+
+    // ── Foreshadowing ──
+    auto foreshadowings = foreshadowing_.list(world_id, std::nullopt);
+    nlohmann::json fs_arr = nlohmann::json::array();
+    for (const auto& f : foreshadowings) {
+        nlohmann::json fj{
+            {"id", f.id},
+            {"content", f.content},
+            {"pay_off_idea", f.pay_off_idea},
+            {"status", to_string(f.status)},
+            {"hint_level", to_string(f.hint_level)},
+            {"tags", f.tags},
+            {"related_foreshadowing_ids", f.related_foreshadowing_ids},
+            {"related_secret_ids", f.related_secret_ids},
+            {"created_by", to_string(f.created_by)}
+        };
+        fj["planted_at"] = f.planted_at.has_value() ? nlohmann::json(*f.planted_at) : nlohmann::json(nullptr);
+        fj["paid_at"] = f.paid_at.has_value() ? nlohmann::json(*f.paid_at) : nlohmann::json(nullptr);
+        fs_arr.push_back(fj);
+    }
+    p["foreshadowing"] = fs_arr;
+
+    // ── Secrets ──
+    auto active_secrets = secrets_.list(world_id, SecretStatus::Active);
+    auto exposed_secrets = secrets_.list(world_id, SecretStatus::Exposed);
+    auto abandoned_secrets = secrets_.list(world_id, SecretStatus::Abandoned);
+    nlohmann::json sec_arr = nlohmann::json::array();
+    auto add_secret = [&](const auto& s) {
+        nlohmann::json sj{
+            {"id", s.id},
+            {"holder_id", s.holder_id},
+            {"truth", s.truth},
+            {"public_version", s.public_version},
+            {"stakes", s.stakes},
+            {"aware_character_ids", s.aware_character_ids},
+            {"suspicious_character_ids", s.suspicious_character_ids},
+            {"related_foreshadowing_ids", s.related_foreshadowing_ids},
+            {"believed_truths", s.believed_truths},
+            {"status", to_string(s.status)}
+        };
+        sj["planted_at"] = s.planted_at.has_value() ? nlohmann::json(*s.planted_at) : nlohmann::json(nullptr);
+        sj["exposed_at"] = s.exposed_at.has_value() ? nlohmann::json(*s.exposed_at) : nlohmann::json(nullptr);
+        sec_arr.push_back(sj);
+    };
+    for (const auto& s : active_secrets) add_secret(s);
+    for (const auto& s : exposed_secrets) add_secret(s);
+    for (const auto& s : abandoned_secrets) add_secret(s);
+    p["secrets"] = sec_arr;
+
+    // ── Timeline ──
+    {
+        auto timeline_path = worlds_.world_path(world_id) / "timeline.json";
+        nlohmann::json timeline_events = nlohmann::json::array();
+        if (std::filesystem::exists(timeline_path)) {
+            try {
+                std::ifstream tf(timeline_path);
+                if (tf) {
+                    auto timeline_data = nlohmann::json::parse(tf);
+                    if (timeline_data.contains("events") && timeline_data["events"].is_array()) {
+                        timeline_events = timeline_data["events"];
+                    }
+                }
+            } catch (...) {
+                // If timeline file is corrupted, export empty array
+                timeline_events = nlohmann::json::array();
+            }
+        }
+        p["timeline"] = timeline_events;
+    }
+
+    // ── File links ──
+    p["file_links"] = worlds_.list_file_links(world_id);
+
+    // ── Manifest ──
+    snap.manifest = {
+        {"schema_version", snap.schema_version},
+        {"exported_at", snap.exported_at},
+        {"snapshot_id", snap.snapshot_id},
+        {"agent_count", agents_arr.size()},
+        {"chapter_count", chapters_arr.size()},
+        {"arc_count", arcs_arr.size()},
+        {"location_count", loc_arr.size()},
+        {"faction_count", fac_arr.size()},
+        {"knowledge_count", kn_arr.size()},
+        {"foreshadowing_count", fs_arr.size()},
+        {"secret_count", sec_arr.size()},
+        {"timeline_event_count", p["timeline"].is_array() ? p["timeline"].size() : 0}
+    };
+
+    return snap;
+}
 
 } // namespace merak::worldbuilding

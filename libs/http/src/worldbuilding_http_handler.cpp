@@ -3,6 +3,7 @@
 #include <merak/worldbuilding/world_models.hpp>
 #include <merak/worldbuilding/card_access.hpp>
 #include <merak/worldbuilding/pipeline_manager.hpp>
+#include <merak/worldbuilding/ids.hpp>
 
 #include <algorithm>
 #include <filesystem>
@@ -415,6 +416,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_chapter_review(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/export)",
         [this](const auto& req, auto& res) { handle_export_chapters(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/export-full)",
+        [this](const auto& req, auto& res) { handle_export_full(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/scenes)",
         [this](const auto& req, auto& res) { handle_list_scenes(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes)",
@@ -2320,6 +2323,92 @@ void WorldbuildingHttpHandler::handle_export_chapters(const httplib::Request& re
             {"ok", true},
             {"file_path", result.file_path},
             {"total_chars", result.total_chars}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 500, "export_failed");
+    }
+}
+
+void WorldbuildingHttpHandler::handle_export_full(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string world_id = req.matches[1];
+
+        bool include_diaries = false;
+        bool include_memories = false;
+        if (!req.body.empty()) {
+            auto body = nlohmann::json::parse(req.body);
+            include_diaries = body.value("include_diaries", false);
+            include_memories = body.value("include_memories", false);
+        }
+
+        auto snapshot = service_->export_world_snapshot(world_id, include_diaries, include_memories);
+
+        // Enrich with image data if image_service_ is available
+        if (image_service_ && snapshot.payload.contains("agents") && snapshot.payload["agents"].is_array()) {
+            for (auto& agent_json : snapshot.payload["agents"]) {
+                if (!agent_json.contains("id")) continue;
+                std::string agent_id = agent_json["id"].get<std::string>();
+
+                auto images = image_service_->list_images(agent_id);
+                nlohmann::json imgs_arr = nlohmann::json::array();
+                for (const auto& img : images) {
+                    nlohmann::json img_json;
+                    img_json["id"] = img.id;
+                    img_json["agent_id"] = img.agent_id;
+                    img_json["image_type"] = img.image_type;
+                    img_json["storage_key"] = img.storage_key;
+                    img_json["mime_type"] = img.mime_type;
+                    img_json["original_name"] = img.original_name;
+                    img_json["file_size_bytes"] = img.file_size_bytes;
+                    img_json["is_primary"] = img.is_primary;
+                    img_json["sort_order"] = img.sort_order;
+                    img_json["created_at"] = img.created_at;
+
+                    // Inline small images as base64, mark large ones as external
+                    const int64_t kMaxInlineBytes = 256 * 1024; // 256 KB
+                    if (img.file_size_bytes > 0 && img.file_size_bytes <= kMaxInlineBytes) {
+                        try {
+                            auto image_data = image_service_->store().load(img.storage_key);
+                            if (!image_data.bytes.empty()) {
+                                std::string b64 = worldbuilding::base64_encode(image_data.bytes);
+                                img_json["data"] = "data:" + img.mime_type + ";base64," + b64;
+                            } else {
+                                img_json["data"] = nullptr;
+                            }
+                        } catch (...) {
+                            img_json["data"] = nullptr;
+                            img_json["transfer"] = "external";
+                        }
+                    } else {
+                        img_json["data"] = nullptr;
+                        img_json["transfer"] = "external";
+                    }
+                    imgs_arr.push_back(img_json);
+                }
+                agent_json["images"] = imgs_arr;
+
+                // Update image count in manifest
+                if (!images.empty()) {
+                    int existing = snapshot.manifest.value("image_count", 0);
+                    snapshot.manifest["image_count"] = existing + static_cast<int>(images.size());
+                }
+            }
+            // Ensure image count is present even if zero
+            if (!snapshot.manifest.contains("image_count")) {
+                snapshot.manifest["image_count"] = 0;
+            }
+        }
+
+        json_response(res, {
+            {"ok", true},
+            {"snapshot", {
+                {"schema_version", snapshot.schema_version},
+                {"exported_at", snapshot.exported_at},
+                {"snapshot_id", snapshot.snapshot_id},
+                {"source", snapshot.source},
+                {"manifest", snapshot.manifest},
+                {"payload", snapshot.payload}
+            }}
         });
     } catch (const std::exception& e) {
         error_response(res, e.what(), 500, "export_failed");
