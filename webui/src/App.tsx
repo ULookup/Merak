@@ -3,17 +3,19 @@ import { ArrowLeft } from 'lucide-react';
 import { api } from './api/client';
 import styles from './App.module.css';
 import { AppStateProvider, useAppState, type AppState } from './AppState';
+import AskUserPrompt from './components/AskUserPrompt';
+import ChapterEditor from './components/ChapterEditor';
 import ConnectionBanner from './components/ConnectionBanner';
+import CreationRequestDialog from './components/CreationRequestDialog';
 import ErrorBoundary from './components/ErrorBoundary';
 import InspectorPanel from './components/InspectorPanel';
 import MainPanel from './components/MainPanel';
+import SettingsPage from './components/SettingsPage';
 import Skeleton from './components/Skeleton';
 import { ToastProvider } from './components/Toast';
 import WorldDashboard from './components/WorldDashboard';
 import WorldOnboarding from './components/WorldOnboarding';
 import WorldSidebar from './components/WorldSidebar';
-import SettingsPage from './components/SettingsPage';
-import ChapterEditor from './components/ChapterEditor';
 import DesktopBoot from './DesktopBoot';
 import { useSSE } from './hooks/useSSE';
 import { I18nProvider } from './i18n';
@@ -56,13 +58,14 @@ function AppInner() {
         dispatch({ type: 'SHOW_SETUP_WIZARD', show: true });
       }
 
-      const [metadataRes, worldsRes, sessionsRes, capabilitiesRes, prefsRes] = await Promise.allSettled([
-        api.metadata(),
-        api.listWorlds(),
-        api.listSessions(),
-        api.capabilities(),
-        api.getPreferences(),
-      ]);
+      const [metadataRes, worldsRes, sessionsRes, capabilitiesRes, prefsRes] =
+        await Promise.allSettled([
+          api.metadata(),
+          api.listWorlds(),
+          api.listSessions(),
+          api.capabilities(),
+          api.getPreferences(),
+        ]);
 
       if (metadataRes.status === 'fulfilled') {
         dispatch({ type: 'SET_METADATA', metadata: metadataRes.value });
@@ -172,10 +175,7 @@ function AppInner() {
         fallback: overviewRes.status === 'fulfilled' ? overviewRes.value.fallback : false,
       });
       if (
-        shouldReportWorldbuildingPartialFailure(
-          overviewRes.status === 'fulfilled',
-          secondaryFailed,
-        )
+        shouldReportWorldbuildingPartialFailure(overviewRes.status === 'fulfilled', secondaryFailed)
       ) {
         dispatch({
           type: 'SET_WORLDBUILDING_STATUS',
@@ -235,9 +235,7 @@ function AppInner() {
             <ArrowLeft size={15} aria-hidden="true" strokeWidth={2.3} />
             返回工作台
           </button>
-          <h1 className={styles.editorTitle}>
-            {state.activeEditorChapterTitle || '章节编辑'}
-          </h1>
+          <h1 className={styles.editorTitle}>{state.activeEditorChapterTitle || '章节编辑'}</h1>
         </div>
         <div className={styles.editorBody}>
           <ChapterEditor chapterId={state.activeEditorChapterId} worldId={state.worldId} />
@@ -255,7 +253,9 @@ function AppInner() {
     return (
       <ToastProvider>
         <WorldOnboarding onOpenGuide={() => setHelpOpen(true)} />
-        <Suspense>{helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}</Suspense>
+        <Suspense>
+          {helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}
+        </Suspense>
       </ToastProvider>
     );
   }
@@ -264,7 +264,9 @@ function AppInner() {
     return (
       <ToastProvider>
         <WorldDashboard onOpenGuide={() => setHelpOpen(true)} />
-        <Suspense>{helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}</Suspense>
+        <Suspense>
+          {helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}
+        </Suspense>
       </ToastProvider>
     );
   }
@@ -289,7 +291,9 @@ function AppInner() {
             />
           </div>
         </ErrorBoundary>
-        <Suspense><HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} /></Suspense>
+        <Suspense>
+          <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
+        </Suspense>
         <ErrorBoundary>
           <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
         </ErrorBoundary>
@@ -298,7 +302,9 @@ function AppInner() {
       {/* Setup Wizard — shown when LLM is not configured */}
       <Suspense>
         {state.showSetupWizard && (
-          <SetupWizard onComplete={() => dispatch({ type: 'SET_LLM_CONFIGURED', configured: true })} />
+          <SetupWizard
+            onComplete={() => dispatch({ type: 'SET_LLM_CONFIGURED', configured: true })}
+          />
         )}
       </Suspense>
 
@@ -323,6 +329,19 @@ function AppInner() {
           />
         )}
       </Suspense>
+
+      {state.pendingAsk && (
+        <AskUserPrompt
+          request={state.pendingAsk}
+          onResolved={() => dispatch({ type: 'RESOLVE_ASK' })}
+        />
+      )}
+      {state.pendingCreation && (
+        <CreationRequestDialog
+          request={state.pendingCreation}
+          onResolved={() => dispatch({ type: 'RESOLVE_CREATION' })}
+        />
+      )}
 
       {/* Export Dialog */}
       <Suspense>

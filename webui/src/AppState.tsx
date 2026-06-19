@@ -4,6 +4,8 @@ import type {
   ConditionState,
   ForeshadowingItem,
   Message,
+  PendingAsk,
+  PendingCreation,
   PhaseTransition,
   PipelineViewData,
   RuntimeMetadata,
@@ -48,6 +50,8 @@ export interface AppState {
   sessionId: string;
   lastSeq: number;
   currentRun: string | null;
+  pendingAsk: PendingAsk | null;
+  pendingCreation: PendingCreation | null;
   lastRunId: string | null;
   messages: Message[];
   status: StatusLabel;
@@ -116,6 +120,8 @@ export const initialState: AppState = {
   sessionId: '',
   lastSeq: 0,
   currentRun: null,
+  pendingAsk: null,
+  pendingCreation: null,
   lastRunId: null,
   messages: [],
   status: 'idle',
@@ -308,6 +314,8 @@ export type Action =
   | { type: 'COMMIT_ACTIVE' }
   | { type: 'SET_STORY_VERSION' }
   | { type: 'APPLY_SSE'; frame: SseFrame }
+  | { type: 'RESOLVE_ASK' }
+  | { type: 'RESOLVE_CREATION' }
   | { type: 'SET_PIPELINE_CONDITIONS'; conditions: ConditionState[] }
   | { type: 'SET_PIPELINE_VIEW'; view: Partial<PipelineViewData> }
   | { type: 'DISMISS_PHASE_PROMPT' }
@@ -339,6 +347,8 @@ export function reducer(state: AppState, action: Action): AppState {
         lastSeq: 0,
         currentRun: null,
         lastRunId: null,
+        pendingAsk: null,
+        pendingCreation: null,
         status: 'idle',
       };
 
@@ -351,6 +361,8 @@ export function reducer(state: AppState, action: Action): AppState {
         lastSeq: 0,
         currentRun: null,
         lastRunId: null,
+        pendingAsk: null,
+        pendingCreation: null,
         status: 'idle',
       };
 
@@ -485,7 +497,8 @@ export function reducer(state: AppState, action: Action): AppState {
         ...state,
         editorBuffers: {
           ...state.editorBuffers,
-          [action.fileId]: state.editorOriginals[action.fileId] ?? state.editorBuffers[action.fileId] ?? '',
+          [action.fileId]:
+            state.editorOriginals[action.fileId] ?? state.editorBuffers[action.fileId] ?? '',
         },
         workspaceFiles: state.workspaceFiles.map((file) =>
           file.id === action.fileId ? { ...file, dirty: false } : file,
@@ -678,9 +691,16 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'APPLY_SSE': {
       const { frame } = action;
+      if (frame.seq > 0 && frame.seq <= state.lastSeq) return state;
       if (frame.seq > 0) state = { ...state, lastSeq: Math.max(state.lastSeq, frame.seq) };
       return applySseFrame(state, frame);
     }
+
+    case 'RESOLVE_ASK':
+      return { ...state, pendingAsk: null };
+
+    case 'RESOLVE_CREATION':
+      return { ...state, pendingCreation: null };
 
     case 'SET_PIPELINE_CONDITIONS':
       return { ...state, pipelineConditions: action.conditions };
@@ -867,6 +887,39 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
 
     case 'approval_resolved':
       return reducer(state, { type: 'CLEAR_APPROVAL' });
+
+    case 'ask_user_requested': {
+      const choices = Array.isArray(p.options)
+        ? p.options.filter((choice): choice is string => typeof choice === 'string')
+        : undefined;
+      return {
+        ...state,
+        pendingAsk: {
+          runId: (p.run_id as string) || state.currentRun || '',
+          ...(typeof p.call_id === 'string' && p.call_id ? { callId: p.call_id } : {}),
+          question: (p.question as string) ?? '',
+          ...(choices?.length ? { choices } : {}),
+          ...(typeof p.multi_select === 'boolean' ? { multiSelect: p.multi_select } : {}),
+        },
+      };
+    }
+
+    case 'creation_requested':
+      return {
+        ...state,
+        pendingCreation: {
+          id: (p.creation_id as string) ?? '',
+          toolName: (p.tool as string) ?? '',
+          ...(p.preview && typeof p.preview === 'object'
+            ? { preview: p.preview as Record<string, unknown> }
+            : {}),
+        },
+      };
+
+    case 'creation_resolved':
+      return state.pendingCreation?.id === p.creation_id || !p.creation_id
+        ? reducer(state, { type: 'RESOLVE_CREATION' })
+        : state;
 
     case 'usage_updated':
       return reducer(state, {

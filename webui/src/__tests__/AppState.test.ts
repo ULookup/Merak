@@ -8,13 +8,20 @@ function state(overrides: Partial<AppState> = {}): AppState {
 
 describe('AppState reducer', () => {
   it('SET_SESSION resets messages and sets sessionId', () => {
-    const prev = state({ messages: [{ id: 'm1', kind: 'user', text: 'hi' }], lastSeq: 5 });
+    const prev = state({
+      messages: [{ id: 'm1', kind: 'user', text: 'hi' }],
+      lastSeq: 5,
+      pendingAsk: { runId: 'old-run', question: 'Old question' },
+      pendingCreation: { id: 'old-creation', toolName: 'create_scene' },
+    });
     const next = reducer(prev, { type: 'SET_SESSION', sessionId: 'new-id' });
     expect(next.sessionId).toBe('new-id');
     expect(next.messages).toHaveLength(0);
     expect(next.lastSeq).toBe(0);
     expect(next.currentRun).toBeNull();
     expect(next.status).toBe('idle');
+    expect(next.pendingAsk).toBeNull();
+    expect(next.pendingCreation).toBeNull();
   });
 
   it('SET_METADATA stores metadata and sets selectedModel', () => {
@@ -42,7 +49,16 @@ describe('AppState reducer', () => {
     const next = reducer(prev, {
       type: 'SET_SESSIONS',
       sessions: [
-        { id: 's1', title: 'Test', world_id: null, agent_id: null, last_seq: 0, created_at: '', updated_at: '', archived_at: null },
+        {
+          id: 's1',
+          title: 'Test',
+          world_id: null,
+          agent_id: null,
+          last_seq: 0,
+          created_at: '',
+          updated_at: '',
+          archived_at: null,
+        },
       ],
     });
     expect(next.sessions).toHaveLength(1);
@@ -198,6 +214,67 @@ describe('AppState reducer', () => {
     expect(next.lastSeq).toBe(5);
     const next2 = reducer(prev, { type: 'SET_LAST_SEQ', seq: 7 });
     expect(next2.lastSeq).toBe(7);
+  });
+
+  it('tracks and resolves interactive SSE requests', () => {
+    const askFrame = {
+      seq: 10,
+      type: 'ask_user_requested',
+      payload: {
+        run_id: 'r1',
+        call_id: 'call_1',
+        question: 'Choose POV',
+        options: ['First person', 'Third person'],
+      },
+    };
+    const asked = reducer(state(), { type: 'APPLY_SSE', frame: askFrame });
+    expect(asked.pendingAsk).toEqual({
+      runId: 'r1',
+      callId: 'call_1',
+      question: 'Choose POV',
+      choices: ['First person', 'Third person'],
+    });
+    expect(reducer(asked, { type: 'RESOLVE_ASK' }).pendingAsk).toBeNull();
+
+    const creationFrame = {
+      seq: 11,
+      type: 'creation_requested',
+      payload: { creation_id: 'creation_1', tool: 'create_scene', preview: { title: 'Arrival' } },
+    };
+    const requested = reducer(asked, { type: 'APPLY_SSE', frame: creationFrame });
+    expect(requested.pendingCreation).toEqual({
+      id: 'creation_1',
+      toolName: 'create_scene',
+      preview: { title: 'Arrival' },
+    });
+    expect(
+      reducer(requested, {
+        type: 'APPLY_SSE',
+        frame: {
+          seq: 12,
+          type: 'creation_resolved',
+          payload: { creation_id: 'creation_1', decision: 'allow' },
+        },
+      }).pendingCreation,
+    ).toBeNull();
+    expect(reducer(requested, { type: 'RESOLVE_CREATION' }).pendingCreation).toBeNull();
+  });
+
+  it('ignores duplicate and stale nonzero SSE frames before applying their effects', () => {
+    const askFrame = {
+      seq: 10,
+      type: 'ask_user_requested',
+      payload: { run_id: 'r1', question: 'Choose POV' },
+    };
+    const prev = state({ lastSeq: 10 });
+    expect(reducer(prev, { type: 'APPLY_SSE', frame: askFrame })).toEqual(prev);
+
+    const zeroSeq = reducer(prev, {
+      type: 'APPLY_SSE',
+      frame: { ...askFrame, seq: 0 },
+    });
+    expect(zeroSeq.pendingAsk).toEqual({ runId: 'r1', question: 'Choose POV' });
+    expect(zeroSeq.lastSeq).toBe(10);
   });
 
   describe('SSE frame: run_started', () => {

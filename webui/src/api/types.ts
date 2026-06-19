@@ -4,6 +4,26 @@ export interface SseFrame {
   payload: Record<string, unknown>;
 }
 
+export interface PendingAsk {
+  runId: string;
+  callId?: string;
+  question: string;
+  choices?: string[];
+  multiSelect?: boolean;
+}
+
+export interface PendingCreation {
+  id: string;
+  toolName: string;
+  preview?: Record<string, unknown>;
+}
+
+export interface AskResponse {
+  ok: boolean;
+  run_id: string;
+  call_id: string;
+}
+
 export type MessageKind = 'user' | 'assistant' | 'tool' | 'system' | 'approval' | 'status_pill';
 
 export type StatusLabel =

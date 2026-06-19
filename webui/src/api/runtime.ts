@@ -2,6 +2,7 @@ import { getApiBase, request } from './http';
 import type {
   ApprovalResponse,
   ArchiveSessionResponse,
+  AskResponse,
   CancelRunResponse,
   CreateSessionResponse,
   GenerateTitleResponse,
@@ -75,6 +76,11 @@ export const runtimeApi = {
       decision: allow ? 'allow' : 'deny',
     }),
   cancelRun: (id: string) => request<CancelRunResponse>('POST', `/v1/runs/${id}/cancel`),
+  respondToAsk: (runId: string, response: string, callId = runId) =>
+    request<AskResponse>('POST', `/v1/runs/${runId}/ask-response`, {
+      call_id: callId,
+      response,
+    }),
   resolveCreation: (id: string, decision: string, modifications?: Record<string, unknown>) =>
     request<ResolveCreationResponse>('POST', `/v1/creations/${id}/resolve`, {
       decision,
