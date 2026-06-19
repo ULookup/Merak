@@ -2869,6 +2869,11 @@ void WorldbuildingHttpHandler::handle_pipeline_retreat(const httplib::Request& r
     }
 
     std::string to_phase = body["to_phase"];
+    auto phase_opt = worldbuilding::creative_phase_from_string(to_phase);
+    if (!phase_opt) {
+        error_response(res, "Invalid to_phase: " + to_phase, 400, "invalid_phase");
+        return;
+    }
     pipeline_mgr_->retreat_to_phase(world_id, to_phase);
 
     // Return state JSON matching pipeline/state handler format
@@ -2877,9 +2882,12 @@ void WorldbuildingHttpHandler::handle_pipeline_retreat(const httplib::Request& r
     const auto* phase_def = wf ? wf->get_phase(data.state.current_phase) : nullptr;
 
     nlohmann::json response;
-    response["phase"] = worldbuilding::to_string(data.state.current_phase);
-    response["label"] = phase_def ? phase_def->label : "";
-    response["active_workflow"] = data.active_workflow_name;
+    response["ok"] = true;
+
+    nlohmann::json state;
+    state["phase"] = worldbuilding::to_string(data.state.current_phase);
+    state["label"] = phase_def ? phase_def->label : "";
+    state["active_workflow"] = data.active_workflow_name;
 
     nlohmann::json conds = nlohmann::json::array();
     for (auto& r : data.current_conditions.results) {
@@ -2890,14 +2898,28 @@ void WorldbuildingHttpHandler::handle_pipeline_retreat(const httplib::Request& r
         if (r.target) cj["target"] = *r.target;
         conds.push_back(cj);
     }
-    response["conditions"] = conds;
-    response["all_conditions_met"] = data.current_conditions.all_met;
+    state["conditions"] = conds;
+    state["all_conditions_met"] = data.current_conditions.all_met;
 
     auto next_phases = worldbuilding::allowed_next_phases(data.state.current_phase);
     nlohmann::json next_arr = nlohmann::json::array();
     for (auto& np : next_phases) next_arr.push_back(worldbuilding::to_string(np));
-    response["next_allowed"] = next_arr;
-    response["allowed_retreat"] = phase_def ? nlohmann::json(phase_def->allowed_retreat) : nlohmann::json::array();
+    state["next_allowed"] = next_arr;
+    state["allowed_retreat"] = phase_def ? nlohmann::json(phase_def->allowed_retreat) : nlohmann::json::array();
+
+    nlohmann::json history = nlohmann::json::array();
+    for (auto& h : data.recent_history) {
+        nlohmann::json hj;
+        hj["id"] = h.id;
+        hj["from"] = worldbuilding::to_string(h.from_phase);
+        hj["to"] = worldbuilding::to_string(h.to_phase);
+        hj["trigger"] = h.trigger;
+        hj["timestamp"] = h.timestamp;
+        history.push_back(hj);
+    }
+    state["recent_history"] = history;
+
+    response["state"] = state;
 
     json_response(res, response);
 }
