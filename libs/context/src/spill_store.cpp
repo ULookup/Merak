@@ -1,5 +1,6 @@
 #include <merak/spill_store.hpp>
 #include <algorithm>
+#include <merak/utilities.hpp>
 #include <fstream>
 #include <sstream>
 #include <functional>
@@ -52,10 +53,10 @@ std::optional<SpillReference> SpillStore::spill(SectionKind kind,
         auto us_b = stem_b.find('_');
         int ta = 0, tb = 0;
         if (us_a != std::string::npos) {
-          try { ta = std::stoi(stem_a.substr(0, us_a)); } catch (...) {}
+          if (auto v = safe_stoi(stem_a.substr(0, us_a))) ta = *v;
         }
         if (us_b != std::string::npos) {
-          try { tb = std::stoi(stem_b.substr(0, us_b)); } catch (...) {}
+          if (auto v = safe_stoi(stem_b.substr(0, us_b))) tb = *v;
         }
         return ta < tb;
       });
@@ -110,14 +111,13 @@ void SpillStore::purge_before(int turn_index) {
     auto stem = entry.path().stem().string();
     auto underscore = stem.find('_');
     if (underscore == std::string::npos) continue;
-    try {
-      int t = std::stoi(stem.substr(0, underscore));
-      if (t < turn_index) {
+    if (auto v = safe_stoi(stem.substr(0, underscore))) {
+      if (*v < turn_index) {
         auto sz = entry.file_size();
         std::filesystem::remove(entry);
         current_total_bytes_ -= sz;
       }
-    } catch (...) {}
+    }
   }
 }
 

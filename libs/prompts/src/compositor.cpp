@@ -8,6 +8,7 @@
 #include <merak/dsl/resolver.hpp>
 #include <merak/dsl/renderer.hpp>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
+#include <spdlog/spdlog.h>
 #include <algorithm>
 #include <sstream>
 
@@ -147,7 +148,8 @@ std::string PromptCompositor::resolve_dsl_references(
     for (const auto& ref : refs) {
         try {
             resolved.push_back(resolver.resolve(ref));
-        } catch (...) {
+        } catch (const std::exception& e) {
+            spdlog::debug("DSL resolution failed for ref '{}': {}", ref.raw, e.what());
             // If resolution fails, leave the reference as-is
             resolved.push_back({ref.raw, ref.raw});
         }

@@ -2,6 +2,7 @@
 
 #include <merak/worldbuilding/ids.hpp>
 #include <merak/worldbuilding/pg_helpers.hpp>
+#include <merak/utilities.hpp>
 #include <nlohmann/json.hpp>
 
 #include <array>
@@ -69,9 +70,9 @@ WorldKnowledge world_knowledge_from_row(const PgResult& res, int row) {
     wk.category = res.get(row, 1);
     wk.content = res.get(row, 2);
     wk.created_at = res.get(row, 3);
-    try { wk.tags = nlohmann::json::parse(res.get(row, 4)).get<std::vector<std::string>>(); } catch (...) {}
-    try { wk.aliases = nlohmann::json::parse(res.get(row, 5)).get<std::vector<std::string>>(); } catch (...) {}
-    try { wk.related_ids = nlohmann::json::parse(res.get(row, 6)).get<std::vector<std::string>>(); } catch (...) {}
+    if (auto j = safe_json_parse(res.get(row, 4))) wk.tags = j->get<std::vector<std::string>>();
+    if (auto j = safe_json_parse(res.get(row, 5))) wk.aliases = j->get<std::vector<std::string>>();
+    if (auto j = safe_json_parse(res.get(row, 6))) wk.related_ids = j->get<std::vector<std::string>>();
     return wk;
 }
 
@@ -160,8 +161,11 @@ WorldMeta WorldStore::create_world(const std::string& name,
              to_string(AgentKind::RelationManager), timestamp, timestamp});
 
         conn.exec("COMMIT");
-    } catch (...) {
-        try { conn.exec("ROLLBACK"); } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::error("WorldStore::create_world failed: {}", e.what());
+        try { conn.exec("ROLLBACK"); } catch (const std::exception& re) {
+            spdlog::critical("ROLLBACK also failed: {}", re.what());
+        }
         remove_all_no_throw(root);
         throw;
     }
@@ -237,8 +241,11 @@ bool WorldStore::delete_world(const std::string& world_id) {
             std::filesystem::remove_all(root);
         }
         return affected > 0;
-    } catch (...) {
-        try { conn.exec("ROLLBACK"); } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::error("WorldStore::delete_world failed: {}", e.what());
+        try { conn.exec("ROLLBACK"); } catch (const std::exception& re) {
+            spdlog::critical("ROLLBACK also failed: {}", re.what());
+        }
         throw;
     }
 }
@@ -315,7 +322,9 @@ WorldStore::search_world_knowledge(const std::string& world_id,
         for (int i = 0; i < res.ntuples(); i++) {
             items.push_back(world_knowledge_from_row(res, i));
         }
-    } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::debug("hybrid_search_knowledge failed, falling back to LIKE: {}", e.what());
+    }
 
     if (!items.empty()) return items;
 
