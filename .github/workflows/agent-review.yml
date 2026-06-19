@@ -1,0 +1,60 @@
+name: Agent Review
+
+on:
+  pull_request:
+    paths:
+      - 'libs/core/**'
+      - 'libs/loop/**'
+      - 'libs/app/**'
+      - 'libs/worldbuilding/**'
+      - 'libs/tools/**'
+      - 'libs/runtime/**'
+      - 'webui/**'
+
+jobs:
+  agent-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: review
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        with:
+          prompt: |
+            You are reviewing a pull request. Review the diff for:
+            - Memory safety (use-after-free, double-delete, dangling references)
+            - Concurrency safety (data races, lock ordering)
+            - Exception safety (RAII, resource cleanup)
+            - Architecture consistency (DI patterns, file boundaries)
+            - Security vulnerabilities (SSRF, command injection, XSS)
+
+            Post your review as a PR review. If you find CRITICAL or IMPORTANT issues,
+            use "request changes". If only minor issues or none, "approve".
+
+            Use Chinese for the review body (this is a Chinese project).
+          claude_args: "--max-turns 5"
+
+      - name: Label ai-reviewed
+        if: steps.review.outcome == 'success'
+        run: gh pr edit --add-label "ai-reviewed"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Label needs-changes
+        if: steps.review.outcome == 'failure'
+        run: gh pr edit --add-label "needs-changes"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Block merge if needs changes
+        if: steps.review.outcome == 'failure'
+        run: |
+          echo "Agent review found issues — merge blocked"
+          exit 1
