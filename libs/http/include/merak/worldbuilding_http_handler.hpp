@@ -173,6 +173,9 @@ private:
     void handle_agent_diary_patch(const httplib::Request&, httplib::Response&);
     void handle_agent_diary_search(const httplib::Request&, httplib::Response&);
     void handle_agent_relations(const httplib::Request&, httplib::Response&);
+    void handle_agent_relation_upsert(const httplib::Request&, httplib::Response&);
+    void handle_agent_relation_update(const httplib::Request&, httplib::Response&);
+    void handle_agent_voice(const httplib::Request&, httplib::Response&);
 
     // Memory summaries
     void handle_memory_summaries_list(const httplib::Request&, httplib::Response&);

@@ -355,6 +355,12 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_agent_diary_patch(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/relations)",
         [this](const auto& req, auto& res) { handle_agent_relations(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/relations)",
+        [this](const auto& req, auto& res) { handle_agent_relation_upsert(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/relations/([^/]+))",
+        [this](const auto& req, auto& res) { handle_agent_relation_update(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/voice)",
+        [this](const auto& req, auto& res) { handle_agent_voice(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/memory-summaries)",
         [this](const auto& req, auto& res) { handle_memory_summaries_list(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/memory-summaries/([^/]+))",
@@ -1676,6 +1682,106 @@ void WorldbuildingHttpHandler::handle_agent_relations(const httplib::Request& re
             });
         }
         json_response(res, {{"ok", true}, {"relations", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent relation create ---
+
+void WorldbuildingHttpHandler::handle_agent_relation_upsert(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto body = nlohmann::json::parse(req.body);
+        if (!body.contains("target_id") || !body["target_id"].is_string()) {
+            error_response(res, "target_id is required", 400);
+            return;
+        }
+        worldbuilding::RelationEntry rel;
+        rel.agent_id = aid;
+        rel.target_id = body["target_id"].get<std::string>();
+        rel.relation_type = body.value("relation_type", "");
+        rel.description = body.value("description", "");
+        rel.intimacy = body.value("intimacy", 0);
+        service_->agents().upsert_relation(rel);
+        json_response(res, {{"ok", true}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent relation update ---
+
+void WorldbuildingHttpHandler::handle_agent_relation_update(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        std::string tid = req.matches[3];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto body = nlohmann::json::parse(req.body);
+        worldbuilding::RelationEntry rel;
+        rel.agent_id = aid;
+        rel.target_id = tid;
+        if (body.contains("relation_type")) rel.relation_type = body["relation_type"].get<std::string>();
+        if (body.contains("description")) rel.description = body["description"].get<std::string>();
+        if (body.contains("intimacy")) rel.intimacy = body["intimacy"].get<int>();
+        service_->agents().upsert_relation(rel);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent voice fingerprint ---
+
+void WorldbuildingHttpHandler::handle_agent_voice(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto fp = service_->voice().fingerprint_for(aid);
+        if (!fp) {
+            error_response(res, "Voice fingerprint not found", 404, "not_found");
+            return;
+        }
+        json_response(res, {
+            {"ok", true},
+            {"voice", {
+                {"avg_sentence_length", fp->avg_sentence_length},
+                {"sentence_variance", fp->sentence_variance},
+                {"question_frequency", fp->question_frequency},
+                {"modifier_ratio", fp->modifier_ratio},
+                {"sample_count", fp->sample_count},
+                {"signature_words", fp->signature_words},
+                {"tone_profile", fp->tone_profile}
+            }}
+        });
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
