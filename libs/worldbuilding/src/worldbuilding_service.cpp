@@ -365,7 +365,6 @@ nlohmann::json WorldbuildingService::resolve_creation(
         return {{"ok", true}, {"decision", "deny"}, {"creation_id", creation_id}};
     }
 
-    delete_pending_creation(creation_id);
     // Step 2: Merge modifications for "modify"
     nlohmann::json final_params = pc.params;
     if (decision == "modify" && !modifications.is_null()) {
@@ -487,12 +486,11 @@ nlohmann::json WorldbuildingService::resolve_creation(
             throw std::runtime_error("Unknown tool_name: " + pc.tool_name);
         }
     } catch (...) {
-        // Step 4: On failure, re-insert pc into map and PostgreSQL for retry.
-        persist_pending_creation(pc);
-        std::lock_guard lock(pending_mutex_);
-        pending_creations_[creation_id] = std::move(pc);
         throw;
     }
+
+    // Only delete pending creation after entity creation succeeds
+    delete_pending_creation(creation_id);
 
     return result;
 }
