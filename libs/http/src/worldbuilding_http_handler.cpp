@@ -1,4 +1,5 @@
 #include <merak/worldbuilding_http_handler.hpp>
+#include <merak/kg/kg_models.hpp>
 #include <merak/runtime_service.hpp>
 #include <merak/worldbuilding/world_models.hpp>
 #include <merak/worldbuilding/card_access.hpp>
@@ -8,6 +9,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -748,6 +750,14 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
 
     server.Post(R"(/api/worldbuilding/([^/]+)/pipeline/clear-error)",
         [this](const auto& req, auto& res) { handle_pipeline_clear_error(req, res); });
+
+    // Knowledge Graph
+    server.Get(R"(/api/worldbuilding/([^/]+)/knowledge-graph/entities)",
+        [this](const auto& req, auto& res) { handle_kg_entities(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/knowledge-graph/entities/([^/]+)/relations)",
+        [this](const auto& req, auto& res) { handle_kg_entity_relations(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/knowledge-graph/search)",
+        [this](const auto& req, auto& res) { handle_kg_search(req, res); });
 }
 
 // --- World handlers ---
@@ -3425,6 +3435,156 @@ void WorldbuildingHttpHandler::handle_pipeline_clear_error(const httplib::Reques
         json_response(res, {{"ok", true}});
     } catch (const std::exception& e) {
         error_response(res, std::string("Failed to clear error: ") + e.what(), 500, "clear_error_failed");
+    }
+}
+
+// --- Knowledge Graph handlers ---
+
+void WorldbuildingHttpHandler::handle_kg_entities(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto* kg = service_->kg_provider();
+        if (!kg) {
+            res.status = 503;
+            res.set_content(R"({"ok":false,"error":{"code":"kg_unavailable","message":"Knowledge Graph not available","retryable":false}})", "application/json");
+            return;
+        }
+
+        auto entities = kg->list_entities(wid);
+
+        // Optional type filter
+        std::optional<merak::kg::EntityType> type_filter;
+        if (req.has_param("type")) {
+            type_filter = merak::kg::entity_type_from_string(req.get_param_value("type"));
+        }
+
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& e : entities) {
+            if (type_filter && e.type != *type_filter) continue;
+            arr.push_back({
+                {"id", e.source_id},
+                {"name", e.name},
+                {"type", merak::kg::to_string(e.type)}
+            });
+        }
+
+        json_response(res, {{"ok", true}, {"entities", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_kg_entity_relations(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string eid = req.matches[2];
+
+        auto* kg = service_->kg_provider();
+        if (!kg) {
+            res.status = 503;
+            res.set_content(R"({"ok":false,"error":{"code":"kg_unavailable","message":"Knowledge Graph not available","retryable":false}})", "application/json");
+            return;
+        }
+
+        // Find the entity by source_id
+        auto entities = kg->list_entities(wid);
+        const merak::kg::GraphEntity* found = nullptr;
+        for (const auto& e : entities) {
+            if (e.source_id == eid) {
+                found = &e;
+                break;
+            }
+        }
+
+        if (!found) {
+            error_response(res, "Entity not found", 404, "entity_not_found");
+            return;
+        }
+
+        // Query subgraph for this entity's relations
+        auto subgraph = kg->query_subgraph(wid, {found->name}, merak::kg::QueryFilters{});
+
+        nlohmann::json rel_arr = nlohmann::json::array();
+        for (const auto& rel : subgraph.relations) {
+            // Determine which side is the target (the other entity)
+            bool is_source = (rel.source_name == found->name);
+            std::string target_id = is_source ? rel.target_id : rel.source_id;
+            std::string target_name = is_source ? rel.target_name : rel.source_name;
+            std::string target_type = is_source
+                ? merak::kg::to_string(rel.target_type)
+                : merak::kg::to_string(rel.source_type);
+
+            rel_arr.push_back({
+                {"relation_type", rel.kind_en},
+                {"target_id", target_id},
+                {"target_name", target_name},
+                {"target_type", target_type}
+            });
+        }
+
+        nlohmann::json entity_obj = {
+            {"id", found->source_id},
+            {"name", found->name}
+        };
+
+        json_response(res, {{"ok", true}, {"entity", entity_obj}, {"relations", rel_arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_kg_search(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+
+        // Require 'q' query parameter
+        if (!req.has_param("q") || req.get_param_value("q").empty()) {
+            error_response(res, "Missing required query parameter: q", 400, "missing_param");
+            return;
+        }
+        std::string query = req.get_param_value("q");
+
+        auto* kg = service_->kg_provider();
+        if (!kg) {
+            res.status = 503;
+            res.set_content(R"({"ok":false,"error":{"code":"kg_unavailable","message":"Knowledge Graph not available","retryable":false}})", "application/json");
+            return;
+        }
+
+        // Optional type filter
+        std::optional<merak::kg::EntityType> type_filter;
+        if (req.has_param("type")) {
+            type_filter = merak::kg::entity_type_from_string(req.get_param_value("type"));
+        }
+
+        auto entities = kg->list_entities(wid);
+
+        // Case-insensitive substring helper
+        auto icontains = [](const std::string& haystack, const std::string& needle) -> bool {
+            if (needle.empty()) return true;
+            auto it = std::search(
+                haystack.begin(), haystack.end(),
+                needle.begin(), needle.end(),
+                [](unsigned char a, unsigned char b) {
+                    return std::tolower(a) == std::tolower(b);
+                });
+            return it != haystack.end();
+        };
+
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& e : entities) {
+            if (type_filter && e.type != *type_filter) continue;
+            if (!icontains(e.name, query)) continue;
+            arr.push_back({
+                {"id", e.source_id},
+                {"name", e.name},
+                {"type", merak::kg::to_string(e.type)}
+            });
+        }
+
+        json_response(res, {{"ok", true}, {"results", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
     }
 }
 

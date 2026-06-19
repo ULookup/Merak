@@ -209,6 +209,11 @@ private:
     void handle_chunked_status(const httplib::Request&, httplib::Response&);
     void handle_complete_chunked(const httplib::Request&, httplib::Response&);
     void handle_cancel_chunked(const httplib::Request&, httplib::Response&);
+
+    // Knowledge Graph
+    void handle_kg_entities(const httplib::Request&, httplib::Response&);
+    void handle_kg_entity_relations(const httplib::Request&, httplib::Response&);
+    void handle_kg_search(const httplib::Request&, httplib::Response&);
 };
 
 } // namespace merak
