@@ -5,9 +5,13 @@
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <merak/storage/image_service.hpp>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 
 namespace merak {
@@ -19,6 +23,7 @@ public:
     explicit WorldbuildingHttpHandler(
         std::shared_ptr<worldbuilding::WorldbuildingService> service,
         std::shared_ptr<RuntimeService> runtime = nullptr);
+    ~WorldbuildingHttpHandler();
 
     void install_routes(httplib::Server& server);
     void set_pipeline_manager(std::shared_ptr<worldbuilding::PipelineManager> mgr);
@@ -143,6 +148,15 @@ private:
 
     std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;
     mutable std::mutex pending_runs_mutex_;
+
+    // Background poller for capturing agent results on run completion
+    void start_result_poller();
+    void stop_result_poller();
+    std::thread result_poller_;
+    std::atomic<bool> poller_stop_{false};
+    std::atomic<bool> poller_started_{false};
+    std::condition_variable poller_started_cv_;
+    std::mutex poller_started_mutex_;
 
     // Agent prompt
     void handle_load_agent_prompt(const httplib::Request&, httplib::Response&);

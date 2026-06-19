@@ -197,6 +197,7 @@ void WorldbuildingHttpHandler::start_agent_run(
             std::lock_guard<std::mutex> lock(pending_runs_mutex_);
             pending_agent_runs_[run.id] = {world_id, operation_type};
         }
+        poller_started_cv_.notify_one();
 
         json_response(res, {
             {"ok", true},
@@ -240,10 +241,71 @@ void WorldbuildingHttpHandler::capture_agent_result(const std::string& run_id) {
     }
 }
 
+void WorldbuildingHttpHandler::start_result_poller() {
+    {
+        std::lock_guard<std::mutex> lock(poller_started_mutex_);
+        if (poller_started_) return;
+        poller_started_ = true;
+    }
+    poller_stop_ = false;
+    result_poller_ = std::thread([this] {
+        while (!poller_stop_) {
+            std::vector<std::string> pending_ids;
+            {
+                std::lock_guard<std::mutex> lock(pending_runs_mutex_);
+                for (const auto& kv : pending_agent_runs_) {
+                    pending_ids.push_back(kv.first);
+                }
+            }
+            for (const auto& id : pending_ids) {
+                if (poller_stop_) break;
+                auto run = runtime_->get_run(id);
+                if (!run) {
+                    std::lock_guard<std::mutex> lock(pending_runs_mutex_);
+                    pending_agent_runs_.erase(id);
+                    continue;
+                }
+                switch (run->status) {
+                case RunStatus::Completed:
+                    capture_agent_result(id);
+                    break;
+                case RunStatus::Failed:
+                case RunStatus::Cancelled:
+                case RunStatus::Interrupted:
+                    {
+                        std::lock_guard<std::mutex> lock(pending_runs_mutex_);
+                        pending_agent_runs_.erase(id);
+                    }
+                    break;
+                default:
+                    break;
+                }
+            }
+            std::unique_lock<std::mutex> cv_lock(poller_started_mutex_);
+            poller_started_cv_.wait_for(cv_lock, std::chrono::seconds(2),
+                                        [this] { return poller_stop_.load(); });
+        }
+    });
+}
+
+void WorldbuildingHttpHandler::stop_result_poller() {
+    poller_stop_ = true;
+    poller_started_cv_.notify_all();
+    if (result_poller_.joinable()) {
+        result_poller_.join();
+    }
+}
+
 WorldbuildingHttpHandler::WorldbuildingHttpHandler(
     std::shared_ptr<worldbuilding::WorldbuildingService> service,
     std::shared_ptr<RuntimeService> runtime)
-    : service_(std::move(service)), runtime_(std::move(runtime)) {}
+    : service_(std::move(service)), runtime_(std::move(runtime)) {
+    if (runtime_) start_result_poller();
+}
+
+WorldbuildingHttpHandler::~WorldbuildingHttpHandler() {
+    stop_result_poller();
+}
 
 void WorldbuildingHttpHandler::set_pipeline_manager(
     std::shared_ptr<worldbuilding::PipelineManager> mgr) {
