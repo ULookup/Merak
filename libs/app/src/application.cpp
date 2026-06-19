@@ -384,7 +384,7 @@ AgentResponse Application::execute_sub_run(
     if (!context.scene_id.empty())      loop->set_active_scene_id(context.scene_id);
     if (!context.caller_agent_id.empty()) loop->set_caller_agent_id(context.caller_agent_id);
 
-    return loop->run(task, control).get();
+    return loop->run(task, control);
 }
 
 // ─────────────────────────────────────────────────────
