@@ -52,7 +52,7 @@ add_subdirectory(libs/skills)
 add_subdirectory(libs/http)
 add_subdirectory(libs/app)
 add_subdirectory(cli)
-# add_subdirectory(tests)
+add_subdirectory(tests)
 
 # Install pipeline configuration files
 install(DIRECTORY config/pipelines/
