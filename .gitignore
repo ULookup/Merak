@@ -8,3 +8,4 @@ CMakeUserPresets.json
 .claude/
 /docs/
 .superpowers/
+.worktrees/
