@@ -2474,8 +2474,7 @@ void WorldbuildingHttpHandler::handle_get_consistency_check(const httplib::Reque
             error_response(res, "Consistency check not yet generated", 404, "result_not_found");
             return;
         }
-        json_response(res, {{"ok", true}, {"conflicts", (*result)["conflicts"]},
-                            {"generated_at", (*result)["generated_at"]}});
+        json_response(res, {{"ok", true}, {"conflicts", *result}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
