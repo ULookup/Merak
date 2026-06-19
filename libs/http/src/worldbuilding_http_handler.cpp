@@ -190,7 +190,10 @@ void WorldbuildingHttpHandler::start_agent_run(
         runtime_->set_session_ephemeral(session.id, 30);
         auto run = runtime_->start_run(session.id, task_description, "");
 
-        pending_agent_runs_[run.id] = {world_id, operation_type};
+        {
+            std::lock_guard<std::mutex> lock(pending_runs_mutex_);
+            pending_agent_runs_[run.id] = {world_id, operation_type};
+        }
 
         json_response(res, {
             {"ok", true},
@@ -206,8 +209,14 @@ void WorldbuildingHttpHandler::start_agent_run(
 }
 
 void WorldbuildingHttpHandler::capture_agent_result(const std::string& run_id) {
-    auto it = pending_agent_runs_.find(run_id);
-    if (it == pending_agent_runs_.end()) return;
+    PendingAgentRun pending;
+    {
+        std::lock_guard<std::mutex> lock(pending_runs_mutex_);
+        auto it = pending_agent_runs_.find(run_id);
+        if (it == pending_agent_runs_.end()) return;
+        pending = it->second;
+        pending_agent_runs_.erase(it);
+    }
     try {
         auto run = runtime_->get_run(run_id);
         if (!run || run->status != RunStatus::Completed) return;
@@ -221,12 +230,11 @@ void WorldbuildingHttpHandler::capture_agent_result(const std::string& run_id) {
                 });
             }
         }
-        service_->worlds().store_agent_result(it->second.world_id,
-                                               it->second.operation_type, messages);
+        service_->worlds().store_agent_result(pending.world_id,
+                                               pending.operation_type, messages);
     } catch (...) {
         // Best-effort caching; don't crash
     }
-    pending_agent_runs_.erase(it);
 }
 
 WorldbuildingHttpHandler::WorldbuildingHttpHandler(

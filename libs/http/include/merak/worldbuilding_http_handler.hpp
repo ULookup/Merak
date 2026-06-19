@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 #include <merak/storage/image_service.hpp>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -115,6 +116,7 @@ private:
     void capture_agent_result(const std::string& run_id);
 
     std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;
+    mutable std::mutex pending_runs_mutex_;
 
     // Agent prompt
     void handle_load_agent_prompt(const httplib::Request&, httplib::Response&);
