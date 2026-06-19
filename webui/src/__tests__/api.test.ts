@@ -25,8 +25,18 @@ describe('api client', () => {
     await expect(request('GET', '/failure')).rejects.toMatchObject({ status: 409, code });
   });
 
+  it('rejects non-success 3xx responses with ApiError', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 304 }));
+
+    await expect(request('GET', '/not-modified')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 304,
+    });
+  });
+
   it('metadata() calls GET /v1/runtime', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 200,
       json: async () => ({ model: 'gpt-4o' }),
     } as Response);
@@ -42,6 +52,7 @@ describe('api client', () => {
 
   it('createSession() calls POST /v1/sessions', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 201,
       json: async () => ({ session_id: 's1' }),
     } as Response);
@@ -98,6 +109,7 @@ describe('api client', () => {
 
   it('worldbuilding readers call the selected world endpoints', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 200,
       json: async () => ({ ok: true, agents: [] }),
     } as Response);
@@ -132,6 +144,7 @@ describe('api client', () => {
 
   it('saveConfig() sends max_output_tokens to the backend', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 200,
       json: async () => ({ ok: true }),
     } as Response);
@@ -162,6 +175,7 @@ describe('api client', () => {
 
   it('deleteWorld() calls DELETE /api/worldbuilding/worlds/:id', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 200,
       json: async () => ({ ok: true, deleted: 'world_1' }),
     } as Response);
@@ -177,6 +191,7 @@ describe('api client', () => {
 
   it('advanceWorldTime() calls POST /api/worldbuilding/:worldId/time/advance', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 200,
       json: async () => ({ ok: true, world_time: 'Day 2 Dawn' }),
     } as Response);

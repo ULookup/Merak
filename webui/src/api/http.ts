@@ -27,7 +27,7 @@ export class ApiError extends Error {
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => ({}));
-  if (response.status >= 400) {
+  if (!response.ok) {
     const raw = payload?.error;
     const detail = typeof raw === 'object' && raw ? raw : {};
     throw new ApiError(
