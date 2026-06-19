@@ -63,6 +63,7 @@ private:
     void handle_workspace_file_content_put(const httplib::Request& req, httplib::Response& res);
     void handle_workspace_file_create(const httplib::Request&, httplib::Response&);
     void handle_workspace_file_delete(const httplib::Request&, httplib::Response&);
+    void handle_workspace_file_rename(const httplib::Request&, httplib::Response&);
 
     std::shared_ptr<LlmProvider> llm_provider_;
     nlohmann::json cached_config_;
