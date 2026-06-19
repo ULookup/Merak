@@ -61,11 +61,15 @@ public:
     int uncompressed_diary_count(const std::string& agent_id) const;
     std::vector<DiaryEntry> uncompressed_diaries(const std::string& agent_id, int limit) const;
 
+    struct SearchCriteria {
+        std::string q;                          // full-text: name, display_name, background
+        std::vector<std::string> traits;        // match core_traits
+        std::string identity;                   // match identity
+        std::string race;                       // match race
+        int max_results = 50;
+    };
     std::vector<AgentRecord>
-    search_agents_by_traits(const std::string& world_id,
-                            const std::vector<std::string>& traits,
-                            const std::string& identity = "",
-                            int max_results = 20) const;
+    search_agents(const std::string& world_id, const SearchCriteria& criteria) const;
 
     void update_agent_prompt(const std::string& agent_id, std::string prompt);
     std::string load_agent_prompt(const std::string& agent_id) const;
