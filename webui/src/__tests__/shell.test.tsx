@@ -167,6 +167,15 @@ describe('desktop shell', () => {
     expect(css).toMatch(/\.navigation\s*\{[^}]*overflow-y:\s*auto/s);
   });
 
+  it('gives the world dashboard a definite scroll-container height', () => {
+    const css = readFileSync('src/components/WorldDashboard.module.css', 'utf8');
+    const dashboardRule = css.match(/\.dashboard\s*\{([^}]*)\}/s)?.[1] ?? '';
+
+    expect(dashboardRule).toMatch(/^\s*height:\s*100%/m);
+    expect(dashboardRule).toMatch(/^\s*min-height:\s*0/m);
+    expect(dashboardRule).toMatch(/^\s*overflow:\s*auto/m);
+  });
+
   it('mounts App global dialogs outside the constrained page outlet', async () => {
     const { default: App } = await import('../App');
     render(<App />);
