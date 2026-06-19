@@ -450,6 +450,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_timeline_event_get(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/timeline)",
         [this](const auto& req, auto& res) { handle_timeline_list(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/timeline)",
+        [this](const auto& req, auto& res) { handle_timeline_add_event(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/timeline/advance)",
         [this](const auto& req, auto& res) { handle_timeline_advance(req, res); });
 
@@ -1519,6 +1521,48 @@ void WorldbuildingHttpHandler::handle_timeline_advance(const httplib::Request& r
         });
     } catch (const std::exception& e) {
         error_response(res, e.what());
+    }
+}
+
+void WorldbuildingHttpHandler::handle_timeline_add_event(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+
+        auto world = service_->worlds().get_world(wid);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+
+        worldbuilding::TimelineEvent event;
+        event.world_time = body.at("world_time");
+        event.description = body.at("description");
+        event.recorded_by = body.value("recorded_by", "user");
+        if (body.contains("affected_character_ids") && body["affected_character_ids"].is_array()) {
+            for (const auto& id : body["affected_character_ids"])
+                event.affected_character_ids.push_back(id.get<std::string>());
+        }
+        if (body.contains("related_scene_ids") && body["related_scene_ids"].is_array()) {
+            for (const auto& id : body["related_scene_ids"])
+                event.related_scene_ids.push_back(id.get<std::string>());
+        }
+
+        auto recorded = service_->narrative().record_timeline_event(wid, std::move(event));
+
+        json_response(res, {
+            {"ok", true},
+            {"event", {
+                {"id", recorded.id},
+                {"world_time", recorded.world_time},
+                {"description", recorded.description},
+                {"recorded_by", recorded.recorded_by},
+                {"affected_character_ids", recorded.affected_character_ids},
+                {"related_scene_ids", recorded.related_scene_ids}
+            }}
+        }, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
     }
 }
 

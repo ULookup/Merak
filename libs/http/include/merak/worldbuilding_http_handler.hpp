@@ -70,6 +70,7 @@ private:
     void handle_timeline_list(const httplib::Request&, httplib::Response&);
     void handle_timeline_event_get(const httplib::Request&, httplib::Response&);
     void handle_timeline_advance(const httplib::Request&, httplib::Response&);
+    void handle_timeline_add_event(const httplib::Request&, httplib::Response&);
 
     // Foreshadowing
     void handle_foreshadow_list(const httplib::Request&, httplib::Response&);
