@@ -1915,28 +1915,30 @@ std::future<ToolResult> EndSceneTool::execute(ToolCall call, ToolExecutionContex
 ToolSpec SearchAgentTool::spec() const {
     ToolSpec s;
     s.name = "search_agent";
-    s.description = R"(Search for characters by traits and/or identity. Returns matching agents with their basic info. Example: search_agent(traits=["剑术"], identity="骑士") or search_agent(traits=["勇敢","善良"]))";
+    s.description = R"(Search for characters by full-text query, traits, identity, and/or race. Returns matching agents with their basic info. Example: search_agent(q="龙骑士", traits=["剑术"], identity="骑士") or search_agent(race="精灵", traits=["勇敢","善良"]))";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"json({
         "type": "object",
         "properties": {
+            "q": {"type": "string", "description": "Full-text search across name, display name, and background"},
             "traits": {"type": "array", "items": {"type": "string"}, "description": "Traits to search for"},
-            "identity": {"type": "string", "description": "Identity keyword to filter by"}
+            "identity": {"type": "string", "description": "Identity keyword to filter by"},
+            "race": {"type": "string", "description": "Filter agents by race (e.g., 精灵, 人类, 兽人)"}
         },
         "required": []
-    })";
+    })json";
     return s;
 }
 
 ToolMeta SearchAgentTool::meta() const {
     ToolMeta m;
     m.name = "search_agent";
-    m.description = "Search for characters by traits or identity";
+    m.description = "Search for characters by full-text query, traits, identity, or race";
     m.triggers = {"agent lookup", "find character", "search"};
     m.pinned = false;
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
-    m.schema_tokens = 25;
+    m.schema_tokens = 45;
     return m;
 }
 
@@ -1947,21 +1949,23 @@ std::future<ToolResult> SearchAgentTool::execute(ToolCall call, ToolExecutionCon
 
         try {
             auto args = json::parse(call.arguments);
-            std::vector<std::string> traits;
+            AgentStore::SearchCriteria criteria;
+            criteria.q = args.value("q", "");
             if (args.contains("traits") && args["traits"].is_array()) {
-                for (auto& t : args["traits"]) traits.push_back(t.get<std::string>());
+                for (auto& t : args["traits"]) criteria.traits.push_back(t.get<std::string>());
             }
-            std::string identity = args.value("identity", "");
+            criteria.identity = args.value("identity", "");
+            criteria.race = args.value("race", "");
 
-            if (traits.empty() && identity.empty()) {
+            if (criteria.q.empty() && criteria.traits.empty() && criteria.identity.empty() && criteria.race.empty()) {
                 result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
-                    "请至少提供 traits 或 identity 中的一个搜索条件。例如：search_agent(traits=[\"剑术\"])");
+                    "请至少提供 q、traits、identity 或 race 中的一个搜索条件。例如：search_agent(traits=[\"剑术\"])");
                 return result;
             }
 
             auto& svc = *static_cast<SearchAgentTool&>(*self).svc_;
 
-            auto agents = svc.agents().search_agents_by_traits(exec_ctx.world_id, traits, identity);
+            auto agents = svc.agents().search_agents(exec_ctx.world_id, criteria);
 
             if (agents.empty()) {
                 result.output = error_response(ToolErrorCode::EMPTY_RESULT,

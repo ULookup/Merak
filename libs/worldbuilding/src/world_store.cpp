@@ -454,13 +454,18 @@ WorldStore::list_locations(const std::string& world_id) const {
 }
 
 std::vector<AgentRecord>
-WorldStore::list_agents(const std::string& world_id) const {
+WorldStore::list_agents(const std::string& world_id,
+                         const std::optional<std::string>& kind) const {
     PgConn conn(*pool_);
-    auto res = conn.query(
-        "SELECT id, world_id, name, display_name, kind, created_at, updated_at "
-        "FROM agents WHERE world_id = $1 "
-        "ORDER BY created_at ASC, id ASC",
-        {world_id});
+    std::string sql = "SELECT id, world_id, name, display_name, kind, created_at, updated_at "
+                      "FROM agents WHERE world_id = $1";
+    std::vector<std::string> params = {world_id};
+    if (kind.has_value()) {
+        sql += " AND kind = $2";
+        params.push_back(*kind);
+    }
+    sql += " ORDER BY created_at ASC, id ASC";
+    auto res = conn.query(sql, params);
 
     std::vector<AgentRecord> agents;
     for (int i = 0; i < res.ntuples(); i++) {

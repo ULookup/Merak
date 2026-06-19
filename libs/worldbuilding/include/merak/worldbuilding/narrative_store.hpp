@@ -62,6 +62,9 @@ public:
                                         TimelineEvent event);
     TimelineEvent advance_time(const std::string& world_id,
                                TimelineEvent event);
+    std::vector<TimelineEvent> list_timeline_events(const std::string& world_id) const;
+    std::optional<TimelineEvent> get_timeline_event(const std::string& world_id,
+                                                     const std::string& event_id) const;
     std::vector<std::string> insert_flashback_scene(const std::string& world_id,
                                                     Scene scene);
 

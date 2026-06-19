@@ -58,3 +58,13 @@ target_include_directories(merak-tui-features-test PRIVATE
 )
 target_link_libraries(merak-tui-features-test PRIVATE merak-core ftxui::component tree-sitter)
 add_test(NAME merak-tui-features-test COMMAND merak-tui-features-test)
+
+# Agent endpoint integration tests
+add_executable(merak-agent-endpoint-test
+    ${CMAKE_SOURCE_DIR}/libs/http/tests/test_agent_endpoints.cpp
+)
+target_include_directories(merak-agent-endpoint-test PRIVATE
+    ${CMAKE_SOURCE_DIR}/libs/worldbuilding/tests
+)
+target_link_libraries(merak-agent-endpoint-test PRIVATE merak-worldbuilding GTest::gtest_main)
+add_test(NAME merak-agent-endpoint-test COMMAND merak-agent-endpoint-test)

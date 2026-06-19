@@ -486,8 +486,8 @@ AgentStore::get_agent(const std::string& agent_id) const {
 }
 
 std::vector<AgentRecord>
-AgentStore::list_agents(const std::string& world_id) const {
-    return worlds_.list_agents(world_id);
+AgentStore::list_agents(const std::string& world_id, const std::optional<std::string>& kind) const {
+    return worlds_.list_agents(world_id, kind);
 }
 
 bool AgentStore::delete_agent(const std::string& agent_id) {
@@ -1033,10 +1033,7 @@ AgentStore::uncompressed_diaries(const std::string& agent_id, int limit) const {
 }
 
 std::vector<AgentRecord>
-AgentStore::search_agents_by_traits(const std::string& world_id,
-                                     const std::vector<std::string>& traits,
-                                     const std::string& identity,
-                                     int max_results) const {
+AgentStore::search_agents(const std::string& world_id, const SearchCriteria& criteria) const {
     PgConn conn(*pool_);
 
     std::vector<std::string> params;
@@ -1049,29 +1046,34 @@ AgentStore::search_agents_by_traits(const std::string& world_id,
     int param_idx = 2;
     params.push_back(world_id);
 
-    if (!identity.empty()) {
-        sql << " AND c.identity LIKE $" << param_idx++;
-        params.push_back("%" + identity + "%");
+    if (!criteria.q.empty()) {
+        sql << " AND (a.name LIKE $" << param_idx
+            << " OR a.display_name LIKE $" << param_idx + 1
+            << " OR c.background LIKE $" << param_idx + 2 << ")";
+        params.push_back("%" + criteria.q + "%");
+        params.push_back("%" + criteria.q + "%");
+        params.push_back("%" + criteria.q + "%");
+        param_idx += 3;
     }
 
-    if (!traits.empty()) {
-        for (const auto& trait : traits) {
-            sql << " AND ("
-                << "  $" << param_idx << " = ANY(c.core_traits)"
-                << "  OR c.background LIKE $" << param_idx + 1
-                << "  OR c.knowledge_scope LIKE $" << param_idx + 2
-                << "  OR c.appearance LIKE $" << param_idx + 3
-                << ")";
-            params.push_back(trait);
-            params.push_back("%" + trait + "%");
-            params.push_back("%" + trait + "%");
-            params.push_back("%" + trait + "%");
-            param_idx += 4;
-        }
+    if (!criteria.identity.empty()) {
+        sql << " AND c.identity LIKE $" << param_idx++;
+        params.push_back("%" + criteria.identity + "%");
+    }
+
+    if (!criteria.race.empty()) {
+        sql << " AND c.race LIKE $" << param_idx++;
+        params.push_back("%" + criteria.race + "%");
+    }
+
+    for (const auto& trait : criteria.traits) {
+        sql << " AND $" << param_idx << " = ANY(c.core_traits)";
+        params.push_back(trait);
+        param_idx++;
     }
 
     sql << " ORDER BY a.created_at ASC LIMIT $" << param_idx;
-    params.push_back(std::to_string(std::clamp(max_results, 0, 100)));
+    params.push_back(std::to_string(std::clamp(criteria.max_results, 0, 100)));
 
     auto res = conn.query(sql.str(), params);
 
