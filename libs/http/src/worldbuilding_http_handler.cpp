@@ -350,7 +350,7 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_delete_faction(req, res); });
 
     // Dashboard
-    server.Get(R"(/api/worldbuilding/([^/]+)/dashboard)",
+    server.Post(R"(/api/worldbuilding/([^/]+)/dashboard)",
         [this](const auto& req, auto& res) { handle_dashboard(req, res); });
 
     // File links
@@ -624,7 +624,10 @@ void WorldbuildingHttpHandler::handle_create_world(const httplib::Request& req, 
 void WorldbuildingHttpHandler::handle_delete_world(const httplib::Request& req, httplib::Response& res) {
     try {
         std::string world_id = req.matches[1];
-        service_->worlds().delete_world(world_id);
+        if (!service_->worlds().delete_world(world_id)) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
         json_response(res, {{"deleted", world_id}}, 200);
     } catch (const std::exception& e) {
         error_response(res, e.what());

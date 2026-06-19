@@ -974,6 +974,17 @@ bool NarrativeStore::delete_chapter(const std::string& world_id, const std::stri
     ensure_world_exists(worlds_, world_id);
     const auto path = worlds_.world_path(world_id) / "chapters" / (chapter_id + ".json");
     if (!std::filesystem::exists(path)) return false;
+
+    // Read chapter before deletion to get arc linkage
+    auto chapter_json = read_json(path);
+    std::optional<std::string> arc_id;
+    int chapter_number = 0;
+    try {
+        if (!chapter_json.at("arc_id").is_null())
+            arc_id = chapter_json.at("arc_id").get<std::string>();
+        chapter_number = chapter_json.value("number", 0);
+    } catch (...) {}
+
     PgConn conn(*pool_);
     conn.exec("BEGIN");
     try {
@@ -989,14 +1000,32 @@ bool NarrativeStore::delete_chapter(const std::string& world_id, const std::stri
                 if (!entry.is_regular_file() || entry.path().extension() != ".json")
                     continue;
                 try {
-                    auto scene_json = read_json(entry.path());
-                    if (scene_json.value("chapter_id", "") == chapter_id) {
+                    auto sj = read_json(entry.path());
+                    if (sj.value("chapter_id", "") == chapter_id) {
                         std::filesystem::remove(entry.path());
                     }
                 } catch (...) {}
             }
         }
         std::filesystem::remove(path);
+
+        // Remove chapter number from parent arc
+        if (arc_id.has_value() && !arc_id->empty()) {
+            const auto arc_path = worlds_.world_path(world_id) / "arcs" / (*arc_id + ".json");
+            if (std::filesystem::exists(arc_path)) {
+                try {
+                    auto arc_j = read_json(arc_path);
+                    auto chapter_numbers = arc_j.value("chapter_numbers",
+                        std::vector<int>{});
+                    chapter_numbers.erase(
+                        std::remove(chapter_numbers.begin(), chapter_numbers.end(), chapter_number),
+                        chapter_numbers.end());
+                    arc_j["chapter_numbers"] = chapter_numbers;
+                    write_json(arc_path, arc_j);
+                } catch (...) {}
+            }
+        }
+
         conn.exec("COMMIT");
     } catch (...) {
         try { conn.exec("ROLLBACK"); } catch (...) {}
@@ -1009,6 +1038,17 @@ bool NarrativeStore::delete_scene(const std::string& world_id, const std::string
     ensure_world_exists(worlds_, world_id);
     const auto path = worlds_.world_path(world_id) / "scenes" / (scene_id + ".json");
     if (!std::filesystem::exists(path)) return false;
+
+    // Read scene before deletion to get parent linkage
+    std::string chapter_id;
+    std::optional<std::string> section_id;
+    try {
+        auto scene_json = read_json(path);
+        chapter_id = scene_json.value("chapter_id", "");
+        if (scene_json.contains("section_id") && !scene_json["section_id"].is_null())
+            section_id = scene_json["section_id"].get<std::string>();
+    } catch (...) {}
+
     PgConn conn(*pool_);
     conn.exec("BEGIN");
     try {
@@ -1020,6 +1060,37 @@ bool NarrativeStore::delete_scene(const std::string& world_id, const std::string
         try { conn.exec("ROLLBACK"); } catch (...) {}
         throw;
     }
+
+    // Remove scene_id from parent chapter's scene_ids array
+    if (!chapter_id.empty()) {
+        const auto chapter_path = worlds_.world_path(world_id) / "chapters" / (chapter_id + ".json");
+        if (std::filesystem::exists(chapter_path)) {
+            try {
+                auto ch_j = read_json(chapter_path);
+                auto scene_ids = ch_j.value("scene_ids", std::vector<std::string>{});
+                scene_ids.erase(std::remove(scene_ids.begin(), scene_ids.end(), scene_id),
+                               scene_ids.end());
+                ch_j["scene_ids"] = scene_ids;
+                write_json(chapter_path, ch_j);
+            } catch (...) {}
+        }
+    }
+
+    // Remove scene_id from parent section's scene_ids array
+    if (section_id.has_value() && !section_id->empty()) {
+        const auto section_path = worlds_.world_path(world_id) / "sections" / (*section_id + ".json");
+        if (std::filesystem::exists(section_path)) {
+            try {
+                auto sec_j = read_json(section_path);
+                auto scene_ids = sec_j.value("scene_ids", std::vector<std::string>{});
+                scene_ids.erase(std::remove(scene_ids.begin(), scene_ids.end(), scene_id),
+                               scene_ids.end());
+                sec_j["scene_ids"] = scene_ids;
+                write_json(section_path, sec_j);
+            } catch (...) {}
+        }
+    }
+
     return true;
 }
 

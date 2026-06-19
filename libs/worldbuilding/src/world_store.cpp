@@ -486,8 +486,9 @@ bool WorldStore::update_location(const std::string& world_id, const std::string&
         if (i > 0) sql += ", ";
         sql += set_parts[i];
     }
-    sql += " WHERE id = $" + std::to_string(n++);
+    sql += " WHERE id = $" + std::to_string(n++) + " AND world_id = $" + std::to_string(n++);
     params.push_back(location_id);
+    params.push_back(world_id);
     conn.execute(sql, params);
     conn.exec("COMMIT");
     return true;
@@ -510,7 +511,8 @@ bool WorldStore::update_knowledge(const std::string& world_id, const std::string
                                    const nlohmann::json& fields) {
     PgConn conn(*pool_);
     conn.exec("BEGIN");
-    auto check = conn.query("SELECT id FROM world_knowledge WHERE id = $1", {knowledge_id});
+    auto check = conn.query("SELECT id FROM world_knowledge WHERE id = $1 AND world_id = $2",
+                            {knowledge_id, world_id});
     if (check.ntuples() == 0) { conn.exec("ROLLBACK"); return false; }
 
     std::vector<std::string> set_parts;
@@ -545,8 +547,9 @@ bool WorldStore::update_knowledge(const std::string& world_id, const std::string
         if (i > 0) sql += ", ";
         sql += set_parts[i];
     }
-    sql += " WHERE id = $" + std::to_string(n++);
+    sql += " WHERE id = $" + std::to_string(n++) + " AND world_id = $" + std::to_string(n++);
     params.push_back(knowledge_id);
+    params.push_back(world_id);
     conn.execute(sql, params);
     conn.exec("COMMIT");
     return true;
@@ -555,9 +558,11 @@ bool WorldStore::update_knowledge(const std::string& world_id, const std::string
 bool WorldStore::delete_knowledge(const std::string& world_id, const std::string& knowledge_id) {
     PgConn conn(*pool_);
     conn.exec("BEGIN");
-    auto check = conn.query("SELECT id FROM world_knowledge WHERE id = $1", {knowledge_id});
+    auto check = conn.query("SELECT id FROM world_knowledge WHERE id = $1 AND world_id = $2",
+                            {knowledge_id, world_id});
     if (check.ntuples() == 0) { conn.exec("ROLLBACK"); return false; }
-    conn.execute("DELETE FROM world_knowledge WHERE id = $1", {knowledge_id});
+    conn.execute("DELETE FROM world_knowledge WHERE id = $1 AND world_id = $2",
+                 {knowledge_id, world_id});
     conn.exec("COMMIT");
     return true;
 }
