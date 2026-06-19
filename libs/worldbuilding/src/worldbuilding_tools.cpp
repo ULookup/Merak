@@ -1915,28 +1915,30 @@ std::future<ToolResult> EndSceneTool::execute(ToolCall call, ToolExecutionContex
 ToolSpec SearchAgentTool::spec() const {
     ToolSpec s;
     s.name = "search_agent";
-    s.description = R"(Search for characters by traits and/or identity. Returns matching agents with their basic info. Example: search_agent(traits=["剑术"], identity="骑士") or search_agent(traits=["勇敢","善良"]))";
+    s.description = R"(Search for characters by full-text query, traits, identity, and/or race. Returns matching agents with their basic info. Example: search_agent(q="龙骑士", traits=["剑术"], identity="骑士") or search_agent(race="精灵", traits=["勇敢","善良"]))";
     s.source = "builtin";
-    s.parameters_json = R"({
+    s.parameters_json = R"json({
         "type": "object",
         "properties": {
+            "q": {"type": "string", "description": "Full-text search across name, display name, and background"},
             "traits": {"type": "array", "items": {"type": "string"}, "description": "Traits to search for"},
-            "identity": {"type": "string", "description": "Identity keyword to filter by"}
+            "identity": {"type": "string", "description": "Identity keyword to filter by"},
+            "race": {"type": "string", "description": "Filter agents by race (e.g., 精灵, 人类, 兽人)"}
         },
         "required": []
-    })";
+    })json";
     return s;
 }
 
 ToolMeta SearchAgentTool::meta() const {
     ToolMeta m;
     m.name = "search_agent";
-    m.description = "Search for characters by traits or identity";
+    m.description = "Search for characters by full-text query, traits, identity, or race";
     m.triggers = {"agent lookup", "find character", "search"};
     m.pinned = false;
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
-    m.schema_tokens = 25;
+    m.schema_tokens = 45;
     return m;
 }
 
