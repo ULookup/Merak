@@ -351,6 +351,7 @@ void HttpServer::install_routes(){
     server_.Get("/api/workspace/files/content", [this](const auto& req, auto& res) { handle_workspace_file_content_get(req, res); });
     server_.Put("/api/workspace/files/content", [this](const auto& req, auto& res) { handle_workspace_file_content_put(req, res); });
     server_.Post("/api/workspace/open", [this](const auto& req, auto& res) { handle_workspace_open(req, res); });
+    server_.Post("/api/workspace/files", [this](const auto& req, auto& res) { handle_workspace_file_create(req, res); });
 }
 void HttpServer::handle_capabilities(const httplib::Request&, httplib::Response& res) {
     json(res, {200, {
@@ -632,6 +633,51 @@ void HttpServer::handle_preferences_set(const httplib::Request& req, httplib::Re
         res.set_content("{\"ok\":true}", "application/json");
     } catch (const std::exception& e) {
         json(res, error("preferences_save_failed", e.what(), 400));
+    }
+}
+
+void HttpServer::handle_workspace_file_create(const httplib::Request& req, httplib::Response& res) {
+    try {
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        auto path_value = body.value("path", "");
+        if (path_value.empty()) {
+            json(res, error("invalid_request", "path is required", 400));
+            return;
+        }
+        std::string type = body.value("type", "markdown");
+        auto home = home_root(merak_home_path_);
+        auto raw = std::filesystem::u8path(path_value);
+        if (raw.is_relative()) raw = home / raw;
+        auto path = safe_existing_or_parent_canonical(raw);
+        if (!is_under(path, home)) {
+            json(res, error("invalid_path", "File must be under merak home", 403));
+            return;
+        }
+        if (std::filesystem::exists(path)) {
+            json(res, error("file_exists", "File already exists", 409));
+            return;
+        }
+        std::filesystem::create_directories(path.parent_path());
+        std::string default_content;
+        if (type == "markdown" || type == "md") default_content = "# New Document\n\n";
+        else if (type == "json") default_content = "{\n  \n}\n";
+        else if (type == "yaml" || type == "yml") default_content = "# YAML Document\n";
+        else default_content = "";
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        out << default_content;
+        out.close();
+
+        auto updated_at = file_updated_at(path);
+        auto version = file_version(path);
+        json(res, {201, {{"ok", true}, {"file", {
+            {"path", path.generic_string()},
+            {"updated_at", updated_at},
+            {"version", version}
+        }}}});
+    } catch (const nlohmann::json::exception& e) {
+        json(res, error("invalid_request", e.what(), 400));
+    } catch (const std::exception& e) {
+        json(res, error("file_create_failed", e.what(), 500));
     }
 }
 
