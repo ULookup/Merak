@@ -123,6 +123,11 @@ private:
     void handle_start_consistency_check(const httplib::Request&, httplib::Response&);
     void handle_get_consistency_check(const httplib::Request&, httplib::Response&);
 
+    // Agent-driven: generate scenes
+    void handle_start_generate_scenes(const httplib::Request&, httplib::Response&);
+    void handle_get_generated_scenes(const httplib::Request&, httplib::Response&);
+    void handle_apply_generated_scenes(const httplib::Request&, httplib::Response&);
+
     std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;
     mutable std::mutex pending_runs_mutex_;
 

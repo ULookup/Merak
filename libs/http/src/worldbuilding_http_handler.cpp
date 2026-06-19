@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <set>
 #include <unordered_map>
 
 namespace merak {
@@ -445,6 +446,14 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_start_consistency_check(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/check-consistency)",
         [this](const auto& req, auto& res) { handle_get_consistency_check(req, res); });
+
+    // ─── Agent-driven: generate scenes ───
+    server.Post(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+)/generate-scenes)",
+        [this](const auto& req, auto& res) { handle_start_generate_scenes(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+)/generated-scenes)",
+        [this](const auto& req, auto& res) { handle_get_generated_scenes(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+)/generated-scenes/apply)",
+        [this](const auto& req, auto& res) { handle_apply_generated_scenes(req, res); });
 
     // ─── Pipeline endpoints ───
     server.Get(R"(/api/worldbuilding/([^/]+)/pipeline/state)",
@@ -2475,6 +2484,78 @@ void WorldbuildingHttpHandler::handle_get_consistency_check(const httplib::Reque
             return;
         }
         json_response(res, {{"ok", true}, {"conflicts", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent-driven: generate scenes ---
+
+void WorldbuildingHttpHandler::handle_start_generate_scenes(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string cid = req.matches[2];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        int scene_count = body.value("scene_count", 0);
+        std::string task = "为本章节拆分场景（";
+        if (scene_count > 0) task += std::to_string(scene_count) + "个";
+        task += "），产出每个场景的 plot_goal、emotional_goal、information_goal 和 suggested_participants。";
+        start_agent_run(req, res, wid, task, "generated_scenes:" + cid);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_generated_scenes(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string cid = req.matches[2];
+        auto result = service_->worlds().get_agent_result(wid, "generated_scenes:" + cid);
+        if (!result) {
+            error_response(res, "Scenes not yet generated", 404, "result_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"scenes", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_apply_generated_scenes(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string cid = req.matches[2];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        auto result = service_->worlds().get_agent_result(wid, "generated_scenes:" + cid);
+        if (!result) {
+            error_response(res, "No generated scenes to apply", 404, "result_not_found");
+            return;
+        }
+        nlohmann::json scenes = result->is_array() ? *result : (*result)["scenes"];
+        std::set<int> selected;
+        if (body.contains("selected_indices") && body["selected_indices"].is_array()) {
+            for (const auto& idx : body["selected_indices"]) selected.insert(idx.get<int>());
+        }
+        nlohmann::json scene_ids = nlohmann::json::array();
+        int idx = 0;
+        for (const auto& scene_data : scenes) {
+            if (!selected.empty() && !selected.contains(idx)) { idx++; continue; }
+            worldbuilding::Scene scene;
+            scene.title = scene_data.value("title", "未命名场景");
+            scene.chapter_id = cid;
+            scene.plot_goal = scene_data.value("plot_goal", "");
+            scene.emotional_goal = scene_data.value("emotional_goal", "");
+            scene.information_goal = scene_data.value("information_goal", "");
+            scene.status = worldbuilding::SceneStatus::Draft;
+            if (scene_data.contains("suggested_participants") && scene_data["suggested_participants"].is_array()) {
+                for (const auto& p : scene_data["suggested_participants"])
+                    scene.participant_ids.push_back(p.get<std::string>());
+            }
+            auto created = service_->create_scene(wid, scene);
+            scene_ids.push_back(created.id);
+            idx++;
+        }
+        json_response(res, {{"ok", true}, {"scene_ids", scene_ids}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
