@@ -355,6 +355,10 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_agent_diary_patch(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/relations)",
         [this](const auto& req, auto& res) { handle_agent_relations(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/memory-summaries)",
+        [this](const auto& req, auto& res) { handle_memory_summaries_list(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/memory-summaries/([^/]+))",
+        [this](const auto& req, auto& res) { handle_memory_summary_get(req, res); });
     server.Get(R"(/api/worldbuilding/agents/([^/]+)/prompt)",
         [this](const auto& req, auto& res) { handle_load_agent_prompt(req, res); });
 
@@ -1672,6 +1676,87 @@ void WorldbuildingHttpHandler::handle_agent_relations(const httplib::Request& re
             });
         }
         json_response(res, {{"ok", true}, {"relations", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Memory summaries ---
+
+void WorldbuildingHttpHandler::handle_memory_summaries_list(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        int limit = 50;
+        if (req.has_param("limit")) {
+            try {
+                limit = std::stoi(req.get_param_value("limit"));
+            } catch (...) {
+                error_response(res, "Invalid limit parameter", 400);
+                return;
+            }
+        }
+        auto summaries = service_->agents().recent_summaries(aid, limit);
+        nlohmann::json arr = nlohmann::json::array();
+        for (auto& s : summaries) {
+            arr.push_back({
+                {"id", s.id},
+                {"period_start", s.period_start},
+                {"period_end", s.period_end},
+                {"summary", s.summary},
+                {"source_diary_ids", s.source_diary_ids},
+                {"created_at", s.created_at}
+            });
+        }
+        json_response(res, {{"ok", true}, {"summaries", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_memory_summary_get(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        std::string mid = req.matches[3];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto summaries = service_->agents().recent_summaries(aid, 200);
+        const worldbuilding::MemorySummary* found = nullptr;
+        for (auto& s : summaries) {
+            if (s.id == mid) {
+                found = &s;
+                break;
+            }
+        }
+        if (!found) {
+            error_response(res, "Memory summary not found", 404, "memory_summary_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"summary", {
+            {"id", found->id},
+            {"period_start", found->period_start},
+            {"period_end", found->period_end},
+            {"summary", found->summary},
+            {"source_diary_ids", found->source_diary_ids},
+            {"created_at", found->created_at}
+        }}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }

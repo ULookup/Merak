@@ -174,6 +174,10 @@ private:
     void handle_agent_diary_search(const httplib::Request&, httplib::Response&);
     void handle_agent_relations(const httplib::Request&, httplib::Response&);
 
+    // Memory summaries
+    void handle_memory_summaries_list(const httplib::Request&, httplib::Response&);
+    void handle_memory_summary_get(const httplib::Request&, httplib::Response&);
+
     // Chapter review
     void handle_chapter_review(const httplib::Request&, httplib::Response&);
 
