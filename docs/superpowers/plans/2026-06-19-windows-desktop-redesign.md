@@ -148,7 +148,7 @@ git commit -m "refactor(webui): split shared API transport"
 
 **Interfaces:**
 - Produces: `worldbuildingApi`, `filesApi`, `configApi`.
-- Core signatures: `getDashboard(worldId)`, `listLocations(worldId)`, `listKnowledge(worldId)`, `listFactions(worldId)`, `getTimeline(worldId)`, `listGraphEntities(worldId)`, `reorderChapters(worldId, chapterIds)`, resource delete functions, `listWorldFiles(worldId)`, `linkWorldFile(worldId, link)`.
+- Core signatures: `getDashboard(worldId)`, `listLocations(worldId)`, `listKnowledge(worldId)`, `listFactions(worldId)`, `getTimeline(worldId)`, `listGraphEntities(worldId)`, `reorderChapters(worldId, chapterIds)`, resource delete functions, `listWorldFiles(worldId)`, `linkWorldFile(worldId, link)`, `unlinkWorldFile(worldId, filePath, target)`.
 
 - [ ] **Step 1: Add failing URL and body tests**
 
@@ -158,14 +158,18 @@ it('reorders chapters with the documented body', async () => {
   await worldbuildingApi.reorderChapters('w 1', ['c1', 'c2']);
   expect(fetchMock).toHaveBeenCalledWith(
     expect.stringContaining('/api/worldbuilding/w%201/chapters/reorder'),
-    expect.objectContaining({ method: 'POST', body: JSON.stringify({ chapter_ids: ['c1', 'c2'] }) }),
+    expect.objectContaining({ method: 'POST', body: JSON.stringify({ order: ['c1', 'c2'] }) }),
   );
 });
 
 it('encodes a linked file path when deleting it', async () => {
   fetchMock.mockResolvedValueOnce(json({ ok: true }));
-  await filesApi.unlinkWorldFile('w1', '章节/第一章.md');
+  await filesApi.unlinkWorldFile('w1', '章节/第一章.md', { entity_type: 'chapter', entity_id: 'c1' });
   expect(fetchMock.mock.calls[0][0]).toContain(encodeURIComponent('章节/第一章.md'));
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({
+    method: 'DELETE',
+    body: JSON.stringify({ target_type: 'chapter', target_id: 'c1' }),
+  });
 });
 ```
 
@@ -503,7 +507,7 @@ git commit -m "feat(webui): add world and character workspaces"
 - Test: `webui/src/__tests__/UserFlow.test.tsx`
 
 **Interfaces:**
-- Chapters produces reorder body `{ chapter_ids: string[] }` and editor navigation.
+- Chapters produces reorder body `{ order: string[] }` and editor navigation.
 - Scenes produces selected scene detail and real `endScene` result rendering.
 
 - [ ] **Step 1: Add failing chapter reorder and scene end tests**
