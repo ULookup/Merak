@@ -163,8 +163,9 @@ feat(worldbuilding): add timeline event recording endpoint
 1. Rebase on the target version branch before submitting
 2. Open a PR against the version branch (e.g. `v0.1`), not `main`
 3. Your PR should: pass CI, include screenshots for UI changes, follow the PR template
-4. Wait for maintainer review. Only the maintainer can merge. Do not merge your own PR.
-5. Approved PRs are squash-merged by the maintainer
+4. If your PR addresses an existing Issue, reference it (e.g. `Fixes #42`) in the PR description
+5. Wait for maintainer review. Only the maintainer can merge. Do not merge your own PR.
+6. Approved PRs are squash-merged by the maintainer
 
 ## AI-Generated Code
 
@@ -349,8 +350,9 @@ feat(worldbuilding): add timeline event recording endpoint
 1. 提交前 rebase 到目标版本分支
 2. PR 目标为版本分支（如 `v0.1`），而非 `main`
 3. 你的 PR 应：通过 CI、UI 变更附带截图、参考 PR 模板
-4. 等待维护者 Review。合并只能由维护者执行，不要自行合并。
-5. 通过后由维护者 Squash Merge
+4. 如果 PR 解决某个已有 Issue，请在 PR 描述中标注（如 `Fixes #42`）
+5. 等待维护者 Review。合并只能由维护者执行，不要自行合并。
+6. 通过后由维护者 Squash Merge
 
 ## AI 生成代码
 
