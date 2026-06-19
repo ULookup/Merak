@@ -352,6 +352,7 @@ void HttpServer::install_routes(){
     server_.Put("/api/workspace/files/content", [this](const auto& req, auto& res) { handle_workspace_file_content_put(req, res); });
     server_.Post("/api/workspace/open", [this](const auto& req, auto& res) { handle_workspace_open(req, res); });
     server_.Post("/api/workspace/files", [this](const auto& req, auto& res) { handle_workspace_file_create(req, res); });
+    server_.Delete("/api/workspace/files", [this](const auto& req, auto& res) { handle_workspace_file_delete(req, res); });
 }
 void HttpServer::handle_capabilities(const httplib::Request&, httplib::Response& res) {
     json(res, {200, {
@@ -678,6 +679,36 @@ void HttpServer::handle_workspace_file_create(const httplib::Request& req, httpl
         json(res, error("invalid_request", e.what(), 400));
     } catch (const std::exception& e) {
         json(res, error("file_create_failed", e.what(), 500));
+    }
+}
+
+void HttpServer::handle_workspace_file_delete(const httplib::Request& req, httplib::Response& res) {
+    try {
+        auto path_value = req.has_param("path") ? req.get_param_value("path") : "";
+        if (path_value.empty()) {
+            json(res, error("invalid_request", "path query parameter is required", 400));
+            return;
+        }
+        auto home = home_root(merak_home_path_);
+        auto raw = std::filesystem::u8path(path_value);
+        if (raw.is_relative()) raw = home / raw;
+        auto path = safe_existing_or_parent_canonical(raw);
+        if (!is_under(path, home)) {
+            json(res, error("invalid_path", "File must be under merak home", 403));
+            return;
+        }
+        if (has_hidden_or_runtime_part(path)) {
+            json(res, error("protected_file", "Cannot delete system files", 403));
+            return;
+        }
+        if (!std::filesystem::exists(path)) {
+            json(res, error("file_not_found", "File does not exist", 404));
+            return;
+        }
+        std::filesystem::remove(path);
+        json(res, {200, {{"ok", true}}});
+    } catch (const std::exception& e) {
+        json(res, error("file_delete_failed", e.what(), 500));
     }
 }
 
