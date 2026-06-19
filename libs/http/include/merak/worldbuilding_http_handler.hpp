@@ -133,6 +133,10 @@ private:
     void handle_get_generated_outline(const httplib::Request&, httplib::Response&);
     void handle_apply_generated_outline(const httplib::Request&, httplib::Response&);
 
+    // Agent-driven: scene rewrite
+    void handle_start_rewrite_scene(const httplib::Request&, httplib::Response&);
+    void handle_get_rewrite_result(const httplib::Request&, httplib::Response&);
+
     std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;
     mutable std::mutex pending_runs_mutex_;
 

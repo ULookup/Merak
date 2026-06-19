@@ -463,6 +463,12 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
     server.Post(R"(/api/worldbuilding/([^/]+)/generated-outline/apply)",
         [this](const auto& req, auto& res) { handle_apply_generated_outline(req, res); });
 
+    // ─── Agent-driven: scene rewrite ───
+    server.Post(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/rewrite)",
+        [this](const auto& req, auto& res) { handle_start_rewrite_scene(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/rewrite-result)",
+        [this](const auto& req, auto& res) { handle_get_rewrite_result(req, res); });
+
     // ─── Pipeline endpoints ───
     server.Get(R"(/api/worldbuilding/([^/]+)/pipeline/state)",
         [this](const auto& req, auto& res) {
@@ -2636,6 +2642,38 @@ void WorldbuildingHttpHandler::handle_apply_generated_outline(const httplib::Req
             }
         }
         json_response(res, {{"ok", true}, {"arc_ids", arc_ids}, {"chapter_ids", chapter_ids}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent-driven: scene rewrite ---
+
+void WorldbuildingHttpHandler::handle_start_rewrite_scene(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string sid = req.matches[2];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        std::string style = body.value("style", "");
+        std::string focus = body.value("focus", "");
+        std::string task = "重写场景，风格=" + style + "，重点=" + focus
+            + "。产出 rewritten_text 和 changes_summary，不修改原场景。";
+        start_agent_run(req, res, wid, task, "rewrite_result:" + sid);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_rewrite_result(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string sid = req.matches[2];
+        auto result = service_->worlds().get_agent_result(wid, "rewrite_result:" + sid);
+        if (!result) {
+            error_response(res, "Rewrite result not yet generated", 404, "result_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"rewrite_result", *result}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
