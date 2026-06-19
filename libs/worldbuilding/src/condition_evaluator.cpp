@@ -614,7 +614,7 @@ ConditionResult eval_relation_currency(const ConditionDef& cond,
 
         auto row = txn.exec_params1(R"(
             SELECT COUNT(*) FROM agent_relations ar
-            JOIN agents a ON (ar.agent_a_id = a.id OR ar.agent_b_id = a.id)
+            JOIN agents a ON (ar.agent_id = a.id OR ar.target_id = a.id)
             WHERE a.world_id = $1 AND ar.updated_at < $2
         )", state.world_id, chapter_start);
         int stale = row[0].as<int>();
