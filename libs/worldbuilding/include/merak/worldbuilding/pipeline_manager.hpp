@@ -86,6 +86,7 @@ public:
     // ─── Error handling ───
     void handle_advance_failure(const std::string& world_id, const PipelineState& state, AdvanceResult result);
     void clear_last_error(const std::string& world_id);
+    void retreat_to_phase(const std::string& world_id, const std::string& to_phase);
 
     // ─── Metrics ───
     struct PipelineMetrics {

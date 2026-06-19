@@ -1,13 +1,21 @@
 #include <merak/worldbuilding_http_handler.hpp>
+#include <merak/kg/kg_models.hpp>
 #include <merak/runtime_service.hpp>
 #include <merak/worldbuilding/world_models.hpp>
 #include <merak/worldbuilding/card_access.hpp>
 #include <merak/worldbuilding/pipeline_manager.hpp>
+#include <merak/worldbuilding/ids.hpp>
+
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <set>
+#include <sstream>
+#include <map>
 #include <unordered_map>
 
 namespace merak {
@@ -177,10 +185,132 @@ nlohmann::json image_json(const ImageRecord& img) {
 
 } // namespace
 
+void WorldbuildingHttpHandler::start_agent_run(
+    const httplib::Request& req, httplib::Response& res,
+    const std::string& world_id, const std::string& task_description,
+    const std::string& operation_type) {
+    if (!runtime_) {
+        error_response(res, "Runtime service not available", 503, "runtime_unavailable");
+        return;
+    }
+    try {
+        auto session = runtime_->create_session("", world_id, "god_agent");
+        runtime_->set_session_ephemeral(session.id, 30);
+        auto run = runtime_->start_run(session.id, task_description, "");
+
+        {
+            std::lock_guard<std::mutex> lock(pending_runs_mutex_);
+            pending_agent_runs_[run.id] = {world_id, operation_type};
+        }
+        poller_started_cv_.notify_one();
+
+        json_response(res, {
+            {"ok", true},
+            {"session_id", session.id},
+            {"run_id", run.id}
+        }, 202);
+    } catch (const RuntimeError& e) {
+        int status = e.code() == "session_busy" ? 409 : 400;
+        error_response(res, e.what(), status, e.code());
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::capture_agent_result(const std::string& run_id) {
+    PendingAgentRun pending;
+    {
+        std::lock_guard<std::mutex> lock(pending_runs_mutex_);
+        auto it = pending_agent_runs_.find(run_id);
+        if (it == pending_agent_runs_.end()) return;
+        pending = it->second;
+        pending_agent_runs_.erase(it);
+    }
+    try {
+        auto run = runtime_->get_run(run_id);
+        if (!run || run->status != RunStatus::Completed) return;
+
+        nlohmann::json messages = nlohmann::json::array();
+        for (const auto& e : runtime_->events_after(run->session_id, 0)) {
+            if (e.run_id == run_id && e.type == "message_appended") {
+                messages.push_back({
+                    {"role", e.payload.value("role", "")},
+                    {"content", e.payload.value("content", "")}
+                });
+            }
+        }
+        service_->worlds().store_agent_result(pending.world_id,
+                                               pending.operation_type, messages);
+    } catch (...) {
+        // Best-effort caching; don't crash
+    }
+}
+
+void WorldbuildingHttpHandler::start_result_poller() {
+    {
+        std::lock_guard<std::mutex> lock(poller_started_mutex_);
+        if (poller_started_) return;
+        poller_started_ = true;
+    }
+    poller_stop_ = false;
+    result_poller_ = std::thread([this] {
+        while (!poller_stop_) {
+            std::vector<std::string> pending_ids;
+            {
+                std::lock_guard<std::mutex> lock(pending_runs_mutex_);
+                for (const auto& kv : pending_agent_runs_) {
+                    pending_ids.push_back(kv.first);
+                }
+            }
+            for (const auto& id : pending_ids) {
+                if (poller_stop_) break;
+                auto run = runtime_->get_run(id);
+                if (!run) {
+                    std::lock_guard<std::mutex> lock(pending_runs_mutex_);
+                    pending_agent_runs_.erase(id);
+                    continue;
+                }
+                switch (run->status) {
+                case RunStatus::Completed:
+                    capture_agent_result(id);
+                    break;
+                case RunStatus::Failed:
+                case RunStatus::Cancelled:
+                case RunStatus::Interrupted:
+                    {
+                        std::lock_guard<std::mutex> lock(pending_runs_mutex_);
+                        pending_agent_runs_.erase(id);
+                    }
+                    break;
+                default:
+                    break;
+                }
+            }
+            std::unique_lock<std::mutex> cv_lock(poller_started_mutex_);
+            poller_started_cv_.wait_for(cv_lock, std::chrono::seconds(2),
+                                        [this] { return poller_stop_.load(); });
+        }
+    });
+}
+
+void WorldbuildingHttpHandler::stop_result_poller() {
+    poller_stop_ = true;
+    poller_started_cv_.notify_all();
+    if (result_poller_.joinable()) {
+        result_poller_.join();
+    }
+}
+
 WorldbuildingHttpHandler::WorldbuildingHttpHandler(
     std::shared_ptr<worldbuilding::WorldbuildingService> service,
     std::shared_ptr<RuntimeService> runtime)
-    : service_(std::move(service)), runtime_(std::move(runtime)) {}
+    : service_(std::move(service)), runtime_(std::move(runtime)) {
+    if (runtime_) start_result_poller();
+}
+
+WorldbuildingHttpHandler::~WorldbuildingHttpHandler() {
+    stop_result_poller();
+}
 
 void WorldbuildingHttpHandler::set_pipeline_manager(
     std::shared_ptr<worldbuilding::PipelineManager> mgr) {
@@ -206,6 +336,8 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_update_world(req, res); });
 
     // Agents
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/search)",
+        [this](const auto& req, auto& res) { handle_search_agents(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/agents)",
         [this](const auto& req, auto& res) { handle_list_agents(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/agents)",
@@ -220,10 +352,30 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_agent_diary_list(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries)",
         [this](const auto& req, auto& res) { handle_agent_diary_add(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries/search)",
+        [this](const auto& req, auto& res) { handle_agent_diary_search(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries/([^/]+))",
+        [this](const auto& req, auto& res) { handle_agent_diary_get(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries/([^/]+))",
+        [this](const auto& req, auto& res) { handle_agent_diary_patch(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/relations)",
         [this](const auto& req, auto& res) { handle_agent_relations(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/relations)",
+        [this](const auto& req, auto& res) { handle_agent_relation_upsert(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/relations/([^/]+))",
+        [this](const auto& req, auto& res) { handle_agent_relation_update(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/voice)",
+        [this](const auto& req, auto& res) { handle_agent_voice(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/memory-summaries)",
+        [this](const auto& req, auto& res) { handle_memory_summaries_list(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/memory-summaries/([^/]+))",
+        [this](const auto& req, auto& res) { handle_memory_summary_get(req, res); });
     server.Get(R"(/api/worldbuilding/agents/([^/]+)/prompt)",
         [this](const auto& req, auto& res) { handle_load_agent_prompt(req, res); });
+
+    // Character appearances
+    server.Get(R"(/api/worldbuilding/([^/]+)/characters/([^/]+)/appearances)",
+        [this](const auto& req, auto& res) { handle_character_appearances(req, res); });
 
     // Image routes
     server.Get(R"(/api/worldbuilding/images/([^/]+))",
@@ -268,6 +420,10 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_chapter_review(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/export)",
         [this](const auto& req, auto& res) { handle_export_chapters(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/export-full)",
+        [this](const auto& req, auto& res) { handle_export_full(req, res); });
+    server.Post("/api/worldbuilding/import",
+        [this](const auto& req, auto& res) { handle_import_snapshot(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/scenes)",
         [this](const auto& req, auto& res) { handle_list_scenes(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes)",
@@ -280,12 +436,22 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_delete_scene(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/end)",
         [this](const auto& req, auto& res) { handle_scene_end(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/extraction-result)",
+        [this](const auto& req, auto& res) { handle_scene_extraction_result(req, res); });
 
     // Time
     server.Get(R"(/api/worldbuilding/([^/]+)/time)",
         [this](const auto& req, auto& res) { handle_time_now(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/time/advance)",
         [this](const auto& req, auto& res) { handle_time_advance(req, res); });
+
+    // Timeline
+    server.Get(R"(/api/worldbuilding/([^/]+)/timeline/events/([^/]+))",
+        [this](const auto& req, auto& res) { handle_timeline_event_get(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/timeline)",
+        [this](const auto& req, auto& res) { handle_timeline_list(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/timeline/advance)",
+        [this](const auto& req, auto& res) { handle_timeline_advance(req, res); });
 
     // Foreshadowing
     server.Get(R"(/api/worldbuilding/([^/]+)/foreshadowing)",
@@ -374,6 +540,39 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_get_pending_creation(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/creations/([^/]+)/resolve)",
         [this](const auto& req, auto& res) { handle_resolve_creation(req, res); });
+
+    // ─── Agent-driven generation ───
+    server.Post(R"(/api/worldbuilding/([^/]+)/suggestions)",
+        [this](const auto& req, auto& res) { handle_start_suggestions(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/suggestions)",
+        [this](const auto& req, auto& res) { handle_get_suggestions(req, res); });
+
+    server.Post(R"(/api/worldbuilding/([^/]+)/check-consistency)",
+        [this](const auto& req, auto& res) { handle_start_consistency_check(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/check-consistency)",
+        [this](const auto& req, auto& res) { handle_get_consistency_check(req, res); });
+
+    // ─── Agent-driven: generate scenes ───
+    server.Post(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+)/generate-scenes)",
+        [this](const auto& req, auto& res) { handle_start_generate_scenes(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+)/generated-scenes)",
+        [this](const auto& req, auto& res) { handle_get_generated_scenes(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/chapters/([^/]+)/generated-scenes/apply)",
+        [this](const auto& req, auto& res) { handle_apply_generated_scenes(req, res); });
+
+    // ─── Agent-driven: generate outline ───
+    server.Post(R"(/api/worldbuilding/([^/]+)/generate-outline)",
+        [this](const auto& req, auto& res) { handle_start_generate_outline(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/generated-outline)",
+        [this](const auto& req, auto& res) { handle_get_generated_outline(req, res); });
+    server.Post(R"(/api/worldbuilding/([^/]+)/generated-outline/apply)",
+        [this](const auto& req, auto& res) { handle_apply_generated_outline(req, res); });
+
+    // ─── Agent-driven: scene rewrite ───
+    server.Post(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/rewrite)",
+        [this](const auto& req, auto& res) { handle_start_rewrite_scene(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/scenes/([^/]+)/rewrite-result)",
+        [this](const auto& req, auto& res) { handle_get_rewrite_result(req, res); });
 
     // ─── Pipeline endpoints ───
     server.Get(R"(/api/worldbuilding/([^/]+)/pipeline/state)",
@@ -555,6 +754,20 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
             }
             res.set_content(R"({"ok":true})", "application/json");
         });
+
+    server.Post(R"(/api/worldbuilding/([^/]+)/pipeline/retreat)",
+        [this](const auto& req, auto& res) { handle_pipeline_retreat(req, res); });
+
+    server.Post(R"(/api/worldbuilding/([^/]+)/pipeline/clear-error)",
+        [this](const auto& req, auto& res) { handle_pipeline_clear_error(req, res); });
+
+    // Knowledge Graph
+    server.Get(R"(/api/worldbuilding/([^/]+)/knowledge-graph/entities)",
+        [this](const auto& req, auto& res) { handle_kg_entities(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/knowledge-graph/entities/([^/]+)/relations)",
+        [this](const auto& req, auto& res) { handle_kg_entity_relations(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/knowledge-graph/search)",
+        [this](const auto& req, auto& res) { handle_kg_search(req, res); });
 }
 
 // --- World handlers ---
@@ -662,7 +875,24 @@ void WorldbuildingHttpHandler::handle_list_agents(const httplib::Request& req, h
             error_response(res, "World not found", 404, "world_not_found");
             return;
         }
-        auto agents = service_->agents().list_agents(wid);
+        // Optional kind filter (individual, group, god, etc.)
+        std::optional<std::string> kind_filter;
+        if (req.has_param("kind") && !req.get_param_value("kind").empty()) {
+            kind_filter = req.get_param_value("kind");
+        }
+        auto agents = service_->agents().list_agents(wid, kind_filter);
+        // Optional faction filter: intersect with faction members
+        if (req.has_param("faction") && !req.get_param_value("faction").empty()) {
+            std::string faction_id = req.get_param_value("faction");
+            auto faction = service_->worlds().get_faction(wid, faction_id);
+            if (faction) {
+                std::set<std::string> member_set(faction->member_agent_ids.begin(),
+                                                  faction->member_agent_ids.end());
+                auto new_end = std::remove_if(agents.begin(), agents.end(),
+                    [&](const auto& a) { return member_set.find(a.id) == member_set.end(); });
+                agents.erase(new_end, agents.end());
+            }
+        }
         // Batch-fetch primary avatars to avoid N+1 queries
         std::unordered_map<std::string, ImageRecord> primary_avatars;
         if (image_service_) {
@@ -1147,6 +1377,152 @@ void WorldbuildingHttpHandler::handle_time_advance(const httplib::Request& req, 
     }
 }
 
+// --- Timeline handlers ---
+
+void WorldbuildingHttpHandler::handle_timeline_list(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto world = service_->worlds().get_world(wid);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+        auto events = service_->narrative().list_timeline_events(wid);
+
+        // Determine current time from last event
+        int day = 1;
+        int period = 0;
+        std::string label = "\xe7\xac\xac\xe4\xb8\x80\xe6\x97\xa5\xe6\x99\xa8"; // "first day morning"
+        if (!events.empty()) {
+            auto last_time = worldbuilding::WorldTime::parse(events.back().world_time);
+            if (last_time.has_value()) {
+                day = last_time->day;
+                period = last_time->period;
+                label = last_time->label;
+            }
+        }
+
+        nlohmann::json events_arr = nlohmann::json::array();
+        for (const auto& e : events) {
+            events_arr.push_back({
+                {"id", e.id},
+                {"world_time", e.world_time},
+                {"description", e.description},
+                {"recorded_by", e.recorded_by},
+                {"affected_character_ids", e.affected_character_ids},
+                {"related_scene_ids", e.related_scene_ids}
+            });
+        }
+
+        json_response(res, {
+            {"ok", true},
+            {"current_time", {
+                {"day", day},
+                {"period", period},
+                {"label", label}
+            }},
+            {"events", events_arr}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what());
+    }
+}
+
+void WorldbuildingHttpHandler::handle_timeline_event_get(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string eid = req.matches[2];
+        auto world = service_->worlds().get_world(wid);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+        auto event = service_->narrative().get_timeline_event(wid, eid);
+        if (!event.has_value()) {
+            error_response(res, "Timeline event not found", 404, "event_not_found");
+            return;
+        }
+
+        // Resolve recorded_by_name
+        std::string recorded_by_name = event->recorded_by;
+        if (!event->recorded_by.empty()) {
+            auto agent = service_->agents().get_agent(event->recorded_by);
+            if (agent.has_value()) {
+                recorded_by_name = agent->name;
+            }
+        }
+
+        nlohmann::json event_json = {
+            {"id", event->id},
+            {"world_time", event->world_time},
+            {"description", event->description},
+            {"recorded_by", event->recorded_by},
+            {"recorded_by_name", recorded_by_name},
+            {"affected_character_ids", event->affected_character_ids},
+            {"related_scene_ids", event->related_scene_ids}
+        };
+
+        json_response(res, {{"ok", true}, {"event", event_json}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what());
+    }
+}
+
+void WorldbuildingHttpHandler::handle_timeline_advance(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = nlohmann::json::parse(req.body);
+        std::string time_label = body.at("time_label");
+
+        // Validate world exists
+        auto world = service_->worlds().get_world(wid);
+        if (!world) {
+            error_response(res, "World not found", 404, "world_not_found");
+            return;
+        }
+
+        // Parse and validate the new time format
+        auto parsed_new = worldbuilding::WorldTime::parse(time_label);
+        if (!parsed_new.has_value()) {
+            error_response(res, "Invalid time_label format: " + time_label, 400, "invalid_time_format");
+            return;
+        }
+
+        // Forward-only validation: new_time must be strictly after current world time
+        auto events = service_->narrative().list_timeline_events(wid);
+        if (!events.empty()) {
+            const auto& last_event = events.back();
+            auto parsed_current = worldbuilding::WorldTime::parse(last_event.world_time);
+            if (parsed_current.has_value() && *parsed_new <= *parsed_current) {
+                error_response(res,
+                    "Time can only advance forward. Current world time: " +
+                        last_event.world_time + ", requested: " + time_label,
+                    400, "time_not_forward");
+                return;
+            }
+        }
+
+        worldbuilding::TimelineEvent event;
+        event.world_time = parsed_new->label;
+        event.description = body.value("description", "Time advanced");
+        event.recorded_by = body.value("recorded_by", "user");
+
+        auto recorded = service_->narrative().advance_time(wid, std::move(event));
+
+        json_response(res, {
+            {"ok", true},
+            {"new_time", {
+                {"day", parsed_new->day},
+                {"period", parsed_new->period},
+                {"label", parsed_new->label}
+            }}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what());
+    }
+}
+
+
 // --- Foreshadowing handlers ---
 
 void WorldbuildingHttpHandler::handle_foreshadow_list(const httplib::Request& req, httplib::Response& res) {
@@ -1338,6 +1714,118 @@ void WorldbuildingHttpHandler::handle_agent_diary_add(const httplib::Request& re
     }
 }
 
+void WorldbuildingHttpHandler::handle_agent_diary_get(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        std::string did = req.matches[3];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto diary = service_->agents().get_diary(did);
+        if (!diary) {
+            error_response(res, "Diary not found", 404, "diary_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"diary", {
+            {"id", diary->id},
+            {"agent_id", diary->agent_id},
+            {"scene_id", diary->scene_id},
+            {"world_time", diary->world_time},
+            {"content", diary->content},
+            {"mood", diary->mood},
+            {"status", diary->status},
+            {"leak_risk_level", diary->leak_risk_level},
+            {"tokens_used", diary->tokens_used},
+            {"created_at", diary->created_at}
+        }}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_agent_diary_patch(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string aid = req.matches[2];
+    std::string did = req.matches[3];
+    try {
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto diary = service_->agents().get_diary(did);
+        if (!diary) {
+            error_response(res, "Diary not found", 404, "diary_not_found");
+            return;
+        }
+        auto body = nlohmann::json::parse(req.body);
+        std::string content = body.value("content", diary->content);
+        std::string mood = body.value("mood", diary->mood);
+        int leak_risk_level = body.value("leak_risk_level", diary->leak_risk_level);
+        int tokens_used = body.value("tokens_used", diary->tokens_used);
+        service_->agents().update_diary_content(did, content, mood, leak_risk_level, tokens_used);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_agent_diary_search(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        if (!req.has_param("q")) {
+            error_response(res, "Missing required query parameter: q", 400, "missing_param");
+            return;
+        }
+        std::string q = req.get_param_value("q");
+        int limit = 20;
+        if (req.has_param("limit")) {
+            try {
+                limit = std::stoi(req.get_param_value("limit"));
+            } catch (...) {
+                error_response(res, "Invalid limit parameter", 400);
+                return;
+            }
+        }
+        auto diaries = service_->agents().search_diary(aid, q, limit);
+        nlohmann::json arr = nlohmann::json::array();
+        for (auto& d : diaries) {
+            arr.push_back({
+                {"id", d.id},
+                {"agent_id", d.agent_id},
+                {"scene_id", d.scene_id},
+                {"content", d.content},
+                {"world_time", d.world_time},
+                {"created_at", d.created_at}
+            });
+        }
+        json_response(res, {{"ok", true}, {"diaries", arr}, {"total", diaries.size()}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
 // --- Agent relations ---
 
 void WorldbuildingHttpHandler::handle_agent_relations(const httplib::Request& req, httplib::Response& res) {
@@ -1367,6 +1855,187 @@ void WorldbuildingHttpHandler::handle_agent_relations(const httplib::Request& re
             });
         }
         json_response(res, {{"ok", true}, {"relations", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent relation create ---
+
+void WorldbuildingHttpHandler::handle_agent_relation_upsert(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto body = nlohmann::json::parse(req.body);
+        if (!body.contains("target_id") || !body["target_id"].is_string()) {
+            error_response(res, "target_id is required", 400);
+            return;
+        }
+        worldbuilding::RelationEntry rel;
+        rel.agent_id = aid;
+        rel.target_id = body["target_id"].get<std::string>();
+        rel.relation_type = body.value("relation_type", "");
+        rel.description = body.value("description", "");
+        rel.intimacy = body.value("intimacy", 0);
+        service_->agents().upsert_relation(rel);
+        json_response(res, {{"ok", true}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent relation update ---
+
+void WorldbuildingHttpHandler::handle_agent_relation_update(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        std::string tid = req.matches[3];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto body = nlohmann::json::parse(req.body);
+        worldbuilding::RelationEntry rel;
+        rel.agent_id = aid;
+        rel.target_id = tid;
+        if (body.contains("relation_type")) rel.relation_type = body["relation_type"].get<std::string>();
+        if (body.contains("description")) rel.description = body["description"].get<std::string>();
+        if (body.contains("intimacy")) rel.intimacy = body["intimacy"].get<int>();
+        service_->agents().upsert_relation(rel);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent voice fingerprint ---
+
+void WorldbuildingHttpHandler::handle_agent_voice(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto fp = service_->voice().fingerprint_for(aid);
+        if (!fp) {
+            error_response(res, "Voice fingerprint not found", 404, "not_found");
+            return;
+        }
+        json_response(res, {
+            {"ok", true},
+            {"voice", {
+                {"avg_sentence_length", fp->avg_sentence_length},
+                {"sentence_variance", fp->sentence_variance},
+                {"question_frequency", fp->question_frequency},
+                {"modifier_ratio", fp->modifier_ratio},
+                {"sample_count", fp->sample_count},
+                {"signature_words", fp->signature_words},
+                {"tone_profile", fp->tone_profile}
+            }}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Memory summaries ---
+
+void WorldbuildingHttpHandler::handle_memory_summaries_list(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        int limit = 50;
+        if (req.has_param("limit")) {
+            try {
+                limit = std::stoi(req.get_param_value("limit"));
+            } catch (...) {
+                error_response(res, "Invalid limit parameter", 400);
+                return;
+            }
+        }
+        auto summaries = service_->agents().recent_summaries(aid, limit);
+        nlohmann::json arr = nlohmann::json::array();
+        for (auto& s : summaries) {
+            arr.push_back({
+                {"id", s.id},
+                {"period_start", s.period_start},
+                {"period_end", s.period_end},
+                {"summary", s.summary},
+                {"source_diary_ids", s.source_diary_ids},
+                {"created_at", s.created_at}
+            });
+        }
+        json_response(res, {{"ok", true}, {"summaries", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_memory_summary_get(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        std::string mid = req.matches[3];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto summaries = service_->agents().recent_summaries(aid, 200);
+        const worldbuilding::MemorySummary* found = nullptr;
+        for (auto& s : summaries) {
+            if (s.id == mid) {
+                found = &s;
+                break;
+            }
+        }
+        if (!found) {
+            error_response(res, "Memory summary not found", 404, "memory_summary_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"summary", {
+            {"id", found->id},
+            {"period_start", found->period_start},
+            {"period_end", found->period_end},
+            {"summary", found->summary},
+            {"source_diary_ids", found->source_diary_ids},
+            {"created_at", found->created_at}
+        }}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
@@ -1827,6 +2496,175 @@ void WorldbuildingHttpHandler::handle_export_chapters(const httplib::Request& re
         });
     } catch (const std::exception& e) {
         error_response(res, e.what(), 500, "export_failed");
+    }
+}
+
+void WorldbuildingHttpHandler::handle_export_full(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string world_id = req.matches[1];
+
+        bool include_diaries = false;
+        bool include_memories = false;
+        if (!req.body.empty()) {
+            auto body = nlohmann::json::parse(req.body);
+            include_diaries = body.value("include_diaries", false);
+            include_memories = body.value("include_memories", false);
+        }
+
+        auto snapshot = service_->export_world_snapshot(world_id, include_diaries, include_memories);
+
+        // Enrich with image data if image_service_ is available
+        if (image_service_ && snapshot.payload.contains("agents") && snapshot.payload["agents"].is_array()) {
+            for (auto& agent_json : snapshot.payload["agents"]) {
+                if (!agent_json.contains("id")) continue;
+                std::string agent_id = agent_json["id"].get<std::string>();
+
+                auto images = image_service_->list_images(agent_id);
+                nlohmann::json imgs_arr = nlohmann::json::array();
+                for (const auto& img : images) {
+                    nlohmann::json img_json;
+                    img_json["id"] = img.id;
+                    img_json["agent_id"] = img.agent_id;
+                    img_json["image_type"] = img.image_type;
+                    img_json["storage_key"] = img.storage_key;
+                    img_json["mime_type"] = img.mime_type;
+                    img_json["original_name"] = img.original_name;
+                    img_json["file_size_bytes"] = img.file_size_bytes;
+                    img_json["is_primary"] = img.is_primary;
+                    img_json["sort_order"] = img.sort_order;
+                    img_json["created_at"] = img.created_at;
+
+                    // Inline small images as base64, mark large ones as external
+                    const int64_t kMaxInlineBytes = 256 * 1024; // 256 KB
+                    if (img.file_size_bytes > 0 && img.file_size_bytes <= kMaxInlineBytes) {
+                        try {
+                            auto image_data = image_service_->store().load(img.storage_key);
+                            if (!image_data.bytes.empty()) {
+                                std::string b64 = worldbuilding::base64_encode(image_data.bytes);
+                                img_json["data"] = "data:" + img.mime_type + ";base64," + b64;
+                            } else {
+                                img_json["data"] = nullptr;
+                            }
+                        } catch (...) {
+                            img_json["data"] = nullptr;
+                            img_json["transfer"] = "external";
+                        }
+                    } else {
+                        img_json["data"] = nullptr;
+                        img_json["transfer"] = "external";
+                    }
+                    imgs_arr.push_back(img_json);
+                }
+                agent_json["images"] = imgs_arr;
+
+                // Update image count in manifest
+                if (!images.empty()) {
+                    int existing = snapshot.manifest.value("image_count", 0);
+                    snapshot.manifest["image_count"] = existing + static_cast<int>(images.size());
+                }
+            }
+            // Ensure image count is present even if zero
+            if (!snapshot.manifest.contains("image_count")) {
+                snapshot.manifest["image_count"] = 0;
+            }
+        }
+
+        json_response(res, {
+            {"ok", true},
+            {"snapshot", {
+                {"schema_version", snapshot.schema_version},
+                {"exported_at", snapshot.exported_at},
+                {"snapshot_id", snapshot.snapshot_id},
+                {"source", snapshot.source},
+                {"manifest", snapshot.manifest},
+                {"payload", snapshot.payload}
+            }}
+        });
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 500, "export_failed");
+    }
+}
+
+void WorldbuildingHttpHandler::handle_import_snapshot(const httplib::Request& req, httplib::Response& res) {
+    try {
+        auto body = nlohmann::json::parse(req.body);
+        if (!body.contains("snapshot")) {
+            error_response(res, "missing required field: snapshot", 400, "missing_field");
+            return;
+        }
+        const auto& snapshot = body["snapshot"];
+        std::optional<std::string> target_name;
+        if (body.contains("target_name") && body["target_name"].is_string()) {
+            target_name = body["target_name"].get<std::string>();
+        }
+
+        auto result = service_->import_snapshot(snapshot, target_name);
+
+        // Import images if image_service_ is available and snapshot has agents
+        int images_imported = 0;
+        if (image_service_ && snapshot.contains("payload")) {
+            const auto& payload = snapshot["payload"];
+            if (payload.contains("agents") && payload["agents"].is_array()) {
+                for (const auto& agent_json : payload["agents"]) {
+                    if (!agent_json.contains("id") || !agent_json.contains("images")) continue;
+                    if (!agent_json["images"].is_array()) continue;
+
+                    std::string old_agent_id = agent_json["id"].get<std::string>();
+                    auto it = result.id_mapping.find(old_agent_id);
+                    if (it == result.id_mapping.end()) continue;
+                    std::string new_agent_id = it->second;
+
+                    for (const auto& img_json : agent_json["images"]) {
+                        if (!img_json.contains("data") || img_json["data"].is_null()) continue;
+                        std::string data_uri = img_json["data"].get<std::string>();
+                        // Only import inline images (skip external references)
+                        if (data_uri.empty() || data_uri.find("data:") != 0) continue;
+
+                        // Parse data URI: data:<mime_type>;base64,<data>
+                        auto comma_pos = data_uri.find(',');
+                        if (comma_pos == std::string::npos) continue;
+                        std::string header = data_uri.substr(0, comma_pos);
+                        std::string b64_data = data_uri.substr(comma_pos + 1);
+
+                        std::string mime_type = img_json.value("mime_type", "image/png");
+                        // Extract mime from header: "data:image/png;base64"
+                        auto colon_pos = header.find(':');
+                        auto semi_pos = header.find(';');
+                        if (colon_pos != std::string::npos && semi_pos != std::string::npos) {
+                            mime_type = header.substr(colon_pos + 1, semi_pos - colon_pos - 1);
+                        }
+
+                        auto decoded = worldbuilding::base64_decode(b64_data);
+                        if (!decoded || decoded->empty()) continue;
+
+                        try {
+                            image_service_->upload(
+                                result.world_id,
+                                new_agent_id,
+                                img_json.value("image_type", "avatar"),
+                                img_json.value("original_name", "imported"),
+                                mime_type,
+                                *decoded);
+                            images_imported++;
+                        } catch (const std::exception& e) {
+                            spdlog::warn("import_snapshot: failed to import image for agent {}: {}",
+                                         new_agent_id, e.what());
+                        }
+                    }
+                }
+            }
+        }
+
+        nlohmann::json response = {
+            {"ok", true},
+            {"world_id", result.world_id},
+            {"id_mapping", result.id_mapping},
+            {"images_imported", images_imported}
+        };
+        json_response(res, response, 201);
+
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 500, "import_failed");
     }
 }
 
@@ -2348,6 +3186,594 @@ void WorldbuildingHttpHandler::handle_resolve_creation(const httplib::Request& r
         auto modifications = body.value("modifications", nlohmann::json::object());
         auto result = service_->resolve_creation(creation_id, decision, modifications);
         json_response(res, {{"ok", true}, {"result", result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent-driven: suggestions ---
+
+void WorldbuildingHttpHandler::handle_start_suggestions(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        std::string category = body.value("category", "all");
+        std::string task = "分析世界设定，找出 " + category + " 类别的缺口，产出结构化建议列表。";
+        start_agent_run(req, res, wid, task, "suggestions");
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_suggestions(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto result = service_->worlds().get_agent_result(wid, "suggestions");
+        if (!result) {
+            error_response(res, "Suggestions not yet generated", 404, "result_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"suggestions", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent-driven: consistency check ---
+
+void WorldbuildingHttpHandler::handle_start_consistency_check(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        std::string scope = body.value("scope", "all");
+        std::string task = "检查世界一致性，范围：" + scope + "。按 narrative_rules.md 规则检查矛盾（如角色死亡后出场、时间线冲突、阵营关系矛盾），产出结构化冲突列表。";
+        start_agent_run(req, res, wid, task, "consistency_check");
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_consistency_check(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto result = service_->worlds().get_agent_result(wid, "consistency_check");
+        if (!result) {
+            error_response(res, "Consistency check not yet generated", 404, "result_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"conflicts", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent-driven: generate scenes ---
+
+void WorldbuildingHttpHandler::handle_start_generate_scenes(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string cid = req.matches[2];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        int scene_count = body.value("scene_count", 0);
+        std::string task = "为本章节拆分场景（";
+        if (scene_count > 0) task += std::to_string(scene_count) + "个";
+        task += "），产出每个场景的 plot_goal、emotional_goal、information_goal 和 suggested_participants。";
+        start_agent_run(req, res, wid, task, "generated_scenes:" + cid);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_generated_scenes(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string cid = req.matches[2];
+        auto result = service_->worlds().get_agent_result(wid, "generated_scenes:" + cid);
+        if (!result) {
+            error_response(res, "Scenes not yet generated", 404, "result_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"scenes", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_apply_generated_scenes(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string cid = req.matches[2];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        auto result = service_->worlds().get_agent_result(wid, "generated_scenes:" + cid);
+        if (!result) {
+            error_response(res, "No generated scenes to apply", 404, "result_not_found");
+            return;
+        }
+        nlohmann::json scenes = result->is_array() ? *result : (*result)["scenes"];
+        std::set<int> selected;
+        if (body.contains("selected_indices") && body["selected_indices"].is_array()) {
+            for (const auto& idx : body["selected_indices"]) selected.insert(idx.get<int>());
+        }
+        nlohmann::json scene_ids = nlohmann::json::array();
+        int idx = 0;
+        for (const auto& scene_data : scenes) {
+            if (!selected.empty() && !selected.contains(idx)) { idx++; continue; }
+            worldbuilding::Scene scene;
+            scene.title = scene_data.value("title", "未命名场景");
+            scene.chapter_id = cid;
+            scene.plot_goal = scene_data.value("plot_goal", "");
+            scene.emotional_goal = scene_data.value("emotional_goal", "");
+            scene.information_goal = scene_data.value("information_goal", "");
+            scene.status = worldbuilding::SceneStatus::Draft;
+            if (scene_data.contains("suggested_participants") && scene_data["suggested_participants"].is_array()) {
+                for (const auto& p : scene_data["suggested_participants"])
+                    scene.participant_ids.push_back(p.get<std::string>());
+            }
+            auto created = service_->create_scene(wid, scene);
+            scene_ids.push_back(created.id);
+            idx++;
+        }
+        json_response(res, {{"ok", true}, {"scene_ids", scene_ids}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent-driven: generate outline ---
+
+void WorldbuildingHttpHandler::handle_start_generate_outline(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        int chapter_count = body.value("chapter_count", 8);
+        std::string tmpl = body.value("template", "three_act");
+        std::string task = "生成故事大纲：" + std::to_string(chapter_count) + "章，模板=" + tmpl
+            + "。产出 arcs 数组，每个 arc 含 title、purpose、chapters（每章含 title、pitch、suggested_pov）。";
+        start_agent_run(req, res, wid, task, "generated_outline");
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_generated_outline(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto result = service_->worlds().get_agent_result(wid, "generated_outline");
+        if (!result) {
+            error_response(res, "Outline not yet generated", 404, "result_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"outline", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_apply_generated_outline(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto result = service_->worlds().get_agent_result(wid, "generated_outline");
+        if (!result) {
+            error_response(res, "No generated outline to apply", 404, "result_not_found");
+            return;
+        }
+        nlohmann::json arcs_data = result->is_array() ? *result : (*result)["arcs"];
+        if (!arcs_data.is_array()) {
+            error_response(res, "Outline result does not contain arcs array", 400);
+            return;
+        }
+        nlohmann::json arc_ids = nlohmann::json::array();
+        nlohmann::json chapter_ids = nlohmann::json::array();
+        int chapter_number = 1;
+        for (const auto& arc_data : arcs_data) {
+            worldbuilding::Arc arc;
+            arc.title = arc_data.value("title", "未命名弧");
+            arc.purpose = arc_data.value("purpose", "");
+            arc.status = "outline";
+            auto created_arc = service_->create_arc(wid, arc);
+            arc_ids.push_back(created_arc.id);
+            if (arc_data.contains("chapters") && arc_data["chapters"].is_array()) {
+                for (const auto& ch_data : arc_data["chapters"]) {
+                    worldbuilding::Chapter chapter;
+                    chapter.title = ch_data.value("title", "未命名章节");
+                    chapter.pitch = ch_data.value("pitch", "");
+                    chapter.number = chapter_number++;
+                    chapter.arc_id = created_arc.id;
+                    chapter.status = worldbuilding::ChapterStatus::Outline;
+                    auto created_ch = service_->create_chapter(wid, chapter);
+                    chapter_ids.push_back(created_ch.id);
+                }
+            }
+        }
+        json_response(res, {{"ok", true}, {"arc_ids", arc_ids}, {"chapter_ids", chapter_ids}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+// --- Agent-driven: scene rewrite ---
+
+void WorldbuildingHttpHandler::handle_start_rewrite_scene(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string sid = req.matches[2];
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        std::string style = body.value("style", "");
+        std::string focus = body.value("focus", "");
+        std::string task = "重写场景，风格=" + style + "，重点=" + focus
+            + "。产出 rewritten_text 和 changes_summary，不修改原场景。";
+        start_agent_run(req, res, wid, task, "rewrite_result:" + sid);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_get_rewrite_result(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string sid = req.matches[2];
+        auto result = service_->worlds().get_agent_result(wid, "rewrite_result:" + sid);
+        if (!result) {
+            error_response(res, "Rewrite result not yet generated", 404, "result_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"rewrite_result", *result}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_scene_extraction_result(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string sid = req.matches[2];
+
+        auto world = service_->worlds().get_world(wid);
+        if (!world) {
+            error_response(res, "World not found", 404);
+            return;
+        }
+
+        auto scene = service_->narrative().get_scene(wid, sid);
+        if (!scene) {
+            error_response(res, "Scene not found", 404);
+            return;
+        }
+
+        auto result = service_->worlds().get_agent_result(wid, "extraction_" + sid);
+        nlohmann::json candidates = nlohmann::json::array();
+        if (result && result->contains("candidates") && (*result)["candidates"].is_array()) {
+            for (const auto& c : (*result)["candidates"]) {
+                nlohmann::json candidate;
+                if (c.contains("relation")) candidate["relation"] = c["relation"];
+                if (c.contains("status")) candidate["status"] = c["status"];
+                if (c.contains("evidence")) candidate["evidence"] = c["evidence"];
+                if (c.contains("change_summary")) candidate["change_summary"] = c["change_summary"];
+                candidates.push_back(candidate);
+            }
+        }
+        json_response(res, {{"ok", true}, {"candidates", candidates}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_search_agents(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        worldbuilding::AgentStore::SearchCriteria criteria;
+        criteria.q = req.has_param("q") ? req.get_param_value("q") : "";
+        criteria.identity = req.has_param("identity") ? req.get_param_value("identity") : "";
+        criteria.race = req.has_param("race") ? req.get_param_value("race") : "";
+        if (req.has_param("traits") && !req.get_param_value("traits").empty()) {
+            std::string traits_str = req.get_param_value("traits");
+            std::istringstream iss(traits_str);
+            std::string token;
+            while (std::getline(iss, token, ',')) {
+                if (!token.empty()) criteria.traits.push_back(token);
+            }
+        }
+        auto results = service_->agents().search_agents(wid, criteria);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& a : results) {
+            nlohmann::json agent_obj = {
+                {"id", a.id},
+                {"name", a.name},
+                {"display_name", a.display_name},
+                {"kind", worldbuilding::to_string(a.kind)}
+            };
+            arr.push_back(agent_obj);
+        }
+        json_response(res, {{"ok", true}, {"agents", arr}, {"total", results.size()}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_character_appearances(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent || agent->world_id != wid) {
+            error_response(res, "Character not found", 404, "agent_not_found");
+            return;
+        }
+        auto appearances = service_->narrative().find_character_appearances(wid, aid);
+        // Group scenes by chapter
+        std::map<std::string, nlohmann::json> chapter_map;
+        std::map<std::string, std::string> chapter_titles;
+        std::map<std::string, int> chapter_numbers;
+        for (const auto& ch : appearances.chapters) {
+            std::string ch_id = ch["id"];
+            chapter_titles[ch_id] = ch.value("title", "");
+            chapter_numbers[ch_id] = ch.value("scene_count", 0);
+            chapter_map[ch_id] = nlohmann::json::array();
+        }
+        for (const auto& sc : appearances.scenes) {
+            std::string ch_id = sc.value("chapter_id", "");
+            // C++17: use find() instead of contains()
+            if (chapter_map.find(ch_id) != chapter_map.end()) {
+                chapter_map[ch_id].push_back({
+                    {"scene_id", sc["id"]},
+                    {"scene_title", sc["title"]}
+                });
+            }
+        }
+        nlohmann::json chapter_list = nlohmann::json::array();
+        for (auto& kv : chapter_map) {
+            const auto& ch_id = kv.first;
+            chapter_list.push_back({
+                {"chapter_id", ch_id},
+                {"chapter_title", chapter_titles[ch_id]},
+                {"chapter_number", chapter_numbers[ch_id]},
+                {"scenes", kv.second}
+            });
+        }
+        json_response(res, {{"ok", true}, {"character_id", aid}, {"appearances", chapter_list}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_pipeline_retreat(const httplib::Request& req, httplib::Response& res) {
+    std::string world_id = req.matches[1];
+    if (!pipeline_mgr_) {
+        res.status = 503;
+        res.set_content(R"({"error":"pipeline_not_available"})", "application/json");
+        return;
+    }
+
+    nlohmann::json body;
+    try {
+        body = nlohmann::json::parse(req.body);
+    } catch (...) {
+        error_response(res, "Invalid JSON body", 400, "invalid_json");
+        return;
+    }
+
+    if (!body.contains("to_phase") || !body["to_phase"].is_string()) {
+        error_response(res, "Missing required field: to_phase", 400, "missing_field");
+        return;
+    }
+
+    std::string to_phase = body["to_phase"];
+    auto phase_opt = worldbuilding::creative_phase_from_string(to_phase);
+    if (!phase_opt) {
+        error_response(res, "Invalid to_phase: " + to_phase, 400, "invalid_phase");
+        return;
+    }
+    pipeline_mgr_->retreat_to_phase(world_id, to_phase);
+
+    // Return state JSON matching pipeline/state handler format
+    auto data = pipeline_mgr_->get_view_data(world_id);
+    const auto* wf = pipeline_mgr_->get_workflow(data.active_workflow_name);
+    const auto* phase_def = wf ? wf->get_phase(data.state.current_phase) : nullptr;
+
+    nlohmann::json response;
+    response["ok"] = true;
+
+    nlohmann::json state;
+    state["phase"] = worldbuilding::to_string(data.state.current_phase);
+    state["label"] = phase_def ? phase_def->label : "";
+    state["active_workflow"] = data.active_workflow_name;
+
+    nlohmann::json conds = nlohmann::json::array();
+    for (auto& r : data.current_conditions.results) {
+        nlohmann::json cj;
+        cj["name"] = r.message;
+        cj["met"] = r.met;
+        if (r.current) cj["current"] = *r.current;
+        if (r.target) cj["target"] = *r.target;
+        conds.push_back(cj);
+    }
+    state["conditions"] = conds;
+    state["all_conditions_met"] = data.current_conditions.all_met;
+
+    auto next_phases = worldbuilding::allowed_next_phases(data.state.current_phase);
+    nlohmann::json next_arr = nlohmann::json::array();
+    for (auto& np : next_phases) next_arr.push_back(worldbuilding::to_string(np));
+    state["next_allowed"] = next_arr;
+    state["allowed_retreat"] = phase_def ? nlohmann::json(phase_def->allowed_retreat) : nlohmann::json::array();
+
+    nlohmann::json history = nlohmann::json::array();
+    for (auto& h : data.recent_history) {
+        nlohmann::json hj;
+        hj["id"] = h.id;
+        hj["from"] = worldbuilding::to_string(h.from_phase);
+        hj["to"] = worldbuilding::to_string(h.to_phase);
+        hj["trigger"] = h.trigger;
+        hj["timestamp"] = h.timestamp;
+        history.push_back(hj);
+    }
+    state["recent_history"] = history;
+
+    response["state"] = state;
+
+    json_response(res, response);
+}
+
+void WorldbuildingHttpHandler::handle_pipeline_clear_error(const httplib::Request& req, httplib::Response& res) {
+    std::string world_id = req.matches[1];
+    if (!pipeline_mgr_) {
+        res.status = 503;
+        res.set_content(R"({"error":"pipeline_not_available"})", "application/json");
+        return;
+    }
+
+    try {
+        pipeline_mgr_->clear_last_error(world_id);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, std::string("Failed to clear error: ") + e.what(), 500, "clear_error_failed");
+    }
+}
+
+// --- Knowledge Graph handlers ---
+
+void WorldbuildingHttpHandler::handle_kg_entities(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        auto* kg = service_->kg_provider();
+        if (!kg) {
+            res.status = 503;
+            res.set_content(R"({"ok":false,"error":{"code":"kg_unavailable","message":"Knowledge Graph not available","retryable":false}})", "application/json");
+            return;
+        }
+
+        auto entities = kg->list_entities(wid);
+
+        // Optional type filter
+        std::optional<merak::kg::EntityType> type_filter;
+        if (req.has_param("type")) {
+            type_filter = merak::kg::entity_type_from_string(req.get_param_value("type"));
+        }
+
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& e : entities) {
+            if (type_filter && e.type != *type_filter) continue;
+            arr.push_back({
+                {"id", e.source_id},
+                {"name", e.name},
+                {"type", merak::kg::to_string(e.type)}
+            });
+        }
+
+        json_response(res, {{"ok", true}, {"entities", arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_kg_entity_relations(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string eid = req.matches[2];
+
+        auto* kg = service_->kg_provider();
+        if (!kg) {
+            res.status = 503;
+            res.set_content(R"({"ok":false,"error":{"code":"kg_unavailable","message":"Knowledge Graph not available","retryable":false}})", "application/json");
+            return;
+        }
+
+        // Find the entity by source_id
+        auto entities = kg->list_entities(wid);
+        const merak::kg::GraphEntity* found = nullptr;
+        for (const auto& e : entities) {
+            if (e.source_id == eid) {
+                found = &e;
+                break;
+            }
+        }
+
+        if (!found) {
+            error_response(res, "Entity not found", 404, "entity_not_found");
+            return;
+        }
+
+        // Query subgraph for this entity's relations
+        auto subgraph = kg->query_subgraph(wid, {found->name}, merak::kg::QueryFilters{});
+
+        nlohmann::json rel_arr = nlohmann::json::array();
+        for (const auto& rel : subgraph.relations) {
+            // Determine which side is the target (the other entity)
+            bool is_source = (rel.source_name == found->name);
+            std::string target_id = is_source ? rel.target_id : rel.source_id;
+            std::string target_name = is_source ? rel.target_name : rel.source_name;
+            std::string target_type = is_source
+                ? merak::kg::to_string(rel.target_type)
+                : merak::kg::to_string(rel.source_type);
+
+            rel_arr.push_back({
+                {"relation_type", rel.kind_en},
+                {"target_id", target_id},
+                {"target_name", target_name},
+                {"target_type", target_type}
+            });
+        }
+
+        nlohmann::json entity_obj = {
+            {"id", found->source_id},
+            {"name", found->name}
+        };
+
+        json_response(res, {{"ok", true}, {"entity", entity_obj}, {"relations", rel_arr}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_kg_search(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+
+        // Require 'q' query parameter
+        if (!req.has_param("q") || req.get_param_value("q").empty()) {
+            error_response(res, "Missing required query parameter: q", 400, "missing_param");
+            return;
+        }
+        std::string query = req.get_param_value("q");
+
+        auto* kg = service_->kg_provider();
+        if (!kg) {
+            res.status = 503;
+            res.set_content(R"({"ok":false,"error":{"code":"kg_unavailable","message":"Knowledge Graph not available","retryable":false}})", "application/json");
+            return;
+        }
+
+        // Optional type filter
+        std::optional<merak::kg::EntityType> type_filter;
+        if (req.has_param("type")) {
+            type_filter = merak::kg::entity_type_from_string(req.get_param_value("type"));
+        }
+
+        auto entities = kg->list_entities(wid);
+
+        // Case-insensitive substring helper
+        auto icontains = [](const std::string& haystack, const std::string& needle) -> bool {
+            if (needle.empty()) return true;
+            auto it = std::search(
+                haystack.begin(), haystack.end(),
+                needle.begin(), needle.end(),
+                [](unsigned char a, unsigned char b) {
+                    return std::tolower(a) == std::tolower(b);
+                });
+            return it != haystack.end();
+        };
+
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& e : entities) {
+            if (type_filter && e.type != *type_filter) continue;
+            if (!icontains(e.name, query)) continue;
+            arr.push_back({
+                {"id", e.source_id},
+                {"name", e.name},
+                {"type", merak::kg::to_string(e.type)}
+            });
+        }
+
+        json_response(res, {{"ok", true}, {"results", arr}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }

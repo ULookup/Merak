@@ -233,6 +233,21 @@ nlohmann::json timeline_event_json(const TimelineEvent& event) {
                           {"related_scene_ids", event.related_scene_ids}};
 }
 
+
+TimelineEvent timeline_event_from_json(const nlohmann::json& json) {
+    TimelineEvent event;
+    event.id = json.at("id").get<std::string>();
+    event.world_time = json.at("world_time").get<std::string>();
+    event.description = json.value("description", "");
+    event.recorded_by = json.value("recorded_by", "");
+    if (json.contains("affected_character_ids") && json["affected_character_ids"].is_array()) {
+        event.affected_character_ids = json["affected_character_ids"].get<std::vector<std::string>>();
+    }
+    if (json.contains("related_scene_ids") && json["related_scene_ids"].is_array()) {
+        event.related_scene_ids = json["related_scene_ids"].get<std::vector<std::string>>();
+    }
+    return event;
+}
 std::string first_line_summary(const std::string& markdown) {
     std::istringstream input(markdown);
     std::string line;
@@ -551,6 +566,36 @@ NarrativeStore::record_timeline_event(const std::string& world_id,
 TimelineEvent NarrativeStore::advance_time(const std::string& world_id,
                                            TimelineEvent event) {
     return record_timeline_event(world_id, std::move(event));
+}
+
+std::vector<TimelineEvent>
+NarrativeStore::list_timeline_events(const std::string& world_id) const {
+    ensure_world_exists(worlds_, world_id);
+    auto path = worlds_.world_path(world_id) / "timeline.json";
+    if (!std::filesystem::exists(path)) {
+        return {};
+    }
+    auto timeline = read_json(path);
+    if (!timeline.contains("events") || !timeline["events"].is_array()) {
+        return {};
+    }
+    std::vector<TimelineEvent> out;
+    for (const auto& j : timeline["events"]) {
+        out.push_back(timeline_event_from_json(j));
+    }
+    return out;
+}
+
+std::optional<TimelineEvent>
+NarrativeStore::get_timeline_event(const std::string& world_id,
+                                    const std::string& event_id) const {
+    auto events = list_timeline_events(world_id);
+    for (const auto& e : events) {
+        if (e.id == event_id) {
+            return e;
+        }
+    }
+    return std::nullopt;
 }
 
 std::vector<std::string>

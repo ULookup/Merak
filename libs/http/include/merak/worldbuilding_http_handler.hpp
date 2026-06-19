@@ -5,8 +5,14 @@
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <merak/storage/image_service.hpp>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <unordered_map>
 
 namespace merak {
 
@@ -17,6 +23,7 @@ public:
     explicit WorldbuildingHttpHandler(
         std::shared_ptr<worldbuilding::WorldbuildingService> service,
         std::shared_ptr<RuntimeService> runtime = nullptr);
+    ~WorldbuildingHttpHandler();
 
     void install_routes(httplib::Server& server);
     void set_pipeline_manager(std::shared_ptr<worldbuilding::PipelineManager> mgr);
@@ -37,6 +44,7 @@ private:
 
     // Agent
     void handle_list_agents(const httplib::Request&, httplib::Response&);
+    void handle_search_agents(const httplib::Request&, httplib::Response&);
     void handle_create_agent(const httplib::Request&, httplib::Response&);
     void handle_get_agent(const httplib::Request&, httplib::Response&);
     void handle_delete_agent(const httplib::Request&, httplib::Response&);
@@ -57,6 +65,11 @@ private:
     // Time
     void handle_time_now(const httplib::Request&, httplib::Response&);
     void handle_time_advance(const httplib::Request&, httplib::Response&);
+
+    // Timeline
+    void handle_timeline_list(const httplib::Request&, httplib::Response&);
+    void handle_timeline_event_get(const httplib::Request&, httplib::Response&);
+    void handle_timeline_advance(const httplib::Request&, httplib::Response&);
 
     // Foreshadowing
     void handle_foreshadow_list(const httplib::Request&, httplib::Response&);
@@ -79,6 +92,10 @@ private:
     void handle_create_knowledge(const httplib::Request&, httplib::Response&);
     void handle_update_knowledge(const httplib::Request&, httplib::Response&);
     void handle_delete_knowledge(const httplib::Request&, httplib::Response&);
+
+    // Pipeline
+    void handle_pipeline_retreat(const httplib::Request&, httplib::Response&);
+    void handle_pipeline_clear_error(const httplib::Request&, httplib::Response&);
 
     // Factions
     void handle_list_factions(const httplib::Request&, httplib::Response&);
@@ -103,6 +120,56 @@ private:
     void handle_get_pending_creation(const httplib::Request&, httplib::Response&);
     void handle_resolve_creation(const httplib::Request&, httplib::Response&);
 
+    // Agent-driven generation infrastructure
+    struct PendingAgentRun {
+        std::string world_id;
+        std::string operation_type;
+    };
+    void start_agent_run(const httplib::Request& req, httplib::Response& res,
+                         const std::string& world_id, const std::string& task_description,
+                         const std::string& operation_type);
+    void capture_agent_result(const std::string& run_id);
+
+    // Agent-driven: suggestions
+    void handle_start_suggestions(const httplib::Request&, httplib::Response&);
+    void handle_get_suggestions(const httplib::Request&, httplib::Response&);
+
+    // Agent-driven: consistency check
+    void handle_start_consistency_check(const httplib::Request&, httplib::Response&);
+    void handle_get_consistency_check(const httplib::Request&, httplib::Response&);
+
+    // Agent-driven: generate scenes
+    void handle_start_generate_scenes(const httplib::Request&, httplib::Response&);
+    void handle_get_generated_scenes(const httplib::Request&, httplib::Response&);
+    void handle_apply_generated_scenes(const httplib::Request&, httplib::Response&);
+
+    // Agent-driven: generate outline
+    void handle_start_generate_outline(const httplib::Request&, httplib::Response&);
+    void handle_get_generated_outline(const httplib::Request&, httplib::Response&);
+    void handle_apply_generated_outline(const httplib::Request&, httplib::Response&);
+
+    // Agent-driven: scene rewrite
+    void handle_start_rewrite_scene(const httplib::Request&, httplib::Response&);
+
+    // Character appearances
+    void handle_character_appearances(const httplib::Request&, httplib::Response&);
+    void handle_get_rewrite_result(const httplib::Request&, httplib::Response&);
+
+    // KG extraction result
+    void handle_scene_extraction_result(const httplib::Request&, httplib::Response&);
+
+    std::unordered_map<std::string, PendingAgentRun> pending_agent_runs_;
+    mutable std::mutex pending_runs_mutex_;
+
+    // Background poller for capturing agent results on run completion
+    void start_result_poller();
+    void stop_result_poller();
+    std::thread result_poller_;
+    std::atomic<bool> poller_stop_{false};
+    std::atomic<bool> poller_started_{false};
+    std::condition_variable poller_started_cv_;
+    std::mutex poller_started_mutex_;
+
     // Agent prompt
     void handle_load_agent_prompt(const httplib::Request&, httplib::Response&);
 
@@ -110,13 +177,25 @@ private:
     void handle_patch_agent(const httplib::Request&, httplib::Response&);
     void handle_agent_diary_list(const httplib::Request&, httplib::Response&);
     void handle_agent_diary_add(const httplib::Request&, httplib::Response&);
+    void handle_agent_diary_get(const httplib::Request&, httplib::Response&);
+    void handle_agent_diary_patch(const httplib::Request&, httplib::Response&);
+    void handle_agent_diary_search(const httplib::Request&, httplib::Response&);
     void handle_agent_relations(const httplib::Request&, httplib::Response&);
+    void handle_agent_relation_upsert(const httplib::Request&, httplib::Response&);
+    void handle_agent_relation_update(const httplib::Request&, httplib::Response&);
+    void handle_agent_voice(const httplib::Request&, httplib::Response&);
+
+    // Memory summaries
+    void handle_memory_summaries_list(const httplib::Request&, httplib::Response&);
+    void handle_memory_summary_get(const httplib::Request&, httplib::Response&);
 
     // Chapter review
     void handle_chapter_review(const httplib::Request&, httplib::Response&);
 
-    // Export
+    // Export & Import
     void handle_export_chapters(const httplib::Request&, httplib::Response&);
+    void handle_export_full(const httplib::Request&, httplib::Response&);
+    void handle_import_snapshot(const httplib::Request&, httplib::Response&);
 
     // PATCH routes for narrative entities
     void handle_patch_scene(const httplib::Request&, httplib::Response&);
@@ -138,6 +217,11 @@ private:
     void handle_chunked_status(const httplib::Request&, httplib::Response&);
     void handle_complete_chunked(const httplib::Request&, httplib::Response&);
     void handle_cancel_chunked(const httplib::Request&, httplib::Response&);
+
+    // Knowledge Graph
+    void handle_kg_entities(const httplib::Request&, httplib::Response&);
+    void handle_kg_entity_relations(const httplib::Request&, httplib::Response&);
+    void handle_kg_search(const httplib::Request&, httplib::Response&);
 };
 
 } // namespace merak
