@@ -220,7 +220,7 @@ git commit -m "feat(webui): add typed worldbuilding APIs"
 - Test: `webui/src/__tests__/sse-workflows.test.tsx`
 
 **Interfaces:**
-- Produces: `runtimeApi.respondToAsk(runId: string, response: string)`, `pendingAsk`, `pendingCreation`, `RESOLVE_ASK`, `RESOLVE_CREATION` actions.
+- Produces: `runtimeApi.respondToAsk(runId: string, callId: string, response: string)`, `pendingAsk`, `pendingCreation`, and identifier-bearing `RESOLVE_ASK` / `RESOLVE_CREATION` actions.
 - Consumes: existing `resolveCreation(id, decision, modifications?)` behavior.
 
 - [ ] **Step 1: Add reducer tests for SSE lifecycle and deduplication**
@@ -242,11 +242,11 @@ Expected: FAIL because pending workflow state and dialogs do not exist.
 - [ ] **Step 3: Implement typed SSE state and dialogs**
 
 ```ts
-export interface PendingAsk { runId: string; question: string; choices?: string[]; }
+export interface PendingAsk { runId: string; callId: string; question: string; choices?: string[]; multiSelect: boolean; }
 export interface PendingCreation { id: string; toolName: string; preview?: Record<string, unknown>; }
 ```
 
-Reject frames whose `seq` is nonzero and `seq <= state.lastSeq`. On submit, disable the dialog, call the real endpoint, clear state only on success, and show `formatApiError` on failure. Clear creation state on both `creation_resolved` and successful local resolution.
+Reject frames whose `seq` is nonzero and `seq <= state.lastSeq`. On submit, disable the dialog, call the real endpoint with the SSE `call_id`, clear only the same request identifier on success, and show `formatApiError` on failure. A `creation_resolved` frame clears state only when its matching `result.ok` is not false. Terminal run events clear matching pending ask/creation state. Multi-select requests support toggling multiple options and expose `aria-pressed`; dialogs trap focus while open and restore focus when closed.
 
 - [ ] **Step 4: Verify workflow tests and all reducer tests**
 
