@@ -14,7 +14,8 @@ class Compactor {
 public:
     Compactor(
         std::shared_ptr<LlmProvider> summary_llm,
-        std::shared_ptr<TokenCounter> counter
+        std::shared_ptr<TokenCounter> counter,
+        std::string model = ""
     );
 
     std::future<CompactionResult> compact(
@@ -34,6 +35,7 @@ public:
 private:
     std::shared_ptr<LlmProvider> summary_llm_;
     std::shared_ptr<TokenCounter> counter_;
+    std::string model_;
 
     std::string messages_to_text(const std::vector<Message>& messages) const;
 };

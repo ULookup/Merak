@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+#include <spdlog/spdlog.h>
+
 namespace merak::worldbuilding {
 namespace {
 
@@ -117,9 +119,9 @@ Foreshadowing detect_foreshadow_proposal(const std::string& markdown) {
             for (auto& p : weak_signals)
                 if (sentence.find(p) != std::string::npos) score += 1;
             // Questions suggest unresolved threads
-            if (sentence.find('？') != std::string::npos || sentence.find('?') != std::string::npos) score += 1;
+            if (sentence.find("？") != std::string::npos || sentence.find('?') != std::string::npos) score += 1;
             // Interrupted dialogue
-            if (sentence.find("——") != std::string::npos && sentence.find('？') == std::string::npos) score += 1;
+            if (sentence.find("——") != std::string::npos && sentence.find("？") == std::string::npos) score += 1;
 
             if (score > best_score) {
                 best_score = score;
@@ -308,25 +310,26 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
             prompt << it->context_snippet << "\n";
         }
 
-        // Recent diary entries (full content)
+        // Recent diary memory (index + summaries)
         try {
-            auto diaries = agents_.recent_diary(pid, service.diary_context_limit());
-            if (!diaries.empty()) {
-                prompt << "\n## 你的近期记忆\n";
+            auto diary_headers = agents_.recent_diary_headers(pid, service.diary_context_limit());
 
-                // Memory summaries first (compressed long-term memory)
-                auto summaries = agents_.recent_summaries(pid, 10);
-                if (!summaries.empty()) {
-                    prompt << "\n### 记忆摘要\n";
-                    for (const auto& s : summaries) {
-                        prompt << s.summary << "\n\n";
-                    }
+            // Memory summaries first (compressed long-term memory)
+            auto summaries = agents_.recent_summaries(pid, 10);
+            if (!summaries.empty()) {
+                prompt << "\n## 你的记忆摘要\n";
+                for (const auto& s : summaries) {
+                    prompt << "- " << s.period_start << " ~ " << s.period_end << ": "
+                           << s.summary.substr(0, 150) << "\n";
                 }
+            }
 
-                // Recent full diary entries
-                prompt << "\n### 最近经历\n";
-                for (const auto& d : diaries) {
-                    prompt << "- [" << d.world_time << "] " << d.content << "\n";
+            // Diary index (preview headers)
+            if (!diary_headers.empty()) {
+                prompt << "\n## 你的日记索引 (使用 read_diary_entry 查看全文)\n";
+                for (const auto& d : diary_headers) {
+                    prompt << "- [" << d.world_time << "] " << d.mood << " | "
+                           << d.content << "  (id=" << d.id << ")\n";
                     view.loaded_memory_refs.push_back(d.id);
                 }
             }
@@ -488,6 +491,21 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
     wrap.chapter_foreshadow_stats =
         foreshadowing_.chapter_summary(world_id, scene.chapter_id);
 
+    // 自动记忆压缩
+    for (const auto& pid : scene.participant_ids) {
+        try {
+            int count = agents_.uncompressed_diary_count(pid);
+            if (count >= compression_trigger_threshold_) {
+                auto result = compact_agent_diaries(pid).get();
+                if (result.compressed) {
+                    wrap.compressed_memories.push_back(result.summary_id);
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::warn("auto-compression failed for agent {}: {}", pid, e.what());
+        }
+    }
+
     return wrap;
 }
 
@@ -552,6 +570,85 @@ SceneOrchestrator::route_direct_message(const std::string& world_id,
     }
 
     return view;
+}
+
+std::future<DiaryCompactionResult> SceneOrchestrator::compact_agent_diaries(const std::string& agent_id) {
+    return std::async(std::launch::async, [this, agent_id]() -> DiaryCompactionResult {
+        DiaryCompactionResult result;
+        result.compressed = false;
+
+        if (!compaction_llm_) {
+            spdlog::warn("compact_agent_diaries: compaction_llm_ not set, skipping");
+            return result;
+        }
+
+        auto diaries = agents_.uncompressed_diaries(agent_id, 20);
+        if ((int)diaries.size() < compression_trigger_threshold_) {
+            return result;
+        }
+
+        std::ostringstream prompt;
+        prompt << "你是一个记忆管理助手。将以下" << diaries.size()
+               << "条角色日记压缩为一份记忆摘要。\n\n";
+        for (const auto& d : diaries) {
+            prompt << "--- [" << d.world_time << "] 心情: " << d.mood << " ---\n";
+            prompt << d.content << "\n\n";
+        }
+        prompt << "请以JSON格式输出摘要：\n"
+               << R"({"summary":"以第三人称概述这段时间内角色的经历、情感变化、关系发展和重要发现，300字以内",)"
+               << R"("key_events":["事件1","事件2"],)"
+               << R"("emotional_arc":"从起始心情到结束心情的情感轨迹",)"
+               << R"("relationship_changes":"关系变化概述，无变化则写'无明显变化'"})";
+
+        ChatRequest req;
+        req.model = compaction_model_.empty() ? "gpt-4o-mini" : compaction_model_;
+        req.max_output_tokens = 1024;
+        req.messages = {{"user", prompt.str()}};
+        req.tools = {};
+        req.enable_cache = false;
+
+        auto llm_future = compaction_llm_->chat(req, [](StreamChunk){}, nullptr);
+        auto llm_response = llm_future.get();
+
+        if (token_counter_) {
+            int prompt_tokens = token_counter_->count(prompt.str());
+            int response_tokens = token_counter_->count(llm_response.text);
+            spdlog::info("compact_agent_diaries for {}: {} diaries, prompt={} tokens, response={} tokens",
+                agent_id, diaries.size(), prompt_tokens, response_tokens);
+        }
+
+        try {
+            auto summary_json = nlohmann::json::parse(llm_response.text);
+
+            MemorySummary summary;
+            summary.id = make_id("summary");
+            summary.agent_id = agent_id;
+            summary.summary = summary_json.value("summary", llm_response.text);
+            summary.period_start = diaries.front().world_time;
+            summary.period_end = diaries.back().world_time;
+            summary.created_at = now_iso_utc();
+            for (const auto& d : diaries) summary.source_diary_ids.push_back(d.id);
+
+            agents_.write_memory_summary(summary);
+            result.summary_id = summary.id;
+            result.compressed = true;
+        } catch (...) {
+            MemorySummary summary;
+            summary.id = make_id("summary");
+            summary.agent_id = agent_id;
+            summary.summary = llm_response.text;
+            summary.period_start = diaries.front().world_time;
+            summary.period_end = diaries.back().world_time;
+            summary.created_at = now_iso_utc();
+            for (const auto& d : diaries) summary.source_diary_ids.push_back(d.id);
+
+            agents_.write_memory_summary(summary);
+            result.summary_id = summary.id;
+            result.compressed = true;
+        }
+
+        return result;
+    });
 }
 
 } // namespace merak::worldbuilding

@@ -116,7 +116,7 @@ std::future<ToolResult> DescribeCharacterTool::execute(ToolCall call, ToolExecut
 ToolSpec SearchMyDiaryTool::spec() const {
     ToolSpec s;
     s.name = "search_my_diary";
-    s.description = R"(Search your own diary entries by keyword. Returns up to 5 matching entries with scene_name, world_time, and a content snippet (max 100 chars). Query must be at least 2 characters. Example: search_my_diary(童年))";
+    s.description = R"(Search your own diary entries by keyword. Returns up to 10 matching entries with scene_name, world_time, diary_id, and a content snippet (max 100 chars). Query must be at least 2 characters. Example: search_my_diary(童年))";
     s.source = "builtin";
     s.parameters_json = R"({
         "type": "object",
@@ -157,7 +157,7 @@ std::future<ToolResult> SearchMyDiaryTool::execute(ToolCall call, ToolExecutionC
 
             auto& svc = *static_cast<SearchMyDiaryTool&>(*self).svc_;
 
-            auto entries = svc.agents().search_diary(exec_ctx.caller_agent_id, query, 5);
+            auto entries = svc.agents().search_diary(exec_ctx.caller_agent_id, query, 10);
             if (entries.empty()) {
                 result.output = error_response(ToolErrorCode::EMPTY_RESULT,
                     "在你的日记中没有找到与 '" + query + "' 相关的内容。尝试更宽泛的词语。");
@@ -167,6 +167,7 @@ std::future<ToolResult> SearchMyDiaryTool::execute(ToolCall call, ToolExecutionC
             json arr = json::array();
             for (auto& e : entries) {
                 arr.push_back({
+                    {"diary_id", e.id},
                     {"scene_name", e.scene_id},
                     {"world_time", e.world_time},
                     {"content_snippet", make_snippet(e.content, 100)}
@@ -178,6 +179,165 @@ std::future<ToolResult> SearchMyDiaryTool::execute(ToolCall call, ToolExecutionC
             result.is_error = true;
             result.output = error_response(ToolErrorCode::INTERNAL,
                 std::string("search_my_diary 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
+// ========== ReadDiaryEntryTool ==========
+
+ToolSpec ReadDiaryEntryTool::spec() const {
+    ToolSpec s;
+    s.name = "read_diary_entry";
+    s.description = R"(Read the full content of a specific diary entry by its diary_id. Use this when you see an interesting entry in the diary index and want to read the full details. Example: read_diary_entry(diary_id="diary_abc123"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "diary_id": {"type": "string", "description": "Diary entry ID from the diary index"}
+        },
+        "required": ["diary_id"]
+    })";
+    return s;
+}
+
+ToolMeta ReadDiaryEntryTool::meta() const {
+    ToolMeta m;
+    m.name = "read_diary_entry";
+    m.description = "Read the full content of a specific diary entry";
+    m.triggers = {"diary", "memory", "read diary", "review"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> ReadDiaryEntryTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = nlohmann::json::parse(call.arguments);
+            std::string diary_id = args.value("diary_id", "");
+
+            if (diary_id.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT, "缺少必填字段：diary_id。");
+                return result;
+            }
+
+            auto& svc = *static_cast<ReadDiaryEntryTool&>(*self).svc_;
+            auto entry = svc.agents().get_diary(diary_id);
+
+            if (!entry.has_value()) {
+                result.output = error_response(ToolErrorCode::NOT_FOUND, "未找到日记条目: " + diary_id);
+                return result;
+            }
+
+            nlohmann::json data{
+                {"diary_id", entry->id},
+                {"scene_id", entry->scene_id},
+                {"world_time", entry->world_time},
+                {"mood", entry->mood},
+                {"content", entry->content},
+                {"created_at", entry->created_at}
+            };
+            result.output = ok_response(data);
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("read_diary_entry 内部错误: ") + e.what());
+        }
+        return result;
+    });
+}
+
+// ========== BrowseDiaryRangeTool ==========
+
+ToolSpec BrowseDiaryRangeTool::spec() const {
+    ToolSpec s;
+    s.name = "browse_diary_range";
+    s.description = R"(Browse diary entries within a world-time date range. Returns a preview list with diary_id, date, and snippet. The from_date and to_date should use world time format like '第3日晨' or '第5日晚'. Example: browse_diary_range(from_date="第1日", to_date="第3日"))";
+    s.source = "builtin";
+    s.parameters_json = R"({
+        "type": "object",
+        "properties": {
+            "from_date": {"type": "string", "description": "Start date in world time format, e.g. '第3日晨'"},
+            "to_date": {"type": "string", "description": "End date in world time format, e.g. '第5日晚'"},
+            "limit": {"type": "integer", "description": "Max entries to return", "default": 10}
+        },
+        "required": ["from_date", "to_date"]
+    })";
+    return s;
+}
+
+ToolMeta BrowseDiaryRangeTool::meta() const {
+    ToolMeta m;
+    m.name = "browse_diary_range";
+    m.description = "Browse diary entries within a date range";
+    m.triggers = {"diary", "memory", "browse", "timeline"};
+    m.pinned = false;
+    m.intents = {IntentType::DomainRead};
+    m.scope = Scope::Local;
+    m.schema_tokens = 25;
+    return m;
+}
+
+std::future<ToolResult> BrowseDiaryRangeTool::execute(ToolCall call, ToolExecutionContext exec_ctx) {
+    return std::async(std::launch::async, [self = this->clone(), call = std::move(call), exec_ctx = std::move(exec_ctx)]() -> ToolResult {
+        ToolResult result;
+        result.call_id = call.id;
+
+        try {
+            auto args = nlohmann::json::parse(call.arguments);
+            std::string from_str = args.value("from_date", "");
+            std::string to_str = args.value("to_date", "");
+            int limit = args.value("limit", 10);
+
+            if (from_str.empty() || to_str.empty()) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "缺少必填字段：from_date 和 to_date。");
+                return result;
+            }
+
+            auto from = WorldTime::parse(from_str);
+            auto to = WorldTime::parse(to_str);
+            if (!from || !to) {
+                result.output = error_response(ToolErrorCode::INVALID_ARGUMENT,
+                    "日期格式无效。格式示例：'第3日晨', '第5日晚'");
+                return result;
+            }
+
+            auto& svc = *static_cast<BrowseDiaryRangeTool&>(*self).svc_;
+            const auto& agent_id = exec_ctx.caller_agent_id;
+            auto all_entries = svc.agents().recent_diary_headers(agent_id, 100);
+
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& e : all_entries) {
+                auto entry_time = WorldTime::parse(e.world_time);
+                if (entry_time && *from <= *entry_time && *entry_time <= *to) {
+                    arr.push_back({
+                        {"diary_id", e.id},
+                        {"world_time", e.world_time},
+                        {"mood", e.mood},
+                        {"content_preview", e.content}
+                    });
+                    if ((int)arr.size() >= limit) break;
+                }
+            }
+
+            if (arr.empty()) {
+                result.output = error_response(ToolErrorCode::EMPTY_RESULT,
+                    "在指定范围内没有找到日记。");
+                return result;
+            }
+
+            result.output = ok_response({{"entries", arr}, {"count", arr.size()}});
+        } catch (const std::exception& e) {
+            result.is_error = true;
+            result.output = error_response(ToolErrorCode::INTERNAL,
+                std::string("browse_diary_range 内部错误: ") + e.what());
         }
         return result;
     });
@@ -2179,6 +2339,74 @@ ToolSpec WriteMyDiaryTool::spec() const {
     return s;
 }
 
+// ========== Information Boundary Filter ==========
+
+namespace {
+
+struct BoundaryResult {
+    bool passed = true;
+    std::string reason;
+};
+
+BoundaryResult check_information_boundary(
+    const ToolExecutionContext& exec_ctx,
+    const std::string& content,
+    const std::optional<Scene>& scene_opt,
+    WorldbuildingService& svc,
+    const std::vector<LeakRisk>& risks)
+{
+    BoundaryResult result;
+    const auto& agent_id = exec_ctx.caller_agent_id;
+
+    // Rule 1: Scene participation check
+    if (scene_opt.has_value()) {
+        bool is_participant = std::find(
+            scene_opt->participant_ids.begin(),
+            scene_opt->participant_ids.end(),
+            agent_id) != scene_opt->participant_ids.end();
+        if (!is_participant) {
+            result.passed = false;
+            result.reason = "你未参与此场景，无法为其写日记。";
+            return result;
+        }
+    }
+
+    // Rule 2: Knowledge scope check
+    if (scene_opt.has_value()) {
+        auto knowledge = svc.secrets().scene_asymmetry(exec_ctx.world_id, *scene_opt);
+        auto it = std::find_if(knowledge.begin(), knowledge.end(),
+            [&](const auto& kv) { return kv.character_id == agent_id; });
+        if (it != knowledge.end()) {
+            std::set<std::string> unknown_holders;
+            for (const auto& secret : it->unknown_secrets) {
+                unknown_holders.insert(secret.holder_id);
+            }
+            for (const auto& holder_id : unknown_holders) {
+                auto holder = svc.agents().get_agent(holder_id);
+                if (holder && content.find(holder->name) != std::string::npos) {
+                    result.passed = false;
+                    result.reason = "日记内容提及了 '" + holder->name
+                        + "'，但你的角色不应知道与其相关的秘密。";
+                    return result;
+                }
+            }
+        }
+    }
+
+    // Rule 3: Secret leak check (risks pre-computed by caller)
+    for (const auto& risk : risks) {
+        if (risk.character_id == agent_id) {
+            result.passed = false;
+            result.reason = "日记内容包含你不应知晓的信息: " + risk.reason;
+            return result;
+        }
+    }
+
+    return result;
+}
+
+} // anonymous namespace
+
 ToolMeta WriteMyDiaryTool::meta() const {
     ToolMeta m;
     m.name = "write_my_diary";
@@ -2235,12 +2463,28 @@ std::future<ToolResult> WriteMyDiaryTool::execute(ToolCall call, ToolExecutionCo
             auto scene_opt = svc.narrative().get_scene(exec_ctx.world_id, scene_id);
             if (scene_opt) world_time = scene_opt->world_time;
 
+            // Compute leak risks once; used by both boundary check and leak_risk_level
+            std::vector<LeakRisk> risks;
+            if (scene_opt) {
+                risks = svc.secrets().check_leak_risk(exec_ctx.world_id, *scene_opt, content);
+            }
+
+            // 信息边界检查
+            {
+                auto boundary = check_information_boundary(exec_ctx, content, scene_opt, svc, risks);
+                if (!boundary.passed) {
+                    result.is_error = true;
+                    result.output = nlohmann::json{
+                        {"ok", false},
+                        {"error", {{"code", "INFORMATION_BOUNDARY_VIOLATION"}, {"message", boundary.reason}}}
+                    }.dump();
+                    return result;
+                }
+            }
+
             // Check leak risk based on the diary content (spec step 2)
             int leak_risk_level = 0;
-            if (scene_opt) {
-                auto risks = svc.secrets().check_leak_risk(exec_ctx.world_id, *scene_opt, content);
-                if (!risks.empty()) leak_risk_level = 1;
-            }
+            if (!risks.empty()) leak_risk_level = 1;
 
             DiaryEntry entry;
             entry.id = make_id("diary");
@@ -2354,6 +2598,7 @@ std::future<ToolResult> CompressMyMemoryTool::execute(ToolCall call, ToolExecuti
             auto summary_json = nlohmann::json::parse(llm_response.text);
 
             MemorySummary summary;
+            summary.id = make_id("summary");
             summary.agent_id = agent_id;
             summary.summary = summary_json.value("summary", llm_response.text);
             summary.period_start = diaries.front().world_time;
@@ -3213,6 +3458,8 @@ WorldbuildingTools::create_tools(AgentKind kind) const {
         tools.push_back(std::make_unique<LookAroundTool>(*service_));
         tools.push_back(std::make_unique<WriteMyDiaryTool>(*service_));
         tools.push_back(std::make_unique<CompressMyMemoryTool>(*service_, llm_, compression_threshold_, diary_model_));
+        tools.push_back(std::make_unique<ReadDiaryEntryTool>(*service_));
+        tools.push_back(std::make_unique<BrowseDiaryRangeTool>(*service_));
         break;
     case AgentKind::MapManager:
         tools.push_back(std::make_unique<QueryMapTool>(*service_));

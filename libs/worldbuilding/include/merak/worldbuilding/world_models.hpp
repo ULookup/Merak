@@ -132,7 +132,7 @@ inline std::optional<WorldTime> WorldTime::parse(const std::string& input) {
     }
 
     // Chinese named format: 第X日[晨/昼/午/晚/夜] or X日[晨/昼/午/晚/夜]
-    size_t day_pos = input.find('日');
+    size_t day_pos = input.find("日");
     if (day_pos != std::string::npos) {
         // Extract day number
         size_t num_start = 0;

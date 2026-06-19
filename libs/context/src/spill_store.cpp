@@ -1,4 +1,5 @@
 #include <merak/spill_store.hpp>
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <functional>

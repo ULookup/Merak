@@ -93,6 +93,38 @@ private:
     WorldbuildingService* svc_;
 };
 
+class ReadDiaryEntryTool : public Tool {
+public:
+    ReadDiaryEntryTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
+    ToolSpec spec() const override;
+    ToolMeta meta() const override;
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<ReadDiaryEntryTool>(*svc_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return true; }
+private:
+    WorldbuildingService* svc_;
+};
+
+class BrowseDiaryRangeTool : public Tool {
+public:
+    BrowseDiaryRangeTool(WorldbuildingService& svc)
+        : svc_(&svc) {}
+    ToolSpec spec() const override;
+    ToolMeta meta() const override;
+    PermissionLevel permission() const override { return PermissionLevel::safe; }
+    std::future<ToolResult> execute(ToolCall call, ToolExecutionContext exec_ctx = {}) override;
+    std::unique_ptr<Tool> clone() const override {
+        return std::make_unique<BrowseDiaryRangeTool>(*svc_);
+    }
+    bool is_concurrent_safe(const ToolCall&) const override { return true; }
+private:
+    WorldbuildingService* svc_;
+};
+
 class LookAroundTool : public Tool {
 public:
     LookAroundTool(WorldbuildingService& svc)
