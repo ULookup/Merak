@@ -196,6 +196,15 @@ struct Scene {
     std::optional<std::string> section_id, location_id;
     std::vector<std::string> participant_ids;
     SceneStatus status = SceneStatus::Draft;
+    std::optional<std::string> pov_character_id;
+    std::string plot_goal;
+    std::string emotional_goal;
+    std::string information_goal;
+    std::string external_conflict;
+    std::string internal_conflict;
+    std::optional<std::string> hidden_conflict;
+    std::vector<std::string> foreshadowing_ids;
+    nlohmann::json style_overrides = nlohmann::json::object();
 };
 
 struct TimelineEvent {
@@ -219,6 +228,13 @@ struct Secret {
         related_foreshadowing_ids;
     nlohmann::json believed_truths = nlohmann::json::object();
     SecretStatus status = SecretStatus::Active;
+};
+
+struct Faction {
+    std::string id, world_id, name, description, goals;
+    std::vector<std::string> member_agent_ids;
+    std::vector<std::string> rival_faction_ids;
+    std::string created_at, updated_at;
 };
 
 struct CharacterCard {
@@ -432,5 +448,23 @@ struct ExtractionResult {
 };
 
 enum class ExtractionConfirmAction { Approve, Reject, Edit, KeepExisting };
+
+inline void to_json(nlohmann::json& j, const Faction& f) {
+    j = {
+        {"id", f.id}, {"world_id", f.world_id}, {"name", f.name},
+        {"description", f.description}, {"goals", f.goals},
+        {"member_agent_ids", f.member_agent_ids},
+        {"rival_faction_ids", f.rival_faction_ids},
+        {"created_at", f.created_at}, {"updated_at", f.updated_at}
+    };
+}
+
+inline void from_json(const nlohmann::json& j, Faction& f) {
+    j.at("name").get_to(f.name);
+    f.description = j.value("description", "");
+    f.goals = j.value("goals", "");
+    if (j.contains("member_agent_ids")) j.at("member_agent_ids").get_to(f.member_agent_ids);
+    if (j.contains("rival_faction_ids")) j.at("rival_faction_ids").get_to(f.rival_faction_ids);
+}
 
 } // namespace merak::worldbuilding
