@@ -1,3 +1,5 @@
+import { ApiError, apiUrl, fallbackRequest, request, requestBlob, requestForm } from './http';
+import { runtimeApi } from './runtime';
 import type {
   AdvanceWorldTimeResponse,
   AgentDetailResponse,
@@ -55,209 +57,7 @@ import type {
   WorldTimeResponse,
 } from './types';
 
-let apiBase = import.meta.env.VITE_API_BASE ?? '';
-
-export function setApiBase(base: string) {
-  apiBase = base.replace(/\/$/, '');
-}
-
-export function getApiBase() {
-  return apiBase;
-}
-
-export function apiUrl(path: string) {
-  if (/^https?:\/\//i.test(path)) return path;
-  return `${apiBase}${path.startsWith('/') ? path : `/${path}`}`;
-}
-
-export class ApiError extends Error {
-  status: number;
-  code?: string;
-  constructor(message: string, status: number, code?: string) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.code = code;
-  }
-}
-
-export function formatApiError(
-  error: unknown,
-  fallback = '操作失败，请稍后重试。',
-  t?: (key: string) => string,
-) {
-  if (error instanceof ApiError) {
-    if (t && error.code) {
-      const key = `error.${error.code}`;
-      const translated = t(key);
-      if (translated !== key) return translated;
-    }
-    switch (error.code) {
-      case 'version_conflict':
-        return '内容已在后端更新，请刷新后再保存。';
-      case 'file_conflict':
-        return '文件已被其他操作修改，请刷新后再保存。';
-      case 'session_not_found':
-        return '会话不存在，可能已被删除或归档。';
-      case 'session_busy':
-        return '会话正在进行中，请等待当前操作完成后再发送消息。';
-      case 'run_not_found':
-        return '运行记录不存在。';
-      case 'approval_not_found':
-        return '审批请求不存在或已过期。';
-      case 'invalid_request':
-        return error.message || '请求格式有误，请检查输入。';
-      case 'invalid_path':
-        return '文件路径不在允许的范围内。';
-      case 'file_not_found':
-        return '文件不存在或已被删除。';
-      case 'unsupported_file_type':
-        return '不支持该文件类型。';
-
-      // World
-      case 'world_not_found':
-        return '世界不存在或已被删除。';
-      case 'world_create_failed':
-        return '创建世界失败，请检查名称是否重复。';
-      case 'world_name_required':
-        return '世界名称不能为空。';
-
-      // Agent
-      case 'agent_not_found':
-        return '角色不存在或已被删除。';
-      case 'agent_create_failed':
-        return '创建角色失败，请检查必填字段。';
-      case 'agent_version_conflict':
-        return '角色信息已被其他操作更新，请刷新后再试。';
-
-      // Scene
-      case 'scene_not_found':
-        return '场景不存在或已被删除。';
-      case 'scene_create_failed':
-        return '创建场景失败，请确认章节存在。';
-      case 'scene_end_failed':
-        return '结束场景失败，场景可能已经结束。';
-      case 'scene_status_invalid':
-        return '场景当前状态不支持此操作。';
-
-      // Chapter
-      case 'chapter_not_found':
-        return '章节不存在或已被删除。';
-      case 'chapter_update_failed':
-        return '章节更新失败，请刷新后再试。';
-
-      // Diary
-      case 'information_boundary_leak':
-        return '日记内容包含角色不应知晓的信息，已被信息边界过滤。';
-      case 'diary_write_failed':
-        return '日记写入失败，请稍后重试。';
-
-      // Foreshadowing / Secret
-      case 'foreshadow_not_found':
-        return '伏笔不存在，可能已被删除。';
-      case 'foreshadowing_not_found':
-        return '伏笔不存在或已被删除。';
-      case 'secret_not_found':
-        return '秘密不存在或已被删除。';
-      case 'secret_status_invalid':
-        return '秘密当前状态不支持此操作。';
-
-      // Pipeline
-      case 'pipeline_not_available':
-        return '创作流水线暂不可用，请确认后端已启用 worldbuilding pipeline。';
-      case 'pipeline_advance_blocked':
-        return '阶段推进被阻止：当前阶段条件未全部满足。请先完成当前阶段的所有要求。';
-      case 'pipeline_phase_invalid':
-        return '目标阶段无效，请确认阶段名称正确。';
-      case 'workflow_not_found':
-        return '指定的 Pipeline 工作流不存在。';
-
-      // Image service
-      case 'image_service_not_available':
-        return '图片服务未启用，请确认后端 Image Service 已初始化。';
-      case 'image_upload_failed':
-        return '图片上传失败，请确认文件格式和大小符合要求。';
-      case 'invalid_image_type':
-        return '图片类型必须是头像或人设图。';
-      case 'image_not_found':
-        return '图片不存在或已被删除。';
-
-      // Config
-      case 'config_load_failed':
-        return '配置加载失败，请检查后端服务状态。';
-      case 'config_save_failed':
-        return '配置保存失败，请稍后重试。';
-      case 'title_generation_failed':
-        return '标题生成失败，请稍后重试。';
-      case 'test_failed':
-        return `连接测试失败：${error.message}`;
-      case 'test_unavailable':
-        return '连接测试暂不可用，请检查后端配置。';
-
-      // General
-      case 'missing_param':
-        return error.message || '缺少必要参数，请检查输入。';
-      case 'database_error':
-        return '数据库操作失败，请稍后重试。';
-
-      default:
-        return error.message || (t ? t('error.unknown') : fallback);
-    }
-  }
-  return error instanceof Error ? error.message : (t ? t('error.unknown') : fallback);
-}
-
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const opts: RequestInit = {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-  };
-  if (body !== undefined) {
-    opts.body = JSON.stringify(body);
-  }
-  const res = await fetch(apiUrl(path), opts);
-  return parseJsonResponse<T>(res);
-}
-
-async function parseJsonResponse<T>(res: Response): Promise<T> {
-  let json: unknown;
-  try {
-    json = await res.json();
-  } catch {
-    const text = await res.text().catch(() => '<unreadable>');
-    throw new Error(`Non-JSON response (${res.status}): ${text.slice(0, 200)}`);
-  }
-  if (res.status >= 400) {
-    const error = (
-      json as { error?: { message?: string; code?: string } | string; message?: string }
-    ).error;
-    const message =
-      typeof error === 'string'
-        ? error
-        : (error?.message ?? (json as { message?: string }).message ?? `HTTP ${res.status}`);
-    const code = typeof error === 'object' && error !== null ? error.code : undefined;
-    throw new ApiError(message, res.status, code);
-  }
-  return json as T;
-}
-
-async function requestForm<T>(path: string, body: FormData): Promise<T> {
-  const res = await fetch(apiUrl(path), { method: 'POST', body });
-  return parseJsonResponse<T>(res);
-}
-
-async function requestBlob<T>(method: string, path: string, body?: Blob): Promise<T> {
-  const res = await fetch(apiUrl(path), { method, body });
-  return parseJsonResponse<T>(res);
-}
-
-async function fallbackRequest<T>(path: string, fallback: T): Promise<T> {
-  try {
-    return await request<T>('GET', path);
-  } catch {
-    return fallback;
-  }
-}
+export { ApiError, apiUrl, formatApiError, getApiBase, setApiBase } from './http';
 
 const fallbackCapabilities: CapabilitiesResponse = {
   ok: true,
@@ -272,73 +72,10 @@ const fallbackCapabilities: CapabilitiesResponse = {
 };
 
 export const api = {
-  metadata: () => request<RuntimeMetadata>('GET', '/v1/runtime'),
+  ...runtimeApi,
 
   capabilities: () =>
     fallbackRequest<CapabilitiesResponse>('/api/webui/capabilities', fallbackCapabilities),
-
-  createSession: (title = '', worldId?: string, agentId?: string) => {
-    const body: Record<string, string> = { title };
-    if (worldId) body.world_id = worldId;
-    if (agentId) body.agent_id = agentId;
-    return request<CreateSessionResponse>('POST', '/v1/sessions', body);
-  },
-
-  archiveSession: (session: SessionSummary, archived: boolean) =>
-    request<ArchiveSessionResponse>('POST', `/v1/sessions/${session.id}/archive`, { archived }),
-
-  updateSession: (id: string, title: string) =>
-    request<UpdateSessionResponse>('PATCH', `/v1/sessions/${id}`, { title }),
-
-  generateTitle: (id: string) =>
-    request<GenerateTitleResponse>('POST', `/v1/sessions/${id}/generate-title`),
-
-  listSessions: (worldId?: string) => {
-    const query = worldId ? `?world_id=${encodeURIComponent(worldId)}` : '';
-    return request<SessionListResponse>('GET', `/v1/sessions${query}`);
-  },
-
-  getOrCreateAgentSession: (worldId: string, agentId: string) =>
-    request<{ session: SessionSummary; created: boolean }>(
-      'GET',
-      `/v1/worlds/${encodeURIComponent(worldId)}/agents/${encodeURIComponent(agentId)}/session`,
-    ),
-
-  getSession: (id: string) => request<SessionSummary>('GET', `/v1/sessions/${id}`),
-
-  getRun: (runId: string) => request<RunDetailResponse>('GET', `/v1/runs/${runId}`),
-
-  events: (id: string, after = 0) =>
-    request<{ events: unknown[] }>('GET', `/v1/sessions/${id}/events?after=${after}`),
-
-  memory: (id: string) =>
-    request<{ session_id: string; items: unknown[] }>('GET', `/v1/sessions/${id}/memory`),
-
-  startRun: (id: string, message: string, model = '') =>
-    request<StartRunResponse>('POST', `/v1/sessions/${id}/runs`, {
-      message,
-      ...(model ? { model } : {}),
-    }),
-
-  startDelegation: (
-    id: string,
-    pattern: string,
-    agents: string[],
-    task: string,
-    aggregation = 'all_results',
-  ) =>
-    request<{ delegation_id: string; parent_run_id: string; session_id: string }>(
-      'POST',
-      `/v1/sessions/${id}/delegations`,
-      { pattern, agents, task, aggregation },
-    ),
-
-  resolveApproval: (id: string, allow: boolean) =>
-    request<ApprovalResponse>('POST', `/v1/approvals/${id}`, {
-      decision: allow ? 'allow' : 'deny',
-    }),
-
-  cancelRun: (id: string) => request<CancelRunResponse>('POST', `/v1/runs/${id}/cancel`),
 
   listWorlds: () => request<WorldListResponse>('GET', '/api/worldbuilding/worlds'),
 
@@ -425,13 +162,11 @@ export const api = {
     ),
 
   saveWorkspaceFile: (path: string, content: string, version?: string) =>
-    request<SaveWorkspaceFileResponse>(
-      'PUT',
-      '/api/workspace/files/content',
-      { path, content, version },
-    ),
-
-  sseUrl: (id: string) => `${apiBase}/v1/sessions/${id}/events/stream`,
+    request<SaveWorkspaceFileResponse>('PUT', '/api/workspace/files/content', {
+      path,
+      content,
+      version,
+    }),
 
   getConfig: () => request<LlmConfigFull>('GET', '/api/config/llm'),
 
@@ -449,8 +184,7 @@ export const api = {
   testConfig: () => request<OkResponse>('POST', '/api/config/llm/test'),
 
   // Preferences
-  getPreferences: () =>
-    request<PreferencesResponse>('GET', '/api/config/preferences'),
+  getPreferences: () => request<PreferencesResponse>('GET', '/api/config/preferences'),
 
   savePreferences: (prefs: {
     default_genre?: string;
@@ -699,14 +433,6 @@ export const api = {
   // World detail
   getWorldDetail: (worldId: string) =>
     request<WorldDetailResponse>('GET', `/api/worldbuilding/worlds/${worldId}`),
-
-  // Creation resolution — wired for future SSE-driven creation approval flow
-  // The backend emits creation requests via SSE; the UI will call this to allow/deny with optional modifications.
-  resolveCreation: (id: string, decision: string, modifications?: Record<string, unknown>) =>
-    request<ResolveCreationResponse>('POST', `/v1/creations/${id}/resolve`, {
-      decision,
-      modifications,
-    }),
 };
 
 export async function getPipelineState(worldId: string): Promise<PipelineViewData> {

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { request } from '../api/http';
 
 describe('api client', () => {
   beforeEach(() => {
@@ -7,6 +8,21 @@ describe('api client', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it.each([
+    [
+      { error: { code: 'world_not_found', message: 'World not found', retryable: false } },
+      'world_not_found',
+    ],
+    [
+      { ok: false, error: { code: 'file_conflict', message: 'Conflict', retryable: true } },
+      'file_conflict',
+    ],
+    [{ error: 'session not found' }, undefined],
+  ])('normalizes documented error shapes', async (payload, code) => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(payload), { status: 409 }));
+    await expect(request('GET', '/failure')).rejects.toMatchObject({ status: 409, code });
   });
 
   it('metadata() calls GET /v1/runtime', async () => {
