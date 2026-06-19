@@ -192,9 +192,11 @@ TEST(WorldStore, CreateWorldCreatesAllDesignDirectoriesAndGodAgent) {
                                         "timeline.json"));
 
     auto agents = store.list_agents(world.id);
-    ASSERT_EQ(agents.size(), 1);
+    ASSERT_EQ(agents.size(), 2);
     EXPECT_EQ(agents[0].kind, AgentKind::God);
     EXPECT_EQ(agents[0].name, "god");
+    EXPECT_EQ(agents[1].kind, AgentKind::RelationManager);
+    EXPECT_EQ(agents[1].name, "relation_manager");
 }
 
 TEST(WorldStore, WorldsAreIsolated) {

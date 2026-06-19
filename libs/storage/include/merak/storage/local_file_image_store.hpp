@@ -12,7 +12,7 @@ public:
     LocalFileImageStore(std::string base_dir, std::string url_prefix);
 
     std::string save(const std::string& key, const ImageData& data) override;
-    ImageData load(const std::string& key) override;
+    ImageData load(const std::string& key) const override;
     void remove(const std::string& key) override;
     std::string public_url(const std::string& key) const override;
 

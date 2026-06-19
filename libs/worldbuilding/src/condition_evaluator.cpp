@@ -111,6 +111,13 @@ void ConditionEvaluator::register_all_builtins() {
         return eval_scene_completeness(cond, state, conn, worlds_base_dir_);
     };
 
+    // all_checks_passed is a compound type dispatched inside evaluate()
+    // (checks check_registry_ directly). Registered so list_condition_types()
+    // includes it; the function below is never actually called.
+    registry_["all_checks_passed"] = [](const ConditionDef&, const PipelineState&, pqxx::connection&) {
+        return ConditionResult{"all_checks_passed", true, std::nullopt, std::nullopt, {}};
+    };
+
     // ─── KG condition types ───
     registry_["kg_relation_count"] = [this](const ConditionDef& cond,
                                              const PipelineState& state,

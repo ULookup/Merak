@@ -18,7 +18,7 @@ public:
     virtual std::string save(const std::string& key, const ImageData& data) = 0;
 
     // Load image bytes by key
-    virtual ImageData load(const std::string& key) = 0;
+    virtual ImageData load(const std::string& key) const = 0;
 
     // Delete image by key
     virtual void remove(const std::string& key) = 0;
