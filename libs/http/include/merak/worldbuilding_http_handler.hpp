@@ -169,6 +169,9 @@ private:
     void handle_patch_agent(const httplib::Request&, httplib::Response&);
     void handle_agent_diary_list(const httplib::Request&, httplib::Response&);
     void handle_agent_diary_add(const httplib::Request&, httplib::Response&);
+    void handle_agent_diary_get(const httplib::Request&, httplib::Response&);
+    void handle_agent_diary_patch(const httplib::Request&, httplib::Response&);
+    void handle_agent_diary_search(const httplib::Request&, httplib::Response&);
     void handle_agent_relations(const httplib::Request&, httplib::Response&);
 
     // Chapter review

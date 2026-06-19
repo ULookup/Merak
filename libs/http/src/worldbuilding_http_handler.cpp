@@ -347,6 +347,12 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
         [this](const auto& req, auto& res) { handle_agent_diary_list(req, res); });
     server.Post(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries)",
         [this](const auto& req, auto& res) { handle_agent_diary_add(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries/search)",
+        [this](const auto& req, auto& res) { handle_agent_diary_search(req, res); });
+    server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries/([^/]+))",
+        [this](const auto& req, auto& res) { handle_agent_diary_get(req, res); });
+    server.Patch(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/diaries/([^/]+))",
+        [this](const auto& req, auto& res) { handle_agent_diary_patch(req, res); });
     server.Get(R"(/api/worldbuilding/([^/]+)/agents/([^/]+)/relations)",
         [this](const auto& req, auto& res) { handle_agent_relations(req, res); });
     server.Get(R"(/api/worldbuilding/agents/([^/]+)/prompt)",
@@ -1520,6 +1526,118 @@ void WorldbuildingHttpHandler::handle_agent_diary_add(const httplib::Request& re
         entry.world_time = body.value("world_time", "");
         service_->agents().append_diary_entry(std::move(entry));
         json_response(res, {{"ok", true}}, 201);
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_agent_diary_get(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        std::string did = req.matches[3];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto diary = service_->agents().get_diary(did);
+        if (!diary) {
+            error_response(res, "Diary not found", 404, "diary_not_found");
+            return;
+        }
+        json_response(res, {{"ok", true}, {"diary", {
+            {"id", diary->id},
+            {"agent_id", diary->agent_id},
+            {"scene_id", diary->scene_id},
+            {"world_time", diary->world_time},
+            {"content", diary->content},
+            {"mood", diary->mood},
+            {"status", diary->status},
+            {"leak_risk_level", diary->leak_risk_level},
+            {"tokens_used", diary->tokens_used},
+            {"created_at", diary->created_at}
+        }}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_agent_diary_patch(const httplib::Request& req, httplib::Response& res) {
+    std::string wid = req.matches[1];
+    std::string aid = req.matches[2];
+    std::string did = req.matches[3];
+    try {
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        auto diary = service_->agents().get_diary(did);
+        if (!diary) {
+            error_response(res, "Diary not found", 404, "diary_not_found");
+            return;
+        }
+        auto body = nlohmann::json::parse(req.body);
+        std::string content = body.value("content", diary->content);
+        std::string mood = body.value("mood", diary->mood);
+        int leak_risk_level = body.value("leak_risk_level", diary->leak_risk_level);
+        int tokens_used = body.value("tokens_used", diary->tokens_used);
+        service_->agents().update_diary_content(did, content, mood, leak_risk_level, tokens_used);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, e.what(), 400);
+    }
+}
+
+void WorldbuildingHttpHandler::handle_agent_diary_search(const httplib::Request& req, httplib::Response& res) {
+    try {
+        std::string wid = req.matches[1];
+        std::string aid = req.matches[2];
+        auto agent = service_->agents().get_agent(aid);
+        if (!agent) {
+            error_response(res, "Agent not found", 404, "agent_not_found");
+            return;
+        }
+        if (agent->world_id != wid) {
+            error_response(res, "Agent not found in this world", 404, "agent_not_found");
+            return;
+        }
+        if (!req.has_param("q")) {
+            error_response(res, "Missing required query parameter: q", 400, "missing_param");
+            return;
+        }
+        std::string q = req.get_param_value("q");
+        int limit = 20;
+        if (req.has_param("limit")) {
+            try {
+                limit = std::stoi(req.get_param_value("limit"));
+            } catch (...) {
+                error_response(res, "Invalid limit parameter", 400);
+                return;
+            }
+        }
+        auto diaries = service_->agents().search_diary(aid, q, limit);
+        nlohmann::json arr = nlohmann::json::array();
+        for (auto& d : diaries) {
+            arr.push_back({
+                {"id", d.id},
+                {"agent_id", d.agent_id},
+                {"scene_id", d.scene_id},
+                {"content", d.content},
+                {"world_time", d.world_time},
+                {"created_at", d.created_at}
+            });
+        }
+        json_response(res, {{"ok", true}, {"diaries", arr}, {"total", diaries.size()}});
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
