@@ -185,7 +185,7 @@ export default function SettingsPage() {
       <div className={styles.header}>
         <button
           className={styles.backBtn}
-          onClick={() => dispatch({ type: 'SET_PAGE', page: 'workbench' })}
+          onClick={() => dispatch({ type: 'SET_PAGE', page: 'overview' })}
         >
           <ArrowLeft size={15} aria-hidden="true" strokeWidth={2.3} />
           返回工作台

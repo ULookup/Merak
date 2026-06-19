@@ -20,9 +20,21 @@ import type {
   WorldAgent,
   WorldSummary,
 } from './api/types';
+import { readStoredDesktopPage } from './shell/navigation';
 
 export type InspectorTab = 'story' | 'files' | 'agents' | 'run' | 'creation';
-export type AppPage = 'workbench' | 'settings' | 'editor';
+export type AppPage =
+  | 'overview'
+  | 'sessions'
+  | 'world'
+  | 'characters'
+  | 'chapters'
+  | 'scenes'
+  | 'foreshadowing'
+  | 'secrets'
+  | 'files'
+  | 'settings'
+  | 'editor';
 export type WorldbuildingStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface GeneratedFileEntry {
@@ -113,7 +125,7 @@ export interface AppState {
 
 export const initialState: AppState = {
   appPhase: 'loading',
-  currentPage: 'workbench',
+  currentPage: 'overview',
   activeEditorChapterId: null,
   activeEditorChapterTitle: '',
   agentId: null,
@@ -1203,7 +1215,10 @@ const AppContext = createContext<{
 } | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState, (baseState) => ({
+    ...baseState,
+    currentPage: readStoredDesktopPage(),
+  }));
   return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>;
 }
 

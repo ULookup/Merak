@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { api } from './api/client';
 import styles from './App.module.css';
@@ -19,6 +19,7 @@ import WorldSidebar from './components/WorldSidebar';
 import DesktopBoot from './DesktopBoot';
 import { useSSE } from './hooks/useSSE';
 import { I18nProvider } from './i18n';
+import DesktopShell from './shell/DesktopShell';
 
 const HelpDrawer = lazy(() => import('./components/HelpDrawer'));
 const SetupWizard = lazy(() => import('./components/SetupWizard'));
@@ -219,9 +220,18 @@ function AppInner() {
 
   const connState = useSSE(sseUrl, dispatch, state.lastSeq);
 
+  const inDesktopShell = (children: ReactNode) => (
+    <DesktopShell
+      page={state.currentPage}
+      onNavigate={(page) => dispatch({ type: 'SET_PAGE', page })}
+    >
+      {children}
+    </DesktopShell>
+  );
+
   // Page-based rendering (overrides phase when navigating away from workbench)
   if (state.currentPage === 'settings') {
-    return <SettingsPage />;
+    return inDesktopShell(<SettingsPage />);
   }
 
   if (state.currentPage === 'editor' && state.activeEditorChapterId && state.worldId) {
@@ -230,7 +240,7 @@ function AppInner() {
         <div className={styles.editorHeader}>
           <button
             className={styles.editorBackBtn}
-            onClick={() => dispatch({ type: 'SET_PAGE', page: 'workbench' })}
+            onClick={() => dispatch({ type: 'SET_PAGE', page: 'overview' })}
           >
             <ArrowLeft size={15} aria-hidden="true" strokeWidth={2.3} />
             返回工作台
@@ -246,33 +256,33 @@ function AppInner() {
 
   // Phase-based rendering (workbench page)
   if (!bootstrapped || state.appPhase === 'loading') {
-    return <Skeleton />;
+    return inDesktopShell(<Skeleton />);
   }
 
   if (state.appPhase === 'no_world') {
-    return (
+    return inDesktopShell(
       <ToastProvider>
         <WorldOnboarding onOpenGuide={() => setHelpOpen(true)} />
         <Suspense>
           {helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}
         </Suspense>
-      </ToastProvider>
+      </ToastProvider>,
     );
   }
 
   if (state.appPhase === 'no_agent') {
-    return (
+    return inDesktopShell(
       <ToastProvider>
         <WorldDashboard onOpenGuide={() => setHelpOpen(true)} />
         <Suspense>
           {helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}
         </Suspense>
-      </ToastProvider>
+      </ToastProvider>,
     );
   }
 
   // appPhase === 'ready': three-column Workbench
-  return (
+  return inDesktopShell(
     <ToastProvider>
       <div className={styles.layout}>
         <ErrorBoundary>
@@ -353,7 +363,7 @@ function AppInner() {
           />
         )}
       </Suspense>
-    </ToastProvider>
+    </ToastProvider>,
   );
 }
 

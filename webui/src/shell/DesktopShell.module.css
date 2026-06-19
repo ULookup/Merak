@@ -1,0 +1,188 @@
+.shell {
+  --shell-navy: #082a78;
+  display: grid;
+  grid-template-columns: 244px minmax(0, 1fr);
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: #f7f9fc;
+  color: #101828;
+}
+
+.sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 18px;
+  border-right: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.brand {
+  height: 54px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+}
+
+.brand img {
+  width: 122px;
+  height: auto;
+}
+
+.worldCard,
+.search,
+.worldSelector {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #dce3ed;
+  border-radius: 7px;
+  background: #fff;
+  color: #17213b;
+}
+
+.worldCard {
+  min-height: 48px;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.worldCard span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search {
+  min-height: 36px;
+  padding: 0 10px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.search span {
+  flex: 1;
+}
+
+.search kbd {
+  padding: 2px 5px;
+  border: 1px solid #e3e8ef;
+  border-radius: 4px;
+  background: #f8fafc;
+  font: inherit;
+}
+
+.navigation {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 1px;
+}
+
+.navButton {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #263653;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.navButton:hover {
+  background: #f1f5fb;
+}
+
+.navButton[aria-current='page'] {
+  background: var(--shell-navy);
+  color: #fff;
+  font-weight: 700;
+}
+
+.stage {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 66px minmax(0, 1fr);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.worldSelector {
+  min-width: 190px;
+  height: 38px;
+  padding: 0 11px;
+}
+
+.worldSelector select {
+  min-width: 0;
+  flex: 1;
+  appearance: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+}
+
+.content {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Legacy phase views previously owned the viewport; the shell now owns it. */
+.content.content > * {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 960px) {
+  .shell {
+    grid-template-columns: 202px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    padding-inline: 10px;
+  }
+
+  .navButton {
+    font-size: 12px;
+  }
+}
