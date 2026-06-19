@@ -486,8 +486,8 @@ AgentStore::get_agent(const std::string& agent_id) const {
 }
 
 std::vector<AgentRecord>
-AgentStore::list_agents(const std::string& world_id) const {
-    return worlds_.list_agents(world_id);
+AgentStore::list_agents(const std::string& world_id, const std::optional<std::string>& kind) const {
+    return worlds_.list_agents(world_id, kind);
 }
 
 bool AgentStore::delete_agent(const std::string& agent_id) {

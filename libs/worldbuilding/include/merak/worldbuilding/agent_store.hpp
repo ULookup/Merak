@@ -29,7 +29,8 @@ public:
                              std::vector<std::string> member_agent_ids);
 
     std::optional<AgentRecord> get_agent(const std::string& agent_id) const;
-    std::vector<AgentRecord> list_agents(const std::string& world_id) const;
+    std::vector<AgentRecord> list_agents(const std::string& world_id,
+                                         const std::optional<std::string>& kind = std::nullopt) const;
     bool delete_agent(const std::string& agent_id);
 
     CharacterCard load_character_card(const std::string& agent_id) const;

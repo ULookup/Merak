@@ -756,7 +756,24 @@ void WorldbuildingHttpHandler::handle_list_agents(const httplib::Request& req, h
             error_response(res, "World not found", 404, "world_not_found");
             return;
         }
-        auto agents = service_->agents().list_agents(wid);
+        // Optional kind filter (individual, group, god, etc.)
+        std::optional<std::string> kind_filter;
+        if (req.has_param("kind") && !req.get_param_value("kind").empty()) {
+            kind_filter = req.get_param_value("kind");
+        }
+        auto agents = service_->agents().list_agents(wid, kind_filter);
+        // Optional faction filter: intersect with faction members
+        if (req.has_param("faction") && !req.get_param_value("faction").empty()) {
+            std::string faction_id = req.get_param_value("faction");
+            auto faction = service_->worlds().get_faction(wid, faction_id);
+            if (faction) {
+                std::set<std::string> member_set(faction->member_agent_ids.begin(),
+                                                  faction->member_agent_ids.end());
+                auto new_end = std::remove_if(agents.begin(), agents.end(),
+                    [&](const auto& a) { return member_set.find(a.id) == member_set.end(); });
+                agents.erase(new_end, agents.end());
+            }
+        }
         // Batch-fetch primary avatars to avoid N+1 queries
         std::unordered_map<std::string, ImageRecord> primary_avatars;
         if (image_service_) {
