@@ -1,21 +1,23 @@
 import { request } from './http';
 import type {
   FactionItem,
+  FactionListResponse,
   GraphEntity,
-  KnowledgeItem,
-  LocationItem,
+  GraphEntityListResponse,
+  KnowledgeListResponse,
+  LocationListResponse,
   OkResponse,
   ResourceListResponse,
-  TimelineEvent,
+  TimelineResponse,
 } from './types';
 
-type NamedListResponse<T> = ResourceListResponse<T> & Record<string, unknown>;
-
-function adaptList<T>(response: NamedListResponse<T>, key: string): ResourceListResponse<T> {
-  const namedItems = response[key];
+function adaptList<T, TResponse extends ResourceListResponse<T>>(
+  response: TResponse,
+  namedItems?: T[],
+): TResponse {
   return {
     ...response,
-    items: response.items ?? (Array.isArray(namedItems) ? (namedItems as T[]) : undefined),
+    items: response.items ?? namedItems,
   };
 }
 
@@ -31,36 +33,28 @@ export const worldbuildingApi = {
     ),
 
   listLocations: async (worldId: string) =>
-    adaptList<LocationItem>(
-      await request<NamedListResponse<LocationItem>>('GET', resourcePath(worldId, 'locations')),
-      'locations',
+    request<LocationListResponse>('GET', resourcePath(worldId, 'locations')).then((response) =>
+      adaptList(response, response.locations),
     ),
 
   listKnowledge: async (worldId: string) =>
-    adaptList<KnowledgeItem>(
-      await request<NamedListResponse<KnowledgeItem>>('GET', resourcePath(worldId, 'knowledge')),
-      'knowledge',
+    request<KnowledgeListResponse>('GET', resourcePath(worldId, 'knowledge')).then((response) =>
+      adaptList(response, response.knowledge),
     ),
 
   listFactions: async (worldId: string) =>
-    adaptList<FactionItem>(
-      await request<NamedListResponse<FactionItem>>('GET', resourcePath(worldId, 'factions')),
-      'factions',
+    request<FactionListResponse>('GET', resourcePath(worldId, 'factions')).then((response) =>
+      adaptList<FactionItem, FactionListResponse>(response, response.factions),
     ),
 
   getTimeline: async (worldId: string) =>
-    adaptList<TimelineEvent>(
-      await request<NamedListResponse<TimelineEvent>>('GET', resourcePath(worldId, 'timeline')),
-      'events',
+    request<TimelineResponse>('GET', resourcePath(worldId, 'timeline')).then((response) =>
+      adaptList(response, response.events),
     ),
 
   listGraphEntities: async (worldId: string) =>
-    adaptList<GraphEntity>(
-      await request<NamedListResponse<GraphEntity>>(
-        'GET',
-        resourcePath(worldId, 'knowledge-graph/entities'),
-      ),
-      'entities',
+    request<GraphEntityListResponse>('GET', resourcePath(worldId, 'knowledge-graph/entities')).then(
+      (response) => adaptList<GraphEntity, GraphEntityListResponse>(response, response.entities),
     ),
 
   reorderChapters: (worldId: string, chapterIds: string[]) =>

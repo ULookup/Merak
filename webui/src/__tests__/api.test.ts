@@ -256,4 +256,66 @@ describe('api client', () => {
       body: JSON.stringify({ target_type: 'chapter', target_id: 'c1' }),
     });
   });
+
+  it('preserves named resource arrays and truthful knowledge fields', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true, locations: [{ id: 'l1', name: 'Harbor' }] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            knowledge: [{ id: 'k1', category: 'history', content: 'Founded at dawn' }],
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const locations = await worldbuildingApi.listLocations('w1');
+    const knowledge = await worldbuildingApi.listKnowledge('w1');
+
+    expect(locations.locations?.[0].name).toBe('Harbor');
+    expect(locations.items).toEqual(locations.locations);
+    expect(knowledge.knowledge?.[0].category).toBe('history');
+    expect(knowledge.items).toEqual(knowledge.knowledge);
+  });
+
+  it('preserves timeline metadata with truthful event fields', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          current_time: { day: 2, period: 1, label: 'Day 2' },
+          events: [{ id: 'e1', world_time: 'Day 2', description: 'The gates opened' }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const timeline = await worldbuildingApi.getTimeline('w1');
+
+    expect(timeline.current_time.label).toBe('Day 2');
+    expect(timeline.events?.[0].description).toBe('The gates opened');
+    expect(timeline.items).toEqual(timeline.events);
+  });
+
+  it('preserves documented file-link target fields', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          files: [{ file_path: 'chapter.md', target_type: 'chapter', target_id: 'c1' }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const files = await filesApi.listWorldFiles('w1');
+
+    expect(files.files?.[0].target_type).toBe('chapter');
+    expect(files.items?.[0].target_id).toBe('c1');
+  });
 });

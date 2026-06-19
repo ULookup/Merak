@@ -723,8 +723,67 @@ export interface GraphEntity {
   name: string;
 }
 
-export interface WorldFileLink {
+export interface WorldFileLinkInput {
   file_path: string;
   entity_type?: string;
   entity_id?: string;
 }
+
+export type WorldFileLink = WorldFileLinkInput;
+
+export interface KnowledgeRecord {
+  id: string;
+  category: string;
+  content: string;
+  tags?: string[];
+  aliases?: string[];
+  related_ids?: string[];
+  created_at?: string;
+}
+
+export interface TimelineEventRecord {
+  id: string;
+  world_time: string;
+  description: string;
+  recorded_by?: string;
+  affected_character_ids?: string[];
+  related_scene_ids?: string[];
+}
+
+export interface WorldFileLinkRecord {
+  file_path: string;
+  target_type: string;
+  target_id: string;
+  created_at?: string;
+}
+
+export type LocationListResponse = ResourceListResponse<LocationItem> & {
+  locations?: LocationItem[];
+};
+
+export type KnowledgeListResponse = ResourceListResponse<KnowledgeRecord> & {
+  knowledge?: KnowledgeRecord[];
+};
+
+export type FactionListResponse = ResourceListResponse<FactionItem> & {
+  factions?: FactionItem[];
+};
+
+export interface TimelineCurrentTime {
+  day: number;
+  period: number;
+  label: string;
+}
+
+export type TimelineResponse = ResourceListResponse<TimelineEventRecord> & {
+  current_time: TimelineCurrentTime;
+  events?: TimelineEventRecord[];
+};
+
+export type GraphEntityListResponse = ResourceListResponse<GraphEntity> & {
+  entities?: GraphEntity[];
+};
+
+export type WorldFileListResponse = ResourceListResponse<WorldFileLinkRecord> & {
+  files?: WorldFileLinkRecord[];
+};
