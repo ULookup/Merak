@@ -970,6 +970,84 @@ void PipelineManager::clear_last_error(const std::string& world_id) {
     }
 }
 
+// ─── Pipeline Retreat ───
+void PipelineManager::retreat_to_phase(const std::string& world_id,
+                                        const std::string& to_phase) {
+    // 1. Parse target phase string
+    auto target = creative_phase_from_string(to_phase);
+    if (!target) {
+        spdlog::warn("PipelineManager: retreat_to_phase - invalid phase string: {}", to_phase);
+        return;
+    }
+
+    // 2. Load current state
+    auto state_opt = get_state(world_id);
+    if (!state_opt) {
+        spdlog::warn("PipelineManager: retreat_to_phase - no active state for world: {}",
+                     world_id);
+        return;
+    }
+
+    PipelineState state = *state_opt;
+    CreativePhase old_phase = state.current_phase;
+
+    if (*target == old_phase) {
+        spdlog::info("PipelineManager: retreat_to_phase - already at target phase {}",
+                     to_string(*target));
+        return;
+    }
+
+    // 3. Retreat current_phase to target phase
+    state.current_phase = *target;
+    state.last_updated = current_iso_timestamp();
+
+    // 4. Reset current_conditions stored in extra
+    state.extra["current_conditions"] = nlohmann::json::object();
+    state.extra["current_conditions"]["phase_key"] = to_phase;
+    state.extra["current_conditions"]["results"] = nlohmann::json::array();
+
+    // 5. Save state
+    save_state(state);
+
+    // 6. Create history record for this retreat
+    ConditionEvalSummary conditions;
+    conditions.phase_key = to_phase;
+
+    PhaseTransitionRecord record{
+        generate_uuid(),
+        world_id,
+        old_phase,
+        *target,
+        "manual_retreat",
+        std::string{"user_click"},
+        conditions,
+        current_iso_timestamp()
+    };
+
+    // 7. Persist history
+    record_transition(record);
+
+    // Emit SSE event for phase change
+    std::string wf_name;
+    {
+        std::shared_lock lock(world_mutex_);
+        auto it = worlds_.find(world_id);
+        if (it != worlds_.end()) {
+            wf_name = it->second.workflow_name;
+        }
+    }
+    const auto* wf = get_workflow(wf_name);
+    const auto* phase_def = wf ? wf->get_phase(*target) : nullptr;
+    if (deps_.event_emitter) {
+        AdvanceRequest dummy_req{world_id, *target, "manual_retreat",
+                                std::string{"user_click"}, false, false};
+        emit_phase_changed(state, phase_def, dummy_req);
+    }
+
+    spdlog::info("PipelineManager: world {} retreated from {} to {}",
+                 world_id, to_string(old_phase), to_string(*target));
+}
+
 // ─── Metrics ───
 PipelineManager::PipelineMetrics PipelineManager::get_metrics() const {
     PipelineMetrics m{};

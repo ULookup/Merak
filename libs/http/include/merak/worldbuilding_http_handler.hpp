@@ -88,6 +88,9 @@ private:
     void handle_update_knowledge(const httplib::Request&, httplib::Response&);
     void handle_delete_knowledge(const httplib::Request&, httplib::Response&);
 
+    // Pipeline
+    void handle_pipeline_retreat(const httplib::Request&, httplib::Response&);
+
     // Factions
     void handle_list_factions(const httplib::Request&, httplib::Response&);
     void handle_get_faction(const httplib::Request&, httplib::Response&);

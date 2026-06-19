@@ -719,6 +719,9 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
             }
             res.set_content(R"({"ok":true})", "application/json");
         });
+
+    server.Post(R"(/api/worldbuilding/([^/]+)/pipeline/retreat)",
+        [this](const auto& req, auto& res) { handle_pipeline_retreat(req, res); });
 }
 
 // --- World handlers ---
@@ -2842,6 +2845,61 @@ void WorldbuildingHttpHandler::handle_character_appearances(const httplib::Reque
     } catch (const std::exception& e) {
         error_response(res, e.what(), 400);
     }
+}
+
+void WorldbuildingHttpHandler::handle_pipeline_retreat(const httplib::Request& req, httplib::Response& res) {
+    std::string world_id = req.matches[1];
+    if (!pipeline_mgr_) {
+        res.status = 503;
+        res.set_content(R"({"error":"pipeline_not_available"})", "application/json");
+        return;
+    }
+
+    nlohmann::json body;
+    try {
+        body = nlohmann::json::parse(req.body);
+    } catch (...) {
+        error_response(res, "Invalid JSON body", 400, "invalid_json");
+        return;
+    }
+
+    if (!body.contains("to_phase") || !body["to_phase"].is_string()) {
+        error_response(res, "Missing required field: to_phase", 400, "missing_field");
+        return;
+    }
+
+    std::string to_phase = body["to_phase"];
+    pipeline_mgr_->retreat_to_phase(world_id, to_phase);
+
+    // Return state JSON matching pipeline/state handler format
+    auto data = pipeline_mgr_->get_view_data(world_id);
+    const auto* wf = pipeline_mgr_->get_workflow(data.active_workflow_name);
+    const auto* phase_def = wf ? wf->get_phase(data.state.current_phase) : nullptr;
+
+    nlohmann::json response;
+    response["phase"] = worldbuilding::to_string(data.state.current_phase);
+    response["label"] = phase_def ? phase_def->label : "";
+    response["active_workflow"] = data.active_workflow_name;
+
+    nlohmann::json conds = nlohmann::json::array();
+    for (auto& r : data.current_conditions.results) {
+        nlohmann::json cj;
+        cj["name"] = r.message;
+        cj["met"] = r.met;
+        if (r.current) cj["current"] = *r.current;
+        if (r.target) cj["target"] = *r.target;
+        conds.push_back(cj);
+    }
+    response["conditions"] = conds;
+    response["all_conditions_met"] = data.current_conditions.all_met;
+
+    auto next_phases = worldbuilding::allowed_next_phases(data.state.current_phase);
+    nlohmann::json next_arr = nlohmann::json::array();
+    for (auto& np : next_phases) next_arr.push_back(worldbuilding::to_string(np));
+    response["next_allowed"] = next_arr;
+    response["allowed_retreat"] = phase_def ? nlohmann::json(phase_def->allowed_retreat) : nlohmann::json::array();
+
+    json_response(res, response);
 }
 
 } // namespace merak
