@@ -48,42 +48,34 @@ void AgentLoop::transition_to(TurnState next, RunControl& control) {
     spdlog::debug("Loop: {} → {}", state_name(prev), state_name(next));
 }
 
-std::future<AgentResponse> AgentLoop::run(
+AgentResponse AgentLoop::run(
     const std::string& user_message,
     RunControl& control) {
-    return std::async(std::launch::async,
-        [this, user_message, &control]() -> AgentResponse {
 
-            Message user_msg;
-            user_msg.role = "user";
-            user_msg.content = user_message;
-            session_history_.push_back(user_msg);
-            memory_->append_message(user_msg);
-            control.append_message(user_msg);
+    Message user_msg;
+    user_msg.role = "user";
+    user_msg.content = user_message;
+    session_history_.push_back(user_msg);
+    memory_->append_message(user_msg);
+    control.append_message(user_msg);
 
-            tool_failure_streak_.clear();
-            turn_guard_.reset();
-            stall_detector_.reset();
-            consecutive_read_only_rounds_ = 0;
-            consecutive_world_query_rounds_ = 0;
-            consecutive_content_avoidance_ = 0;
+    tool_failure_streak_.clear();
+    turn_guard_.reset();
+    stall_detector_.reset();
+    consecutive_read_only_rounds_ = 0;
+    consecutive_world_query_rounds_ = 0;
+    consecutive_content_avoidance_ = 0;
+    last_compaction_text_.clear();
 
-            return run_loop(control);
-        });
+    return run_loop(control);
 }
 
-std::future<AgentResponse> AgentLoop::resume(RunControl& control) {
-    return std::async(std::launch::async,
-        [this, &control]() -> AgentResponse {
-            // Detector state is cleared on resume (fresh turn starts).
-            // Counter fields (consecutive_read_only_rounds_ etc.) are
-            // intentionally preserved — they track behavior across the
-            // full session, not per-run.
-            tool_failure_streak_.clear();
-            turn_guard_.reset();
-            stall_detector_.reset();
-            return run_loop(control);
-        });
+AgentResponse AgentLoop::resume(RunControl& control) {
+    tool_failure_streak_.clear();
+    turn_guard_.reset();
+    stall_detector_.reset();
+    last_compaction_text_.clear();
+    return run_loop(control);
 }
 
 AgentResponse AgentLoop::run_loop(RunControl& control) {
@@ -319,14 +311,28 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
             nlohmann::json ts;
             ts["state"] = state_name(state_);
             ts["turn_count"] = turn_count;
+
+            nlohmann::json pending = nlohmann::json::array();
+            for (auto& tc : accumulated_tool_calls) {
+                pending.push_back({
+                    {"id", tc.id},
+                    {"name", tc.name},
+                    {"arguments", tc.arguments}
+                });
+            }
+
+            nlohmann::json pipeline_snapshot;
+            pipeline_snapshot["turn"] = turn_count;
+            pipeline_snapshot["cache_hit_ratio"] = pipeline_->stats().cache_hit_ratio();
+
             control.save_checkpoint(
                 current_turn_,
                 ts.dump(),
                 llm_response.total_input_tokens,
                 llm_response.total_output_tokens,
-                "[]",
-                "",
-                "");
+                pending.dump(),
+                last_compaction_text_,
+                pipeline_snapshot.dump());
         }
 
         // Set total tool output chars after knowing actual results
@@ -653,6 +659,7 @@ void AgentLoop::maybe_compact(RunControl& control) {
         int keep_recent = config_.max_turns * 2;
         auto result = compactor_->compact_history(session_history_, keep_recent).get();
         if (!result.summary.empty()) {
+            last_compaction_text_ = result.summary;
             Message summary_msg;
             summary_msg.role = "system";
             summary_msg.content = "[Previous conversation summary]\n" + result.summary;
