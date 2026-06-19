@@ -906,16 +906,20 @@ NarrativeStore::find_character_appearances(const std::string& world_id,
         if (!scene_res.get(i, 2).empty()) chapter_ids.insert(scene_res.get(i, 2));
     }
     if (!chapter_ids.empty()) {
-        std::ostringstream id_list;
-        bool first = true;
+        std::vector<std::string> id_params;
+        std::string placeholders;
+        int n = 2; // $1 is world_id
         for (const auto& cid : chapter_ids) {
-            if (!first) id_list << ", ";
-            id_list << "'" << cid << "'";
-            first = false;
+            if (!placeholders.empty()) placeholders += ", ";
+            placeholders += "$" + std::to_string(n++);
+            id_params.push_back(cid);
         }
-        auto ch_res = conn.query(
+        std::string sql =
             "SELECT id, name, (SELECT COUNT(*) FROM scenes WHERE chapter_id = chapters.id) "
-            "FROM chapters WHERE id IN (" + id_list.str() + ") ORDER BY position");
+            "FROM chapters WHERE world_id = $1 AND id IN (" + placeholders + ") ORDER BY position";
+        std::vector<std::string> params = {world_id};
+        params.insert(params.end(), id_params.begin(), id_params.end());
+        auto ch_res = conn.query(sql, params);
         for (int i = 0; i < ch_res.ntuples(); i++) {
             nlohmann::json ch;
             ch["id"] = ch_res.get(i, 0);

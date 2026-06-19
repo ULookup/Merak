@@ -571,7 +571,7 @@ bool WorldStore::delete_knowledge(const std::string& world_id, const std::string
 
 Faction WorldStore::add_faction(const std::string& world_id, Faction faction) {
     initialize();
-    faction.id = make_id("faction");
+    if (faction.id.empty()) faction.id = make_id("faction");
     faction.world_id = world_id;
     faction.created_at = now_iso_utc();
     faction.updated_at = faction.created_at;
