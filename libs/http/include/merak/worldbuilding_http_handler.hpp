@@ -90,6 +90,7 @@ private:
 
     // Pipeline
     void handle_pipeline_retreat(const httplib::Request&, httplib::Response&);
+    void handle_pipeline_clear_error(const httplib::Request&, httplib::Response&);
 
     // Factions
     void handle_list_factions(const httplib::Request&, httplib::Response&);

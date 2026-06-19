@@ -722,6 +722,9 @@ void WorldbuildingHttpHandler::install_routes(httplib::Server& server) {
 
     server.Post(R"(/api/worldbuilding/([^/]+)/pipeline/retreat)",
         [this](const auto& req, auto& res) { handle_pipeline_retreat(req, res); });
+
+    server.Post(R"(/api/worldbuilding/([^/]+)/pipeline/clear-error)",
+        [this](const auto& req, auto& res) { handle_pipeline_clear_error(req, res); });
 }
 
 // --- World handlers ---
@@ -2922,6 +2925,22 @@ void WorldbuildingHttpHandler::handle_pipeline_retreat(const httplib::Request& r
     response["state"] = state;
 
     json_response(res, response);
+}
+
+void WorldbuildingHttpHandler::handle_pipeline_clear_error(const httplib::Request& req, httplib::Response& res) {
+    std::string world_id = req.matches[1];
+    if (!pipeline_mgr_) {
+        res.status = 503;
+        res.set_content(R"({"error":"pipeline_not_available"})", "application/json");
+        return;
+    }
+
+    try {
+        pipeline_mgr_->clear_last_error(world_id);
+        json_response(res, {{"ok", true}});
+    } catch (const std::exception& e) {
+        error_response(res, std::string("Failed to clear error: ") + e.what(), 500, "clear_error_failed");
+    }
 }
 
 } // namespace merak
