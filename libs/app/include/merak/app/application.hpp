@@ -28,6 +28,7 @@ class PortableNeo4j;
 class WorldbuildingHttpHandler;
 namespace kg { class KnowledgeGraphProvider; }
 namespace skills { class SkillRegistry; }
+struct AgentRunContext;
 }
 
 namespace merak::app {
@@ -80,8 +81,23 @@ private:
     void init_image_service();
 
     // Factory helpers
+
+    // Bundled dependencies for sub-agent execution (DI pattern, cf. PipelineManager::Dependencies)
+    struct SubRunDeps {
+        Config config;
+        std::shared_ptr<LlmProvider> llm;
+        std::shared_ptr<ToolRegistry> tools;
+        std::shared_ptr<MemoryStore> memory;
+        std::shared_ptr<Compactor> compactor;
+        std::shared_ptr<worldbuilding::WorldbuildingService> wb_service;
+        std::shared_ptr<skills::SkillRegistry> skill_registry;
+        std::shared_ptr<std::atomic<bool>> plan_mode;
+        std::shared_ptr<ContextAssembler> context_assembler;
+    };
+
     AgentLoop::Config make_loop_config(const std::string& model) const;
-    AgentResponse execute_sub_run(
+    static AgentResponse execute_sub_run(
+        const SubRunDeps& deps,
         const SubAgentConfig& agent, const std::string& task,
         RunControl& control, const AgentRunContext& context);
 

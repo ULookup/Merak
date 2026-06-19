@@ -57,14 +57,19 @@ public:
     // When not set (default), working_memory_text returns empty string.
     void set_working_memory_provider(std::function<std::string()> provider);
 
+    AgentLoop(const AgentLoop&) = delete;
+    AgentLoop& operator=(const AgentLoop&) = delete;
+    AgentLoop(AgentLoop&&) = delete;
+    AgentLoop& operator=(AgentLoop&&) = delete;
+
     // Process a user message. Appends user msg to session_history_,
     // then enters the ReAct loop. Returns final response.
-    std::future<AgentResponse> run(
+    AgentResponse run(
         const std::string& user_message,
         RunControl& control);
 
     // Resume the ReAct loop without appending a new user message.
-    std::future<AgentResponse> resume(RunControl& control);
+    AgentResponse resume(RunControl& control);
 
     TurnState current_state() const { return state_; }
     std::shared_ptr<ToolRegistry> tools() { return tools_; }
@@ -109,6 +114,9 @@ private:
     int consecutive_world_query_rounds_ = 0;
     int consecutive_content_avoidance_ = 0;
     int current_turn_ = 0;
+
+    // H2: last compaction summary text for checkpoint recovery
+    std::string last_compaction_text_;
 
     std::vector<std::string> restricted_tools_;
 

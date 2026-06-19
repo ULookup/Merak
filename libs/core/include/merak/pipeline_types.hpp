@@ -95,7 +95,7 @@ struct PlanInput {
   int model_max;
   int schema_count;
   double avg_schema_tokens;
-  std::function<void()> on_escalate;
+  std::function<void()> on_escalate = []{};
 };
 
 struct BoundContext {

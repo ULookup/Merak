@@ -19,6 +19,7 @@
 #include <merak/worldbuilding/condition_evaluator.hpp>
 #include <merak/worldbuilding/ids.hpp>
 #include <merak/skills/skill_registry.hpp>
+#include <merak/runtime_service.hpp>
 #include <merak/storage/image_service.hpp>
 #include <merak/storage/local_file_image_store.hpp>
 #include <merak/tool_registry.hpp>
@@ -341,50 +342,55 @@ void Application::init_skills() {
 // make_loop_config / execute_sub_run — factory helpers
 // ─────────────────────────────────────────────────────
 
-AgentLoop::Config Application::make_loop_config(const std::string& model) const {
+static AgentLoop::Config make_loop_config_impl(const std::string& model, const Config& config) {
     AgentLoop::Config c;
-    c.system_prompt     = config_.agent.system_prompt;
-    c.max_turns         = config_.agent.max_tool_turns;
-    c.default_model     = model.empty() ? config_.llm.default_model : model;
-    c.max_output_tokens = config_.llm.max_output_tokens;
+    c.system_prompt     = config.agent.system_prompt;
+    c.max_turns         = config.agent.max_tool_turns;
+    c.default_model     = model.empty() ? config.llm.default_model : model;
+    c.max_output_tokens = config.llm.max_output_tokens;
     return c;
 }
 
+AgentLoop::Config Application::make_loop_config(const std::string& model) const {
+    return make_loop_config_impl(model, config_);
+}
+
 AgentResponse Application::execute_sub_run(
+    const SubRunDeps& deps,
     const SubAgentConfig& agent, const std::string& task,
     RunControl& control, const AgentRunContext& context)
 {
     auto sub_tools = std::make_shared<ToolRegistry>();
-    sub_tools->set_permission_mode(config_.agent.permission_mode);
+    sub_tools->set_permission_mode(deps.config.agent.permission_mode);
 
     if (agent.tool_allowlist.empty()) {
-        for (auto& spec : tools_->all_tools()) {
-            if (auto* t = tools_->get_tool(spec.name))
+        for (auto& spec : deps.tools->all_tools()) {
+            if (auto* t = deps.tools->get_tool(spec.name))
                 sub_tools->register_tool(t->clone());
         }
     } else {
         for (auto& name : agent.tool_allowlist) {
-            if (auto* t = tools_->get_tool(name))
+            if (auto* t = deps.tools->get_tool(name))
                 sub_tools->register_tool(t->clone());
         }
     }
 
     auto counter = std::make_shared<TokenCounter>();
-    auto sub_compactor = std::make_shared<Compactor>(llm_, counter);
+    auto sub_compactor = std::make_shared<Compactor>(deps.llm, counter);
 
-    auto cfg = make_loop_config(agent.model);
+    auto cfg = make_loop_config_impl(agent.model, deps.config);
     cfg.system_prompt = agent.system_prompt.empty()
-        ? config_.agent.system_prompt : agent.system_prompt;
+        ? deps.config.agent.system_prompt : agent.system_prompt;
 
     auto loop = std::make_unique<AgentLoop>(
-        cfg, llm_, sub_tools, memory_, sub_compactor,
-        wb_service_, skill_registry_);
-    loop->set_plan_mode_source(plan_mode_);
+        cfg, deps.llm, sub_tools, deps.memory, sub_compactor,
+        deps.wb_service, deps.skill_registry);
+    loop->set_plan_mode_source(deps.plan_mode);
     if (!context.world_id.empty())      loop->set_active_world_id(context.world_id);
     if (!context.scene_id.empty())      loop->set_active_scene_id(context.scene_id);
     if (!context.caller_agent_id.empty()) loop->set_caller_agent_id(context.caller_agent_id);
 
-    return loop->run(task, control).get();
+    return loop->run(task, control);
 }
 
 // ─────────────────────────────────────────────────────
@@ -392,14 +398,25 @@ AgentResponse Application::execute_sub_run(
 // ─────────────────────────────────────────────────────
 
 void Application::init_runtime() {
-    // Sub-executor delegates to the canonical execute_sub_run method.
-    // Capturing 'this' is safe because tools_ (which stores AgentTool holding
-    // this lambda) is destroyed before Application members during destruction.
-    auto sub_executor = [this](const SubAgentConfig& agent, const std::string& task,
+    // Bundled dependencies for sub-agent execution.
+    // Captured by value — no [this], safe regardless of destruction order.
+    SubRunDeps deps{
+        config_,
+        llm_,
+        tools_,
+        memory_,
+        compactor_,
+        wb_service_,
+        skill_registry_,
+        plan_mode_,
+        context_assembler_
+    };
+
+    auto sub_executor = [deps](const SubAgentConfig& agent, const std::string& task,
                                 RunControl& control, const AgentRunContext& context)
         -> AgentResponse
     {
-        return execute_sub_run(agent, task, control, context);
+        return execute_sub_run(deps, agent, task, control, context);
     };
 
     // Register AgentTool before creating RuntimeService (SubExecutor is

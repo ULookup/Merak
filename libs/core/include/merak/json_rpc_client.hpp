@@ -47,6 +47,7 @@ private:
 
     std::atomic<int> next_id_{1};
     std::mutex io_mutex_;
+    std::mutex read_mutex_;  // serializes concurrent read_message calls
 };
 
 } // namespace merak
