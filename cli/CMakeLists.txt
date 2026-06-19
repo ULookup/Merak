@@ -151,7 +151,7 @@ target_include_directories(merak-cli PRIVATE src)
 
 add_executable(test_buffer tests/test_buffer.cpp)
 target_include_directories(test_buffer PRIVATE src)
-target_compile_features(test_buffer PRIVATE cxx_std_17)
+target_compile_features(test_buffer PRIVATE cxx_std_23)
 add_test(NAME test_buffer COMMAND test_buffer)
 
 add_executable(test_syntax tests/test_syntax.cpp)
@@ -160,13 +160,13 @@ target_include_directories(test_syntax PRIVATE
     src
     ${tree-sitter_SOURCE_DIR}/lib/include
 )
-target_compile_features(test_syntax PRIVATE cxx_std_17)
+target_compile_features(test_syntax PRIVATE cxx_std_23)
 add_test(NAME test_syntax COMMAND test_syntax)
 
 add_executable(test_persistence tests/test_persistence.cpp)
 target_link_libraries(test_persistence PRIVATE nlohmann_json::nlohmann_json)
 target_include_directories(test_persistence PRIVATE src)
-target_compile_features(test_persistence PRIVATE cxx_std_17)
+target_compile_features(test_persistence PRIVATE cxx_std_23)
 add_test(NAME test_persistence COMMAND test_persistence)
 
 install(TARGETS merak-cli RUNTIME DESTINATION bin)

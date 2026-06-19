@@ -1,7 +1,7 @@
-import { AlertTriangle, BookOpen, Clock3, Flag, GitBranch, KeyRound, Plus, Users } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AlertTriangle, BookOpen, ChevronRight, Clock3, Edit3, Flag, GitBranch, KeyRound, Plus, Users } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../api/client';
-import type { DiaryEntry, StoryScene, WorldDetail } from '../../api/types';
+import type { DiaryEntry, StoryChapter, StoryScene, WorldDetail } from '../../api/types';
 import { useAppState } from '../../AppState';
 import styles from '../InspectorPanel.module.css';
 import CreateForeshadowingModal from './CreateForeshadowingModal';
@@ -9,33 +9,37 @@ import CreateSceneModal from './CreateSceneModal';
 import CreateSecretModal from './CreateSecretModal';
 import EndSceneModal from './EndSceneModal';
 
-const MOOD_COLORS: Record<string, { bg: string; fg: string }> = {
-  '喜悦': { bg: '#dcfce7', fg: '#166534' },
-  '悲伤': { bg: '#dbeafe', fg: '#1e40af' },
-  '愤怒': { bg: '#fee2e2', fg: '#991b1b' },
-  '恐惧': { bg: '#fff7ed', fg: '#9a3412' },
-  '期待': { bg: '#f3e8ff', fg: '#6b21a8' },
-  '困惑': { bg: '#fef9c3', fg: '#854d0e' },
-  '决心': { bg: '#ccfbf1', fg: '#115e59' },
-  '平静': { bg: '#f3f4f6', fg: '#374151' },
-};
-
 type SceneWithNarrative = StoryScene & {
   narrative?: string;
   text?: string;
   content?: string;
 };
 
+const MOOD_COLORS: Record<string, { bg: string; fg: string }> = {
+  joy: { bg: '#dcfce7', fg: '#166534' },
+  sadness: { bg: '#dbeafe', fg: '#1e40af' },
+  anger: { bg: '#fee2e2', fg: '#991b1b' },
+  fear: { bg: '#fff7ed', fg: '#9a3412' },
+  anticipation: { bg: '#f3e8ff', fg: '#6b21a8' },
+  confusion: { bg: '#fef9c3', fg: '#854d0e' },
+  resolve: { bg: '#ccfbf1', fg: '#115e59' },
+  calm: { bg: '#f3f4f6', fg: '#374151' },
+};
+
 function moodStyle(mood: string): React.CSSProperties {
-  const c = MOOD_COLORS[mood];
-  if (c) return { background: c.bg, color: c.fg };
+  const color = MOOD_COLORS[mood.toLowerCase()];
+  if (color) return { background: color.bg, color: color.fg };
   return { background: '#f3f4f6', color: '#6b7280' };
+}
+
+function moodLabel(mood: string) {
+  return mood.replace(/_/g, ' ');
 }
 
 function leakBadge(level: number) {
   if (level === 0) return null;
   const color = level >= 2 ? '#dc2626' : '#d97706';
-  const label = level >= 2 ? `泄密高风险` : `泄密低风险`;
+  const label = level >= 2 ? 'High leak risk' : 'Low leak risk';
   return (
     <span
       style={{
@@ -58,6 +62,10 @@ function statusLabel(value: string | undefined) {
   return value ? value.replace(/_/g, ' ') : 'open';
 }
 
+function sceneNarrative(scene: SceneWithNarrative) {
+  return scene.narrative || scene.text || scene.content || 'No narrative content yet.';
+}
+
 export default function StoryInspector() {
   const { state, dispatch } = useAppState();
   const selectedWorld = state.worlds.find((world) => world.id === state.worldId);
@@ -70,15 +78,36 @@ export default function StoryInspector() {
   const [showCreateSecret, setShowCreateSecret] = useState(false);
   const [showCreateScene, setShowCreateScene] = useState(false);
   const [worldDetail, setWorldDetail] = useState<WorldDetail | null>(null);
+  const [chapters, setChapters] = useState<StoryChapter[]>([]);
+  const [chaptersLoading, setChaptersLoading] = useState(false);
+  const [newWorldTime, setNewWorldTime] = useState('');
+  const [advancingTime, setAdvancingTime] = useState(false);
 
   useEffect(() => {
-    if (!state.worldId) { setWorldDetail(null); return; }
+    if (!state.worldId) {
+      setWorldDetail(null);
+      return;
+    }
     api.getWorldDetail(state.worldId)
-      .then(res => setWorldDetail(res.world))
+      .then((res) => setWorldDetail(res.world))
       .catch(() => setWorldDetail(null));
   }, [state.worldId, state.storyVersion]);
 
-  // Find the first writing/draft scene
+  useEffect(() => {
+    if (!state.worldId) return;
+    let cancelled = false;
+    setChaptersLoading(true);
+    api.listChapters(state.worldId)
+      .then((res) => {
+        if (!cancelled) setChapters(res.chapters ?? []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setChaptersLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [state.worldId, state.storyVersion]);
+
   const activeScene = (() => {
     if (overview?.current_scene?.status === 'writing' || overview?.current_scene?.status === 'draft') {
       return overview.current_scene as SceneWithNarrative;
@@ -86,8 +115,12 @@ export default function StoryInspector() {
     return null;
   })();
 
-  const participantAgents = state.agents.filter((a) =>
-    activeScene?.participant_ids?.includes(a.id)
+  const participantAgents = state.agents.filter((agent) =>
+    activeScene?.participant_ids?.includes(agent.id),
+  );
+  const participantAgentIds = useMemo(
+    () => participantAgents.map((agent) => agent.id).join('|'),
+    [participantAgents],
   );
 
   const [participantDiaries, setParticipantDiaries] = useState<DiaryEntry[]>([]);
@@ -102,14 +135,17 @@ export default function StoryInspector() {
     setDiariesLoading(true);
     Promise.all(
       participantAgents.map((agent) =>
-        api.fetchDiaries(state.worldId!, agent.id).catch(() => ({ ok: true, diaries: [] as DiaryEntry[] }))
-      )
+        api.fetchDiaries(state.worldId!, agent.id).catch(() => ({
+          ok: true,
+          diaries: [] as DiaryEntry[],
+        })),
+      ),
     )
       .then((results) => {
         if (cancelled) return;
         const all: DiaryEntry[] = [];
-        for (const r of results) {
-          all.push(...(r.diaries ?? []));
+        for (const result of results) {
+          all.push(...(result.diaries ?? []));
         }
         all.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
         setParticipantDiaries(all.slice(0, 20));
@@ -118,8 +154,10 @@ export default function StoryInspector() {
       .finally(() => {
         if (!cancelled) setDiariesLoading(false);
       });
-    return () => { cancelled = true; };
-  }, [state.worldId, activeScene?.id, state.storyVersion]);
+    return () => {
+      cancelled = true;
+    };
+  }, [state.worldId, activeScene?.id, state.storyVersion, participantAgentIds]);
 
   function handleCreated() {
     dispatch({ type: 'SET_STORY_VERSION' });
@@ -127,85 +165,110 @@ export default function StoryInspector() {
 
   return (
     <>
+      {state.fallback.storyOverview && (
+        <div className={styles.notice}>Story overview is using WebUI preview data.</div>
+      )}
+
       <section className={styles.heroBlock}>
         <div className={styles.worldName}>{selectedWorld?.name ?? state.worldId}</div>
-        <p>{selectedWorld?.description || '还没有世界简介。'}</p>
+        <p>{selectedWorld?.description || 'No world description yet.'}</p>
         <div className={styles.storyStats}>
           <span>
             <Clock3 size={14} aria-hidden="true" />
-            {state.worldTime ?? '时间未设置'}
+            {state.worldTime ?? 'Time not set'}
           </span>
           <span>
             <Users size={14} aria-hidden="true" />
-            {worldDetail ? worldDetail.stats.agents : state.agents.length} 角色
+            {worldDetail ? worldDetail.stats.agents : state.agents.length} voices
           </span>
           <span>
             <GitBranch size={14} aria-hidden="true" />
-            {worldDetail ? worldDetail.stats.open_foreshadowing : state.foreshadowing.length} 伏笔
+            {worldDetail ? worldDetail.stats.open_foreshadowing : state.foreshadowing.length} threads
           </span>
         </div>
         {worldDetail && (
           <div className={styles.storyStats} style={{ marginTop: 8 }}>
             <span>
               <BookOpen size={14} aria-hidden="true" />
-              {worldDetail.stats.chapters} 章节
+              {worldDetail.stats.chapters} chapters
             </span>
             <span>
               <GitBranch size={14} aria-hidden="true" />
-              {worldDetail.stats.scenes} 场景
+              {worldDetail.stats.scenes} scenes
             </span>
             <span>
               <KeyRound size={14} aria-hidden="true" />
-              {worldDetail.stats.active_secrets} 秘密
+              {worldDetail.stats.active_secrets} secrets
             </span>
           </div>
         )}
-        <div className={styles.timeUnavailable}>
+        <div className={styles.timeAdvance}>
           <div>
-            <strong>世界时间控制</strong>
-            <span>{state.worldTime ? `当前：${state.worldTime}` : '时间未设置'}</span>
+            <strong>世界时间</strong>
+            <span>{state.worldTime ? `当前：${state.worldTime}` : '时间未设定'}</span>
           </div>
-          <button className={styles.ghostButton} disabled title="后端暂未实现 /time/advance">
-            <Clock3 size={14} aria-hidden="true" />
-            后端暂未支持
-          </button>
+          <div className={styles.timeAdvanceRow}>
+            <input
+              className={styles.timeInput}
+              type="text"
+              value={newWorldTime}
+              onChange={(e) => setNewWorldTime(e.target.value)}
+              placeholder="例如：第三章·清晨"
+              disabled={advancingTime}
+            />
+            <button
+              className={styles.ghostButton}
+              disabled={advancingTime || !newWorldTime.trim()}
+              onClick={async () => {
+                if (!state.worldId || !newWorldTime.trim()) return;
+                setAdvancingTime(true);
+                try {
+                  await api.advanceWorldTime(state.worldId, newWorldTime.trim());
+                  dispatch({ type: 'SET_STORY_VERSION' });
+                  setNewWorldTime('');
+                } catch {
+                  // Error handled by toast/global error
+                } finally {
+                  setAdvancingTime(false);
+                }
+              }}
+              title="推进世界时间"
+            >
+              <Clock3 size={14} aria-hidden="true" />
+              {advancingTime ? '推进中...' : '推进时间'}
+            </button>
+          </div>
         </div>
       </section>
 
       <section className={styles.section}>
-        <div className={styles.sectionTitle}>叙事位置</div>
+        <div className={styles.sectionTitle}>Narrative Position</div>
         <div className={styles.contextGrid}>
           <div>
-            <span>篇章线</span>
-            <strong>{overview?.current_arc?.title ?? '篇章线未加载'}</strong>
-            <small>{overview?.current_arc?.status ?? '自由创作'}</small>
+            <span>Arc</span>
+            <strong>{overview?.current_arc?.title ?? 'Unassigned arc'}</strong>
+            <small>{overview?.current_arc?.status ?? 'freeform'}</small>
           </div>
           <div>
-            <span>章节</span>
-            <strong>{chapter ? `${chapter.number}. ${chapter.title}` : '章节未加载'}</strong>
-            <small>{chapter ? `${chapter.scene_count} 个场景` : '尚未加载'}</small>
+            <span>Chapter</span>
+            <strong>{chapter ? `${chapter.number}. ${chapter.title}` : 'No chapter selected'}</strong>
+            <small>{chapter ? `${chapter.scene_count} scenes` : 'waiting for backend'}</small>
           </div>
           <div>
-            <span>场景</span>
-            <strong>{scene?.title ?? '场景未加载'}</strong>
-            <small>{scene?.status ?? '未开始'}</small>
+            <span>Scene</span>
+            <strong>{scene?.title ?? 'No active scene'}</strong>
+            <small>{scene?.status ?? 'draft'}</small>
           </div>
         </div>
         {scene && state.worldId && chapter && (
           <div className={styles.sceneActions}>
-            <button
-              className={styles.entryButton}
-              onClick={() => setShowEndScene(true)}
-            >
+            <button className={styles.entryButton} onClick={() => setShowEndScene(true)}>
               <Flag size={14} aria-hidden="true" />
-              结束场景
+              End Scene
             </button>
-            <button
-              className={styles.ghostButton}
-              onClick={() => setShowCreateScene(true)}
-            >
+            <button className={styles.ghostButton} onClick={() => setShowCreateScene(true)}>
               <Plus size={14} aria-hidden="true" />
-              新建场景
+              New Scene
             </button>
           </div>
         )}
@@ -213,18 +276,14 @@ export default function StoryInspector() {
 
       {activeScene && (
         <section className={styles.section}>
-          <div className={styles.sectionTitle}>场景正文</div>
-          <div className={styles.narrativeBox}>
-            {activeScene.narrative || activeScene.text || activeScene.content || '还没有场景正文。'}
-          </div>
+          <div className={styles.sectionTitle}>Scene Narrative</div>
+          <div className={styles.narrativeBox}>{sceneNarrative(activeScene)}</div>
           {participantAgents.length > 0 && (
             <>
-              <div className={styles.sectionTitle} style={{ marginTop: '0.75rem' }}>参与角色</div>
+              <div className={styles.sectionTitle} style={{ marginTop: '0.75rem' }}>Participants</div>
               <div className={styles.voiceStrip}>
                 {participantAgents.map((agent) => (
-                  <span key={agent.id}>
-                    {agent.display_name || agent.name}
-                  </span>
+                  <span key={agent.id}>{agent.display_name || agent.name}</span>
                 ))}
               </div>
             </>
@@ -234,14 +293,14 @@ export default function StoryInspector() {
 
       {activeScene && (
         <section className={styles.section}>
-          <div className={styles.sectionTitle}>角色日记</div>
+          <div className={styles.sectionTitle}>Character Diaries</div>
           {diariesLoading ? (
-            <p className={styles.muted}>正在读取日记...</p>
+            <p className={styles.muted}>Loading diaries...</p>
           ) : participantDiaries.length === 0 ? (
-            <p className={styles.muted}>暂未加载参与角色的日记。</p>
+            <p className={styles.muted}>No diary entries for scene participants yet.</p>
           ) : (
             participantDiaries.slice(0, 10).map((diary) => {
-              const author = participantAgents.find((a) => a.id === diary.agent_id);
+              const author = participantAgents.find((agent) => agent.id === diary.agent_id);
               return (
                 <div className={styles.thread} key={diary.id}>
                   <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, marginBottom: 4 }}>
@@ -261,7 +320,7 @@ export default function StoryInspector() {
                           ...moodStyle(diary.mood),
                         }}
                       >
-                        {diary.mood}
+                        {moodLabel(diary.mood)}
                       </span>
                     )}
                     {leakBadge(diary.leak_risk_level)}
@@ -272,7 +331,7 @@ export default function StoryInspector() {
                     )}
                   </div>
                   <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--ink)' }}>
-                    {diary.content.length > 200 ? diary.content.slice(0, 200) + '...' : diary.content}
+                    {diary.content.length > 200 ? `${diary.content.slice(0, 200)}...` : diary.content}
                   </div>
                 </div>
               );
@@ -283,10 +342,10 @@ export default function StoryInspector() {
 
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
-          <div className={styles.sectionTitle}>角色声音</div>
+          <div className={styles.sectionTitle}>Active Voices</div>
         </div>
         {state.agents.length === 0 ? (
-          <p className={styles.muted}>暂未加载角色声音</p>
+          <p className={styles.muted}>No character voices loaded.</p>
         ) : (
           <div className={styles.voiceStrip}>
             {state.agents.slice(0, 6).map((agent) => (
@@ -300,19 +359,19 @@ export default function StoryInspector() {
         <div className={styles.sectionHeader}>
           <div className={styles.sectionTitle}>
             <BookOpen size={14} aria-hidden="true" />
-            开放伏笔
+            Open Foreshadowing
           </div>
           <button
             className={styles.addBtn}
             onClick={() => setShowCreateForeshadowing(true)}
-            aria-label="埋设伏笔"
-            title="新增伏笔"
+            aria-label="Plant foreshadowing"
+            title="Plant new thread"
           >
             <Plus size={14} aria-hidden="true" />
           </button>
         </div>
         {state.foreshadowing.length === 0 ? (
-          <p className={styles.muted}>暂未加载开放伏笔</p>
+          <p className={styles.muted}>No open threads loaded.</p>
         ) : (
           state.foreshadowing.slice(0, 6).map((item) => (
             <div className={styles.thread} key={item.id}>
@@ -328,19 +387,19 @@ export default function StoryInspector() {
         <div className={styles.sectionHeader}>
           <div className={styles.sectionTitle}>
             <KeyRound size={14} aria-hidden="true" />
-            知识边界
+            Knowledge Boundaries
           </div>
           <button
             className={styles.addBtn}
             onClick={() => setShowCreateSecret(true)}
-            aria-label="创建秘密"
-            title="新增秘密"
+            aria-label="Create secret"
+            title="New secret"
           >
             <Plus size={14} aria-hidden="true" />
           </button>
         </div>
         {state.secrets.length === 0 ? (
-          <p className={styles.muted}>暂未加载秘密边界</p>
+          <p className={styles.muted}>No secret boundaries loaded.</p>
         ) : (
           state.secrets.slice(0, 5).map((item) => (
             <div className={styles.secret} key={item.id}>
@@ -351,23 +410,83 @@ export default function StoryInspector() {
         )}
       </section>
 
+      {/* Chapters List */}
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <div className={styles.sectionTitle}>
+            <BookOpen size={14} aria-hidden="true" />
+            章节目录
+          </div>
+        </div>
+        {chaptersLoading ? (
+          <p className={styles.muted}>加载中...</p>
+        ) : chapters.length === 0 ? (
+          <p className={styles.muted}>暂无章节。</p>
+        ) : (
+          chapters.map((ch) => (
+            <div
+              className={styles.thread}
+              key={ch.id}
+              style={{ cursor: 'pointer' }}
+              onClick={() =>
+                dispatch({
+                  type: 'OPEN_CHAPTER_EDITOR',
+                  chapterId: ch.id,
+                  chapterTitle: `第${ch.number}章 ${ch.title}`,
+                })
+              }
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter')
+                  dispatch({
+                    type: 'OPEN_CHAPTER_EDITOR',
+                    chapterId: ch.id,
+                    chapterTitle: `第${ch.number}章 ${ch.title}`,
+                  });
+              }}
+            >
+              <span>
+                <Edit3 size={12} aria-hidden="true" style={{ marginRight: 6 }} />
+                第{ch.number}章 {ch.title}
+              </span>
+              <small>
+                {ch.status?.replace(/_/g, ' ') ?? 'draft'} · {ch.scene_count} 个场景
+                <ChevronRight size={12} aria-hidden="true" style={{ marginLeft: 4 }} />
+              </small>
+            </div>
+          ))
+        )}
+      </section>
+
       {showEndScene && scene && state.worldId && chapter && (
         <EndSceneModal
           worldId={state.worldId}
           sceneId={scene.id}
           sceneTitle={scene.title}
-          chapterId={chapter.id}
           onClose={() => setShowEndScene(false)}
         />
       )}
       {showCreateForeshadowing && state.worldId && (
-        <CreateForeshadowingModal worldId={state.worldId} onClose={() => setShowCreateForeshadowing(false)} onCreated={handleCreated} />
+        <CreateForeshadowingModal
+          worldId={state.worldId}
+          onClose={() => setShowCreateForeshadowing(false)}
+          onCreated={handleCreated}
+        />
       )}
       {showCreateSecret && state.worldId && (
-        <CreateSecretModal worldId={state.worldId} onClose={() => setShowCreateSecret(false)} onCreated={handleCreated} />
+        <CreateSecretModal
+          worldId={state.worldId}
+          onClose={() => setShowCreateSecret(false)}
+          onCreated={handleCreated}
+        />
       )}
       {showCreateScene && state.worldId && (
-        <CreateSceneModal worldId={state.worldId} onClose={() => setShowCreateScene(false)} onCreated={handleCreated} />
+        <CreateSceneModal
+          worldId={state.worldId}
+          onClose={() => setShowCreateScene(false)}
+          onCreated={handleCreated}
+        />
       )}
     </>
   );

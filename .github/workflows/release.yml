@@ -5,6 +5,12 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+env:
+  PG_VERSION: "17.4"
+  NEO4J_VERSION: "5.26.0"
+  JAVA_VERSION: "17.0.12"
+  JAVA_MAJOR: "17"
+
 jobs:
   build-linux:
     runs-on: ubuntu-22.04
@@ -63,13 +69,41 @@ jobs:
           cp config/prompts merak-pkg/config/ -r 2>/dev/null || true
           cp scripts/start.sh merak-pkg/ 2>/dev/null || true
 
-      - name: Download PostgreSQL 17 (Linux)
+      # ── PostgreSQL ──────────────────────────────────
+      - name: Download PostgreSQL
         run: |
-          PG_VERSION="17.4"
           curl -fsSL "https://get.enterprisedb.com/postgresql/postgresql-${PG_VERSION}-1-linux-x64-binaries.tar.gz" \
             -o /tmp/pg.tar.gz
           tar xzf /tmp/pg.tar.gz -C /tmp
           mv /tmp/pgsql merak-pkg/pg
+
+      # ── Java (Eclipse Temurin JRE 17) ───────────────
+      - name: Download Java JRE
+        run: |
+          JAVA_URL="https://github.com/adoptium/temurin${JAVA_MAJOR}-binaries/releases/download"
+          JAVA_URL="${JAVA_URL}/jdk-${JAVA_VERSION}%2B7/OpenJDK${JAVA_MAJOR}U-jre_x64_linux_hotspot_${JAVA_VERSION}_7.tar.gz"
+          curl -fsSL "$JAVA_URL" -o /tmp/jre.tar.gz
+          mkdir -p merak-pkg/java
+          tar xzf /tmp/jre.tar.gz -C merak-pkg/java --strip-components=1
+
+      # ── Neo4j Community Edition ─────────────────────
+      - name: Download Neo4j
+        run: |
+          NEO4J_URL="https://dist.neo4j.org/neo4j-community-${NEO4J_VERSION}-unix.tar.gz"
+          curl -fsSL "$NEO4J_URL" -o /tmp/neo4j.tar.gz
+          mkdir -p merak-pkg/neo4j
+          tar xzf /tmp/neo4j.tar.gz -C merak-pkg/neo4j --strip-components=1
+
+      # ── Verify external binaries ────────────────────
+      - name: Verify external binaries
+        run: |
+          test -f merak-pkg/pg/bin/postgres
+          test -f merak-pkg/pg/bin/pg_ctl
+          test -f merak-pkg/pg/bin/initdb
+          test -f merak-pkg/pg/bin/psql
+          test -f merak-pkg/java/bin/java
+          test -f merak-pkg/neo4j/bin/neo4j
+          echo "External binaries verified"
 
       - name: Package
         run: tar czf merak-linux-x64.tar.gz -C merak-pkg .
@@ -142,15 +176,49 @@ jobs:
           cp -r webui/dist/* merak-pkg/webui/
           cp config/prompts merak-pkg/config/ -r 2>/dev/null || true
 
-      - name: Download PostgreSQL 17 (Windows)
+      # ── PostgreSQL ──────────────────────────────────
+      - name: Download PostgreSQL (Windows)
         shell: bash
         run: |
-          PG_VERSION="17.4"
           curl -fsSL "https://get.enterprisedb.com/postgresql/postgresql-${PG_VERSION}-1-windows-x64-binaries.zip" \
             -o /tmp/pg.zip
           unzip -q /tmp/pg.zip -d /tmp
           mv /tmp/pgsql merak-pkg/pg
 
+      # ── Java (Eclipse Temurin JRE 17) ───────────────
+      - name: Download Java JRE (Windows)
+        shell: bash
+        run: |
+          JAVA_URL="https://github.com/adoptium/temurin${JAVA_MAJOR}-binaries/releases/download"
+          JAVA_URL="${JAVA_URL}/jdk-${JAVA_VERSION}%2B7/OpenJDK${JAVA_MAJOR}U-jre_x64_windows_hotspot_${JAVA_VERSION}_7.zip"
+          curl -fsSL "$JAVA_URL" -o /tmp/jre.zip
+          mkdir -p merak-pkg/java
+          unzip -q /tmp/jre.zip -d /tmp/jre-tmp
+          mv /tmp/jre-tmp/*/* merak-pkg/java/ 2>/dev/null || mv /tmp/jre-tmp/* merak-pkg/java/
+
+      # ── Neo4j Community Edition ─────────────────────
+      - name: Download Neo4j (Windows)
+        shell: bash
+        run: |
+          NEO4J_URL="https://dist.neo4j.org/neo4j-community-${NEO4J_VERSION}-windows.zip"
+          curl -fsSL "$NEO4J_URL" -o /tmp/neo4j.zip
+          mkdir -p merak-pkg/neo4j
+          unzip -q /tmp/neo4j.zip -d /tmp/neo4j-tmp
+          mv /tmp/neo4j-tmp/*/* merak-pkg/neo4j/ 2>/dev/null || mv /tmp/neo4j-tmp/* merak-pkg/neo4j/
+
+      # ── Verify external binaries ────────────────────
+      - name: Verify external binaries (Windows)
+        shell: bash
+        run: |
+          test -f merak-pkg/pg/bin/postgres.exe
+          test -f merak-pkg/pg/bin/pg_ctl.exe
+          test -f merak-pkg/pg/bin/initdb.exe
+          test -f merak-pkg/pg/bin/psql.exe
+          test -f merak-pkg/java/bin/java.exe
+          test -f merak-pkg/neo4j/bin/neo4j.bat || test -f merak-pkg/neo4j/bin/neo4j
+          echo "External binaries verified"
+
+      # ── Desktop resources (for Tauri bundling) ──────
       - name: Prepare desktop resources
         shell: bash
         run: |
@@ -159,6 +227,8 @@ jobs:
           cp build/cli/Release/merak.exe apps/desktop/resources/ || cp build/cli/merak.exe apps/desktop/resources/
           find build -type f -name '*.dll' -exec cp -n {} apps/desktop/resources/ \; 2>/dev/null || true
           cp -r merak-pkg/pg apps/desktop/resources/pg
+          cp -r merak-pkg/java apps/desktop/resources/java
+          cp -r merak-pkg/neo4j apps/desktop/resources/neo4j
           cp -r config apps/desktop/resources/config
 
       - name: Verify Windows desktop resources
@@ -169,6 +239,8 @@ jobs:
           test -f apps/desktop/resources/pg/bin/pg_ctl.exe
           test -f apps/desktop/resources/pg/bin/initdb.exe
           test -f apps/desktop/resources/pg/bin/psql.exe
+          test -f apps/desktop/resources/java/bin/java.exe
+          echo "Desktop resources verified"
           ls -la apps/desktop/resources
 
       - name: Package

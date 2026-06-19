@@ -96,6 +96,8 @@ public:
     ForeshadowingStore& foreshadowing() noexcept { return foreshadowing_; }
     SecretStore& secrets() noexcept { return secrets_; }
     VoiceAnalyzer& voice() noexcept { return voice_; }
+    SceneOrchestrator& orchestrator() noexcept { return orchestrator_; }
+    const SceneOrchestrator& orchestrator() const noexcept { return orchestrator_; }
 
     // Preview builders (no DB write)
     nlohmann::json build_scene_preview(const std::string& world_id, const nlohmann::json& params);
@@ -190,7 +192,7 @@ private:
     void delete_pending_creation(const std::string& creation_id);
 
     std::function<void(std::string, std::string, nlohmann::json)> entity_event_handler_;
-    int diary_context_limit_ = 5;
+    int diary_context_limit_ = 20;
 };
 
 } // namespace merak::worldbuilding

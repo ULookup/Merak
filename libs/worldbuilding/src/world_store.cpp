@@ -2,6 +2,7 @@
 
 #include <merak/worldbuilding/ids.hpp>
 #include <merak/worldbuilding/pg_helpers.hpp>
+#include <merak/utilities.hpp>
 #include <nlohmann/json.hpp>
 
 #include <array>
@@ -30,17 +31,25 @@ AgentKind agent_kind_from_string(const std::string& value) {
     if (value == "relation_manager") return AgentKind::RelationManager;
     if (value == "group") return AgentKind::Group;
     if (value == "individual") return AgentKind::Individual;
+    if (value == "writer") return AgentKind::Writer;
     throw std::runtime_error("unknown agent kind: " + value);
 }
 
 WorldMeta world_meta_from_row(const PgResult& res, int row) {
-    return WorldMeta{
+    WorldMeta meta{
         .id = res.get(row, 0),
         .name = res.get(row, 1),
         .description = res.get(row, 2),
         .created_at = res.get(row, 3),
         .updated_at = res.get(row, 4),
     };
+    if (res.nfields() > 5) {
+        std::string config_str = res.get(row, 5);
+        if (!config_str.empty()) {
+            try { meta.config = nlohmann::json::parse(config_str); } catch (...) {}
+        }
+    }
+    return meta;
 }
 
 AgentRecord agent_record_from_row(const PgResult& res, int row) {
@@ -61,9 +70,9 @@ WorldKnowledge world_knowledge_from_row(const PgResult& res, int row) {
     wk.category = res.get(row, 1);
     wk.content = res.get(row, 2);
     wk.created_at = res.get(row, 3);
-    try { wk.tags = nlohmann::json::parse(res.get(row, 4)).get<std::vector<std::string>>(); } catch (...) {}
-    try { wk.aliases = nlohmann::json::parse(res.get(row, 5)).get<std::vector<std::string>>(); } catch (...) {}
-    try { wk.related_ids = nlohmann::json::parse(res.get(row, 6)).get<std::vector<std::string>>(); } catch (...) {}
+    if (auto j = safe_json_parse(res.get(row, 4))) wk.tags = j->get<std::vector<std::string>>();
+    if (auto j = safe_json_parse(res.get(row, 5))) wk.aliases = j->get<std::vector<std::string>>();
+    if (auto j = safe_json_parse(res.get(row, 6))) wk.related_ids = j->get<std::vector<std::string>>();
     return wk;
 }
 
@@ -185,8 +194,8 @@ WorldMeta WorldStore::create_world(const std::string& name,
 
         conn.exec("BEGIN");
         conn.execute(
-            "INSERT INTO worlds(id, name, description, created_at, updated_at) "
-            "VALUES($1, $2, $3, $4, $5)",
+            "INSERT INTO worlds(id, name, description, created_at, updated_at, config) "
+            "VALUES($1, $2, $3, $4, $5, '{}'::jsonb)",
             {world.id, world.name, world.description, world.created_at, world.updated_at});
 
         const auto agent_id = make_id("agent");
@@ -203,8 +212,11 @@ WorldMeta WorldStore::create_world(const std::string& name,
              to_string(AgentKind::RelationManager), timestamp, timestamp});
 
         conn.exec("COMMIT");
-    } catch (...) {
-        try { conn.exec("ROLLBACK"); } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::error("WorldStore::create_world failed: {}", e.what());
+        try { conn.exec("ROLLBACK"); } catch (const std::exception& re) {
+            spdlog::critical("ROLLBACK also failed: {}", re.what());
+        }
         remove_all_no_throw(root);
         throw;
     }
@@ -234,6 +246,7 @@ WorldMeta WorldStore::update_world(const std::string& world_id,
         .description = new_desc,
         .created_at = existing->created_at,
         .updated_at = timestamp,
+        .config = existing->config,
     };
 }
 
@@ -241,7 +254,7 @@ std::optional<WorldMeta>
 WorldStore::get_world(const std::string& world_id) const {
     PgConn conn(*pool_);
     auto res = conn.query(
-        "SELECT id, name, description, created_at, updated_at "
+        "SELECT id, name, description, created_at, updated_at, config "
         "FROM worlds WHERE id = $1",
         {world_id});
     if (res.ntuples() == 0) return std::nullopt;
@@ -251,7 +264,7 @@ WorldStore::get_world(const std::string& world_id) const {
 std::vector<WorldMeta> WorldStore::list_worlds() const {
     PgConn conn(*pool_);
     auto res = conn.query(
-        "SELECT id, name, description, created_at, updated_at "
+        "SELECT id, name, description, created_at, updated_at, config "
         "FROM worlds ORDER BY created_at ASC, id ASC");
     std::vector<WorldMeta> worlds;
     for (int i = 0; i < res.ntuples(); i++) {
@@ -282,10 +295,22 @@ bool WorldStore::delete_world(const std::string& world_id) {
             std::filesystem::remove_all(root);
         }
         return affected > 0;
-    } catch (...) {
-        try { conn.exec("ROLLBACK"); } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::error("WorldStore::delete_world failed: {}", e.what());
+        try { conn.exec("ROLLBACK"); } catch (const std::exception& re) {
+            spdlog::critical("ROLLBACK also failed: {}", re.what());
+        }
         throw;
     }
+}
+
+void WorldStore::update_world_config(const std::string& world_id,
+                                     const nlohmann::json& config) {
+    initialize();
+    PgConn conn(*pool_);
+    conn.execute(
+        "UPDATE worlds SET config = $2, updated_at = NOW() WHERE id = $1",
+        {world_id, config.dump()});
 }
 
 void WorldStore::add_world_knowledge(const std::string& world_id,
@@ -351,7 +376,9 @@ WorldStore::search_world_knowledge(const std::string& world_id,
         for (int i = 0; i < res.ntuples(); i++) {
             items.push_back(world_knowledge_from_row(res, i));
         }
-    } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::debug("hybrid_search_knowledge failed, falling back to LIKE: {}", e.what());
+    }
 
     if (!items.empty()) return items;
 

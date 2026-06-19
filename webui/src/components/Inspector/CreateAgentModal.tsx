@@ -26,7 +26,10 @@ export default function CreateAgentModal({ worldId, onClose, onCreated }: Props)
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !submitting) onClose(); }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !submitting) onClose();
+    }
+
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose, submitting]);
@@ -35,6 +38,7 @@ export default function CreateAgentModal({ worldId, onClose, onCreated }: Props)
     if (!name.trim()) return;
     setSubmitting(true);
     setError(null);
+
     try {
       await api.createAgent(worldId, {
         name: name.trim(),
@@ -46,7 +50,12 @@ export default function CreateAgentModal({ worldId, onClose, onCreated }: Props)
         deep_fear: deepFear.trim() || undefined,
         speaking_style: speakingStyle.trim() || undefined,
         background: background.trim() || undefined,
-        core_traits: traits ? traits.split(',').map(t => t.trim()).filter(Boolean) : undefined,
+        core_traits: traits
+          ? traits
+              .split(',')
+              .map((trait) => trait.trim())
+              .filter(Boolean)
+          : undefined,
         session_id: state.sessionId,
       });
       onCreated?.();
@@ -60,75 +69,140 @@ export default function CreateAgentModal({ worldId, onClose, onCreated }: Props)
 
   return (
     <div className={styles.scrim} role="presentation">
-      <section className={styles.modal} role="dialog" aria-modal="true" aria-label="创建角色">
-        <button className={styles.closeBtn} onClick={onClose} aria-label="取消" disabled={submitting}>
+      <section className={styles.modal} role="dialog" aria-modal="true" aria-label="Create character">
+        <button className={styles.closeBtn} onClick={onClose} aria-label="Cancel" disabled={submitting}>
           <X size={17} aria-hidden="true" strokeWidth={2.4} />
         </button>
         <div className={styles.iconWrap}>
           <UserPlus size={28} aria-hidden="true" strokeWidth={2.1} />
         </div>
-        <div className={styles.kicker}>角色声音</div>
-        <h2>创建角色</h2>
-        <p>把角色的身份、动机和说话方式交给后端保存。信息越清楚，后续场景里的角色声音越稳定。</p>
+        <div className={styles.kicker}>Character voice</div>
+        <h2>Create Character</h2>
+        <p>
+          Save the character&apos;s identity, motive, and speaking style so later scenes can keep
+          the voice consistent.
+        </p>
 
         <div className={styles.row}>
           <label className={styles.field}>
-            <span>角色名</span>
-            <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：艾拉、陈泊舟" />
+            <span>Character name</span>
+            <input
+              className={styles.input}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="e.g., Lian"
+            />
           </label>
           <label className={styles.field}>
-            <span>身份定位</span>
-            <input className={styles.input} value={identity} onChange={(e) => setIdentity(e.target.value)} placeholder="例如：边境医师、失势贵族" />
+            <span>Identity</span>
+            <input
+              className={styles.input}
+              value={identity}
+              onChange={(event) => setIdentity(event.target.value)}
+              placeholder="e.g., Border medic, exiled heir"
+            />
           </label>
         </div>
 
         <div className={styles.row}>
           <label className={styles.field}>
-            <span>性别</span>
-            <input className={styles.input} value={gender} onChange={(e) => setGender(e.target.value)} placeholder="可留空，或写角色自我认同" />
+            <span>Gender</span>
+            <input
+              className={styles.input}
+              value={gender}
+              onChange={(event) => setGender(event.target.value)}
+              placeholder="Optional"
+            />
           </label>
           <label className={styles.field}>
-            <span>年龄</span>
-            <input className={styles.input} type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="28" />
+            <span>Age</span>
+            <input
+              className={styles.input}
+              type="number"
+              value={age}
+              onChange={(event) => setAge(event.target.value)}
+              placeholder="28"
+            />
           </label>
         </div>
 
         <label className={styles.field}>
-          <span>种族 / 群体</span>
-          <input className={styles.input} value={race} onChange={(e) => setRace(e.target.value)} placeholder="例如：人类、仿生人、北境氏族" />
+          <span>Race / group</span>
+          <input
+            className={styles.input}
+            value={race}
+            onChange={(event) => setRace(event.target.value)}
+            placeholder="e.g., Human, north-clan, changeling"
+          />
         </label>
 
         <label className={styles.field}>
-          <span>核心欲望</span>
-          <input className={styles.input} value={coreDesire} onChange={(e) => setCoreDesire(e.target.value)} placeholder="这个角色最想得到什么？" />
+          <span>Core desire</span>
+          <input
+            className={styles.input}
+            value={coreDesire}
+            onChange={(event) => setCoreDesire(event.target.value)}
+            placeholder="What does this character want most?"
+          />
         </label>
 
         <label className={styles.field}>
-          <span>深层恐惧</span>
-          <input className={styles.input} value={deepFear} onChange={(e) => setDeepFear(e.target.value)} placeholder="他们最害怕失去或面对什么？" />
+          <span>Deep fear</span>
+          <input
+            className={styles.input}
+            value={deepFear}
+            onChange={(event) => setDeepFear(event.target.value)}
+            placeholder="What are they afraid to lose or face?"
+          />
         </label>
 
         <label className={styles.field}>
-          <span>说话风格</span>
-          <input className={styles.input} value={speakingStyle} onChange={(e) => setSpeakingStyle(e.target.value)} placeholder="例如：克制、讽刺、短句多" />
+          <span>Speaking style</span>
+          <input
+            className={styles.input}
+            value={speakingStyle}
+            onChange={(event) => setSpeakingStyle(event.target.value)}
+            placeholder="e.g., restrained, precise, short sentences"
+          />
         </label>
 
         <label className={styles.field}>
-          <span>背景</span>
-          <textarea className={styles.textarea} value={background} onChange={(e) => setBackground(e.target.value)} placeholder="简要写下经历、关系或创伤。" rows={3} />
+          <span>Background</span>
+          <textarea
+            className={styles.textarea}
+            value={background}
+            onChange={(event) => setBackground(event.target.value)}
+            placeholder="Briefly describe history, relationships, or wounds."
+            rows={3}
+          />
         </label>
 
         <label className={styles.field}>
-          <span>核心特质（用逗号分隔）</span>
-          <input className={styles.input} value={traits} onChange={(e) => setTraits(e.target.value)} placeholder="勇敢，敏感，容易冲动" />
+          <span>Core traits, comma-separated</span>
+          <input
+            className={styles.input}
+            value={traits}
+            onChange={(event) => setTraits(event.target.value)}
+            placeholder="brave, observant, impulsive"
+          />
         </label>
 
         {error && <div className={styles.error}>{error}</div>}
 
         <div className={styles.actions}>
-          <button className={styles.secondary} onClick={onClose} disabled={submitting}>取消</button>
+          <button className={styles.secondary} onClick={onClose} disabled={submitting}>
+            Cancel
+          </button>
           <button className={styles.primary} onClick={handleSubmit} disabled={submitting || !name.trim()}>
-            {submitting ? <><Loader2 size={15} aria-hidden="true" className={styles.spin} /> 正在创建...</> : <><Sparkles size={14} aria-hidden="true" /> 创建角色</>}
+            {submitting ? (
+              <>
+                <Loader2 size={15} aria-hidden="true" className={styles.spin} /> Creating...
+              </>
+            ) : (
+              <>
+                <Sparkles size={14} aria-hidden="true" /> Create character
+              </>
+            )}
           </button>
         </div>
       </section>

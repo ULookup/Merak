@@ -1,4 +1,4 @@
-import { FileText, FolderOpen, Save, Search } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileText, FolderOpen, RotateCcw, Save, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { api, formatApiError } from '../../api/client';
 import { useAppState } from '../../AppState';
@@ -16,6 +16,18 @@ function displayFileName(name: string) {
   return name.replace(/\.(md|markdown|txt|docx|json|ya?ml)$/i, '');
 }
 
+function formatUpdated(value: string | undefined) {
+  if (!value) return 'Not saved yet';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export default function FilesInspector() {
   const { state, dispatch } = useAppState();
   const { showToast } = useToast();
@@ -23,6 +35,25 @@ export default function FilesInspector() {
   const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
   const activeFile =
     state.workspaceFiles.find((file) => file.id === state.activeEditorFileId) ?? null;
+  const activeFileName = activeFile ? displayFileName(activeFile.name) : '';
+  const activeFileDirty = Boolean(activeFile?.dirty || state.editorSaveStatus === 'dirty');
+  const activeFileLoaded = activeFile ? activeFile.id in state.editorOriginals : false;
+  const editorStatusLabel =
+    state.editorSaveStatus === 'saving'
+      ? 'Saving...'
+      : state.editorSaveStatus === 'error'
+        ? 'Save failed'
+        : activeFileDirty
+          ? 'Unsaved changes'
+          : state.editorSaveStatus === 'saved'
+            ? 'Saved'
+            : 'Local draft';
+  const editorStatusIcon =
+    state.editorSaveStatus === 'error' ? (
+      <AlertCircle size={13} aria-hidden="true" strokeWidth={2.3} />
+    ) : state.editorSaveStatus === 'saved' ? (
+      <CheckCircle2 size={13} aria-hidden="true" strokeWidth={2.3} />
+    ) : null;
 
   const fileTypes = useMemo(
     () => ['all', ...Array.from(new Set(state.workspaceFiles.map((file) => file.ext).filter(Boolean)))],
@@ -77,6 +108,7 @@ export default function FilesInspector() {
         state.editorVersions[activeFile.id],
       );
       dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saved' });
+      dispatch({ type: 'COMMIT_EDITOR_BUFFER', fileId: activeFile.id, version: res.file.version });
       dispatch({
         type: 'SET_WORKSPACE_FILES',
         files: state.workspaceFiles.map((file) =>
@@ -94,6 +126,7 @@ export default function FilesInspector() {
         status: 'error',
         error: formatApiError(error, 'Save failed.'),
       });
+      showToast(formatApiError(error, 'Save failed.'), 'error');
     }
   }
 
@@ -165,9 +198,9 @@ export default function FilesInspector() {
                   <strong>{displayName}</strong>
                   <code>{file.path}</code>
                   <small>
-                    {file.ext || 'file'} / {formatSize(file.size)}
-                    {file.dirty ? ' / unsaved' : ''}
+                    {file.ext || 'file'} / {formatSize(file.size)} / Updated {formatUpdated(file.updated_at)}
                   </small>
+                  {file.dirty && <span className={styles.fileDirtyBadge}>Unsaved changes</span>}
                 </div>
                 <div className={styles.fileActions}>
                   <button
@@ -203,14 +236,30 @@ export default function FilesInspector() {
           <div className={styles.editorHeader}>
             <div>
               <div className={styles.sectionTitle}>Text Editor</div>
-              <strong>{displayFileName(activeFile.name)}</strong>
+              <strong>{activeFileName}</strong>
               <code>{activeFile.path}</code>
+              <small className={styles.editorMeta}>
+                Last loaded {activeFileLoaded ? formatUpdated(activeFile.updated_at) : 'from preview buffer'}
+              </small>
             </div>
-            <span>{state.editorSaveStatus === 'dirty' ? 'Unsaved' : 'Local draft'}</span>
+            <span
+              className={`${styles.editorStatus} ${
+                state.editorSaveStatus === 'error'
+                  ? styles.editorStatusError
+                  : activeFileDirty
+                    ? styles.editorStatusDirty
+                    : state.editorSaveStatus === 'saved'
+                      ? styles.editorStatusSaved
+                      : ''
+              }`}
+            >
+              {editorStatusIcon}
+              {editorStatusLabel}
+            </span>
           </div>
           <textarea
             className={styles.editor}
-            aria-label={`Edit ${displayFileName(activeFile.name)}`}
+            aria-label={`Edit ${activeFileName}`}
             value={state.editorBuffers[activeFile.id] ?? ''}
             onChange={(event) =>
               dispatch({
@@ -221,16 +270,31 @@ export default function FilesInspector() {
             }
           />
           <div className={styles.editorActions}>
-            <button
-              className={styles.entryButton}
-              type="button"
-              onClick={saveFile}
-              disabled={state.editorSaveStatus === 'saving'}
-            >
-              <Save size={14} aria-hidden="true" strokeWidth={2.3} />
-              {state.editorSaveStatus === 'saving' ? 'Saving...' : 'Save'}
-            </button>
-            <span>{state.editorError ?? state.editorSaveStatus}</span>
+            <div className={styles.editorButtonGroup}>
+              <button
+                className={styles.entryButton}
+                type="button"
+                aria-label={`Save ${activeFileName}`}
+                onClick={saveFile}
+                disabled={state.editorSaveStatus === 'saving' || !activeFileDirty}
+              >
+                <Save size={14} aria-hidden="true" strokeWidth={2.3} />
+                {state.editorSaveStatus === 'saving' ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                className={styles.secondaryButton}
+                type="button"
+                aria-label={`Revert ${activeFileName} to last loaded version`}
+                disabled={!activeFileDirty || !activeFileLoaded}
+                onClick={() => dispatch({ type: 'REVERT_EDITOR_BUFFER', fileId: activeFile.id })}
+              >
+                <RotateCcw size={14} aria-hidden="true" strokeWidth={2.3} />
+                Revert
+              </button>
+            </div>
+            <span className={state.editorError ? styles.editorErrorText : ''}>
+              {state.editorError ?? (activeFileDirty ? 'Changes stay local until saved.' : 'Ready.')}
+            </span>
           </div>
         </section>
       )}

@@ -21,6 +21,20 @@
   border-bottom: 1px solid var(--border);
   background:
     linear-gradient(135deg, rgba(247, 234, 210, 0.78), rgba(255, 255, 255, 0.86)), var(--surface);
+  animation: brandReveal 560ms var(--ease-spring) both;
+}
+
+@keyframes brandReveal {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
 }
 
 .label {
@@ -107,6 +121,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   border: 1px solid transparent;
+  animation: slideUpIn 300ms var(--ease-spring) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
   transition:
     transform 180ms var(--ease),
     background 180ms var(--ease),
@@ -241,7 +257,7 @@
     height: 100vh;
     z-index: 1000;
     transform: translateX(-100%);
-    transition: transform 0.28s var(--ease);
+    transition: transform 320ms var(--ease-spring);
     border-radius: 0 10px 10px 0;
   }
 
@@ -251,5 +267,12 @@
 
   .closeBtn {
     display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brandSection,
+  .sessionItem {
+    animation: none;
   }
 }

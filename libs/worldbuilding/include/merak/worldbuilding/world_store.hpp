@@ -24,6 +24,8 @@ public:
     WorldMeta update_world(const std::string& world_id,
                            const std::optional<std::string>& name,
                            const std::optional<std::string>& description);
+    void update_world_config(const std::string& world_id,
+                             const nlohmann::json& config);
     std::optional<WorldMeta> get_world(const std::string& world_id) const;
     std::vector<WorldMeta> list_worlds() const;
     bool delete_world(const std::string& world_id);

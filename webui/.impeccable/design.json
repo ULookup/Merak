@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-06-16T00:00:00.000Z",
+  "title": "Design System: Merak WebUI",
+  "extensions": {
+    "colorMeta": {
+      "ink": { "role": "primary", "displayName": "Ink", "canonical": "oklch(15% 0 0)", "tonalRamp": ["oklch(8% 0 0)", "oklch(12% 0 0)", "oklch(15% 0 0)", "oklch(22% 0 0)", "oklch(30% 0 0)", "oklch(45% 0 0)", "oklch(65% 0 0)", "oklch(85% 0 0)"] },
+      "ink-soft": { "role": "primary", "displayName": "Ink Soft", "canonical": "oklch(28% 0 0)", "tonalRamp": ["oklch(20% 0 0)", "oklch(25% 0 0)", "oklch(28% 0 0)", "oklch(35% 0 0)", "oklch(42% 0 0)", "oklch(52% 0 0)", "oklch(68% 0 0)", "oklch(88% 0 0)"] },
+      "page": { "role": "neutral", "displayName": "Page", "canonical": "oklch(97.5% 0.003 100)", "tonalRamp": ["oklch(90% 0.003 100)", "oklch(93% 0.003 100)", "oklch(95% 0.003 100)", "oklch(97.5% 0.003 100)", "oklch(98.5% 0.002 100)", "oklch(99% 0.001 100)", "oklch(99.5% 0.001 100)", "oklch(100% 0 0)"] },
+      "surface": { "role": "neutral", "displayName": "Surface", "canonical": "oklch(100% 0 0)", "tonalRamp": ["oklch(92% 0 0)", "oklch(95% 0 0)", "oklch(97% 0 0)", "oklch(98.5% 0 0)", "oklch(100% 0 0)", "oklch(100% 0 0)", "oklch(100% 0 0)", "oklch(100% 0 0)"] },
+      "surface-muted": { "role": "neutral", "displayName": "Surface Muted", "canonical": "oklch(96% 0.002 100)", "tonalRamp": ["oklch(90% 0.002 100)", "oklch(93% 0.002 100)", "oklch(96% 0.002 100)", "oklch(97% 0.001 100)", "oklch(98% 0.001 100)", "oklch(99% 0 0)", "oklch(100% 0 0)", "oklch(100% 0 0)"] },
+      "surface-strong": { "role": "neutral", "displayName": "Surface Strong", "canonical": "oklch(98.5% 0.001 100)", "tonalRamp": ["oklch(93% 0.001 100)", "oklch(96% 0.001 100)", "oklch(98.5% 0.001 100)", "oklch(99% 0 0)", "oklch(99.5% 0 0)", "oklch(100% 0 0)", "oklch(100% 0 0)", "oklch(100% 0 0)"] },
+      "muted": { "role": "neutral", "displayName": "Muted", "canonical": "oklch(55% 0.008 100)", "tonalRamp": ["oklch(35% 0.008 100)", "oklch(42% 0.008 100)", "oklch(50% 0.008 100)", "oklch(55% 0.008 100)", "oklch(65% 0.006 100)", "oklch(78% 0.004 100)", "oklch(88% 0.002 100)", "oklch(95% 0.001 100)"] },
+      "border": { "role": "neutral", "displayName": "Border", "canonical": "oklch(90% 0.004 100)", "tonalRamp": ["oklch(78% 0.004 100)", "oklch(83% 0.004 100)", "oklch(88% 0.004 100)", "oklch(90% 0.004 100)", "oklch(93% 0.003 100)", "oklch(95% 0.002 100)", "oklch(97% 0.001 100)", "oklch(99% 0 0)"] },
+      "border-strong": { "role": "neutral", "displayName": "Border Strong", "canonical": "oklch(82% 0.006 100)", "tonalRamp": ["oklch(68% 0.006 100)", "oklch(74% 0.006 100)", "oklch(78% 0.006 100)", "oklch(82% 0.006 100)", "oklch(86% 0.005 100)", "oklch(90% 0.004 100)", "oklch(94% 0.002 100)", "oklch(98% 0.001 100)"] },
+      "brand": { "role": "primary", "displayName": "Brand", "canonical": "oklch(25% 0 0)", "tonalRamp": ["oklch(12% 0 0)", "oklch(18% 0 0)", "oklch(25% 0 0)", "oklch(35% 0 0)", "oklch(48% 0 0)", "oklch(62% 0 0)", "oklch(80% 0 0)", "oklch(93% 0 0)"] },
+      "amber": { "role": "secondary", "displayName": "Amber", "canonical": "oklch(52% 0.14 75)", "tonalRamp": ["oklch(36% 0.14 75)", "oklch(44% 0.14 75)", "oklch(52% 0.14 75)", "oklch(62% 0.12 75)", "oklch(72% 0.10 75)", "oklch(82% 0.06 75)", "oklch(90% 0.04 75)", "oklch(96% 0.02 75)"] },
+      "ruby": { "role": "secondary", "displayName": "Ruby", "canonical": "oklch(48% 0.22 15)", "tonalRamp": ["oklch(32% 0.22 15)", "oklch(40% 0.22 15)", "oklch(48% 0.22 15)", "oklch(58% 0.18 15)", "oklch(70% 0.10 15)", "oklch(82% 0.05 15)", "oklch(90% 0.02 15)", "oklch(96% 0.01 15)"] },
+      "green": { "role": "secondary", "displayName": "Green", "canonical": "oklch(60% 0.18 145)", "tonalRamp": ["oklch(40% 0.18 145)", "oklch(50% 0.18 145)", "oklch(60% 0.18 145)", "oklch(70% 0.14 145)", "oklch(80% 0.08 145)", "oklch(88% 0.04 145)", "oklch(94% 0.02 145)", "oklch(97% 0.01 145)"] }
+    },
+    "typographyMeta": {
+      "body": { "displayName": "Body", "purpose": "Default body text, messages, prose content." },
+      "title": { "displayName": "Title", "purpose": "Panel and section headings." },
+      "label": { "displayName": "Label", "purpose": "Field labels, section kickers (sparingly)." },
+      "mono": { "displayName": "Mono", "purpose": "Code blocks, file paths, tool names, inline code." }
+    },
+    "shadows": [
+      { "name": "shadow-sm", "value": "0 1px 2px rgba(23, 23, 23, 0.06)", "purpose": "Workspace panels, empty state cards. Minimal lift." },
+      { "name": "shadow-md", "value": "0 12px 28px rgba(23, 23, 23, 0.1)", "purpose": "Sidebar, toasts, modals. Floating global elements." },
+      { "name": "shadow-lg", "value": "0 18px 46px rgba(23, 23, 23, 0.12)", "purpose": "Reserved for highest elevation." },
+      { "name": "ring", "value": "0 0 0 3px rgba(23, 23, 23, 0.12)", "purpose": "Focus ring for all focusable elements." }
+    ],
+    "motion": [
+      { "name": "ease", "value": "cubic-bezier(0.2, 0.8, 0.2, 1)", "purpose": "Default easing for state transitions (hover, focus)." },
+      { "name": "ease-spring", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Entry animations: workspace mount, panel reveal." },
+      { "name": "duration-fast", "value": "120ms", "purpose": "Micro-interactions: button hover, icon toggle." },
+      { "name": "duration-med", "value": "220ms", "purpose": "Panel transitions, composer focus." }
+    ],
+    "breakpoints": [
+      { "name": "mobile", "value": "767px" },
+      { "name": "panel-collapse", "value": "1179px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main call-to-action: send message, confirm creation.",
+      "html": "<button class=\"ds-btn-primary\">Send Message</button>",
+      "css": ".ds-btn-primary { background: #171717; color: #fff; border: 1px solid #171717; border-radius: 6px; padding: 10px 14px; font-size: 12px; font-weight: 720; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px; transition: background 180ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1); } .ds-btn-primary:hover { background: #303030; transform: translateY(-1px); } .ds-btn-primary:active { transform: translateY(0) scale(0.98); } .ds-btn-primary:disabled { opacity: 0.4; cursor: default; transform: none; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Secondary action: cancel, back, dismiss.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { background: #fafafa; color: #55524c; border: 1px solid #e0dfdc; border-radius: 8px; padding: 9px 13px; font-size: 12px; font-weight: 900; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px; transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); } .ds-btn-secondary:hover { transform: translateY(-1px); } .ds-btn-secondary:disabled { opacity: 0.42; cursor: default; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Low-emphasis navigation item or toolbar action.",
+      "html": "<button class=\"ds-btn-ghost\">World Settings</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: #55524c; border: 1px solid transparent; border-radius: 8px; padding: 7px 10px; font-size: 13px; cursor: pointer; text-align: left; transition: background 180ms cubic-bezier(0.2, 0.8, 0.2, 1), color 180ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); } .ds-btn-ghost:hover { background: #ffffff; color: #171717; transform: translateX(3px); }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive action: cancel run, delete.",
+      "html": "<button class=\"ds-btn-danger\">Cancel Run</button>",
+      "css": ".ds-btn-danger { background: #fff1f2; color: #be123c; border: 1px solid #fecaca; border-radius: 6px; padding: 10px 14px; font-size: 12px; font-weight: 720; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px; transition: background 120ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 120ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1); } .ds-btn-danger:hover { background: #ffe4e6; transform: translateY(-1px); } .ds-btn-danger:active { transform: translateY(0) scale(0.98); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standard text field.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"World name\" />",
+      "css": ".ds-input { width: 100%; border: 1px solid #e0dfdc; border-radius: 6px; background: #fafafa; color: #171717; padding: 9px 11px; font-size: 13px; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; transition: border-color 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1); } .ds-input:focus { outline: none; border-color: #171717; box-shadow: 0 0 0 3px rgba(23, 23, 23, 0.12); } .ds-input::placeholder { color: #77756f; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Content container — used for inspector blocks, file items, run cards.",
+      "html": "<div class=\"ds-card\"><strong>World Summary</strong><p>Your world overview content here.</p></div>",
+      "css": ".ds-card { background: #ffffff; border: 1px solid #e0dfdc; border-radius: 6px; padding: 12px; transition: border-color 120ms cubic-bezier(0.2, 0.8, 0.2, 1), background 120ms cubic-bezier(0.2, 0.8, 0.2, 1); animation: panelRise 360ms cubic-bezier(0.2, 0.8, 0.2, 1); } .ds-card:hover { border-color: #c8c7c3; } .ds-card strong { display: block; color: #171717; font-size: 13px; margin-bottom: 6px; } .ds-card p { color: #77756f; font-size: 12px; line-height: 1.6; margin: 0; } @keyframes panelRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Small toggle or tag — run mode selector, agent type badge.",
+      "html": "<button class=\"ds-chip\">Chat</button><button class=\"ds-chip ds-chip-active\">Outline</button>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; gap: 6px; background: transparent; color: #55524c; border: 1px solid #e0dfdc; border-radius: 6px; padding: 6px 8px; font-size: 11px; font-weight: 680; cursor: pointer; transition: background 120ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 120ms cubic-bezier(0.2, 0.8, 0.2, 1), color 120ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1); } .ds-chip:hover { border-color: #c8c7c3; background: #ffffff; color: #171717; transform: translateY(-1px); } .ds-chip-active { background: #ffffff; color: #171717; box-shadow: inset 0 0 0 1px #e0dfdc; }"
+    },
+    {
+      "name": "Toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "Fixed-position notification. Slides in from right.",
+      "html": "<div class=\"ds-toast ds-toast-error\">Connection lost. Retrying…</div>",
+      "css": ".ds-toast { padding: 12px 16px; border-radius: 14px; font-size: 13px; line-height: 1.4; box-shadow: 0 12px 28px rgba(23, 23, 23, 0.1); animation: dsSlideIn 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); } .ds-toast-error { background: #fff1f2; border: 1px solid #fecaca; color: #be123c; } @keyframes dsSlideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }"
+    },
+    {
+      "name": "Modal",
+      "kind": "custom",
+      "refersTo": "modal",
+      "description": "Centered dialog with backdrop blur scrim.",
+      "html": "<div class=\"ds-scrim\"><div class=\"ds-modal\"><h2>Create World</h2><p>Start a new worldbuilding project.</p><button class=\"ds-btn-primary\">Create</button></div></div>",
+      "css": ".ds-scrim { position: fixed; inset: 0; z-index: 1500; display: grid; place-items: center; padding: 18px; background: rgba(24, 33, 31, 0.34); backdrop-filter: blur(8px); } .ds-modal { position: relative; width: min(480px, 100%); border: 1px solid #e0dfdc; border-radius: 10px; background: #ffffff; color: #171717; box-shadow: 0 12px 28px rgba(23, 23, 23, 0.1); padding: 28px; } .ds-modal h2 { font-size: 21px; line-height: 1.2; margin-bottom: 8px; } .ds-modal p { color: #55524c; font-size: 13px; line-height: 1.6; margin-bottom: 18px; }"
+    },
+    {
+      "name": "Assistant Message",
+      "kind": "custom",
+      "refersTo": "message-assistant",
+      "description": "Chat message from the AI assistant with left accent bar.",
+      "html": "<div class=\"ds-msg-assistant\"><p>The forests of the North are ancient, their roots tangled with secrets older than the kingdom itself.</p></div>",
+      "css": ".ds-msg-assistant { max-width: min(820px, 88%); padding: 10px 12px; border-radius: 8px 8px 8px 4px; font-size: 13px; line-height: 1.55; background: #ffffff; border: 1px solid #e0dfdc; color: #171717; align-self: flex-start; position: relative; overflow: hidden; animation: msgIn 320ms cubic-bezier(0.2, 0.8, 0.2, 1); transition: border-color 120ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1); } .ds-msg-assistant::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: #c8c7c3; } .ds-msg-assistant:hover { border-color: #c8c7c3; transform: translateY(-1px); } .ds-msg-assistant p { margin: 7px 0; overflow-wrap: anywhere; } @keyframes msgIn { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Typeshop",
+    "overview": "Merak WebUI 是一个铸字车间——精确、利落、每一像素都有存在的理由。它不是装饰性的设计工作室，而是一个生产文字的工厂，界面是服务于这个目的的工具。系统的美学哲学根植于单色品牌（mono-brand）：近黑就是品牌色。没有花哨的渐变强调色，没有霓虹点缀。层次来自亮度的微妙递进。组件触感是精确利落的：悬停微升，点击下沉，就像按下真实的物理按钮。动效可以华丽——spring 曲线、弹性入场、pulse 呼吸——只要不打断创作心流。",
+    "keyCharacteristics": [
+      "单色品牌系统：near-black 就是强调色",
+      "精确利落的触感交互：lift on hover, sink on press",
+      "玻璃侧边栏：唯一使用 backdrop-filter 的表面",
+      "Inter 单一字体族，通过粗细（650–900）构建层级",
+      "克制阴影：三层（sm/md/lg），flat-by-default",
+      "动效可以华丽：ease-spring、弹性入场、pulse 呼吸"
+    ],
+    "rules": [
+      { "name": "The Mono-Brand Rule", "body": "系统的强调色就是 near-black。没有第二个品牌色。没有渐变。Ink 在任一屏幕上占用的面积不超过 10%，它的稀缺性本身就是信号。", "section": "colors" },
+      { "name": "The One Accent Per Context Rule", "body": "语义色（amber / ruby / green）每次只出现一种。不同时使用两种语义色争夺注意力。", "section": "colors" },
+      { "name": "The Gray-Is-Not-Elegance Rule", "body": "muted (#77756f) 只在纯白 surface 上使用。在 tinted 背景上，用更深一档的 muted-strong 或透明度叠印。", "section": "colors" },
+      { "name": "The Single-Font Rule", "body": "只用 Inter 一个字体族（加等宽 Mono）。不引入衬线体。层级靠粗细和尺寸。", "section": "typography" },
+      { "name": "The No-Eyebrow-Army Rule", "body": "Label（10px uppercase）只用于表单字段和 Inspector 区块标题。不在每个 section 上方添加独立的小号大写 eyebrow。", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "表面在静止状态下是平的。阴影作为状态响应出现（hover lift、全局叠加），不作为静态装饰。唯一例外是 sidebar。", "section": "elevation" },
+      { "name": "The One-Glass-Surface Rule", "body": "backdrop-filter: blur() 只用于侧边栏。不扩散到卡片、模态框、或任何其他表面。玻璃材质是导航层的专属语言。", "section": "elevation" }
+    ],
+    "dos": [
+      "用 var(--ink) 作为唯一的强调色。系统不需要第二个品牌色。",
+      "用粗细（650–900）和尺寸（10–18px）构建层级，不引入第二个字体族。",
+      "让按钮 hover 时微升（translateY(-1px)）、press 时下沉（scale(0.98)）。",
+      "让表面在静止时保持平坦（flat-by-default），阴影只在交互反馈或全局叠加层出现。",
+      "用 amber-soft + amber 边框表示警告，用 ruby-soft + ruby 边框表示错误。",
+      "保持行宽 ≤75ch（约 820px）以保证长篇阅读舒适。",
+      "让动效可以华丽——spring 曲线、弹性入场、pulse 呼吸——只要不打断创作心流。"
+    ],
+    "donts": [
+      "引入第二个品牌色或彩色渐变（modal primary button 是唯一例外）。",
+      "使用游戏/主播风格——霓虹色、暗色配高饱和强调色、激进渐变、游戏字体。",
+      "使用 SaaS 营销模板套路——Hero 大图、渐变 CTA、卡片阵列、social proof。",
+      "使用传统企业软件风格——密集表格、拥挤工具栏、灰底灰字、无留白。",
+      "在 sidebar 以外的任何地方使用 backdrop-filter: blur()。",
+      "嵌套阴影卡片。一层卡片 = 一个阴影或边框。",
+      "在每个 section 上方添加 tiny uppercase eyebrow。",
+      "使用 border-left 或 border-right > 1px 作为彩色装饰条。",
+      "使用 gradient text（background-clip: text）。"
+    ]
+  }
+}

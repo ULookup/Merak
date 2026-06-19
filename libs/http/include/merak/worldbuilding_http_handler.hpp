@@ -45,6 +45,7 @@ private:
     void handle_overview(const httplib::Request&, httplib::Response&);
     void handle_list_chapters(const httplib::Request&, httplib::Response&);
     void handle_get_chapter(const httplib::Request&, httplib::Response&);
+    void handle_chapter_tree(const httplib::Request&, httplib::Response&);
     void handle_list_scenes(const httplib::Request&, httplib::Response&);
     void handle_scene_new(const httplib::Request&, httplib::Response&);
     void handle_scene_end(const httplib::Request&, httplib::Response&);

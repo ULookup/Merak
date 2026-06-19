@@ -1,7 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { api } from '../api/client';
 import { useAppState } from '../AppState';
 import styles from './ChapterEditor.module.css';
+
+function chapterFilePath(worldId: string, chapterId: string) {
+  return `chapters/${worldId}/${chapterId}.md`;
+}
 
 interface Props {
   chapterId: string;
@@ -22,67 +26,94 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
 
   const [title, setTitle] = useState(chapter?.title ?? '');
   const [content, setContent] = useState('');
+  const [contentLoaded, setContentLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showContext, setShowContext] = useState(false);
   const [entities, setEntities] = useState<ContextEntity[]>([]);
 
-  // Build entity list from current world data
   useEffect(() => {
     const items: ContextEntity[] = [];
-    state.agents.forEach(a => {
-      items.push({ kind: 'agent', id: a.id, label: a.display_name || a.name, detail: a.kind });
+    state.agents.forEach((agent) => {
+      items.push({
+        kind: 'agent',
+        id: agent.id,
+        label: agent.display_name || agent.name,
+        detail: agent.kind,
+      });
     });
-    state.foreshadowing.forEach(f => {
-      items.push({ kind: 'foreshadow', id: f.id, label: f.content.slice(0, 40), detail: f.status });
+    state.foreshadowing.forEach((item) => {
+      items.push({
+        kind: 'foreshadow',
+        id: item.id,
+        label: item.content.slice(0, 40),
+        detail: item.status,
+      });
     });
-    state.secrets.forEach(s => {
-      items.push({ kind: 'secret', id: s.id, label: s.title ?? s.truth?.slice(0, 40) ?? s.id, detail: s.status });
+    state.secrets.forEach((secret) => {
+      items.push({
+        kind: 'secret',
+        id: secret.id,
+        label: secret.title ?? secret.truth?.slice(0, 40) ?? secret.id,
+        detail: secret.status,
+      });
     });
     setEntities(items);
   }, [state.agents, state.foreshadowing, state.secrets]);
 
-  // Reset title/content on chapterId change; load content from API
   useEffect(() => {
     setTitle(chapter?.title ?? '');
-    setContent('');
+  }, [chapter?.title]);
+
+  useEffect(() => {
     if (!chapterId || !worldId) return;
     let cancelled = false;
-    api.fetchChapterContent(worldId, chapterId)
-      .then(data => {
-        if (!cancelled) setContent(data.content ?? '');
+    const path = chapterFilePath(worldId, chapterId);
+    setContentLoaded(false);
+    api
+      .readWorkspaceFile(path)
+      .then((data) => {
+        if (!cancelled) {
+          setContent(data.file.content);
+          setContentLoaded(true);
+        }
       })
       .catch(() => {
-        // Content not yet saved or fetch failed — start with empty editor
+        if (!cancelled) {
+          setContent('');
+          setContentLoaded(true);
+        }
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [chapterId, worldId]);
 
   const trimmed = content.trim();
-  const cjkChars = (trimmed.match(/[一-鿿㐀-䶿　-〿＀-￯]/g) || []).length;
+  const cjkChars = (trimmed.match(/[一-鿿]/g) || []).length;
   const isCJK = trimmed.length > 0 && cjkChars / trimmed.length > 0.3;
-  const wordCount = trimmed
-    ? (isCJK ? cjkChars : trimmed.split(/\s+/).length)
-    : 0;
+  const wordCount = trimmed ? (isCJK ? cjkChars : trimmed.split(/\s+/).length) : 0;
   const charCount = content.length;
 
   const insertTag = useCallback((entity: ContextEntity) => {
-    const tag = entity.kind === 'agent'
-      ? `@agent{name=${entity.label}}`
-      : entity.kind === 'foreshadow'
-        ? `@foreshadow{id=${entity.id}}`
-        : entity.kind === 'secret'
-          ? `@secret{id=${entity.id}}`
-          : `@location{name=${entity.label}}`;
-    setContent(prev => prev + (prev ? '\n' : '') + tag);
+    const tag =
+      entity.kind === 'agent'
+        ? `@agent{name=${entity.label}}`
+        : entity.kind === 'foreshadow'
+          ? `@foreshadow{id=${entity.id}}`
+          : entity.kind === 'secret'
+            ? `@secret{id=${entity.id}}`
+            : `@location{name=${entity.label}}`;
+    setContent((previous) => previous + (previous ? '\n' : '') + tag);
   }, []);
 
   const handleSave = async () => {
     setSaveStatus('saving');
     try {
-      await api.patchChapter(worldId, chapterId, {
-        title,
-        content,
-      });
+      const path = chapterFilePath(worldId, chapterId);
+      await api.saveWorkspaceFile(path, content);
+      if (title !== (chapter?.title ?? '')) {
+        await api.patchChapter(worldId, chapterId, { title }).catch(() => {});
+      }
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } catch {
@@ -90,9 +121,9 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-      e.preventDefault();
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+      event.preventDefault();
       handleSave();
     }
   };
@@ -103,26 +134,30 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
         <input
           className={styles.titleInput}
           value={title}
-          onChange={e => setTitle(e.target.value)}
-          placeholder="章节标题"
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Chapter title"
         />
         <div className={styles.toolbarRight}>
           <span className={styles.stats}>
-            {isCJK ? `${wordCount} 字` : `${wordCount} words`} | {charCount} 字符
+            {isCJK ? `${wordCount} 字` : `${wordCount} words`} &middot; {charCount} chars
           </span>
           <button
             className={styles.contextBtn}
             onClick={() => setShowContext(!showContext)}
+            type="button"
           >
-            {showContext ? '隐藏上下文' : '上下文'}
+            {showContext ? 'Hide context' : 'Context'}
           </button>
-          <button className={styles.reviewBtn}>审阅</button>
+          <button className={styles.reviewBtn} type="button">
+            Review
+          </button>
           <button
             className={styles.saveBtn}
             onClick={handleSave}
-            disabled={saveStatus === 'saving'}
+            disabled={saveStatus === 'saving' || !contentLoaded}
+            type="button"
           >
-            {saveStatus === 'saving' ? '保存中...' : saveStatus === 'saved' ? '已保存' : '保存'}
+            {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save'}
           </button>
         </div>
       </div>
@@ -131,48 +166,67 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
         <textarea
           className={styles.textarea}
           value={content}
-          onChange={e => setContent(e.target.value)}
+          onChange={(event) => setContent(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="在此写作...&#10;&#10;使用 @agent{name=角色名} 引用角色&#10;使用 @foreshadow{id=伏笔ID} 引用伏笔&#10;使用 @secret{id=秘密ID} 引用秘密"
+          placeholder={[
+            'Write here...',
+            '',
+            'Use @agent{name=character_name} to reference a character',
+            'Use @foreshadow{id=thread_id} to reference a thread',
+            'Use @secret{id=secret_id} to reference a secret',
+          ].join('\n')}
           spellCheck={false}
         />
 
         {showContext && (
           <aside className={styles.contextPanel}>
-            <div className={styles.contextTitle}>创作上下文</div>
+            <div className={styles.contextTitle}>Writing Context</div>
             {chapter && (
               <section className={styles.ctxSection}>
-                <div className={styles.ctxSectionTitle}>当前章节</div>
-                <div>第{chapter.number}章：{chapter.title}</div>
-                <div className={styles.ctxMeta}>状态：{chapter.status} | {chapter.scene_count} 个场景</div>
+                <div className={styles.ctxSectionTitle}>Current Chapter</div>
+                <div>
+                  Chapter {chapter.number}: {chapter.title}
+                </div>
+                <div className={styles.ctxMeta}>
+                  Status: {chapter.status} &middot; {chapter.scene_count} scenes
+                </div>
               </section>
             )}
             {scene && (
               <section className={styles.ctxSection}>
-                <div className={styles.ctxSectionTitle}>当前场景</div>
+                <div className={styles.ctxSectionTitle}>Current Scene</div>
                 <div>{scene.title}</div>
-                <div className={styles.ctxMeta}>时间：{scene.world_time}</div>
+                <div className={styles.ctxMeta}>Time: {scene.world_time}</div>
                 {scene.participant_ids.length > 0 && (
                   <div className={styles.ctxMeta}>
-                    参与者：{scene.participant_ids.map(pid => {
-                      const agent = state.agents.find(a => a.id === pid);
-                      return agent?.display_name || agent?.name || pid;
-                    }).join(', ')}
+                    Participants:{' '}
+                    {scene.participant_ids
+                      .map((participantId) => {
+                        const agent = state.agents.find((item) => item.id === participantId);
+                        return agent?.display_name || agent?.name || participantId;
+                      })
+                      .join(', ')}
                   </div>
                 )}
               </section>
             )}
             <section className={styles.ctxSection}>
-              <div className={styles.ctxSectionTitle}>实体标签</div>
+              <div className={styles.ctxSectionTitle}>Entity Tags</div>
               <div className={styles.entityList}>
-                {entities.map(e => (
+                {entities.map((entity) => (
                   <button
-                    key={`${e.kind}-${e.id}`}
-                    className={`${styles.entityTag} ${styles[e.kind]}`}
-                    onClick={() => insertTag(e)}
-                    title={e.detail}
+                    key={`${entity.kind}-${entity.id}`}
+                    className={`${styles.entityTag} ${styles[entity.kind]}`}
+                    onClick={() => insertTag(entity)}
+                    title={entity.detail}
+                    type="button"
                   >
-                    {e.kind === 'agent' ? '@' : e.kind === 'foreshadow' ? '◈' : '⚷'} {e.label}
+                    {entity.kind === 'agent'
+                      ? '@'
+                      : entity.kind === 'foreshadow'
+                        ? '#'
+                        : 'key'}{' '}
+                    {entity.label}
                   </button>
                 ))}
               </div>

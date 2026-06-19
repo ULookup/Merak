@@ -14,7 +14,7 @@
   border-radius: 14px;
   font-size: 13px;
   line-height: 1.4;
-  animation: slideIn 0.28s var(--ease);
+  animation: slideIn 320ms var(--ease-spring) both;
   word-break: break-word;
   box-shadow: var(--shadow-md);
 }
@@ -24,7 +24,7 @@
 }
 
 .error {
-  background: #fff1f2;
+  background: var(--ruby-soft);
   border: 1px solid #fecaca;
   color: var(--ruby);
 }
@@ -60,5 +60,12 @@
   to {
     transform: translateX(100%);
     opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .removing {
+    animation: none;
   }
 }

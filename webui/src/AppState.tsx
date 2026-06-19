@@ -20,6 +20,7 @@ import type {
 } from './api/types';
 
 export type InspectorTab = 'story' | 'files' | 'agents' | 'run' | 'creation';
+export type AppPage = 'workbench' | 'settings' | 'editor';
 export type WorldbuildingStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface GeneratedFileEntry {
@@ -40,6 +41,9 @@ export interface RunTimelineItem {
 
 export interface AppState {
   appPhase: 'loading' | 'no_world' | 'no_agent' | 'ready';
+  currentPage: AppPage;
+  activeEditorChapterId: string | null;
+  activeEditorChapterTitle: string;
   agentId: string | null;
   sessionId: string;
   lastSeq: number;
@@ -75,6 +79,7 @@ export interface AppState {
   fileTypeFilter: string;
   activeEditorFileId: string | null;
   editorBuffers: Record<string, string>;
+  editorOriginals: Record<string, string>;
   editorVersions: Record<string, string>;
   editorSaveStatus: 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
   editorError: string | null;
@@ -104,6 +109,9 @@ export interface AppState {
 
 export const initialState: AppState = {
   appPhase: 'loading',
+  currentPage: 'workbench',
+  activeEditorChapterId: null,
+  activeEditorChapterTitle: '',
   agentId: null,
   sessionId: '',
   lastSeq: 0,
@@ -146,6 +154,7 @@ export const initialState: AppState = {
   activeEditorFileId: null,
   storyVersion: 0,
   editorBuffers: {},
+  editorOriginals: {},
   editorVersions: {},
   editorSaveStatus: 'idle',
   editorError: null,
@@ -279,6 +288,8 @@ export type Action =
   | { type: 'OPEN_WORKSPACE_FILE'; fileId: string }
   | { type: 'SET_EDITOR_CONTENT'; fileId: string; content: WorkspaceFileContent }
   | { type: 'UPDATE_EDITOR_BUFFER'; fileId: string; content: string }
+  | { type: 'REVERT_EDITOR_BUFFER'; fileId: string }
+  | { type: 'COMMIT_EDITOR_BUFFER'; fileId: string; version?: string }
   | { type: 'SET_EDITOR_SAVE_STATUS'; status: AppState['editorSaveStatus']; error?: string | null }
   | { type: 'SET_MODEL'; model: string }
   | { type: 'SET_LAST_SEQ'; seq: number }
@@ -308,7 +319,10 @@ export type Action =
   | { type: 'SHOW_SETUP_WIZARD'; show: boolean }
   | { type: 'SET_CHAPTER_REVIEW'; review: ChapterReviewItem | null }
   | { type: 'SET_SHOW_EXPORT_DIALOG'; show: boolean }
-  | { type: 'SET_USER_PREFERENCES'; prefs: { default_genre: string; preferred_style: string } };
+  | { type: 'SET_USER_PREFERENCES'; prefs: { default_genre: string; preferred_style: string } }
+  | { type: 'SET_PAGE'; page: AppPage }
+  | { type: 'OPEN_CHAPTER_EDITOR'; chapterId: string; chapterTitle: string }
+  | { type: 'SET_PIPELINE_AUTO_ADVANCE'; value: boolean };
 
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -440,6 +454,10 @@ export function reducer(state: AppState, action: Action): AppState {
           ...state.editorBuffers,
           [action.fileId]: action.content.content,
         },
+        editorOriginals: {
+          ...state.editorOriginals,
+          [action.fileId]: action.content.content,
+        },
         editorVersions: {
           ...state.editorVersions,
           [action.fileId]: action.content.version,
@@ -460,6 +478,33 @@ export function reducer(state: AppState, action: Action): AppState {
         ),
         editorSaveStatus: 'dirty',
         editorError: null,
+      };
+
+    case 'REVERT_EDITOR_BUFFER':
+      return {
+        ...state,
+        editorBuffers: {
+          ...state.editorBuffers,
+          [action.fileId]: state.editorOriginals[action.fileId] ?? state.editorBuffers[action.fileId] ?? '',
+        },
+        workspaceFiles: state.workspaceFiles.map((file) =>
+          file.id === action.fileId ? { ...file, dirty: false } : file,
+        ),
+        editorSaveStatus: 'idle',
+        editorError: null,
+      };
+
+    case 'COMMIT_EDITOR_BUFFER':
+      return {
+        ...state,
+        editorOriginals: {
+          ...state.editorOriginals,
+          [action.fileId]: state.editorBuffers[action.fileId] ?? '',
+        },
+        editorVersions: {
+          ...state.editorVersions,
+          ...(action.version ? { [action.fileId]: action.version } : {}),
+        },
       };
 
     case 'SET_EDITOR_SAVE_STATUS':
@@ -682,6 +727,20 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'SET_USER_PREFERENCES':
       return { ...state, userPreferences: action.prefs };
+
+    case 'SET_PAGE':
+      return { ...state, currentPage: action.page };
+
+    case 'OPEN_CHAPTER_EDITOR':
+      return {
+        ...state,
+        currentPage: 'editor',
+        activeEditorChapterId: action.chapterId,
+        activeEditorChapterTitle: action.chapterTitle,
+      };
+
+    case 'SET_PIPELINE_AUTO_ADVANCE':
+      return { ...state, pipelineAutoAdvance: action.value };
 
     default:
       return state;

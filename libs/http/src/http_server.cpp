@@ -536,6 +536,11 @@ void HttpServer::handle_config_set(const httplib::Request& req, httplib::Respons
         if (body.contains("temperature")) existing["llm"]["temperature"] = body["temperature"];
         if (body.contains("context_memory_length")) existing["llm"]["context_memory_length"] = body["context_memory_length"];
 
+        if (body.contains("writer_model")) {
+            if (!existing.contains("memory")) existing["memory"] = nlohmann::json::object();
+            existing["memory"]["writer_model"] = body["writer_model"];
+        }
+
         std::filesystem::create_directories(local_path.parent_path());
         std::ofstream out(local_path);
         out << existing.dump(2);

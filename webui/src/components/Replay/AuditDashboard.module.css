@@ -7,38 +7,42 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.4px;
-  color: var(--muted, #888);
+  color: var(--muted);
   margin-bottom: 12px;
 }
 
 .sourceBanner {
   margin-bottom: 12px;
-  padding: 8px 10px;
-  border: 1px solid rgba(183, 121, 31, 0.26);
+  padding: 6px 10px;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--amber-soft, #fff7ed);
-  color: var(--brand-strong, #92400e);
+  background: var(--surface-muted);
+  color: var(--muted-strong);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 650;
   line-height: 1.4;
 }
 
 .sourceBackend {
-  border-color: rgba(15, 118, 110, 0.22);
-  background: var(--teal-soft, #ecfdf5);
-  color: var(--teal, #0f766e);
+  border-color: var(--border-strong);
+  background: var(--brand-soft);
+  color: var(--ink);
 }
 
 .section {
   margin-bottom: 14px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--border, #2a2a3a);
+  border-bottom: 1px solid var(--border);
+}
+
+.section:last-child {
+  border-bottom: none;
 }
 
 .sectionTitle {
   font-size: 11px;
   font-weight: 700;
-  color: var(--teal, #4fc3f7);
+  color: var(--muted-strong);
   margin-bottom: 8px;
 }
 
@@ -55,18 +59,18 @@
   align-items: center;
   padding: 8px;
   border-radius: 6px;
-  background: var(--card-bg, #1a1a2e);
+  background: var(--surface-muted);
 }
 
 .statValue {
   font-size: 20px;
   font-weight: 700;
-  color: var(--text-primary, #ddd);
+  color: var(--ink);
 }
 
 .statLabel {
   font-size: 11px;
-  color: var(--muted, #888);
+  color: var(--muted);
   margin-top: 2px;
 }
 
@@ -74,7 +78,7 @@
 .tokenBar {
   height: 6px;
   border-radius: 3px;
-  background: var(--border, #333);
+  background: var(--border);
   overflow: hidden;
   margin-bottom: 6px;
 }
@@ -82,15 +86,19 @@
 .tokenFill {
   height: 100%;
   border-radius: 3px;
-  background: linear-gradient(90deg, #4fc3f7, #7c4dff);
-  transition: width 300ms ease;
+  background: var(--ink);
+  transition: width 300ms var(--ease);
+}
+
+.tokenWarn {
+  background: var(--ruby);
 }
 
 .tokenRow {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: var(--muted, #888);
+  color: var(--muted);
 }
 
 /* Tool Distribution */
@@ -103,8 +111,8 @@
 
 .toolName {
   font-size: 11px;
-  font-family: 'JetBrains Mono', monospace;
-  color: var(--text-primary, #ccc);
+  font-family: var(--mono);
+  color: var(--ink);
   min-width: 100px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -115,7 +123,7 @@
   flex: 1;
   height: 4px;
   border-radius: 2px;
-  background: var(--border, #333);
+  background: var(--border);
   overflow: hidden;
 }
 
@@ -123,12 +131,12 @@
   display: block;
   height: 100%;
   border-radius: 2px;
-  background: #ffb74d;
+  background: var(--amber);
 }
 
 .toolCount {
   font-size: 11px;
-  color: var(--muted, #888);
+  color: var(--muted);
   min-width: 20px;
   text-align: right;
 }
@@ -142,18 +150,18 @@
 }
 
 .statusRow > span:first-child {
-  color: var(--muted, #888);
+  color: var(--muted);
 }
 
 .statusValue {
-  color: var(--text-primary, #ddd);
+  color: var(--ink);
   font-weight: 500;
 }
 
 .empty {
   text-align: center;
   font-size: 13px;
-  color: var(--muted, #666);
+  color: var(--muted);
   padding: 24px;
   margin: 0;
 }

@@ -1,12 +1,18 @@
+import { lazy, Suspense } from 'react';
 import { X } from 'lucide-react';
 import { useAppState, type InspectorTab } from '../AppState';
 import { useI18n } from '../i18n';
-import AgentsInspector from './Inspector/AgentsInspector';
-import CreationDashboard from './Inspector/CreationDashboard';
-import FilesInspector from './Inspector/FilesInspector';
-import RunInspector from './Inspector/RunInspector';
-import StoryInspector from './Inspector/StoryInspector';
 import styles from './InspectorPanel.module.css';
+
+const AgentsInspector = lazy(() => import('./Inspector/AgentsInspector'));
+const CreationDashboard = lazy(() => import('./Inspector/CreationDashboard'));
+const FilesInspector = lazy(() => import('./Inspector/FilesInspector'));
+const RunInspector = lazy(() => import('./Inspector/RunInspector'));
+const StoryInspector = lazy(() => import('./Inspector/StoryInspector'));
+
+function TabFallback() {
+  return <div className={styles.empty} style={{ minHeight: 180 }} />;
+}
 
 interface InspectorPanelProps {
   open?: boolean;
@@ -77,11 +83,13 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
           <EmptyState tab={state.inspectorTab} />
         ) : (
           <div className={styles.content}>
-            {state.inspectorTab === 'story' && <StoryInspector />}
-            {state.inspectorTab === 'files' && <FilesInspector />}
-            {state.inspectorTab === 'agents' && <AgentsInspector />}
-            {state.inspectorTab === 'creation' && <CreationDashboard />}
-            {state.inspectorTab === 'run' && <RunInspector />}
+            <Suspense fallback={<TabFallback />}>
+              {state.inspectorTab === 'story' && <StoryInspector />}
+              {state.inspectorTab === 'files' && <FilesInspector />}
+              {state.inspectorTab === 'agents' && <AgentsInspector />}
+              {state.inspectorTab === 'creation' && <CreationDashboard />}
+              {state.inspectorTab === 'run' && <RunInspector />}
+            </Suspense>
           </div>
         )}
       </div>

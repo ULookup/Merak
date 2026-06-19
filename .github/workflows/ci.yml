@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - '*.md'
+
+jobs:
+  build-cpp:
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [Debug, Release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup GCC 14
+        if: matrix.compiler == 'gcc'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq g++-14
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
+          echo "CC=gcc-14" >> $GITHUB_ENV
+          echo "CXX=g++-14" >> $GITHUB_ENV
+
+      - name: Setup Clang 18
+        if: matrix.compiler == 'clang'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang-18 libc++-18-dev libc++abi-18-dev
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/clang-18 100
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/clang++-18 100
+          echo "CC=clang-18" >> $GITHUB_ENV
+          echo "CXX=clang++-18" >> $GITHUB_ENV
+
+      - name: Setup CMake (pin for libpqxx compat)
+        run: pip install "cmake>=3.28,<3.31"
+
+      - name: Setup Conan
+        run: |
+          pip install "conan>=2.0,<3.0"
+          conan profile detect --name default
+
+      - name: Configure Conan profile
+        run: |
+          PROFILE=~/.conan2/profiles/default
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            sed -i 's/^compiler=.*/compiler=gcc/' "$PROFILE"
+            sed -i 's/^compiler\.version=.*/compiler.version=14/' "$PROFILE"
+            grep -q '^compiler\.libcxx=' "$PROFILE" && sed -i 's/^compiler\.libcxx=.*/compiler.libcxx=libstdc++11/' "$PROFILE" || echo 'compiler.libcxx=libstdc++11' >> "$PROFILE"
+          else
+            sed -i 's/^compiler=.*/compiler=clang/' "$PROFILE"
+            sed -i 's/^compiler\.version=.*/compiler.version=18/' "$PROFILE"
+            grep -q '^compiler\.libcxx=' "$PROFILE" && sed -i 's/^compiler\.libcxx=.*/compiler.libcxx=libc++/' "$PROFILE" || echo 'compiler.libcxx=libc++' >> "$PROFILE"
+          fi
+          grep -q '^compiler\.cppstd=' "$PROFILE" && sed -i 's/^compiler\.cppstd=.*/compiler.cppstd=23/' "$PROFILE" || echo 'compiler.cppstd=23' >> "$PROFILE"
+          echo "=== Profile ==="
+          cat "$PROFILE"
+
+      - name: Cache Conan
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: ${{ runner.os }}-conan-${{ matrix.compiler }}-${{ hashFiles('conanfile.txt') }}
+          restore-keys: ${{ runner.os }}-conan-${{ matrix.compiler }}-
+
+      - name: Conan install
+        run: conan install . --build=missing -s build_type=${{ matrix.build_type }}
+
+      - name: CMake configure
+        run: cmake -B build -DCMAKE_TOOLCHAIN_FILE=build/${{ matrix.build_type }}/generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DCMAKE_C_COMPILER="$CC" -DCMAKE_CXX_COMPILER="$CXX" -DCMAKE_CXX_STANDARD=23
+
+      - name: CMake build
+        run: cmake --build build -j$(nproc)
+
+  build-webui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('webui/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-
+
+      - name: Build WebUI
+        run: |
+          cd webui
+          npm ci
+          npm run build

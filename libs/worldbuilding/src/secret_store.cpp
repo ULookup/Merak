@@ -3,6 +3,8 @@
 #include <merak/worldbuilding/ids.hpp>
 #include <merak/worldbuilding/pg_helpers.hpp>
 
+#include <spdlog/spdlog.h>
+
 #include <algorithm>
 #include <filesystem>
 #include <memory>
@@ -151,8 +153,11 @@ Secret SecretStore::create(const std::string& world_id, Secret secret) {
         write_json(worlds_.world_path(world_id) / "secrets" / (secret.id + ".json"),
                    secret_json(secret));
         conn.exec("COMMIT");
-    } catch (...) {
-        try { conn.exec("ROLLBACK"); } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::error("SecretStore::create failed: {}", e.what());
+        try { conn.exec("ROLLBACK"); } catch (const std::exception& re) {
+            spdlog::critical("ROLLBACK also failed: {}", re.what());
+        }
         throw;
     }
     return secret;
@@ -197,8 +202,11 @@ Secret SecretStore::expose(const std::string& world_id,
             " WHERE world_id = $3 AND id = $4",
             {to_string(secret.status), scene_id, world_id, secret_id});
         conn.exec("COMMIT");
-    } catch (...) {
-        try { conn.exec("ROLLBACK"); } catch (...) {}
+    } catch (const std::exception& e) {
+        spdlog::error("SecretStore::expose failed: {}", e.what());
+        try { conn.exec("ROLLBACK"); } catch (const std::exception& re) {
+            spdlog::critical("ROLLBACK also failed: {}", re.what());
+        }
         write_json(path, old_json);
         throw;
     }
@@ -209,8 +217,8 @@ Secret SecretStore::expose(const std::string& world_id,
         if (std::filesystem::exists(fs_path)) {
             try {
                 foreshadowing_.pay(world_id, fs_id, scene_id);
-            } catch (...) {
-                // Pay best-effort; don't roll back secret exposure
+            } catch (const std::exception& e) {
+                spdlog::debug("foreshadowing pay skipped for {}: {}", fs_id, e.what());
             }
         }
     }

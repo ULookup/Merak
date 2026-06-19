@@ -11,6 +11,8 @@ interface Props {
   onCancel: () => void;
 }
 
+const LIST_SPLIT_PATTERN = /[,，、\s]+/;
+
 export default function AgentCardEdit({ worldId, agentId, detail, onSave, onCancel }: Props) {
   const cc = detail.character_card;
   const [fields, setFields] = useState<Record<string, string>>({
@@ -18,7 +20,7 @@ export default function AgentCardEdit({ worldId, agentId, detail, onSave, onCanc
     gender: cc.gender ?? '',
     race: cc.race ?? '',
     identity: cc.identity ?? '',
-    core_traits: cc.core_traits?.join('、') ?? '',
+    core_traits: cc.core_traits?.join(', ') ?? '',
     emotional_tendency: cc.emotional_tendency ?? '',
     speaking_style: cc.speaking_style ?? '',
     core_desire: cc.core_desire ?? '',
@@ -27,24 +29,25 @@ export default function AgentCardEdit({ worldId, agentId, detail, onSave, onCanc
     background: cc.background ?? '',
     knowledge_scope: cc.knowledge_scope ?? '',
     appearance: cc.appearance ?? '',
-    taboo_topics: cc.taboo_topics?.join('、') ?? '',
+    taboo_topics: cc.taboo_topics?.join(', ') ?? '',
   });
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
 
-  const set = (key: string, value: string) => setFields(prev => ({ ...prev, [key]: value }));
+  const displayName = detail.display_name || detail.name;
+  const set = (key: string, value: string) => setFields((prev) => ({ ...prev, [key]: value }));
 
   const handleSave = async () => {
     setSaving(true);
     setConflict(false);
     try {
       const payload: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(fields)) {
-        if (k === 'core_traits') {
-          const traits = v.split(/[,，、\s]+/).filter(Boolean);
-          if (traits.length > 0) payload[k] = traits;
-        } else if (v !== '' && v !== String(cc[k as keyof typeof cc] ?? '')) {
-          payload[k] = k === 'age' ? Number(v) : v;
+      for (const [key, value] of Object.entries(fields)) {
+        if (key === 'core_traits' || key === 'taboo_topics') {
+          const values = value.split(LIST_SPLIT_PATTERN).filter(Boolean);
+          if (values.length > 0) payload[key] = values;
+        } else if (value !== '' && value !== String(cc[key as keyof typeof cc] ?? '')) {
+          payload[key] = key === 'age' ? Number(value) : value;
         }
       }
       if (Object.keys(payload).length === 0) {
@@ -66,9 +69,9 @@ export default function AgentCardEdit({ worldId, agentId, detail, onSave, onCanc
     <label className={styles.field}>
       <span>{label}</span>
       {textarea ? (
-        <textarea value={fields[key] ?? ''} onChange={e => set(key, e.target.value)} rows={4} />
+        <textarea value={fields[key] ?? ''} onChange={(event) => set(key, event.target.value)} rows={4} />
       ) : (
-        <input value={fields[key] ?? ''} onChange={e => set(key, e.target.value)} />
+        <input value={fields[key] ?? ''} onChange={(event) => set(key, event.target.value)} />
       )}
     </label>
   );
@@ -76,33 +79,34 @@ export default function AgentCardEdit({ worldId, agentId, detail, onSave, onCanc
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h3>编辑：{detail.display_name || detail.name}</h3>
+        <span>Character Card</span>
+        <h3>Edit {displayName}</h3>
       </div>
       {conflict && (
         <div className={styles.conflictBanner}>
-          此卡片已被其他来源修改。请刷新后重新编辑。
+          This card was updated elsewhere. Refresh the character profile before editing again.
         </div>
       )}
       <div className={styles.form}>
-        {field('年龄', 'age')}
-        {field('性别', 'gender')}
-        {field('种族', 'race')}
-        {field('身份', 'identity')}
-        {field('性格特征（逗号或空格分隔）', 'core_traits')}
-        {field('情感倾向', 'emotional_tendency')}
-        {field('说话风格', 'speaking_style')}
-        {field('核心欲望', 'core_desire')}
-        {field('深层恐惧', 'deep_fear')}
-        {field('日常目标', 'daily_goal')}
-        {field('知识范围', 'knowledge_scope')}
-        {field('背景故事', 'background', true)}
-        {field('外观', 'appearance', true)}
-        {field('禁忌话题（逗号或空格分隔）', 'taboo_topics')}
+        {field('Age', 'age')}
+        {field('Gender', 'gender')}
+        {field('Race', 'race')}
+        {field('Identity', 'identity')}
+        {field('Core traits (comma or space separated)', 'core_traits')}
+        {field('Emotional tendency', 'emotional_tendency')}
+        {field('Speaking style', 'speaking_style')}
+        {field('Core desire', 'core_desire')}
+        {field('Deep fear', 'deep_fear')}
+        {field('Daily goal', 'daily_goal')}
+        {field('Knowledge scope', 'knowledge_scope')}
+        {field('Background', 'background', true)}
+        {field('Appearance', 'appearance', true)}
+        {field('Taboo topics (comma or space separated)', 'taboo_topics')}
       </div>
       <div className={styles.actions}>
-        <button onClick={onCancel} disabled={saving}>取消</button>
+        <button onClick={onCancel} disabled={saving}>Cancel</button>
         <button onClick={handleSave} disabled={saving} className={styles.saveBtn}>
-          {saving ? '保存中...' : '保存'}
+          {saving ? 'Saving...' : 'Save'}
         </button>
       </div>
     </div>

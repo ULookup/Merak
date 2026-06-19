@@ -46,6 +46,9 @@ AgentKind agent_kind_from_string(const std::string& value) {
     if (value == "group") {
         return AgentKind::Group;
     }
+    if (value == "writer") {
+        return AgentKind::Writer;
+    }
     throw std::runtime_error("unknown agent kind: " + value);
 }
 
@@ -705,6 +708,30 @@ AgentStore::recent_diary(const std::string& agent_id, int max_entries) const {
             .world_time = res.get(i, 3),
             .content = res.get(i, 4),
             .created_at = res.get(i, 5),
+        });
+    }
+    return entries;
+}
+
+std::vector<DiaryEntry>
+AgentStore::recent_diary_headers(const std::string& agent_id, int max_entries) const {
+    PgConn conn(*pool_);
+    auto res = conn.query(
+        "SELECT id, agent_id, scene_id, world_time, SUBSTR(content, 1, 80) AS content, "
+        "mood, created_at FROM agent_diaries WHERE agent_id = $1 "
+        "ORDER BY created_at DESC, id DESC LIMIT $2",
+        {agent_id, std::to_string(std::max(0, max_entries))});
+
+    std::vector<DiaryEntry> entries;
+    for (int i = 0; i < res.ntuples(); i++) {
+        entries.push_back(DiaryEntry{
+            .id = res.get(i, 0),
+            .agent_id = res.get(i, 1),
+            .scene_id = res.get(i, 2),
+            .world_time = res.get(i, 3),
+            .content = res.get(i, 4),  // 前80字符 preview
+            .created_at = res.get(i, 6),
+            .mood = res.get(i, 5),
         });
     }
     return entries;

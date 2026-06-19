@@ -1,19 +1,10 @@
-.layout {
-  display: flex;
-  height: 100vh;
-  overflow: hidden;
-  padding: 8px;
-  gap: 8px;
-  background: var(--page);
-}
-
 .sidebar {
   width: 272px;
   min-width: 272px;
-  background: var(--surface-muted);
+  background: rgba(255, 255, 255, 0.78);
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(224, 223, 220, 0.92);
   border-radius: 8px;
   box-shadow: none;
   overflow: hidden;
@@ -33,10 +24,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(224, 223, 220, 0.92);
   border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--shadow-lg);
 }
 
 .chatArea {
@@ -111,11 +102,6 @@
 }
 
 @media (max-width: 767px) {
-  .layout {
-    padding: 0;
-    gap: 0;
-  }
-
   .sidebar {
     display: none;
   }
@@ -131,5 +117,11 @@
 
   .composerArea {
     padding: 10px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    animation: none;
   }
 }

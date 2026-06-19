@@ -7,9 +7,11 @@ namespace merak {
 
 Compactor::Compactor(
     std::shared_ptr<LlmProvider> summary_llm,
-    std::shared_ptr<TokenCounter> counter)
+    std::shared_ptr<TokenCounter> counter,
+    std::string model)
     : summary_llm_(std::move(summary_llm))
     , counter_(std::move(counter))
+    , model_(std::move(model))
 {
 }
 
@@ -39,7 +41,7 @@ std::future<CompactionResult> Compactor::compact(
                << history_text;
 
         ChatRequest req;
-        req.model = "gpt-4o-mini";
+        req.model = model_.empty() ? "gpt-4o-mini" : model_;
         req.messages.push_back({"system", "You are a concise summarizer. Output only the summary, no preamble."});
         req.messages.push_back({"user", prompt.str()});
         req.max_output_tokens = target_tokens;

@@ -15,12 +15,48 @@
   margin-bottom: 6px;
 }
 
+.groups {
+  display: grid;
+  gap: 10px;
+}
+
+.groups section {
+  min-width: 0;
+}
+
+.groupTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 1px 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 820;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.groupTitle strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  font-size: 10px;
+  line-height: 1;
+}
+
 .list ul {
   display: flex;
   flex-direction: column;
   gap: 3px;
   list-style: none;
-  max-height: 220px;
+  max-height: 178px;
   overflow-y: auto;
 }
 
@@ -59,9 +95,30 @@
   box-shadow: inset 2px 0 0 var(--ink);
 }
 
+.itemArchived {
+  color: var(--muted);
+}
+
+.sessionMain {
+  min-width: 0;
+  display: grid;
+  flex: 1;
+  gap: 3px;
+}
+
 .title {
   min-width: 0;
-  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 680;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -130,4 +187,14 @@
   margin-left: 6px;
   padding: 2px 5px;
   text-transform: uppercase;
+}
+
+.empty {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: default;
+  font-size: 11px;
+  line-height: 1.35;
+  padding: 8px;
 }

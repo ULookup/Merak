@@ -5,6 +5,7 @@
 #include <thread>
 #include <unordered_set>
 #include <merak/skills/skill_executor.hpp>
+#include <merak/utilities.hpp>
 
 namespace merak {
 
@@ -596,21 +597,18 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
         auto result = result_future.get();
 
         if (call.name == "ask_user") {
-            try {
-                auto result_json = nlohmann::json::parse(result.output);
-                if (result_json.value("status", "") == "pending") {
+            if (auto j = safe_json_parse(result.output)) {
+                if (j->value("status", "") == "pending") {
                     result = control.await_ask_user(call, result);
                 }
-            } catch (...) {}
+            }
         }
 
         if (tools_->requires_confirmation(call.name)) {
-            try {
-                auto result_json = nlohmann::json::parse(result.output);
-                if (result_json.contains("creation_id") && result_json.value("status", "") == "pending_creation") {
+            if (auto j = safe_json_parse(result.output)) {
+                if (j->contains("creation_id") && j->value("status", "") == "pending_creation") {
                     result = control.await_creation(call, result);
                 }
-            } catch (...) {
             }
         }
 

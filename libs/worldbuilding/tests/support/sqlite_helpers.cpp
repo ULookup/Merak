@@ -1,5 +1,6 @@
 #include <merak/worldbuilding/sqlite_helpers.hpp>
 
+#include <exception>
 #include <stdexcept>
 #include <string>
 

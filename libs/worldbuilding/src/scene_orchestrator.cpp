@@ -6,6 +6,8 @@
 #include "prompts/character.hpp"
 #include "prompts/creative_director.hpp"
 #include "prompts/domain_manager.hpp"
+#include "prompts/relation_manager.hpp"
+#include "prompts/group.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -15,6 +17,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include <spdlog/spdlog.h>
 
 namespace merak::worldbuilding {
 namespace {
@@ -115,9 +119,9 @@ Foreshadowing detect_foreshadow_proposal(const std::string& markdown) {
             for (auto& p : weak_signals)
                 if (sentence.find(p) != std::string::npos) score += 1;
             // Questions suggest unresolved threads
-            if (sentence.find('？') != std::string::npos || sentence.find('?') != std::string::npos) score += 1;
+            if (sentence.find("？") != std::string::npos || sentence.find('?') != std::string::npos) score += 1;
             // Interrupted dialogue
-            if (sentence.find("——") != std::string::npos && sentence.find('？') == std::string::npos) score += 1;
+            if (sentence.find("——") != std::string::npos && sentence.find("？") == std::string::npos) score += 1;
 
             if (score > best_score) {
                 best_score = score;
@@ -258,7 +262,9 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                 try {
                     auto agent = agents_.get_agent(pid);
                     if (agent) participant_names.push_back(agent->name);
-                } catch (...) {}
+                } catch (const std::exception& e) {
+                    spdlog::debug("get_agent for KG participant names skipped: {}", e.what());
+                }
             }
             if (participant_names.size() > 1) {
                 try {
@@ -268,7 +274,9 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                     if (!md.empty()) {
                         god << md << "\n";
                     }
-                } catch (...) {}
+                } catch (const std::exception& e) {
+                    spdlog::debug("KG query_subgraph skipped: {}", e.what());
+                }
             }
         }
 
@@ -293,7 +301,8 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
         try {
             auto card = agents_.load_character_card(pid);
             prompt << card_to_prompt(card);
-        } catch (...) {
+        } catch (const std::exception& e) {
+            spdlog::debug("load_character_card({}) skipped: {}", pid, e.what());
             // Agent may be a manager or group; skip card for non-characters
             prompt << "代理人: " << pid << "\n";
         }
@@ -306,29 +315,31 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
             prompt << it->context_snippet << "\n";
         }
 
-        // Recent diary entries (full content)
+        // Recent diary memory (index + summaries)
         try {
-            auto diaries = agents_.recent_diary(pid, service.diary_context_limit());
-            if (!diaries.empty()) {
-                prompt << "\n## 你的近期记忆\n";
+            auto diary_headers = agents_.recent_diary_headers(pid, service.diary_context_limit());
 
-                // Memory summaries first (compressed long-term memory)
-                auto summaries = agents_.recent_summaries(pid, 10);
-                if (!summaries.empty()) {
-                    prompt << "\n### 记忆摘要\n";
-                    for (const auto& s : summaries) {
-                        prompt << s.summary << "\n\n";
-                    }
+            // Memory summaries first (compressed long-term memory)
+            auto summaries = agents_.recent_summaries(pid, 10);
+            if (!summaries.empty()) {
+                prompt << "\n## 你的记忆摘要\n";
+                for (const auto& s : summaries) {
+                    prompt << "- " << s.period_start << " ~ " << s.period_end << ": "
+                           << s.summary.substr(0, 150) << "\n";
                 }
+            }
 
-                // Recent full diary entries
-                prompt << "\n### 最近经历\n";
-                for (const auto& d : diaries) {
-                    prompt << "- [" << d.world_time << "] " << d.content << "\n";
+            // Diary index (preview headers)
+            if (!diary_headers.empty()) {
+                prompt << "\n## 你的日记索引 (使用 read_diary_entry 查看全文)\n";
+                for (const auto& d : diary_headers) {
+                    prompt << "- [" << d.world_time << "] " << d.mood << " | "
+                           << d.content << "  (id=" << d.id << ")\n";
                     view.loaded_memory_refs.push_back(d.id);
                 }
             }
-        } catch (...) {
+        } catch (const std::exception& e) {
+            spdlog::debug("diary index loading skipped: {}", e.what());
         }
 
         // Group shared memory: if agent is a group member, load shared refs
@@ -337,7 +348,8 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
             for (const auto& ref : shared) {
                 view.loaded_memory_refs.push_back(ref);
             }
-        } catch (...) {
+        } catch (const std::exception& e) {
+            spdlog::debug("shared_memory_refs_for skipped: {}", e.what());
         }
 
         // Append character behavior prompt
@@ -368,13 +380,59 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
     // Manager tools and behavior constraints.
     auto dm_prompt = prompts::load_domain_manager_prompt(prompts_dir_);
     for (auto kind : {AgentKind::MapManager, AgentKind::HistoryManager,
-                       AgentKind::MagicSystemManager, AgentKind::FactionManager,
-                       AgentKind::RelationManager}) {
+                       AgentKind::MagicSystemManager, AgentKind::FactionManager}) {
         auto instances = tools_factory.create_tools(kind);
         std::string key = to_string(kind);
         for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
         if (!dm_prompt.empty()) {
             prep.behavior_constraints[key] = dm_prompt;
+        }
+    }
+
+    // RelationManager gets its own prompt with KG tool semantics
+    {
+        auto kind = AgentKind::RelationManager;
+        auto instances = tools_factory.create_tools(kind);
+        std::string key = to_string(kind);
+        for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
+        auto rm_prompt = prompts::load_relation_manager_prompt(prompts_dir_);
+        if (!rm_prompt.empty()) {
+            prep.behavior_constraints[key] = rm_prompt;
+        }
+    }
+
+    // Group managers — cultural context layer, one per group
+    {
+        auto gp_prompt_template = prompts::load_group_prompt(prompts_dir_);
+
+        try {
+            auto all_agents = agents_.list_agents(world_id);
+            for (const auto& ag : all_agents) {
+                if (ag.kind != AgentKind::Group) continue;
+
+                auto instances = tools_factory.create_tools(AgentKind::Group);
+                for (auto& t : instances) {
+                    prep.tools_by_agent_id[ag.id].push_back(t->spec());
+                }
+
+                if (!gp_prompt_template.empty()) {
+                    std::string prompt = gp_prompt_template;
+                    size_t pos = 0;
+                    while ((pos = prompt.find("{{agent.name}}", pos)) != std::string::npos) {
+                        prompt.replace(pos, 14, ag.name);
+                        pos += ag.name.length();
+                    }
+                    prep.behavior_constraints[ag.id] = prompt;
+                }
+            }
+        } catch (...) {
+            // Fallback: single shared key for backward compatibility
+            auto instances = tools_factory.create_tools(AgentKind::Group);
+            std::string key = to_string(AgentKind::Group);
+            for (auto& t : instances) prep.tools_by_agent_id[key].push_back(t->spec());
+            if (!gp_prompt_template.empty()) {
+                prep.behavior_constraints[key] = gp_prompt_template;
+            }
         }
     }
 
@@ -404,7 +462,8 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
         for (const auto& pid : scene.participant_ids) {
             try {
                 voice_.update(pid, dialogue_lines);
-            } catch (...) {
+            } catch (const std::exception& e) {
+                spdlog::debug("voice fingerprint update skipped: {}", e.what());
             }
         }
     }
@@ -428,7 +487,8 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
             try {
                 auto planted = foreshadowing_.plant(world_id, proposal);
                 wrap.proposed_foreshadowing.push_back(planted);
-            } catch (...) {
+            } catch (const std::exception& e) {
+                spdlog::debug("foreshadowing proposal plant skipped: {}", e.what());
             }
         }
     }
@@ -439,6 +499,21 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
     // Chapter foreshadow stats
     wrap.chapter_foreshadow_stats =
         foreshadowing_.chapter_summary(world_id, scene.chapter_id);
+
+    // 自动记忆压缩
+    for (const auto& pid : scene.participant_ids) {
+        try {
+            int count = agents_.uncompressed_diary_count(pid);
+            if (count >= compression_trigger_threshold_) {
+                auto result = compact_agent_diaries(pid).get();
+                if (result.compressed) {
+                    wrap.compressed_memories.push_back(result.summary_id);
+                }
+            }
+        } catch (const std::exception& e) {
+            spdlog::warn("auto-compression failed for agent {}: {}", pid, e.what());
+        }
+    }
 
     return wrap;
 }
@@ -484,7 +559,8 @@ SceneOrchestrator::route_direct_message(const std::string& world_id,
                 for (const auto& ref : group.shared_memory_ids) {
                     view.loaded_memory_refs.push_back(ref);
                 }
-            } catch (...) {
+            } catch (const std::exception& e) {
+                spdlog::debug("group member card load({}) skipped: {}", member_id, e.what());
                 view.system_prompt = "群体 " + agent->name + " 成员 " + member_id;
             }
         } else {
@@ -498,12 +574,92 @@ SceneOrchestrator::route_direct_message(const std::string& world_id,
             prompt << card_to_prompt(card) << "\n";
             prompt << "## 用户消息\n" << message;
             view.system_prompt = prompt.str();
-        } catch (...) {
+        } catch (const std::exception& e) {
+            spdlog::debug("individual card load({}) skipped: {}", target_agent_id, e.what());
             view.system_prompt = "代理人 " + target_agent_id + ":\n" + message;
         }
     }
 
     return view;
+}
+
+std::future<DiaryCompactionResult> SceneOrchestrator::compact_agent_diaries(const std::string& agent_id) {
+    return std::async(std::launch::async, [this, agent_id]() -> DiaryCompactionResult {
+        DiaryCompactionResult result;
+        result.compressed = false;
+
+        if (!compaction_llm_) {
+            spdlog::warn("compact_agent_diaries: compaction_llm_ not set, skipping");
+            return result;
+        }
+
+        auto diaries = agents_.uncompressed_diaries(agent_id, 20);
+        if ((int)diaries.size() < compression_trigger_threshold_) {
+            return result;
+        }
+
+        std::ostringstream prompt;
+        prompt << "你是一个记忆管理助手。将以下" << diaries.size()
+               << "条角色日记压缩为一份记忆摘要。\n\n";
+        for (const auto& d : diaries) {
+            prompt << "--- [" << d.world_time << "] 心情: " << d.mood << " ---\n";
+            prompt << d.content << "\n\n";
+        }
+        prompt << "请以JSON格式输出摘要：\n"
+               << R"({"summary":"以第三人称概述这段时间内角色的经历、情感变化、关系发展和重要发现，300字以内",)"
+               << R"("key_events":["事件1","事件2"],)"
+               << R"("emotional_arc":"从起始心情到结束心情的情感轨迹",)"
+               << R"("relationship_changes":"关系变化概述，无变化则写'无明显变化'"})";
+
+        ChatRequest req;
+        req.model = compaction_model_.empty() ? "gpt-4o-mini" : compaction_model_;
+        req.max_output_tokens = 1024;
+        req.messages = {{"user", prompt.str()}};
+        req.tools = {};
+        req.enable_cache = false;
+
+        auto llm_future = compaction_llm_->chat(req, [](StreamChunk){}, nullptr);
+        auto llm_response = llm_future.get();
+
+        if (token_counter_) {
+            int prompt_tokens = token_counter_->count(prompt.str());
+            int response_tokens = token_counter_->count(llm_response.text);
+            spdlog::info("compact_agent_diaries for {}: {} diaries, prompt={} tokens, response={} tokens",
+                agent_id, diaries.size(), prompt_tokens, response_tokens);
+        }
+
+        try {
+            auto summary_json = nlohmann::json::parse(llm_response.text);
+
+            MemorySummary summary;
+            summary.id = make_id("summary");
+            summary.agent_id = agent_id;
+            summary.summary = summary_json.value("summary", llm_response.text);
+            summary.period_start = diaries.front().world_time;
+            summary.period_end = diaries.back().world_time;
+            summary.created_at = now_iso_utc();
+            for (const auto& d : diaries) summary.source_diary_ids.push_back(d.id);
+
+            agents_.write_memory_summary(summary);
+            result.summary_id = summary.id;
+            result.compressed = true;
+        } catch (...) {
+            MemorySummary summary;
+            summary.id = make_id("summary");
+            summary.agent_id = agent_id;
+            summary.summary = llm_response.text;
+            summary.period_start = diaries.front().world_time;
+            summary.period_end = diaries.back().world_time;
+            summary.created_at = now_iso_utc();
+            for (const auto& d : diaries) summary.source_diary_ids.push_back(d.id);
+
+            agents_.write_memory_summary(summary);
+            result.summary_id = summary.id;
+            result.compressed = true;
+        }
+
+        return result;
+    });
 }
 
 } // namespace merak::worldbuilding

@@ -46,6 +46,8 @@ public:
     void append_diary_entry(DiaryEntry entry);
     std::vector<DiaryEntry> recent_diary(const std::string& agent_id,
                                          int max_entries) const;
+    std::vector<DiaryEntry> recent_diary_headers(const std::string& agent_id,
+                                                  int max_entries) const;
     void write_memory_summary(MemorySummary summary);
 
     std::vector<DiaryEntry> search_diary(const std::string& agent_id,
