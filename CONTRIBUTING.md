@@ -16,6 +16,43 @@ For security issues, do NOT file a public issue. Contact maintainers privately.
 1. Search existing proposals first
 2. Use the Feature Request template, describe: use case, proposed solution, alternatives considered
 
+## Branch Strategy
+
+```
+main          stable releases (tags: v0.1.0, v0.2.0, ...)
+  └── v0.1    development branch for version 0.1
+  └── v0.2    development branch for version 0.2
+```
+
+- **`main`** — stable, tagged releases only. Never committed to directly (except hotfixes).
+- **`vX.X`** — development branch for that major version. All feature work targets a version branch.
+- **Hotfixes** — critical fixes may go directly to `main`, then cherry-picked back to active version branches.
+
+## Development Workflow
+
+1. Fork the repository
+2. Clone your fork
+3. Identify the target version branch (e.g. `v0.1`). If unsure, ask in an Issue.
+4. Create your dev branch from the version branch:
+   ```
+   git checkout v0.1
+   git checkout -b feat/my-feature
+   ```
+5. Develop and self-test
+6. Rebase on the version branch before submitting:
+   ```
+   git fetch upstream
+   git rebase upstream/v0.1
+   ```
+7. Ensure CI passes
+8. Submit a PR targeting the same version branch (e.g. `v0.1`)
+9. Once merged, the version branch will be merged into `main` on release
+
+Branch naming:
+- `feat/<name>` — new feature
+- `fix/<name>` — bug fix
+- `docs/<name>` — documentation
+
 ## Development Setup
 
 ### Prerequisites
@@ -70,15 +107,6 @@ cd build && ctest --output-on-failure
 cd webui && npm run test
 ```
 
-## Development Workflow
-
-1. Fork the repository
-2. Clone your fork
-3. Create a feature branch (see [Branch Strategy](#branch-strategy))
-4. Develop and self-test
-5. Ensure CI passes
-6. Submit a PR
-
 ## Commit Conventions
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/):
@@ -109,15 +137,6 @@ Example:
 feat(worldbuilding): add timeline event recording endpoint
 ```
 
-## Branch Strategy
-
-- `main` — stable, ready to release
-- `feat/<name>` — new feature
-- `fix/<name>` — bug fix
-- `docs/<name>` — documentation
-
-Always branch from the latest `main`.
-
 ## Code Style
 
 ### C++
@@ -141,10 +160,11 @@ Always branch from the latest `main`.
 
 ## Pull Request Process
 
-1. Rebase on `main`
-2. Your PR should: pass CI, include screenshots for UI changes, follow the PR template
-3. At least one maintainer approval required
-4. Merged via Squash Merge
+1. Rebase on the target version branch before submitting
+2. Open a PR against the version branch (e.g. `v0.1`), not `main`
+3. Your PR should: pass CI, include screenshots for UI changes, follow the PR template
+4. At least one maintainer approval required
+5. Merged via Squash Merge
 
 ## Code Review
 
@@ -171,6 +191,43 @@ Contributors should respond to review feedback within a reasonable timeframe. St
 
 1. 先在 Issues 中搜索是否已有类似提议
 2. 使用 Feature Request 模板，说明：使用场景、期望的解决方案、备选方案
+
+## 分支策略
+
+```
+main          稳定发布分支（tag: v0.1.0, v0.2.0, ...）
+  └── v0.1    0.1 版本的开发分支
+  └── v0.2    0.2 版本的开发分支
+```
+
+- **`main`** — 仅包含已发布的稳定版本，通过 tag 标记。不直接提交（紧急修复除外）。
+- **`vX.X`** — 大版本的开发分支。所有功能开发目标都是版本分支。
+- **紧急修复** — 关键 bug 可直接提交到 `main`，然后 cherry-pick 回活跃的版本分支。
+
+## 开发流程
+
+1. Fork 本仓库
+2. Clone 你的 Fork
+3. 确认目标版本分支（如 `v0.1`）。不确定时可在 Issue 中询问。
+4. 从版本分支创建你的开发分支：
+   ```
+   git checkout v0.1
+   git checkout -b feat/my-feature
+   ```
+5. 开发并自测
+6. 提交 PR 前 rebase 到版本分支：
+   ```
+   git fetch upstream
+   git rebase upstream/v0.1
+   ```
+7. 确保 CI 通过
+8. 向同一版本分支提交 PR（如 `v0.1`）
+9. 合并后，版本分支将在发版时合入 `main`
+
+分支命名：
+- `feat/<name>` — 新功能
+- `fix/<name>` — Bug 修复
+- `docs/<name>` — 文档
 
 ## 开发环境
 
@@ -226,15 +283,6 @@ cd build && ctest --output-on-failure
 cd webui && npm run test
 ```
 
-## 开发流程
-
-1. Fork 本仓库
-2. Clone 你的 Fork
-3. 创建功能分支（见[分支策略](#分支策略-1)）
-4. 开发并自测
-5. 确保 CI 通过
-6. 提交 PR
-
 ## Commit 规范
 
 采用 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/v1.0.0/)：
@@ -265,15 +313,6 @@ Scope：`worldbuilding`、`runtime`、`http`、`llm`、`memory`、`tools`、`web
 feat(worldbuilding): add timeline event recording endpoint
 ```
 
-## 分支策略
-
-- `main` — 稳定分支，随时可发布
-- `feat/<name>` — 新功能
-- `fix/<name>` — Bug 修复
-- `docs/<name>` — 文档
-
-始终基于 `main` 最新提交创建分支。
-
 ## 代码风格
 
 ### C++
@@ -297,10 +336,11 @@ feat(worldbuilding): add timeline event recording endpoint
 
 ## Pull Request 流程
 
-1. 确保分支与 `main` 同步
-2. 你的 PR 应：通过 CI、UI 变更附带截图、参考 PR 模板
-3. 至少一位维护者 Review 通过后方可合并
-4. 合并使用 Squash Merge
+1. 提交前 rebase 到目标版本分支
+2. PR 目标为版本分支（如 `v0.1`），而非 `main`
+3. 你的 PR 应：通过 CI、UI 变更附带截图、参考 PR 模板
+4. 至少一位维护者 Review 通过后方可合并
+5. 合并使用 Squash Merge
 
 ## Code Review
 
