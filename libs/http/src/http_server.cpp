@@ -353,6 +353,7 @@ void HttpServer::install_routes(){
     server_.Post("/api/workspace/open", [this](const auto& req, auto& res) { handle_workspace_open(req, res); });
     server_.Post("/api/workspace/files", [this](const auto& req, auto& res) { handle_workspace_file_create(req, res); });
     server_.Delete("/api/workspace/files", [this](const auto& req, auto& res) { handle_workspace_file_delete(req, res); });
+    server_.Post("/api/workspace/files/rename", [this](const auto& req, auto& res) { handle_workspace_file_rename(req, res); });
 }
 void HttpServer::handle_capabilities(const httplib::Request&, httplib::Response& res) {
     json(res, {200, {
@@ -709,6 +710,51 @@ void HttpServer::handle_workspace_file_delete(const httplib::Request& req, httpl
         json(res, {200, {{"ok", true}}});
     } catch (const std::exception& e) {
         json(res, error("file_delete_failed", e.what(), 500));
+    }
+}
+
+void HttpServer::handle_workspace_file_rename(const httplib::Request& req, httplib::Response& res) {
+    try {
+        auto body = req.body.empty() ? nlohmann::json::object() : nlohmann::json::parse(req.body);
+        auto from_value = body.value("from_path", "");
+        auto to_value = body.value("to_path", "");
+        if (from_value.empty() || to_value.empty()) {
+            json(res, error("invalid_request", "from_path and to_path are required", 400));
+            return;
+        }
+        auto home = home_root(merak_home_path_);
+        auto from_raw = std::filesystem::u8path(from_value);
+        if (from_raw.is_relative()) from_raw = home / from_raw;
+        auto from_path = safe_existing_or_parent_canonical(from_raw);
+        if (!is_under(from_path, home)) {
+            json(res, error("invalid_path", "Source must be under merak home", 403));
+            return;
+        }
+        if (!std::filesystem::exists(from_path)) {
+            json(res, error("rename_source_not_found", "Source file does not exist", 404));
+            return;
+        }
+        auto to_raw = std::filesystem::u8path(to_value);
+        if (to_raw.is_relative()) to_raw = home / to_raw;
+        auto to_path = safe_existing_or_parent_canonical(to_raw);
+        if (!is_under(to_path, home)) {
+            json(res, error("invalid_path", "Destination must be under merak home", 403));
+            return;
+        }
+        std::filesystem::create_directories(to_path.parent_path());
+        std::filesystem::rename(from_path, to_path);
+
+        auto updated_at = file_updated_at(to_path);
+        auto version = file_version(to_path);
+        json(res, {200, {{"ok", true}, {"file", {
+            {"path", to_path.generic_string()},
+            {"updated_at", updated_at},
+            {"version", version}
+        }}}});
+    } catch (const nlohmann::json::exception& e) {
+        json(res, error("invalid_request", e.what(), 400));
+    } catch (const std::exception& e) {
+        json(res, error("file_rename_failed", e.what(), 500));
     }
 }
 
