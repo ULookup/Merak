@@ -36,6 +36,11 @@ struct SceneSummary {
     std::vector<std::string> participant_ids;
 };
 
+struct CharacterAppearances {
+    nlohmann::json chapters; // [{id, title, scene_count}]
+    nlohmann::json scenes;   // [{id, title, chapter_id, status}]
+};
+
 class NarrativeStore {
 public:
     NarrativeStore(WorldStore& worlds, std::string_view pg_conninfo,
@@ -82,6 +87,10 @@ public:
     list_scenes(const std::string& world_id,
                 const std::optional<std::string>& chapter_id = std::nullopt,
                 std::optional<SceneStatus> status = std::nullopt) const;
+
+    bool reorder_chapters(const std::string& world_id, const nlohmann::json& order);
+    CharacterAppearances find_character_appearances(const std::string& world_id,
+                                                     const std::string& agent_id) const;
 
 private:
     void initialize();
