@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { worldbuildingApi } from '../api/worldbuilding';
+import { AppStateProvider } from '../AppState';
 import DetailPane from '../components/layout/DetailPane';
 import PageState from '../components/layout/PageState';
 import ResourceList from '../components/layout/ResourceList';
 import { useResource } from '../hooks/useResource';
+import CharactersPage from '../pages/CharactersPage';
 import OverviewPage from '../pages/OverviewPage';
 import { selectWorldMetrics } from '../pages/selectors';
+import WorldPage from '../pages/WorldPage';
 
 vi.mock('../api/client', () => ({
   api: {
@@ -17,11 +20,23 @@ vi.mock('../api/client', () => ({
     listScenes: vi.fn(),
     listWorkspaceFiles: vi.fn(),
     getStoryOverview: vi.fn(),
+    getWorldDetail: vi.fn(),
+    fetchAgentDetail: vi.fn(),
+    fetchDiaries: vi.fn(),
+    fetchRelations: vi.fn(),
+    createAgent: vi.fn(),
   },
 }));
 
 vi.mock('../api/worldbuilding', () => ({
-  worldbuildingApi: { getDashboard: vi.fn() },
+  worldbuildingApi: {
+    getDashboard: vi.fn(),
+    listLocations: vi.fn(),
+    listKnowledge: vi.fn(),
+    listFactions: vi.fn(),
+    getTimeline: vi.fn(),
+    listGraphEntities: vi.fn(),
+  },
 }));
 
 type Deferred<T> = {
@@ -517,5 +532,160 @@ describe('Overview page', () => {
       await screen.findByRole('heading', { name: 'Your world is ready for its first details' }),
     ).toBeDefined();
     expect(screen.queryByText('Recent activity')).toBeNull();
+  });
+});
+
+describe('World page', () => {
+  it('keeps world detail visible when the graph request fails', async () => {
+    vi.mocked(api.getWorldDetail).mockResolvedValue({
+      ok: true,
+      world: {
+        id: 'world-1',
+        name: 'Starfall City',
+        description: 'A city rebuilt after the long night.',
+        created_at: '2026-06-01T00:00:00Z',
+        stats: { agents: 2, chapters: 1, scenes: 3, open_foreshadowing: 0, active_secrets: 0 },
+      },
+    });
+    vi.mocked(worldbuildingApi.listLocations).mockResolvedValue({
+      ok: true,
+      locations: [],
+      items: [],
+    });
+    vi.mocked(worldbuildingApi.listFactions).mockResolvedValue({
+      ok: true,
+      factions: [],
+      items: [],
+    });
+    vi.mocked(worldbuildingApi.listKnowledge).mockResolvedValue({
+      ok: true,
+      knowledge: [],
+      items: [],
+    });
+    vi.mocked(worldbuildingApi.getTimeline).mockResolvedValue({
+      ok: true,
+      current_time: { day: 1, period: 1, label: 'First dawn' },
+      events: [],
+      items: [],
+    });
+    vi.mocked(worldbuildingApi.listGraphEntities).mockRejectedValue(new Error('Graph unavailable'));
+
+    render(<WorldPage worldId="world-1" />);
+
+    expect(await screen.findByRole('heading', { name: 'Starfall City' })).toBeDefined();
+    expect(screen.getByText('A city rebuilt after the long night.')).toBeDefined();
+    expect(await screen.findByText('Graph unavailable')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Retry graph' })).toBeDefined();
+  });
+
+  it('shows honest empty states for endpoint-backed world sections', async () => {
+    vi.mocked(api.getWorldDetail).mockResolvedValue({
+      ok: true,
+      world: {
+        id: 'world-1',
+        name: 'Blank World',
+        description: '',
+        created_at: '2026-06-01T00:00:00Z',
+        stats: { agents: 0, chapters: 0, scenes: 0, open_foreshadowing: 0, active_secrets: 0 },
+      },
+    });
+    vi.mocked(worldbuildingApi.listLocations).mockResolvedValue({ ok: true, items: [] });
+    vi.mocked(worldbuildingApi.listFactions).mockResolvedValue({ ok: true, items: [] });
+    vi.mocked(worldbuildingApi.listKnowledge).mockResolvedValue({ ok: true, items: [] });
+    vi.mocked(worldbuildingApi.getTimeline).mockResolvedValue({
+      ok: true,
+      current_time: { day: 1, period: 1, label: 'Day 1' },
+      items: [],
+    });
+    vi.mocked(worldbuildingApi.listGraphEntities).mockResolvedValue({ ok: true, items: [] });
+
+    render(<WorldPage worldId="world-1" />);
+
+    expect(await screen.findByText('No locations yet.')).toBeDefined();
+    expect(screen.getByText('No factions yet.')).toBeDefined();
+    expect(screen.getByText('No knowledge records yet.')).toBeDefined();
+    expect(screen.getByText('No timeline events yet.')).toBeDefined();
+    expect(screen.getByText('No graph entities yet.')).toBeDefined();
+  });
+});
+
+describe('Characters page', () => {
+  const lin = { id: 'lin', name: 'Lin', display_name: 'Lin', kind: 'character' };
+  const sora = { id: 'sora', name: 'Sora', display_name: 'Sora', kind: 'character' };
+
+  function detail(id: string, name: string) {
+    return {
+      ok: true as const,
+      agent: {
+        id,
+        world_id: 'world-1',
+        name,
+        display_name: name,
+        kind: 'character',
+        created_at: '2026-06-01T00:00:00Z',
+        updated_at: '2026-06-01T00:00:00Z',
+        character_card: { version: 1, core_traits: [], identity: `${name} identity` },
+      },
+    };
+  }
+
+  it('loads selected detail once and retains selection after list refresh', async () => {
+    vi.mocked(api.listAgents).mockClear();
+    vi.mocked(api.fetchAgentDetail).mockClear();
+    vi.mocked(api.fetchDiaries).mockClear();
+    vi.mocked(api.fetchRelations).mockClear();
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [lin, sora] });
+    vi.mocked(api.fetchAgentDetail).mockImplementation((_worldId, agentId) =>
+      Promise.resolve(detail(agentId, agentId === 'lin' ? 'Lin' : 'Sora')),
+    );
+    vi.mocked(api.fetchDiaries).mockResolvedValue({ ok: true, diaries: [] });
+    vi.mocked(api.fetchRelations).mockResolvedValue({ ok: true, relations: [] });
+
+    render(<CharactersPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /Sora/ }));
+    expect(await screen.findByRole('heading', { name: 'Sora' })).toBeDefined();
+    expect(screen.queryByText('Not set')).toBeNull();
+    expect(api.fetchAgentDetail).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh characters' }));
+
+    await waitFor(() => expect(api.listAgents).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('option', { name: /Sora/ })).toHaveAttribute('aria-selected', 'true');
+    expect(api.fetchAgentDetail).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an honest empty state without loading character detail', async () => {
+    vi.mocked(api.fetchAgentDetail).mockClear();
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
+    render(<CharactersPage worldId="world-1" />);
+
+    expect(await screen.findByRole('heading', { name: 'No characters yet' })).toBeDefined();
+    expect(api.fetchAgentDetail).not.toHaveBeenCalled();
+  });
+
+  it('refreshes only the character list after creation', async () => {
+    vi.mocked(api.listAgents).mockClear();
+    vi.mocked(api.fetchAgentDetail).mockClear();
+    vi.mocked(api.fetchDiaries).mockClear();
+    vi.mocked(api.fetchRelations).mockClear();
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [lin] });
+    vi.mocked(api.createAgent).mockResolvedValue({ ok: true, agent_id: 'new-agent', name: 'Mira' });
+
+    render(
+      <AppStateProvider>
+        <CharactersPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Create character' }));
+    const dialog = screen.getByRole('dialog', { name: 'Create character' });
+    fireEvent.change(within(dialog).getByLabelText('Character name'), {
+      target: { value: 'Mira' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create character' }));
+
+    await waitFor(() => expect(api.listAgents).toHaveBeenCalledTimes(2));
+    expect(api.fetchAgentDetail).not.toHaveBeenCalled();
+    expect(api.fetchDiaries).not.toHaveBeenCalled();
+    expect(api.fetchRelations).not.toHaveBeenCalled();
   });
 });

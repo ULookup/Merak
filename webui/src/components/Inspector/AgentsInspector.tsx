@@ -30,9 +30,10 @@ export default function AgentsInspector() {
   const [showCreateAgent, setShowCreateAgent] = useState(false);
   const [promptAgentId, setPromptAgentId] = useState<string | null>(null);
 
-  if (selectedAgentId) {
+  if (selectedAgentId && state.worldId) {
     return (
       <AgentCardView
+        worldId={state.worldId}
         agentId={selectedAgentId}
         onClose={() => setSelectedAgentId(null)}
         onViewPrompt={() => setPromptAgentId(selectedAgentId)}
@@ -45,7 +46,9 @@ export default function AgentsInspector() {
       <>
         <section className={styles.section}>
           <div className={styles.sectionTitle}>角色声音</div>
-          <p className={styles.muted}>当前世界还没有角色。创建第一个角色后，工作台会用真实后端数据展示声音、提示词和知识边界。</p>
+          <p className={styles.muted}>
+            当前世界还没有角色。创建第一个角色后，工作台会用真实后端数据展示声音、提示词和知识边界。
+          </p>
           {state.worldId && (
             <button
               className={styles.entryButton}

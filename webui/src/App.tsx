@@ -27,6 +27,8 @@ const ChapterReviewBanner = lazy(() => import('./components/ChapterReviewBanner'
 const ExportDialog = lazy(() => import('./components/ExportDialog'));
 const OverviewPage = lazy(() => import('./pages/OverviewPage'));
 const SessionsPage = lazy(() => import('./pages/SessionsPage'));
+const WorldPage = lazy(() => import('./pages/WorldPage'));
+const CharactersPage = lazy(() => import('./pages/CharactersPage'));
 
 export function shouldReportWorldbuildingPartialFailure(
   overviewLoaded: boolean,
@@ -287,6 +289,22 @@ function AppInner() {
           sessions={state.sessions}
           onNavigate={(page) => dispatch({ type: 'SET_PAGE', page })}
         />
+      </Suspense>,
+    );
+  }
+
+  if (state.currentPage === 'world' && state.worldId) {
+    return inDesktopShell(
+      <Suspense fallback={<Skeleton />}>
+        <WorldPage worldId={state.worldId} />
+      </Suspense>,
+    );
+  }
+
+  if (state.currentPage === 'characters' && state.worldId) {
+    return inDesktopShell(
+      <Suspense fallback={<Skeleton />}>
+        <CharactersPage worldId={state.worldId} />
       </Suspense>,
     );
   }
