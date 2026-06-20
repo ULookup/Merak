@@ -103,8 +103,9 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         if (config_.enable_cache) {
             auto split = CacheAwareContext::split(context_messages);
-            spdlog::debug("Loop: turn {} — {}", turn_count,
-                CacheAwareContext::info(split));
+            context_messages = split.static_prefix;
+            context_messages.insert(context_messages.end(),
+                split.dynamic_suffix.begin(), split.dynamic_suffix.end());
         }
 
         transition_to(TurnState::Thinking, control);
