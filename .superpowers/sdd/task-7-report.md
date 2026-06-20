@@ -85,3 +85,29 @@ Result: 0 errors and the same 12 pre-existing unused-type warnings in `src/api/c
 - Selecting or creating a session atomically sets its agent, clears a missing agent, and moves the app to ready.
 - The composer send action stays disabled until both prompt text and a session ID exist; its handler guard remains intact.
 - Desktop and tablet toggles now collapse grid columns, remove hidden panels from interaction, and expose matching `aria-hidden` / `aria-expanded` state.
+
+## Final Review Fixes
+
+### RED
+
+Command:
+`npm test -- --run src/__tests__/components.test.tsx src/__tests__/UserFlow.test.tsx`
+
+Result: 2 new failures, confirming that the base sessions grid required a 420px center track and legacy `MainPanel` sidebar mode referenced the sessions-only `session-history-panel` ID.
+
+### GREEN
+
+Command:
+`npm test -- --run src/__tests__/components.test.tsx src/__tests__/UserFlow.test.tsx`
+
+Result: 57 passed, 0 failed across 2 test files.
+
+Build command: `npm run build`
+
+Result: TypeScript and Vite production build passed. The existing main-chunk size advisory remains.
+
+### Preserved constraints
+
+- The base three-column grid now uses `minmax(0, 1fr)`, so a 1180-1293px viewport can retain the inspector without exceeding the shell content width.
+- The existing `1179px` inspector-overlay breakpoint remains, preserving the 960px minimum-window layout.
+- Sessions mode retains `aria-controls="session-history-panel"`; legacy sidebar mode emits no reference to that sessions-only ID.

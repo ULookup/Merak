@@ -250,6 +250,43 @@ describe('Cell components', () => {
     expect(screen.queryByText('◫')).toBeNull();
   });
 
+  it('MainPanel only references session history controls in sessions mode', () => {
+    const { rerender } = render(
+      <AppStateProvider>
+        <ToastProvider>
+          <MainPanel connectionState="connected" onToggleSidebar={() => {}} />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Open sidebar' })).not.toHaveAttribute(
+      'aria-controls',
+    );
+
+    rerender(
+      <AppStateProvider>
+        <ToastProvider>
+          <MainPanel connectionState="connected" onToggleHistory={() => {}} />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Open session history' })).toHaveAttribute(
+      'aria-controls',
+      'session-history-panel',
+    );
+  });
+
+  it('keeps the sessions center column shrinkable before inspector overlay mode', () => {
+    const css = readFileSync(join(process.cwd(), 'src/pages/SessionsPage.module.css'), 'utf8');
+    const basePageRule = css.match(/^\.page\s*\{([^}]*)\}/m)?.[1] ?? '';
+
+    expect(basePageRule).toMatch(
+      /grid-template-columns:\s*var\(--history-width\)\s+minmax\(0,\s*1fr\)\s+var\(--inspector-width\)/,
+    );
+    expect(css).toMatch(/@media\s*\(max-width:\s*1179px\)/);
+  });
+
   it('MainPanel opens an in-workbench guide from the help control', () => {
     render(
       <AppStateProvider>

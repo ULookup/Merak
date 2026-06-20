@@ -70,7 +70,7 @@ export default function MainPanel({
                 ? 'Close sidebar'
                 : 'Open sidebar'
           }
-          aria-controls="session-history-panel"
+          aria-controls={onToggleHistory ? 'session-history-panel' : undefined}
           aria-expanded={onToggleHistory ? historyOpen : sidebarOpen}
           data-testid="menu-btn"
         >
