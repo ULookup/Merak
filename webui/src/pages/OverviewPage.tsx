@@ -209,6 +209,11 @@ export default function OverviewPage({ worldId, sessions, onNavigate }: Overview
                 label="Chapter completion"
                 value={metrics.chapterCompletionPercent}
                 detail={`${metrics.completedChapterCount} of ${metrics.chapterCount} chapters`}
+                source={
+                  metrics.chapterProgressSource === 'dashboard'
+                    ? 'Calculated from the worldbuilding dashboard.'
+                    : 'Calculated from chapter statuses in the chapter list.'
+                }
               />
             )}
           {metrics.sceneCompletionPercent !== null &&
@@ -218,6 +223,11 @@ export default function OverviewPage({ worldId, sessions, onNavigate }: Overview
                 label="Scene completion"
                 value={metrics.sceneCompletionPercent}
                 detail={`${metrics.completedSceneCount} of ${metrics.sceneCount} scenes`}
+                source={
+                  metrics.sceneProgressSource === 'dashboard'
+                    ? 'Calculated from the worldbuilding dashboard.'
+                    : 'Calculated from scene statuses in the scene list.'
+                }
               />
             )}
           {metrics.chapterCompletionPercent === null && metrics.sceneCompletionPercent === null && (
@@ -285,7 +295,17 @@ export default function OverviewPage({ worldId, sessions, onNavigate }: Overview
   );
 }
 
-function ProgressRow({ label, value, detail }: { label: string; value: number; detail: string }) {
+function ProgressRow({
+  label,
+  value,
+  detail,
+  source,
+}: {
+  label: string;
+  value: number;
+  detail: string;
+  source: string;
+}) {
   const boundedValue = Math.max(0, Math.min(100, Math.round(value)));
   return (
     <div className={styles.progressRow}>
@@ -300,6 +320,7 @@ function ProgressRow({ label, value, detail }: { label: string; value: number; d
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={boundedValue}
+        title={source}
       >
         <span style={{ width: `${boundedValue}%` }} />
       </div>

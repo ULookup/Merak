@@ -24,7 +24,9 @@ export interface WorldMetrics {
   characterSource: 'dashboard' | 'list' | 'overview' | null;
   chapterSource: 'dashboard' | 'list' | null;
   sceneSource: 'dashboard' | 'list' | null;
-  fileSource: 'dashboard' | 'list' | null;
+  fileSource: 'list' | null;
+  chapterProgressSource: 'dashboard' | 'list' | null;
+  sceneProgressSource: 'dashboard' | 'list' | null;
 }
 
 function nestedNumber(source: DashboardData | null, group: string, key: string) {
@@ -45,7 +47,6 @@ export function selectWorldMetrics(input: WorldMetricInput): WorldMetrics {
   const dashboardRevisedChapters = nestedNumber(input.dashboard, 'chapters', 'revised');
   const dashboardScenes = nestedNumber(input.dashboard, 'scenes', 'total');
   const dashboardCompletedScenes = nestedNumber(input.dashboard, 'scenes', 'completed');
-  const dashboardFiles = nestedNumber(input.dashboard, 'file_links', 'total');
   const derivedCompletedChapters = input.chapters?.filter((item) =>
     ['completed', 'revised'].includes(item.status ?? ''),
   ).length;
@@ -68,7 +69,7 @@ export function selectWorldMetrics(input: WorldMetricInput): WorldMetrics {
     completedChapterCount,
     sceneCount,
     completedSceneCount,
-    fileCount: dashboardFiles ?? input.files?.length ?? null,
+    fileCount: input.files?.length ?? null,
     chapterCompletionPercent:
       chapterPercent ??
       (completedChapterCount !== null && chapterCount !== null
@@ -89,6 +90,18 @@ export function selectWorldMetrics(input: WorldMetricInput): WorldMetrics {
             : null,
     chapterSource: dashboardChapters !== null ? 'dashboard' : input.chapters ? 'list' : null,
     sceneSource: dashboardScenes !== null ? 'dashboard' : input.scenes ? 'list' : null,
-    fileSource: dashboardFiles !== null ? 'dashboard' : input.files ? 'list' : null,
+    fileSource: input.files ? 'list' : null,
+    chapterProgressSource:
+      chapterPercent !== null || (dashboardChapters !== null && dashboardCompletedChapters !== null)
+        ? 'dashboard'
+        : input.chapters
+          ? 'list'
+          : null,
+    sceneProgressSource:
+      scenePercent !== null || (dashboardScenes !== null && dashboardCompletedScenes !== null)
+        ? 'dashboard'
+        : input.scenes
+          ? 'list'
+          : null,
   };
 }

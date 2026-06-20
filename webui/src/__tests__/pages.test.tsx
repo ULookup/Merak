@@ -336,6 +336,19 @@ describe('Overview selectors', () => {
       chapterCompletionPercent: 100,
     });
   });
+
+  it('does not substitute dashboard file-link associations for workspace files', () => {
+    expect(
+      selectWorldMetrics({
+        agents: [],
+        chapters: [],
+        scenes: [],
+        files: null,
+        overview: null,
+        dashboard: { file_links: { total: 9 } },
+      }),
+    ).toMatchObject({ fileCount: null, fileSource: null });
+  });
 });
 
 describe('Overview page', () => {
@@ -432,6 +445,14 @@ describe('Overview page', () => {
       'Counted from the worldbuilding dashboard.',
     );
     expect(screen.getByText('Characters').closest('article')).toHaveTextContent('1');
+    expect(screen.getByRole('progressbar', { name: 'Chapter completion' })).toHaveAttribute(
+      'title',
+      'Calculated from the worldbuilding dashboard.',
+    );
+    expect(screen.getByRole('progressbar', { name: 'Scene completion' })).toHaveAttribute(
+      'title',
+      'Calculated from scene statuses in the scene list.',
+    );
   });
 
   it('Overview falls back to derived resource counts when dashboard fails', async () => {
@@ -441,6 +462,10 @@ describe('Overview page', () => {
     expect(await screen.findByText(/Dashboard summary is unavailable\./)).toBeDefined();
     expect(screen.getByTitle('Counted from the world character list.')).toHaveTextContent('1');
     expect(screen.getByText('The First Light')).toBeDefined();
+    expect(screen.getByRole('progressbar', { name: 'Chapter completion' })).toHaveAttribute(
+      'title',
+      'Calculated from chapter statuses in the chapter list.',
+    );
   });
 
   it('Overview does not turn failed lists into an empty world when dashboard also fails', async () => {
@@ -464,6 +489,15 @@ describe('Overview page', () => {
 
   it('Overview omits only a failed metric and shows a partial warning', async () => {
     mockResources({ failedLists: ['files'] });
+    vi.mocked(worldbuildingApi.getDashboard).mockResolvedValue({
+      ok: true,
+      dashboard: {
+        agents: { total: 1 },
+        chapters: { total: 1, completed: 0 },
+        file_links: { total: 7 },
+        progress: { chapter_completion_pct: 0 },
+      },
+    });
     render(<OverviewPage worldId="world-1" sessions={[]} onNavigate={navigate} />);
 
     expect(await screen.findByText(/Some overview data is unavailable\./)).toBeDefined();
