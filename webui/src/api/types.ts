@@ -185,9 +185,6 @@ export interface ForeshadowingItem {
   tags?: string[];
   planted_at?: string;
   paid_at?: string;
-  planned_chapter_position?: number;
-  current_chapter_position?: number;
-  related_secret_ids?: string[];
 }
 
 export interface ForeshadowingListResponse {

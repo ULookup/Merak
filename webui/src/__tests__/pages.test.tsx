@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { worldbuildingApi } from '../api/worldbuilding';
 import { AppStateProvider } from '../AppState';
+import CreateForeshadowingModal from '../components/Inspector/CreateForeshadowingModal';
+import CreateSecretModal from '../components/Inspector/CreateSecretModal';
 import DetailPane from '../components/layout/DetailPane';
 import PageState from '../components/layout/PageState';
 import ResourceList from '../components/layout/ResourceList';
@@ -51,19 +53,9 @@ vi.mock('../api/client', () => ({
 
 describe('Foreshadowing page', () => {
   it('derives overdue only when planned and current chapter positions both exist', () => {
-    expect(deriveForeshadowingStatus({ status: 'open', planned_chapter_position: 2 }, 4)).toBeNull();
-    expect(
-      deriveForeshadowingStatus(
-        { status: 'open', planned_chapter_position: 2, current_chapter_position: 4 },
-        null,
-      ),
-    ).toBe('overdue');
-    expect(
-      deriveForeshadowingStatus(
-        { status: 'open', planned_chapter_position: 5, current_chapter_position: 4 },
-        null,
-      ),
-    ).toBeNull();
+    expect(deriveForeshadowingStatus({ status: 'open', plannedPosition: 2, currentPosition: null })).toBeNull();
+    expect(deriveForeshadowingStatus({ status: 'open', plannedPosition: 2, currentPosition: 4 })).toBe('overdue');
+    expect(deriveForeshadowingStatus({ status: 'open', plannedPosition: 5, currentPosition: 4 })).toBeNull();
   });
 
   it('filters real records and keeps selection safe after deletion', async () => {
@@ -110,6 +102,25 @@ describe('Foreshadowing page', () => {
     expect(screen.getByRole('heading', { name: 'Broken seal' })).toBeDefined();
   });
 
+  it('resolves real planted and paid narrative IDs and retains the list when context fails', async () => {
+    vi.mocked(api.listForeshadowing).mockResolvedValue({
+      ok: true,
+      items: [{ id: 'f1', content: 'Silver bell', status: 'paid', planted_at: 'scene-1', paid_at: 'chapter-2' }],
+    });
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [{ id: 'chapter-2', title: 'Reckoning', status: 'draft' }] });
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [{ id: 'scene-1', title: 'The warning', status: 'planned', chapter_id: 'chapter-1' }] });
+    render(<ForeshadowingPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /Silver bell/ }));
+    expect(screen.getByText('The warning')).toBeDefined();
+    expect(screen.getByText('Reckoning')).toBeDefined();
+
+    vi.mocked(api.listChapters).mockRejectedValue(new Error('Chapters unavailable'));
+    vi.mocked(api.listScenes).mockRejectedValue(new Error('Scenes unavailable'));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh foreshadowing' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Chapters unavailable');
+    expect(screen.getByRole('option', { name: /Silver bell/ })).toBeDefined();
+  });
+
   it('ignores a completed delete after switching worlds and disables duplicate mutation', async () => {
     const deletion = deferred<{ ok: boolean }>();
     vi.mocked(api.deleteForeshadowing).mockClear();
@@ -136,6 +147,33 @@ describe('Foreshadowing page', () => {
     expect(screen.getByRole('option', { name: /New thread/ })).toBeDefined();
   });
 
+  it('does not let an A-B-A delete completion clear the new world generation lock', async () => {
+    const oldDeletion = deferred<{ ok: boolean }>();
+    const newDeletion = deferred<{ ok: boolean }>();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.listForeshadowing).mockImplementation((worldId) => Promise.resolve({
+      ok: true,
+      items: [{ id: 'shared', content: worldId === 'world-a' ? 'A thread' : 'B thread', status: 'open' }],
+    }));
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
+    vi.mocked(api.deleteForeshadowing).mockReset().mockReturnValueOnce(oldDeletion.promise).mockReturnValueOnce(newDeletion.promise);
+    const view = render(<ForeshadowingPage worldId="world-a" />);
+    fireEvent.click(await screen.findByRole('option', { name: /A thread/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete foreshadowing' }));
+    view.rerender(<ForeshadowingPage worldId="world-b" />);
+    await screen.findByRole('option', { name: /B thread/ });
+    view.rerender(<ForeshadowingPage worldId="world-a" />);
+    fireEvent.click(await screen.findByRole('option', { name: /A thread/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete foreshadowing' }));
+
+    await act(async () => oldDeletion.resolve({ ok: true }));
+
+    expect(screen.getByRole('button', { name: 'Delete foreshadowing' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: /A thread/ })).toBeDefined();
+    await act(async () => newDeletion.resolve({ ok: true }));
+  });
+
   it('closes the create mutation when the world changes', async () => {
     vi.mocked(api.listForeshadowing).mockResolvedValue({ ok: true, items: [] });
     const view = render(
@@ -154,6 +192,74 @@ describe('Foreshadowing page', () => {
     );
 
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('does not let an A-B-A secret delete completion clear the new generation lock', async () => {
+    const oldDeletion = deferred<{ ok: boolean }>();
+    const newDeletion = deferred<{ ok: boolean }>();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.listSecrets).mockImplementation((worldId) => Promise.resolve({ ok: true, items: [{ id: 'shared', title: `${worldId} secret`, status: 'active' }] }));
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
+    vi.mocked(api.deleteSecret).mockReset().mockReturnValueOnce(oldDeletion.promise).mockReturnValueOnce(newDeletion.promise);
+    const view = render(<SecretsPage worldId="world-a" />);
+    fireEvent.click(await screen.findByRole('option', { name: /world-a secret/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete secret' }));
+    view.rerender(<SecretsPage worldId="world-b" />);
+    await screen.findByRole('option', { name: /world-b secret/ });
+    view.rerender(<SecretsPage worldId="world-a" />);
+    fireEvent.click(await screen.findByRole('option', { name: /world-a secret/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete secret' }));
+
+    await act(async () => oldDeletion.resolve({ ok: true }));
+
+    expect(screen.getByRole('button', { name: 'Delete secret' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: /world-a secret/ })).toBeDefined();
+    await act(async () => newDeletion.resolve({ ok: true }));
+  });
+});
+
+describe('Task 10 create mutation lifetime', () => {
+  it.each([
+    ['foreshadowing', CreateForeshadowingModal, 'createForeshadowing'],
+    ['secret', CreateSecretModal, 'createSecret'],
+  ] as const)('ignores %s callbacks after unmount', async (_name, Modal, method) => {
+    const creation = deferred<{ ok: boolean }>();
+    const onCreated = vi.fn();
+    const onClose = vi.fn();
+    vi.mocked(api[method]).mockReturnValue(creation.promise as never);
+    const view = render(<AppStateProvider><Modal worldId="world-a" onCreated={onCreated} onClose={onClose} /></AppStateProvider>);
+    const field = view.container.querySelector('textarea, input') as HTMLInputElement | HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'Required value' } });
+    const submit = Array.from(view.container.querySelectorAll('button')).at(-1) as HTMLButtonElement;
+    fireEvent.click(submit);
+    view.unmount();
+
+    await act(async () => creation.resolve({ ok: true }));
+
+    expect(onCreated).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['foreshadowing', CreateForeshadowingModal, 'createForeshadowing'],
+    ['secret', CreateSecretModal, 'createSecret'],
+  ] as const)('ignores stale %s callbacks after an A-B-A world change', async (_name, Modal, method) => {
+    const creation = deferred<{ ok: boolean }>();
+    const onCreated = vi.fn();
+    const onClose = vi.fn();
+    vi.mocked(api[method]).mockReturnValue(creation.promise as never);
+    const renderModal = (worldId: string) => <AppStateProvider><Modal worldId={worldId} onCreated={onCreated} onClose={onClose} /></AppStateProvider>;
+    const view = render(renderModal('world-a'));
+    const field = view.container.querySelector('textarea, input') as HTMLInputElement | HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'Required value' } });
+    fireEvent.click(Array.from(view.container.querySelectorAll('button')).at(-1) as HTMLButtonElement);
+    view.rerender(renderModal('world-b'));
+    view.rerender(renderModal('world-a'));
+
+    await act(async () => creation.resolve({ ok: true }));
+
+    expect(onCreated).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });
 

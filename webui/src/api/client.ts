@@ -453,6 +453,7 @@ export const api = {
       stakes?: string;
       aware_character_ids?: string[];
       suspicious_character_ids?: string[];
+      related_foreshadowing_ids?: string[];
       session_id?: string;
     },
   ) => request<CreateSecretResponse>('POST', `/api/worldbuilding/${worldId}/secrets`, data),

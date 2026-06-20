@@ -19,14 +19,14 @@ export default function CreateForeshadowingModal({ worldId, onClose, onCreated }
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submittingRef = useRef(false);
-  const mountedRef = useRef(true);
-  const worldRef = useRef(worldId);
-  worldRef.current = worldId;
+  const generationRef = useRef(0);
+  const renderedWorldRef = useRef(worldId);
+  if (renderedWorldRef.current !== worldId) {
+    renderedWorldRef.current = worldId;
+    generationRef.current += 1;
+  }
 
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
+  useEffect(() => () => { generationRef.current += 1; }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !submitting) onClose(); }
@@ -37,6 +37,7 @@ export default function CreateForeshadowingModal({ worldId, onClose, onCreated }
   async function handleSubmit() {
     if (!content.trim() || submittingRef.current) return;
     const operationWorld = worldId;
+    const operationGeneration = generationRef.current;
     submittingRef.current = true;
     setSubmitting(true);
     setError(null);
@@ -48,14 +49,14 @@ export default function CreateForeshadowingModal({ worldId, onClose, onCreated }
         tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
         session_id: state.sessionId,
       });
-      if (mountedRef.current && worldRef.current === operationWorld) {
+      if (generationRef.current === operationGeneration) {
         await onCreated?.();
-        if (mountedRef.current && worldRef.current === operationWorld) onClose();
+        if (generationRef.current === operationGeneration) onClose();
       }
     } catch (e) {
-      if (mountedRef.current && worldRef.current === operationWorld) setError((e as Error).message);
+      if (generationRef.current === operationGeneration) setError((e as Error).message);
     } finally {
-      if (mountedRef.current && worldRef.current === operationWorld) {
+      if (generationRef.current === operationGeneration) {
         submittingRef.current = false;
         setSubmitting(false);
       }

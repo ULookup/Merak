@@ -31,34 +31,41 @@ export default function SecretsPage({ worldId }: { worldId: string }) {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [pendingMutation, setPendingMutation] = useState<string | null>(null);
   const pendingMutationRef = useRef(false);
-  const worldRef = useRef(worldId);
-  worldRef.current = worldId;
+  const generationRef = useRef(0);
+  const renderedWorldRef = useRef(worldId);
+  if (renderedWorldRef.current !== worldId) {
+    renderedWorldRef.current = worldId;
+    generationRef.current += 1;
+  }
   const data: Data | null = resource.data;
   const items = useMemo(() => (data?.items ?? []).filter((item) => !removed.includes(item.id)), [data, removed]);
   const filtered = filter === 'all' ? items : items.filter((item) => item.status === filter);
   const selected = filtered.find((item) => item.id === selectedId) ?? null;
 
   useEffect(() => { setSelectedId(null); setRemoved([]); setRevealedTruth(null); setEditing(false); setCreateOpen(false); setPendingMutation(null); pendingMutationRef.current = false; setMutationError(null); }, [worldId]);
+  useEffect(() => () => { generationRef.current += 1; }, []);
   useEffect(() => { setRevealedTruth(null); setEditing(false); setPublicVersion(selected?.public_version ?? ''); }, [selected?.id]);
   useEffect(() => { if (selectedId && !filtered.some((item) => item.id === selectedId)) setSelectedId(filtered[0]?.id ?? null); }, [filtered, selectedId]);
 
   async function save() {
     if (!selected || pendingMutationRef.current || !window.confirm('Update this secret?')) return;
     const operationWorld = worldId;
+    const operationGeneration = generationRef.current;
     pendingMutationRef.current = true;
     setPendingMutation('update'); setMutationError(null);
-    try { await api.patchSecret(operationWorld, selected.id, { public_version: publicVersion }); if (worldRef.current === operationWorld) { setEditing(false); resource.retry(); } }
-    catch (error) { if (worldRef.current === operationWorld) setMutationError((error as Error).message); }
-    finally { if (worldRef.current === operationWorld) { pendingMutationRef.current = false; setPendingMutation(null); } }
+    try { await api.patchSecret(operationWorld, selected.id, { public_version: publicVersion }); if (generationRef.current === operationGeneration) { setEditing(false); resource.retry(); } }
+    catch (error) { if (generationRef.current === operationGeneration) setMutationError((error as Error).message); }
+    finally { if (generationRef.current === operationGeneration) { pendingMutationRef.current = false; setPendingMutation(null); } }
   }
   async function remove() {
     if (!selected || pendingMutationRef.current || !window.confirm('Delete this secret?')) return;
     const operationWorld = worldId; const id = selected.id;
+    const operationGeneration = generationRef.current;
     pendingMutationRef.current = true;
     setPendingMutation('delete'); setMutationError(null);
-    try { await api.deleteSecret(operationWorld, id); if (worldRef.current === operationWorld) { setRemoved((ids) => [...ids, id]); setSelectedId(filtered.find((item) => item.id !== id)?.id ?? null); setRevealedTruth(null); resource.retry(); } }
-    catch (error) { if (worldRef.current === operationWorld) setMutationError((error as Error).message); }
-    finally { if (worldRef.current === operationWorld) { pendingMutationRef.current = false; setPendingMutation(null); } }
+    try { await api.deleteSecret(operationWorld, id); if (generationRef.current === operationGeneration) { setRemoved((ids) => [...ids, id]); setSelectedId(filtered.find((item) => item.id !== id)?.id ?? null); setRevealedTruth(null); resource.retry(); } }
+    catch (error) { if (generationRef.current === operationGeneration) setMutationError((error as Error).message); }
+    finally { if (generationRef.current === operationGeneration) { pendingMutationRef.current = false; setPendingMutation(null); } }
   }
   function changeFilter(nextFilter: string) {
     setFilter(nextFilter);
