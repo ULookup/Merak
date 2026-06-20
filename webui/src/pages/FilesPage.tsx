@@ -181,15 +181,6 @@ export default function FilesPage({ worldId }: Props) {
   const linked = selected ? links.items.filter((link) => link.file_path === selected.path) : [];
   if (loading) return <PageState loading loadingLabel="Loading files" />;
   if (error && files.length === 0) return <PageState error={new Error(error)} onRetry={loadList} />;
-  if (files.length === 0)
-    return (
-      <PageState
-        isEmpty
-        emptyTitle="No workspace files yet"
-        emptyDescription="Files created by Merak will appear here."
-      />
-    );
-
   return (
     <div className={styles.page}>
       <aside className={styles.library} aria-label="File library">
@@ -224,20 +215,24 @@ export default function FilesPage({ worldId }: Props) {
           <option value="text">Text</option>
           <option value="data">Data</option>
         </select>
-        <ResourceList
-          disabled={saving}
-          items={visible}
-          selectedId={selectedPath}
-          getId={(file) => file.path}
-          onSelect={selectFile}
-          ariaLabel="Workspace files"
-          renderItem={(file) => (
-            <>
-              <strong>{file.name}</strong>
-              <small>{file.path}</small>
-            </>
-          )}
-        />
+        {visible.length ? (
+          <ResourceList
+            disabled={saving}
+            items={visible}
+            selectedId={selectedPath}
+            getId={(file) => file.path}
+            onSelect={selectFile}
+            ariaLabel="Workspace files"
+            renderItem={(file) => (
+              <>
+                <strong>{file.name}</strong>
+                <small>{file.path}</small>
+              </>
+            )}
+          />
+        ) : (
+          <p>No files in this view.</p>
+        )}
       </aside>
       {selected && loaded ? (
         <DetailPane

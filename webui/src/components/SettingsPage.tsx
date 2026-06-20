@@ -12,6 +12,8 @@ import {
 } from '../desktop';
 import styles from './SettingsPage.module.css';
 
+const STYLE_OPTIONS = ['轻松', '严肃', '诗意', '简洁'] as const;
+
 export default function SettingsPage() {
   const [config, setConfig] = useState<LlmConfigFull | null>(null);
   const [provider, setProvider] = useState('');
@@ -25,24 +27,48 @@ export default function SettingsPage() {
   const [metadata, setMetadata] = useState<RuntimeMetadata | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [message, setMessage] = useState('');
+  const [configError, setConfigError] = useState('');
+  const [preferencesError, setPreferencesError] = useState('');
+  const [metadataError, setMetadataError] = useState('');
+  const [desktopError, setDesktopError] = useState('');
   const desktop = isDesktopApp();
 
   useEffect(() => {
     let active = true;
-    Promise.all([api.getConfig(), api.getPreferences(), api.metadata()])
-      .then(([next, prefs, runtimeMetadata]) => {
+    Promise.allSettled([api.getConfig(), api.getPreferences(), api.metadata()]).then(
+      ([configResult, preferencesResult, metadataResult]) => {
         if (!active) return;
-        setConfig(next);
-        setProvider(next.provider);
-        setModel(next.default_model);
-        setBaseUrl(next.api_base_url);
-        setMetadata(runtimeMetadata);
-        setGenre(prefs.default_genre ?? '');
-        setStyle(prefs.preferred_style ?? '');
-        setUsageLogs(prefs.allow_usage_logs ?? false);
-      })
-      .catch((error) => active && setMessage(formatApiError(error, 'Could not load settings.')));
-    if (desktop) getDesktopRuntimeStatus().then((value) => active && setRuntime(value));
+        if (configResult.status === 'fulfilled') {
+          const next = configResult.value;
+          setConfig(next);
+          setProvider(next.provider);
+          setModel(next.default_model);
+          setBaseUrl(next.api_base_url);
+        } else
+          setConfigError(formatApiError(configResult.reason, 'Could not load model settings.'));
+        if (preferencesResult.status === 'fulfilled') {
+          const prefs = preferencesResult.value;
+          setGenre(prefs.default_genre ?? '');
+          setStyle(prefs.preferred_style ?? '');
+          setUsageLogs(prefs.allow_usage_logs ?? false);
+        } else setPreferencesError(formatApiError(preferencesResult.reason, 'Request failed.'));
+        if (metadataResult.status === 'fulfilled') setMetadata(metadataResult.value);
+        else
+          setMetadataError(
+            `Runtime metadata unavailable: ${formatApiError(metadataResult.reason, 'Request failed.')}`,
+          );
+      },
+    );
+    if (desktop)
+      getDesktopRuntimeStatus()
+        .then((value) => active && setRuntime(value))
+        .catch(
+          (error) =>
+            active &&
+            setDesktopError(
+              `Desktop Runtime unavailable: ${formatApiError(error, 'Request failed.')}`,
+            ),
+        );
     return () => {
       active = false;
     };
@@ -70,6 +96,10 @@ export default function SettingsPage() {
 
   async function savePreferences() {
     setMessage('');
+    if (!STYLE_OPTIONS.includes(style as (typeof STYLE_OPTIONS)[number])) {
+      setMessage('Choose a supported preferred style before saving.');
+      return;
+    }
     try {
       await api.savePreferences({
         default_genre: genre,
@@ -92,6 +122,21 @@ export default function SettingsPage() {
       {message && (
         <div role="status" className={styles.message}>
           {message}
+        </div>
+      )}
+      {preferencesError && (
+        <div role="alert" className={styles.message}>
+          Preferences unavailable: {preferencesError}
+        </div>
+      )}
+      {metadataError && (
+        <div role="alert" className={styles.message}>
+          {metadataError}
+        </div>
+      )}
+      {desktopError && (
+        <div role="alert" className={styles.message}>
+          {desktopError}
         </div>
       )}
       <div className={styles.grid}>
@@ -148,6 +193,8 @@ export default function SettingsPage() {
                 </button>
               </div>
             </>
+          ) : configError ? (
+            <p role="alert">{configError}</p>
           ) : (
             <p>Loading model settings...</p>
           )}
@@ -161,7 +208,17 @@ export default function SettingsPage() {
           </label>
           <label>
             Preferred style
-            <input value={style} onChange={(event) => setStyle(event.target.value)} />
+            <select
+              aria-label="Preferred style"
+              value={style}
+              onChange={(event) => setStyle(event.target.value)}
+            >
+              {STYLE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </label>
           <label className={styles.check}>
             <input
@@ -172,7 +229,11 @@ export default function SettingsPage() {
             Allow usage logs
           </label>
           <div className={styles.actions}>
-            <button type="button" onClick={savePreferences}>
+            <button
+              type="button"
+              disabled={!STYLE_OPTIONS.includes(style as (typeof STYLE_OPTIONS)[number])}
+              onClick={savePreferences}
+            >
               Save preferences
             </button>
           </div>

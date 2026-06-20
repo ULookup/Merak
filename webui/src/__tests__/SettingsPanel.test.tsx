@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { AppStateProvider } from '../AppState';
 import SettingsPanel from '../components/Sidebar/SettingsPanel';
+import { getDesktopRuntimeStatus } from '../desktop';
 import { I18nProvider } from '../i18n';
 import SettingsPage from '../pages/SettingsPage';
 
@@ -19,7 +20,7 @@ vi.mock('../api/client', () => ({
     testConfig: vi.fn().mockResolvedValue({ ok: true }),
     getPreferences: vi.fn().mockResolvedValue({
       default_genre: 'No preference',
-      preferred_style: 'concise',
+      preferred_style: '简洁',
       allow_usage_logs: true,
     }),
     savePreferences: vi.fn().mockResolvedValue({ ok: true }),
@@ -108,5 +109,46 @@ describe('Settings page capabilities', () => {
     expect(api.saveConfig).toHaveBeenCalledWith(
       expect.objectContaining({ api_base_url: 'http://localhost:11434/v1' }),
     );
+  });
+
+  it('keeps model settings editable when preferences fail and reports a local warning', async () => {
+    vi.mocked(api.getPreferences).mockRejectedValueOnce(new Error('Preferences offline'));
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+    expect(await screen.findByLabelText('API key')).toBeDefined();
+    expect(screen.getByText(/Preferences unavailable: Preferences offline/)).toBeDefined();
+    expect(screen.queryByText('Loading model settings...')).toBeNull();
+  });
+
+  it('restricts preferred style to the backend enum', async () => {
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+    const style = await screen.findByLabelText('Preferred style');
+    expect(style.tagName).toBe('SELECT');
+    expect(
+      within(style)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['轻松', '严肃', '诗意', '简洁']);
+  });
+
+  it('keeps config available when runtime sources fail', async () => {
+    vi.mocked(api.metadata).mockRejectedValueOnce(new Error('Metadata offline'));
+    vi.mocked(getDesktopRuntimeStatus).mockRejectedValueOnce(new Error('Desktop offline'));
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+    expect(await screen.findByLabelText('API key')).toBeDefined();
+    expect(screen.getByText(/Runtime metadata unavailable: Metadata offline/)).toBeDefined();
+    expect(screen.getByText(/Desktop Runtime unavailable: Desktop offline/)).toBeDefined();
+    expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0);
   });
 });

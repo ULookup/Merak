@@ -42,15 +42,18 @@ export default function FilesInspector() {
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
   const [conflictFileId, setConflictFileId] = useState<string | null>(null);
-  const requestGeneration = useRef(0);
+  const lifecycleGeneration = useRef(0);
+  const readGeneration = useRef(0);
   const mounted = useRef(true);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    const lifecycle = ++lifecycleGeneration.current;
+    return () => {
       mounted.current = false;
-      requestGeneration.current += 1;
-    },
-    [],
-  );
+      if (lifecycleGeneration.current === lifecycle) lifecycleGeneration.current += 1;
+      readGeneration.current += 1;
+    };
+  }, []);
   const activeFile =
     state.workspaceFiles.find((file) => file.id === state.activeEditorFileId) ?? null;
   const activeFileName = activeFile ? displayFileName(activeFile.name) : '';
@@ -107,24 +110,39 @@ export default function FilesInspector() {
     const file = state.workspaceFiles.find((item) => item.id === fileId);
     if (!file) return;
     dispatch({ type: 'OPEN_WORKSPACE_FILE', fileId });
-    const token = ++requestGeneration.current;
+    const lifecycle = lifecycleGeneration.current;
+    const token = ++readGeneration.current;
     setConflictFileId(null);
     setLoadingFileId(fileId);
     try {
       const res = await api.readWorkspaceFile(file.path);
-      if (mounted.current && token === requestGeneration.current)
+      if (
+        mounted.current &&
+        lifecycle === lifecycleGeneration.current &&
+        token === readGeneration.current
+      )
         dispatch({ type: 'SET_EDITOR_CONTENT', fileId, content: res.file });
     } catch (error) {
-      showToast(formatApiError(error, 'Could not read file.'), 'error');
+      if (
+        mounted.current &&
+        lifecycle === lifecycleGeneration.current &&
+        token === readGeneration.current
+      )
+        showToast(formatApiError(error, 'Could not read file.'), 'error');
     } finally {
-      setLoadingFileId(null);
+      if (
+        mounted.current &&
+        lifecycle === lifecycleGeneration.current &&
+        token === readGeneration.current
+      )
+        setLoadingFileId(null);
     }
   }
 
   async function saveFile() {
     if (!activeFile) return;
     const target = activeFile;
-    const token = requestGeneration.current;
+    const lifecycle = lifecycleGeneration.current;
     dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saving' });
     try {
       const res = await api.saveWorkspaceFile(
@@ -132,7 +150,7 @@ export default function FilesInspector() {
         state.editorBuffers[target.id] ?? '',
         state.editorVersions[target.id],
       );
-      if (!mounted.current || token !== requestGeneration.current) return;
+      if (!mounted.current || lifecycle !== lifecycleGeneration.current) return;
       dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saved' });
       dispatch({ type: 'COMMIT_EDITOR_BUFFER', fileId: target.id, version: res.file.version });
       dispatch({
@@ -145,7 +163,7 @@ export default function FilesInspector() {
       });
       showToast('File saved.', 'success');
     } catch (error) {
-      if (!mounted.current || token !== requestGeneration.current) return;
+      if (!mounted.current || lifecycle !== lifecycleGeneration.current) return;
       const conflict = error as { status?: number; code?: string };
       if (conflict.status === 409 || conflict.code === 'file_conflict')
         setConflictFileId(target.id);

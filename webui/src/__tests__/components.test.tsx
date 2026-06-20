@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { useEffect } from 'react';
+import { StrictMode, useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
@@ -785,7 +785,7 @@ function AgentsPanelHarness() {
   return <InspectorPanel open={true} onClose={() => {}} />;
 }
 
-function FilesHarness() {
+function FilesHarness({ twoFiles = false }: { twoFiles?: boolean }) {
   const { dispatch } = useAppState();
 
   useEffect(() => {
@@ -803,7 +803,13 @@ function FilesHarness() {
       },
     });
     dispatch({ type: 'SET_INSPECTOR_TAB', tab: 'files' });
-  }, [dispatch]);
+    if (twoFiles) {
+      dispatch({
+        type: 'REGISTER_GENERATED_FILE',
+        file: { id: 'file_2', title: 'notes', path: '/Users/me/novel/notes.txt', updatedAt: 2 },
+      });
+    }
+  }, [dispatch, twoFiles]);
 
   return <InspectorPanel open={true} onClose={() => {}} />;
 }
@@ -928,11 +934,13 @@ describe('InspectorPanel', () => {
     vi.spyOn(api, 'saveWorkspaceFile').mockRejectedValue(new Error('Disk is locked'));
 
     render(
-      <AppStateProvider>
-        <ToastProvider>
-          <FilesHarness />
-        </ToastProvider>
-      </AppStateProvider>,
+      <StrictMode>
+        <AppStateProvider>
+          <ToastProvider>
+            <FilesHarness />
+          </ToastProvider>
+        </AppStateProvider>
+      </StrictMode>,
     );
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
@@ -967,11 +975,13 @@ describe('InspectorPanel', () => {
         file: { path: '/Users/me/novel/chapter-12.md', updated_at: 'newer', version: 'v3' },
       });
     render(
-      <AppStateProvider>
-        <ToastProvider>
-          <FilesHarness />
-        </ToastProvider>
-      </AppStateProvider>,
+      <StrictMode>
+        <AppStateProvider>
+          <ToastProvider>
+            <FilesHarness />
+          </ToastProvider>
+        </AppStateProvider>
+      </StrictMode>,
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
     const editor = await screen.findByLabelText('Edit chapter-12');
@@ -989,6 +999,67 @@ describe('InspectorPanel', () => {
     await waitFor(() =>
       expect(save).toHaveBeenLastCalledWith('/Users/me/novel/chapter-12.md', 'Second save', 'v2'),
     );
+  });
+
+  it('ignores stale read errors and finally callbacks across A-B-A overlap', async () => {
+    let rejectA!: (reason: Error) => void;
+    let resolveB!: (value: Awaited<ReturnType<typeof api.readWorkspaceFile>>) => void;
+    let resolveNewestA!: (value: Awaited<ReturnType<typeof api.readWorkspaceFile>>) => void;
+    const oldA = new Promise<never>((_, reject) => {
+      rejectA = reject;
+    });
+    const oldB = new Promise<Awaited<ReturnType<typeof api.readWorkspaceFile>>>((resolve) => {
+      resolveB = resolve;
+    });
+    const newestA = new Promise<Awaited<ReturnType<typeof api.readWorkspaceFile>>>((resolve) => {
+      resolveNewestA = resolve;
+    });
+    vi.spyOn(api, 'readWorkspaceFile')
+      .mockReturnValueOnce(oldA)
+      .mockReturnValueOnce(oldB)
+      .mockReturnValueOnce(newestA);
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness twoFiles />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    const a = await screen.findByRole('button', { name: 'Open chapter-12 in editor' });
+    const b = screen.getByRole('button', { name: 'Open notes in editor' });
+    fireEvent.click(a);
+    fireEvent.click(b);
+    fireEvent.click(a);
+    await act(async () => rejectA(new Error('Old A failed')));
+    await act(async () =>
+      resolveB({
+        ok: true,
+        file: {
+          path: '/Users/me/novel/notes.txt',
+          content: 'Old B',
+          encoding: 'utf-8',
+          updated_at: 'old',
+          version: 'b1',
+        },
+      }),
+    );
+    expect(screen.queryByText('Old A failed')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Open chapter-12 in editor' })).toHaveTextContent(
+      'Loading...',
+    );
+    await act(async () =>
+      resolveNewestA({
+        ok: true,
+        file: {
+          path: '/Users/me/novel/chapter-12.md',
+          content: 'Newest A',
+          encoding: 'utf-8',
+          updated_at: 'new',
+          version: 'a2',
+        },
+      }),
+    );
+    expect(await screen.findByLabelText('Edit chapter-12')).toHaveValue('Newest A');
   });
 
   it('renders a readable creation dashboard without mojibake copy', async () => {

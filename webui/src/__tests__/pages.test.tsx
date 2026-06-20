@@ -352,6 +352,35 @@ describe('Files page', () => {
     );
     expect(screen.queryByRole('textbox', { name: 'File content' })).toBeNull();
   });
+
+  it('keeps the file shell and workspace actions visible for a real empty list', async () => {
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/empty-story',
+      files: [],
+    });
+    render(<FilesPage worldId="world-1" />);
+    expect(await screen.findByRole('heading', { name: 'Files' })).toBeDefined();
+    expect(screen.getByText('C:/empty-story')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Refresh files' })).toBeDefined();
+    expect(screen.getByLabelText('File type')).toBeDefined();
+    expect(screen.getByLabelText('Search files')).toBeDefined();
+    expect(screen.getByText('No files in this view.')).toBeDefined();
+  });
+
+  it('keeps filters available when a type has no matching files', async () => {
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file],
+    });
+    render(<FilesPage worldId="world-1" />);
+    await screen.findByRole('option', { name: /draft/i });
+    fireEvent.change(screen.getByLabelText('File type'), { target: { value: 'text' } });
+    expect(await screen.findByText('No files in this view.')).toBeDefined();
+    fireEvent.change(screen.getByLabelText('File type'), { target: { value: 'all' } });
+    expect(await screen.findByRole('option', { name: /draft/i })).toBeDefined();
+  });
 });
 
 describe('Foreshadowing page', () => {
