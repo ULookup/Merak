@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppStateProvider, useAppState } from '../AppState';
+import { useSafePageNavigation } from '../hooks/useSafePageNavigation';
 import { I18nProvider } from '../i18n';
 import DesktopShell from '../shell/DesktopShell';
 import { desktopPages, readStoredDesktopPage, writeStoredDesktopPage } from '../shell/navigation';
@@ -70,6 +71,78 @@ describe('desktop shell', () => {
       </I18nProvider>,
     );
   }
+
+  function SafeNavigationHarness() {
+    const { state, dispatch } = useAppState();
+    const navigate = useSafePageNavigation();
+    return (
+      <>
+        <button onClick={() => dispatch({ type: 'SET_PAGE', page: 'chapters' })}>
+          Start chapters
+        </button>
+        <button onClick={() => dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'dirty' })}>
+          Make dirty
+        </button>
+        <button onClick={() => dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saving' })}>
+          Start saving
+        </button>
+        <output aria-label="Current page">{state.currentPage}</output>
+        <DesktopShell page={state.currentPage} onNavigate={navigate}>
+          Embedded chapter editor
+        </DesktopShell>
+      </>
+    );
+  }
+
+  function renderSafeNavigation() {
+    return render(
+      <I18nProvider defaultLocale="en">
+        <AppStateProvider>
+          <SafeNavigationHarness />
+        </AppStateProvider>
+      </I18nProvider>,
+    );
+  }
+
+  it('keeps dirty Chapters navigation on the page when Overview or Scenes is cancelled', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderSafeNavigation();
+    fireEvent.click(screen.getByRole('button', { name: 'Start chapters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make dirty' }));
+    const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
+
+    fireEvent.click(within(navigation).getAllByRole('button')[0]);
+    fireEvent.click(within(navigation).getByRole('button', { name: 'Scenes 场景' }));
+
+    expect(screen.getByLabelText('Current page')).toHaveTextContent('chapters');
+    expect(window.confirm).toHaveBeenCalledTimes(2);
+  });
+
+  it('allows confirmed dirty navigation from Chapters to Scenes', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderSafeNavigation();
+    fireEvent.click(screen.getByRole('button', { name: 'Start chapters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make dirty' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Scenes 场景' }));
+
+    expect(screen.getByLabelText('Current page')).toHaveTextContent('scenes');
+    fireEvent.click(
+      screen.getByRole('navigation', { name: 'Primary navigation' }).querySelectorAll('button')[0],
+    );
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Current page')).toHaveTextContent('overview');
+  });
+
+  it('blocks navigation while a chapter save is pending without prompting', () => {
+    const confirm = vi.spyOn(window, 'confirm');
+    renderSafeNavigation();
+    fireEvent.click(screen.getByRole('button', { name: 'Start chapters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start saving' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Scenes 场景' }));
+
+    expect(screen.getByLabelText('Current page')).toHaveTextContent('chapters');
+    expect(confirm).not.toHaveBeenCalled();
+  });
 
   it('renders exactly ten bilingual navigation buttons and dispatches navigation', () => {
     const dispatch = vi.fn();

@@ -19,19 +19,22 @@ export default function ChaptersPage({ worldId }: { worldId: string }) {
   const [reorderError, setReorderError] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const reorderingRef = useRef(false);
+  const resourceDataRef = useRef(resource.data);
+  resourceDataRef.current = resource.data;
   const chapters =
     localOrder?.worldId === worldId ? localOrder.items : (resource.data?.chapters ?? []);
   const selected = chapters.find((chapter) => chapter.id === selectedId) ?? null;
 
   useEffect(() => {
-    setLocalOrder(null);
+    if (!reorderingRef.current) setLocalOrder(null);
   }, [resource.data]);
 
   function selectChapter(chapter: StoryChapter) {
+    if (selectedId && selectedId !== chapter.id && state.editorSaveStatus === 'saving') return;
     if (
       selectedId &&
       selectedId !== chapter.id &&
-      ['dirty', 'saving', 'error'].includes(state.editorSaveStatus) &&
+      ['dirty', 'error'].includes(state.editorSaveStatus) &&
       !window.confirm('Discard unsaved chapter changes and switch chapters?')
     ) {
       return;
@@ -44,6 +47,7 @@ export default function ChaptersPage({ worldId }: { worldId: string }) {
     const target = index + offset;
     if (target < 0 || target >= chapters.length) return;
     const previous = chapters;
+    const resourceAtStart = resource.data;
     const next = [...chapters];
     [next[index], next[target]] = [next[target], next[index]];
     setLocalOrder({ worldId, items: next });
@@ -61,6 +65,7 @@ export default function ChaptersPage({ worldId }: { worldId: string }) {
     } finally {
       reorderingRef.current = false;
       setReordering(false);
+      if (resourceDataRef.current !== resourceAtStart) setLocalOrder(null);
     }
   }
 
@@ -95,7 +100,12 @@ export default function ChaptersPage({ worldId }: { worldId: string }) {
           <h1>Chapters</h1>
           <p>Arrange the manuscript and open a chapter without leaving the planning workspace.</p>
         </div>
-        <button type="button" className={styles.refresh} onClick={resource.retry}>
+        <button
+          type="button"
+          className={styles.refresh}
+          onClick={resource.retry}
+          disabled={reordering}
+        >
           <RefreshCw aria-hidden="true" /> Refresh
         </button>
       </header>

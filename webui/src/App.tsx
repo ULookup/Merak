@@ -17,6 +17,7 @@ import WorldDashboard from './components/WorldDashboard';
 import WorldOnboarding from './components/WorldOnboarding';
 import WorldSidebar from './components/WorldSidebar';
 import DesktopBoot from './DesktopBoot';
+import { useSafePageNavigation } from './hooks/useSafePageNavigation';
 import { useSSE } from './hooks/useSSE';
 import { I18nProvider } from './i18n';
 import DesktopShell from './shell/DesktopShell';
@@ -51,6 +52,7 @@ export function shouldRenderSessionsPage(page: AppPage, phase: AppState['appPhas
 
 function AppInner() {
   const { state, dispatch } = useAppState();
+  const safeNavigate = useSafePageNavigation();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [inspectorOpen, setInspectorOpen] = useState(window.innerWidth >= 1180);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -231,11 +233,7 @@ function AppInner() {
   const connState = useSSE(sseUrl, dispatch, state.lastSeq);
 
   const inDesktopShell = (children: ReactNode, overlays?: ReactNode) => (
-    <DesktopShell
-      page={state.currentPage}
-      onNavigate={(page) => dispatch({ type: 'SET_PAGE', page })}
-      overlays={overlays}
-    >
+    <DesktopShell page={state.currentPage} onNavigate={safeNavigate} overlays={overlays}>
       {children}
     </DesktopShell>
   );
@@ -298,17 +296,14 @@ function AppInner() {
 
   // Page-based rendering (overrides phase when navigating away from workbench)
   if (state.currentPage === 'settings') {
-    return inDesktopShell(<SettingsPage />);
+    return inDesktopShell(<SettingsPage />, narrativePageOverlays);
   }
 
   if (state.currentPage === 'editor' && state.activeEditorChapterId && state.worldId) {
     return (
       <div className={styles.editorOverlay}>
         <div className={styles.editorHeader}>
-          <button
-            className={styles.editorBackBtn}
-            onClick={() => dispatch({ type: 'SET_PAGE', page: 'overview' })}
-          >
+          <button className={styles.editorBackBtn} onClick={() => safeNavigate('overview')}>
             <ArrowLeft size={15} aria-hidden="true" strokeWidth={2.3} />
             返回工作台
           </button>
@@ -342,12 +337,9 @@ function AppInner() {
   if (state.currentPage === 'overview' && state.worldId) {
     return inDesktopShell(
       <Suspense fallback={<Skeleton />}>
-        <OverviewPage
-          worldId={state.worldId}
-          sessions={state.sessions}
-          onNavigate={(page) => dispatch({ type: 'SET_PAGE', page })}
-        />
+        <OverviewPage worldId={state.worldId} sessions={state.sessions} onNavigate={safeNavigate} />
       </Suspense>,
+      narrativePageOverlays,
     );
   }
 
@@ -356,6 +348,7 @@ function AppInner() {
       <Suspense fallback={<Skeleton />}>
         <WorldPage worldId={state.worldId} />
       </Suspense>,
+      narrativePageOverlays,
     );
   }
 
@@ -364,6 +357,7 @@ function AppInner() {
       <Suspense fallback={<Skeleton />}>
         <CharactersPage worldId={state.worldId} />
       </Suspense>,
+      narrativePageOverlays,
     );
   }
 

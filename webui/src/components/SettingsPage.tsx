@@ -10,6 +10,7 @@ import {
   restartDesktopRuntime,
   type DesktopRuntimeStatus,
 } from '../desktop';
+import { useSafePageNavigation } from '../hooks/useSafePageNavigation';
 import styles from './SettingsPage.module.css';
 
 interface ConfigState {
@@ -39,6 +40,7 @@ const STYLE_OPTIONS = [
 
 export default function SettingsPage() {
   const { dispatch } = useAppState();
+  const safeNavigate = useSafePageNavigation();
 
   // LLM config
   const [config, setConfig] = useState<ConfigState | null>(null);
@@ -50,7 +52,9 @@ export default function SettingsPage() {
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [llmStatus, setLlmStatus] = useState<'idle' | 'saved' | 'test_ok' | 'test_fail' | 'error'>('idle');
+  const [llmStatus, setLlmStatus] = useState<'idle' | 'saved' | 'test_ok' | 'test_fail' | 'error'>(
+    'idle',
+  );
   const [llmError, setLlmError] = useState('');
 
   // User preferences
@@ -67,7 +71,8 @@ export default function SettingsPage() {
   const [diagnosticMsg, setDiagnosticMsg] = useState('');
 
   useEffect(() => {
-    api.getConfig()
+    api
+      .getConfig()
       .then((data) => {
         setConfig(data);
         setProvider(data.provider || 'anthropic');
@@ -82,7 +87,8 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    api.getPreferences()
+    api
+      .getPreferences()
       .then((prefs) => {
         if (prefs.default_genre) setGenre(prefs.default_genre);
         if (prefs.preferred_style) setStyle(prefs.preferred_style);
@@ -146,7 +152,10 @@ export default function SettingsPage() {
         preferred_style: style,
         allow_usage_logs: allowUsageLogs,
       });
-      dispatch({ type: 'SET_USER_PREFERENCES', prefs: { default_genre: genre, preferred_style: style } });
+      dispatch({
+        type: 'SET_USER_PREFERENCES',
+        prefs: { default_genre: genre, preferred_style: style },
+      });
       setPrefSaved(true);
       setTimeout(() => setPrefSaved(false), 2000);
     } catch (error) {
@@ -166,11 +175,14 @@ export default function SettingsPage() {
     setRuntime(response?.status ?? null);
     setDiagnosticMsg(response?.ok ? 'Merak 已重新打开。' : 'Merak 没能完成重新打开。');
     if (response?.ok) {
-      api.getConfig().then((data) => {
-        setConfig(data);
-        setProvider(data.provider || 'anthropic');
-        setModel(data.default_model || '');
-      }).catch(() => {});
+      api
+        .getConfig()
+        .then((data) => {
+          setConfig(data);
+          setProvider(data.provider || 'anthropic');
+          setModel(data.default_model || '');
+        })
+        .catch(() => {});
     }
   };
 
@@ -183,10 +195,7 @@ export default function SettingsPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <button
-          className={styles.backBtn}
-          onClick={() => dispatch({ type: 'SET_PAGE', page: 'overview' })}
-        >
+        <button className={styles.backBtn} onClick={() => safeNavigate('overview')}>
           <ArrowLeft size={15} aria-hidden="true" strokeWidth={2.3} />
           返回工作台
         </button>
@@ -199,13 +208,21 @@ export default function SettingsPage() {
           <h2 className={styles.sectionTitle}>大模型配置</h2>
 
           {!config ? (
-            llmStatus === 'error' ? <div className={styles.error}>{llmError}</div> : <p className={styles.hint}>正在加载配置...</p>
+            llmStatus === 'error' ? (
+              <div className={styles.error}>{llmError}</div>
+            ) : (
+              <p className={styles.hint}>正在加载配置...</p>
+            )
           ) : (
             <>
               <div className={styles.field}>
                 <label className={styles.label}>
                   服务类型
-                  <select value={provider} onChange={(e) => setProvider(e.target.value)} className={styles.select}>
+                  <select
+                    value={provider}
+                    onChange={(e) => setProvider(e.target.value)}
+                    className={styles.select}
+                  >
                     <option value="anthropic">Anthropic</option>
                     <option value="openai">OpenAI</option>
                     <option value="custom">Custom</option>
@@ -224,7 +241,11 @@ export default function SettingsPage() {
                       placeholder={config.api_key_masked || 'sk-...'}
                       className={styles.input}
                     />
-                    <button type="button" onClick={() => setShowKey(!showKey)} className={styles.toggleBtn}>
+                    <button
+                      type="button"
+                      onClick={() => setShowKey(!showKey)}
+                      className={styles.toggleBtn}
+                    >
                       {showKey ? '隐藏' : '显示'}
                     </button>
                   </div>
@@ -265,7 +286,9 @@ export default function SettingsPage() {
                     min={256}
                     step={256}
                     value={maxOutputTokens}
-                    onChange={(e) => setMaxOutputTokens(Math.max(256, Number(e.target.value) || 256))}
+                    onChange={(e) =>
+                      setMaxOutputTokens(Math.max(256, Number(e.target.value) || 256))
+                    }
                     placeholder={String(config.max_output_tokens || 4096)}
                     className={styles.input}
                   />
@@ -300,9 +323,19 @@ export default function SettingsPage() {
               <div className={styles.field}>
                 <label className={styles.label}>
                   默认题材
-                  <select value={genre} onChange={(e) => { setGenre(e.target.value); setPrefSaved(false); }} className={styles.select} disabled={prefSaving}>
+                  <select
+                    value={genre}
+                    onChange={(e) => {
+                      setGenre(e.target.value);
+                      setPrefSaved(false);
+                    }}
+                    className={styles.select}
+                    disabled={prefSaving}
+                  >
                     {GENRE_OPTIONS.map((g) => (
-                      <option key={g.value} value={g.value}>{g.label}</option>
+                      <option key={g.value} value={g.value}>
+                        {g.label}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -311,9 +344,19 @@ export default function SettingsPage() {
               <div className={styles.field}>
                 <label className={styles.label}>
                   偏好风格
-                  <select value={style} onChange={(e) => { setStyle(e.target.value); setPrefSaved(false); }} className={styles.select} disabled={prefSaving}>
+                  <select
+                    value={style}
+                    onChange={(e) => {
+                      setStyle(e.target.value);
+                      setPrefSaved(false);
+                    }}
+                    className={styles.select}
+                    disabled={prefSaving}
+                  >
                     {STYLE_OPTIONS.map((s) => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -328,7 +371,10 @@ export default function SettingsPage() {
                     role="switch"
                     aria-checked={allowUsageLogs}
                     aria-label="切换使用情况日志"
-                    onClick={() => { setAllowUsageLogs((prev) => !prev); setPrefSaved(false); }}
+                    onClick={() => {
+                      setAllowUsageLogs((prev) => !prev);
+                      setPrefSaved(false);
+                    }}
                     disabled={prefSaving}
                   >
                     <span className={styles.toggleKnob} />
@@ -338,7 +384,11 @@ export default function SettingsPage() {
               </div>
 
               <div className={styles.actions}>
-                <button onClick={handleSavePrefs} disabled={prefSaving} className={styles.btnPrimary}>
+                <button
+                  onClick={handleSavePrefs}
+                  disabled={prefSaving}
+                  className={styles.btnPrimary}
+                >
                   {prefSaving ? '保存中...' : '保存偏好'}
                 </button>
               </div>
@@ -370,10 +420,22 @@ export default function SettingsPage() {
               </div>
               {runtime?.error && <div className={styles.error}>{runtime.error}</div>}
               <div className={styles.actions}>
-                <button type="button" onClick={refreshRuntime} className={styles.btn}>刷新</button>
-                <button type="button" onClick={handleRestartRuntime} className={styles.btn}>重新打开 Merak</button>
-                <button type="button" onClick={() => openDiagnosticsFolder()} className={styles.btn}>打开报告文件夹</button>
-                <button type="button" onClick={handleExportDiagnostics} className={styles.btn}>导出故障报告</button>
+                <button type="button" onClick={refreshRuntime} className={styles.btn}>
+                  刷新
+                </button>
+                <button type="button" onClick={handleRestartRuntime} className={styles.btn}>
+                  重新打开 Merak
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openDiagnosticsFolder()}
+                  className={styles.btn}
+                >
+                  打开报告文件夹
+                </button>
+                <button type="button" onClick={handleExportDiagnostics} className={styles.btn}>
+                  导出故障报告
+                </button>
               </div>
               {diagnosticMsg && <div className={styles.ok}>{diagnosticMsg}</div>}
             </div>

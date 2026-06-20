@@ -246,6 +246,7 @@ describe('Chapter and scene pages', () => {
   it('disables chapter moves while a reorder request is pending', async () => {
     const reorder = deferred<{ ok: boolean }>();
     vi.mocked(worldbuildingApi.reorderChapters).mockClear();
+    vi.mocked(api.listChapters).mockClear();
     vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: chapterFixtures });
     vi.mocked(worldbuildingApi.reorderChapters).mockReturnValue(reorder.promise);
 
@@ -260,12 +261,21 @@ describe('Chapter and scene pages', () => {
     fireEvent.click(movePrevious);
 
     const moveNext = screen.getByRole('button', { name: 'Move The Rain Archive next' });
+    const refresh = screen.getByRole('button', { name: 'Refresh' });
     expect(moveNext).toBeDisabled();
+    expect(refresh).toBeDisabled();
+    expect(screen.getAllByRole('heading', { level: 2 }).map((item) => item.textContent)).toEqual([
+      'The Rain Archive',
+      'Ashes at Dawn',
+    ]);
+    fireEvent.click(refresh);
     fireEvent.click(moveNext);
     expect(worldbuildingApi.reorderChapters).toHaveBeenCalledTimes(1);
+    expect(api.listChapters).toHaveBeenCalledTimes(1);
 
     await act(async () => reorder.resolve({ ok: true }));
     await waitFor(() => expect(moveNext).not.toBeDisabled());
+    expect(refresh).not.toBeDisabled();
   });
 
   it('reconciles local chapter order with a fresh server response', async () => {
@@ -293,7 +303,9 @@ describe('Chapter and scene pages', () => {
       </AppStateProvider>,
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Move The Rain Archive previous' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    const refresh = screen.getByRole('button', { name: 'Refresh' });
+    await waitFor(() => expect(refresh).not.toBeDisabled());
+    fireEvent.click(refresh);
 
     expect(await screen.findByRole('heading', { name: 'Rain Archive Revised' })).toBeDefined();
     expect(screen.getByRole('heading', { name: 'A New Signal' })).toBeDefined();
@@ -428,6 +440,46 @@ describe('Chapter and scene pages', () => {
     expect(window.confirm).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('region', { name: 'Editing The Rain Archive' })).toBeDefined();
     expect(editor).toHaveValue('Unsaved rain.');
+  });
+
+  it('blocks chapter switching without confirmation while a save is pending', async () => {
+    const saving = deferred<Awaited<ReturnType<typeof api.saveWorkspaceFile>>>();
+    const confirm = vi.spyOn(window, 'confirm');
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: chapterFixtures });
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: 'chapters/world-1/chapter-2.md',
+        content: 'Original draft.',
+        encoding: 'utf-8',
+        updated_at: '2026-06-19T09:00:00Z',
+        version: 'v7',
+      },
+    });
+    vi.mocked(api.saveWorkspaceFile).mockReturnValue(saving.promise);
+
+    render(
+      <AppStateProvider>
+        <ChaptersPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit The Rain Archive' }));
+    const editor = await screen.findByRole('textbox', { name: 'Chapter content' });
+    fireEvent.change(editor, { target: { value: 'Saving rain.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter' }));
+    expect(screen.getByRole('button', { name: 'Save chapter' })).toHaveTextContent('Saving...');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Ashes at Dawn' }));
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(screen.getByRole('region', { name: 'Editing The Rain Archive' })).toBeDefined();
+    expect(editor).toHaveValue('Saving rain.');
+
+    await act(async () =>
+      saving.resolve({
+        ok: true,
+        file: { path: 'chapters/world-1/chapter-2.md', updated_at: 'now', version: 'v8' },
+      }),
+    );
   });
 
   it('commits a successful file version before reporting a title metadata failure', async () => {
