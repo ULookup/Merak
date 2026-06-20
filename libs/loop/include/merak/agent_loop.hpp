@@ -7,6 +7,7 @@
 #include <merak/tool_registry.hpp>
 #include <merak/memory_store.hpp>
 #include <merak/context_pipeline.hpp>
+#include <merak/token_counter.hpp>
 #include <merak/compactor.hpp>
 #include <merak/cache_aware_context.hpp>
 #include <merak/stall_detector.hpp>
@@ -88,6 +89,7 @@ private:
     std::shared_ptr<ToolRegistry> tools_;
     std::shared_ptr<MemoryStore> memory_;
     std::shared_ptr<Compactor> compactor_;
+    std::shared_ptr<TokenCounter> token_counter_;
 
     std::unique_ptr<ContextPipeline> pipeline_;
     StallDetector stall_detector_;

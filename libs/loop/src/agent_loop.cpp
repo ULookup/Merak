@@ -25,6 +25,7 @@ AgentLoop::AgentLoop(
     , worldbuilding_(std::move(worldbuilding))
     , skills_(std::move(skills))
     , pipeline_(std::make_unique<ContextPipeline>())
+    , token_counter_(std::make_shared<TokenCounter>(config_.default_model))
 {
     pipeline_->set_compactor(compactor_);
 }
@@ -212,6 +213,9 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         response.total_output_tokens += llm_response.total_output_tokens;
         response.has_usage = response.has_usage || llm_response.has_usage;
         response.usage_missing = response.usage_missing || !llm_response.has_usage;
+        token_counter_->update_authoritative(
+            llm_response.total_input_tokens,
+            (int)context_messages.size());
         control.emit_usage(llm_response.total_input_tokens,
             llm_response.total_output_tokens, llm_response.has_usage);
         if (auto token = control.cancellation_token(); token && token->should_stop()) throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
@@ -652,8 +656,7 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
 void AgentLoop::maybe_compact(RunControl& control) {
     if (!config_.enable_compaction) return;
 
-    TokenCounter counter(config_.default_model);
-    int total_tokens = counter.count(session_history_);
+    int total_tokens = token_counter_->count(session_history_);
 
     // Microcompact is handled by ContextOptimizer during pipeline assembly.
     // Here we trigger LLM-based compaction when token pressure is high.
