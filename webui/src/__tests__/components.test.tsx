@@ -194,12 +194,14 @@ describe('Cell components', () => {
     render(
       <AppStateProvider>
         <ToastProvider>
-          <MainPanel connectionState="connected" />
+          <MainPanel connectionState="connected" onToggleHistory={() => {}} />
         </ToastProvider>
       </AppStateProvider>,
     );
 
-    expect(screen.getByRole('button', { name: 'Open sidebar' }).querySelector('svg')).toBeDefined();
+    expect(
+      screen.getByRole('button', { name: 'Open session history' }).querySelector('svg'),
+    ).toBeDefined();
     expect(
       screen.getByRole('button', { name: 'Open inspector' }).querySelector('svg'),
     ).toBeDefined();
@@ -728,8 +730,8 @@ describe('InspectorPanel', () => {
     expect(screen.getByText('Lian')).toBeDefined();
     expect(screen.getByText('The bell tower never rings at noon')).toBeDefined();
     expect(screen.getByText('Lian knows the passphrase')).toBeDefined();
-    expect(screen.getByText('World time control')).toBeDefined();
-    expect(screen.getByText('Current: Day 4, dusk')).toBeDefined();
+    expect(screen.getByText('世界时间')).toBeDefined();
+    expect(screen.getByText('当前：Day 4, dusk')).toBeDefined();
     expect(screen.queryByText(/[�鈥鈫鈭]/)).toBeNull();
   });
 
@@ -853,8 +855,8 @@ describe('InspectorPanel', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Creation Panel' })).toBeDefined();
-    expect(screen.getByRole('tab', { name: /Foreshadowing/ })).toBeDefined();
-    expect(screen.getByText('Plant and track narrative threads.')).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Create' })).toBeDefined();
+    expect(await screen.findByText('Plant and track narrative threads.')).toBeDefined();
     expect(screen.getByText('Open Threads')).toBeDefined();
     expect(screen.getByText('The old bell never rings at noon.')).toBeDefined();
     expect(screen.queryByText(/[�鈥鈫鈭]/)).toBeNull();

@@ -26,6 +26,7 @@ const SetupWizard = lazy(() => import('./components/SetupWizard'));
 const ChapterReviewBanner = lazy(() => import('./components/ChapterReviewBanner'));
 const ExportDialog = lazy(() => import('./components/ExportDialog'));
 const OverviewPage = lazy(() => import('./pages/OverviewPage'));
+const SessionsPage = lazy(() => import('./pages/SessionsPage'));
 
 export function shouldReportWorldbuildingPartialFailure(
   overviewLoaded: boolean,
@@ -303,27 +304,33 @@ function AppInner() {
   return (
     <ToastProvider>
       {inDesktopShell(
-        <div className={styles.layout}>
-          <ErrorBoundary>
-            <WorldSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-          </ErrorBoundary>
-          <ErrorBoundary>
-            <div className={styles.workspace}>
-              <ConnectionBanner state={connState} />
-              <MainPanel
-                onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
-                onToggleInspector={() => setInspectorOpen((prev) => !prev)}
-                onOpenGuide={() => setHelpOpen(true)}
-                sidebarOpen={sidebarOpen}
-                inspectorOpen={inspectorOpen}
-                connectionState={connState}
-              />
-            </div>
-          </ErrorBoundary>
-          <ErrorBoundary>
-            <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
-          </ErrorBoundary>
-        </div>,
+        state.currentPage === 'sessions' ? (
+          <Suspense fallback={<Skeleton />}>
+            <SessionsPage connectionState={connState} onOpenGuide={() => setHelpOpen(true)} />
+          </Suspense>
+        ) : (
+          <div className={styles.layout}>
+            <ErrorBoundary>
+              <WorldSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <div className={styles.workspace}>
+                <ConnectionBanner state={connState} />
+                <MainPanel
+                  onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+                  onToggleInspector={() => setInspectorOpen((prev) => !prev)}
+                  onOpenGuide={() => setHelpOpen(true)}
+                  sidebarOpen={sidebarOpen}
+                  inspectorOpen={inspectorOpen}
+                  connectionState={connState}
+                />
+              </div>
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
+            </ErrorBoundary>
+          </div>
+        ),
         <>
           <Suspense>
             <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />

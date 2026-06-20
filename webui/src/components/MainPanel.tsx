@@ -1,25 +1,31 @@
-import { CircleHelp, Menu, PanelRight, X } from 'lucide-react';
 import { useState } from 'react';
-import type { ConnectionState } from '../hooks/useSSE';
+import { CircleHelp, Menu, PanelRight, X } from 'lucide-react';
 import { useAppState } from '../AppState';
+import type { ConnectionState } from '../hooks/useSSE';
 import BrandMark from './BrandMark';
 import ChatTimeline from './ChatTimeline';
 import Composer from './Composer';
 import styles from './MainPanel.module.css';
 
 interface MainPanelProps {
+  title?: string;
+  onToggleHistory?: () => void;
   onToggleSidebar?: () => void;
   onToggleInspector?: () => void;
   onOpenGuide?: () => void;
+  historyOpen?: boolean;
   sidebarOpen?: boolean;
   inspectorOpen?: boolean;
   connectionState?: ConnectionState;
 }
 
 export default function MainPanel({
+  title,
+  onToggleHistory,
   onToggleSidebar,
   onToggleInspector,
   onOpenGuide,
+  historyOpen,
   sidebarOpen,
   inspectorOpen,
   connectionState = 'connecting',
@@ -30,9 +36,11 @@ export default function MainPanel({
   const currentAgent = state.agents.find((a) => a.id === state.agentId);
   const currentWorld = state.worlds.find((w) => w.id === state.worldId);
 
-  const headerTitle = currentAgent
-    ? `${currentAgent.display_name || currentAgent.name} / ${currentWorld?.name ?? ''}`
-    : 'Merak Workbench';
+  const headerTitle =
+    title ||
+    (currentAgent
+      ? `${currentAgent.display_name || currentAgent.name} / ${currentWorld?.name ?? ''}`
+      : 'Merak Workbench');
 
   const headerSubtitle = currentAgent
     ? (() => {
@@ -48,12 +56,20 @@ export default function MainPanel({
   const activeScene = state.storyOverview?.current_scene ?? null;
 
   return (
-    <main className={styles.main} role="main" aria-label="Chat">
+    <main className={styles.main} role="main" aria-label="Conversation">
       <header className={styles.header}>
         <button
           className={styles.iconBtn}
-          onClick={onToggleSidebar}
-          aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          onClick={onToggleHistory ?? onToggleSidebar}
+          aria-label={
+            onToggleHistory
+              ? historyOpen
+                ? 'Close session history'
+                : 'Open session history'
+              : sidebarOpen
+                ? 'Close sidebar'
+                : 'Open sidebar'
+          }
           data-testid="menu-btn"
         >
           <Menu size={18} aria-hidden="true" strokeWidth={2.2} />
@@ -62,7 +78,7 @@ export default function MainPanel({
           <BrandMark compact />
         </div>
         <div>
-          <div className={styles.title}>{headerTitle}</div>
+          <h1 className={styles.title}>{headerTitle}</h1>
           <div className={styles.subtitle}>
             {headerSubtitle}
             {activeScene && (
@@ -137,7 +153,9 @@ export default function MainPanel({
               </article>
               <article>
                 <strong>Close safely</strong>
-                <span>Active runs and unsaved editor changes are protected before window close.</span>
+                <span>
+                  Active runs and unsaved editor changes are protected before window close.
+                </span>
               </article>
             </div>
           </section>

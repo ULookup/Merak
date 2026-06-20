@@ -1,10 +1,79 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { useEffect } from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { AppStateProvider } from '../AppState';
+import { AppStateProvider, useAppState } from '../AppState';
 import Composer from '../components/Composer';
 import ExportDialog from '../components/ExportDialog';
-import { ToastProvider } from '../components/Toast';
 import SetupWizard from '../components/SetupWizard';
+import { ToastProvider } from '../components/Toast';
+import SessionsPage from '../pages/SessionsPage';
+
+function SessionsPageHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
+    dispatch({ type: 'SET_SESSION', sessionId: 'session_1' });
+    dispatch({ type: 'SET_CURRENT_RUN', runId: 'run_1' });
+    dispatch({ type: 'SET_STATUS', status: 'thinking' });
+    dispatch({
+      type: 'SET_WORLDBUILDING_DATA',
+      worlds: [
+        {
+          id: 'world_1',
+          name: 'Northreach',
+          description: 'Snowbound border city',
+          created_at: '2026-06-06T10:00:00Z',
+        },
+      ],
+      agents: [],
+      foreshadowing: [],
+      secrets: [],
+      worldTime: 'Day 4, dusk',
+    });
+    dispatch({
+      type: 'SET_SESSIONS',
+      sessions: [
+        {
+          id: 'session_1',
+          title: 'Plan the rain invasion',
+          world_id: 'world_1',
+          agent_id: null,
+          last_seq: 6,
+          created_at: '2026-06-06T10:30:00Z',
+          updated_at: '2026-06-06T10:35:00Z',
+          archived_at: null,
+        },
+      ],
+    });
+    dispatch({ type: 'SET_INSPECTOR_TAB', tab: 'run' });
+  }, [dispatch]);
+
+  return <SessionsPage connectionState="connected" />;
+}
+
+describe('Sessions workbench', () => {
+  it('keeps session history, conversation, context, composer, and execution state together', async () => {
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <SessionsPageHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    expect(await screen.findByRole('region', { name: 'Session history' })).toBeDefined();
+    expect(screen.getByRole('main', { name: 'Conversation' })).toBeDefined();
+    expect(screen.getByRole('complementary', { name: 'Story inspector' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Plan the rain invasion' })).toBeDefined();
+    expect(screen.getByTestId('composer-input')).toBeDefined();
+    for (const tab of ['Story', 'Files', 'Agents', 'Create', 'Run']) {
+      expect(screen.getByRole('tab', { name: tab })).toBeDefined();
+    }
+    expect(screen.getAllByText('Thinking').length).toBeGreaterThan(0);
+    expect(await screen.findByText('Creation in progress')).toBeDefined();
+  });
+});
 
 describe('SetupWizard', () => {
   it('renders the provider selection step initially', () => {
