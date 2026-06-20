@@ -14,9 +14,10 @@ import ResourceList from '../components/layout/ResourceList';
 import { useResource } from '../hooks/useResource';
 import ChaptersPage from '../pages/ChaptersPage';
 import CharactersPage from '../pages/CharactersPage';
+import FilesPage from '../pages/FilesPage';
+import ForeshadowingPage, { deriveForeshadowingStatus } from '../pages/ForeshadowingPage';
 import OverviewPage from '../pages/OverviewPage';
 import ScenesPage from '../pages/ScenesPage';
-import ForeshadowingPage, { deriveForeshadowingStatus } from '../pages/ForeshadowingPage';
 import SecretsPage from '../pages/SecretsPage';
 import { selectWorldMetrics } from '../pages/selectors';
 import WorldPage from '../pages/WorldPage';
@@ -49,13 +50,152 @@ vi.mock('../api/client', () => ({
     createForeshadowing: vi.fn(),
     createSecret: vi.fn(),
   },
+  formatApiError: vi.fn((error: unknown, fallback: string) =>
+    error instanceof Error ? error.message : fallback,
+  ),
 }));
+
+describe('Files page', () => {
+  const file = {
+    id: 'draft',
+    path: 'chapters/draft.md',
+    name: 'draft.md',
+    ext: 'md',
+    mime: 'text/markdown',
+    size: 14,
+    updated_at: '2026-06-20T00:00:00Z',
+    dirty: false,
+  };
+
+  it('loads file content only after selection', async () => {
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file],
+    });
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: file.path,
+        content: 'Original text',
+        encoding: 'utf-8',
+        updated_at: file.updated_at,
+        version: 'v1',
+      },
+    });
+
+    render(<FilesPage worldId="world-1" />);
+    await screen.findByRole('option', { name: /draft/i });
+    expect(api.readWorkspaceFile).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('option', { name: /draft/i }));
+    expect(await screen.findByRole('textbox', { name: 'File content' })).toHaveValue(
+      'Original text',
+    );
+  });
+
+  it('preserves the local draft and offers Reload and Copy after a file conflict', async () => {
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file],
+    });
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: file.path,
+        content: 'Original text',
+        encoding: 'utf-8',
+        updated_at: file.updated_at,
+        version: 'v1',
+      },
+    });
+    vi.mocked(api.saveWorkspaceFile).mockRejectedValue(
+      Object.assign(new Error('File changed on disk'), { status: 409, code: 'file_conflict' }),
+    );
+
+    render(<FilesPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /draft/i }));
+    const editor = await screen.findByRole('textbox', { name: 'File content' });
+    fireEvent.change(editor, { target: { value: 'My local draft' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save file' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/changed on disk/i);
+    expect(editor).toHaveValue('My local draft');
+    expect(screen.getByRole('button', { name: 'Reload file' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Copy local draft' })).toBeDefined();
+  });
+
+  it('ignores stale file reads across an A-B-A selection sequence', async () => {
+    const secondA = deferred<Awaited<ReturnType<typeof api.readWorkspaceFile>>>();
+    const firstA = deferred<Awaited<ReturnType<typeof api.readWorkspaceFile>>>();
+    const b = deferred<Awaited<ReturnType<typeof api.readWorkspaceFile>>>();
+    const other = { ...file, id: 'notes', path: 'notes.md', name: 'notes.md' };
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file, other],
+    });
+    vi.mocked(api.readWorkspaceFile)
+      .mockReturnValueOnce(firstA.promise)
+      .mockReturnValueOnce(b.promise)
+      .mockReturnValueOnce(secondA.promise);
+
+    render(<FilesPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /draft/i }));
+    fireEvent.click(screen.getByRole('option', { name: /notes/i }));
+    fireEvent.click(screen.getByRole('option', { name: /draft/i }));
+    await act(async () =>
+      secondA.resolve({
+        ok: true,
+        file: {
+          path: file.path,
+          content: 'Newest A',
+          encoding: 'utf-8',
+          updated_at: file.updated_at,
+          version: 'v3',
+        },
+      }),
+    );
+    await act(async () =>
+      firstA.resolve({
+        ok: true,
+        file: {
+          path: file.path,
+          content: 'Old A',
+          encoding: 'utf-8',
+          updated_at: file.updated_at,
+          version: 'v1',
+        },
+      }),
+    );
+    await act(async () =>
+      b.resolve({
+        ok: true,
+        file: {
+          path: other.path,
+          content: 'Old B',
+          encoding: 'utf-8',
+          updated_at: other.updated_at,
+          version: 'v2',
+        },
+      }),
+    );
+
+    expect(screen.getByRole('textbox', { name: 'File content' })).toHaveValue('Newest A');
+  });
+});
 
 describe('Foreshadowing page', () => {
   it('derives overdue only when planned and current chapter positions both exist', () => {
-    expect(deriveForeshadowingStatus({ status: 'open', plannedPosition: 2, currentPosition: null })).toBeNull();
-    expect(deriveForeshadowingStatus({ status: 'open', plannedPosition: 2, currentPosition: 4 })).toBe('overdue');
-    expect(deriveForeshadowingStatus({ status: 'open', plannedPosition: 5, currentPosition: 4 })).toBeNull();
+    expect(
+      deriveForeshadowingStatus({ status: 'open', plannedPosition: 2, currentPosition: null }),
+    ).toBeNull();
+    expect(
+      deriveForeshadowingStatus({ status: 'open', plannedPosition: 2, currentPosition: 4 }),
+    ).toBe('overdue');
+    expect(
+      deriveForeshadowingStatus({ status: 'open', plannedPosition: 5, currentPosition: 4 }),
+    ).toBeNull();
   });
 
   it('filters real records and keeps selection safe after deletion', async () => {
@@ -68,7 +208,10 @@ describe('Foreshadowing page', () => {
           { id: 'f2', content: 'Broken seal', status: 'paid' },
         ],
       })
-      .mockResolvedValueOnce({ ok: true, items: [{ id: 'f2', content: 'Broken seal', status: 'paid' }] });
+      .mockResolvedValueOnce({
+        ok: true,
+        items: [{ id: 'f2', content: 'Broken seal', status: 'paid' }],
+      });
     vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
     vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
     vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
@@ -79,7 +222,10 @@ describe('Foreshadowing page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete foreshadowing' }));
 
     await waitFor(() => expect(api.deleteForeshadowing).toHaveBeenCalledWith('world-1', 'f1'));
-    expect(screen.getByRole('option', { name: /Broken seal/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: /Broken seal/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 
   it('selects only visible records when the status filter changes', async () => {
@@ -98,17 +244,34 @@ describe('Foreshadowing page', () => {
 
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'paid' } });
 
-    expect(screen.getByRole('option', { name: /Broken seal/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: /Broken seal/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     expect(screen.getByRole('heading', { name: 'Broken seal' })).toBeDefined();
   });
 
   it('resolves real planted and paid narrative IDs and retains the list when context fails', async () => {
     vi.mocked(api.listForeshadowing).mockResolvedValue({
       ok: true,
-      items: [{ id: 'f1', content: 'Silver bell', status: 'paid', planted_at: 'scene-1', paid_at: 'chapter-2' }],
+      items: [
+        {
+          id: 'f1',
+          content: 'Silver bell',
+          status: 'paid',
+          planted_at: 'scene-1',
+          paid_at: 'chapter-2',
+        },
+      ],
     });
-    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [{ id: 'chapter-2', title: 'Reckoning', status: 'draft' }] });
-    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [{ id: 'scene-1', title: 'The warning', status: 'planned', chapter_id: 'chapter-1' }] });
+    vi.mocked(api.listChapters).mockResolvedValue({
+      ok: true,
+      chapters: [{ id: 'chapter-2', title: 'Reckoning', status: 'draft' }],
+    });
+    vi.mocked(api.listScenes).mockResolvedValue({
+      ok: true,
+      scenes: [{ id: 'scene-1', title: 'The warning', status: 'planned', chapter_id: 'chapter-1' }],
+    });
     render(<ForeshadowingPage worldId="world-1" />);
     fireEvent.click(await screen.findByRole('option', { name: /Silver bell/ }));
     const positions = screen.getByRole('heading', { name: 'Narrative positions' }).parentElement!;
@@ -126,10 +289,18 @@ describe('Foreshadowing page', () => {
     const deletion = deferred<{ ok: boolean }>();
     vi.mocked(api.deleteForeshadowing).mockClear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    vi.mocked(api.listForeshadowing).mockImplementation((worldId) => Promise.resolve({
-      ok: true,
-      items: [{ id: 'shared', content: worldId === 'world-1' ? 'Old thread' : 'New thread', status: 'open' }],
-    }));
+    vi.mocked(api.listForeshadowing).mockImplementation((worldId) =>
+      Promise.resolve({
+        ok: true,
+        items: [
+          {
+            id: 'shared',
+            content: worldId === 'world-1' ? 'Old thread' : 'New thread',
+            status: 'open',
+          },
+        ],
+      }),
+    );
     vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
     vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
     vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
@@ -152,13 +323,24 @@ describe('Foreshadowing page', () => {
     const oldDeletion = deferred<{ ok: boolean }>();
     const newDeletion = deferred<{ ok: boolean }>();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    vi.mocked(api.listForeshadowing).mockImplementation((worldId) => Promise.resolve({
-      ok: true,
-      items: [{ id: 'shared', content: worldId === 'world-a' ? 'A thread' : 'B thread', status: 'open' }],
-    }));
+    vi.mocked(api.listForeshadowing).mockImplementation((worldId) =>
+      Promise.resolve({
+        ok: true,
+        items: [
+          {
+            id: 'shared',
+            content: worldId === 'world-a' ? 'A thread' : 'B thread',
+            status: 'open',
+          },
+        ],
+      }),
+    );
     vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
     vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
-    vi.mocked(api.deleteForeshadowing).mockReset().mockReturnValueOnce(oldDeletion.promise).mockReturnValueOnce(newDeletion.promise);
+    vi.mocked(api.deleteForeshadowing)
+      .mockReset()
+      .mockReturnValueOnce(oldDeletion.promise)
+      .mockReturnValueOnce(newDeletion.promise);
     const view = render(<ForeshadowingPage worldId="world-a" />);
     fireEvent.click(await screen.findByRole('option', { name: /A thread/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete foreshadowing' }));
@@ -179,17 +361,30 @@ describe('Foreshadowing page', () => {
     const deletion = deferred<{ ok: boolean }>();
     const suspended = new Promise<never>(() => {});
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    vi.mocked(api.listForeshadowing).mockResolvedValue({ ok: true, items: [{ id: 'f1', content: 'Committed thread', status: 'open' }] });
+    vi.mocked(api.listForeshadowing).mockResolvedValue({
+      ok: true,
+      items: [{ id: 'f1', content: 'Committed thread', status: 'open' }],
+    });
     vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
     vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
     vi.mocked(api.deleteForeshadowing).mockReset().mockReturnValue(deletion.promise);
-    const SuspendRender = ({ active }: { active: boolean }) => { if (active) throw suspended; return null; };
-    const page = (worldId: string, suspend: boolean) => <Suspense fallback={<p>Suspended</p>}><ForeshadowingPage worldId={worldId} /><SuspendRender active={suspend} /></Suspense>;
+    const SuspendRender = ({ active }: { active: boolean }) => {
+      if (active) throw suspended;
+      return null;
+    };
+    const page = (worldId: string, suspend: boolean) => (
+      <Suspense fallback={<p>Suspended</p>}>
+        <ForeshadowingPage worldId={worldId} />
+        <SuspendRender active={suspend} />
+      </Suspense>
+    );
     const view = render(page('world-a', false));
     fireEvent.click(await screen.findByRole('option', { name: /Committed thread/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete foreshadowing' }));
 
-    act(() => { startTransition(() => view.rerender(page('world-b', true))); });
+    act(() => {
+      startTransition(() => view.rerender(page('world-b', true)));
+    });
     await act(async () => deletion.reject(new Error('Delete failed')));
 
     expect(screen.getByRole('alert')).toHaveTextContent('Delete failed');
@@ -220,9 +415,17 @@ describe('Foreshadowing page', () => {
     const oldDeletion = deferred<{ ok: boolean }>();
     const newDeletion = deferred<{ ok: boolean }>();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    vi.mocked(api.listSecrets).mockImplementation((worldId) => Promise.resolve({ ok: true, items: [{ id: 'shared', title: `${worldId} secret`, status: 'active' }] }));
+    vi.mocked(api.listSecrets).mockImplementation((worldId) =>
+      Promise.resolve({
+        ok: true,
+        items: [{ id: 'shared', title: `${worldId} secret`, status: 'active' }],
+      }),
+    );
     vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
-    vi.mocked(api.deleteSecret).mockReset().mockReturnValueOnce(oldDeletion.promise).mockReturnValueOnce(newDeletion.promise);
+    vi.mocked(api.deleteSecret)
+      .mockReset()
+      .mockReturnValueOnce(oldDeletion.promise)
+      .mockReturnValueOnce(newDeletion.promise);
     const view = render(<SecretsPage worldId="world-a" />);
     fireEvent.click(await screen.findByRole('option', { name: /world-a secret/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete secret' }));
@@ -249,10 +452,18 @@ describe('Task 10 create mutation lifetime', () => {
     const onCreated = vi.fn();
     const onClose = vi.fn();
     vi.mocked(api[method]).mockReturnValue(creation.promise as never);
-    const view = render(<AppStateProvider><Modal worldId="world-a" onCreated={onCreated} onClose={onClose} /></AppStateProvider>);
-    const field = view.container.querySelector('textarea, input') as HTMLInputElement | HTMLTextAreaElement;
+    const view = render(
+      <AppStateProvider>
+        <Modal worldId="world-a" onCreated={onCreated} onClose={onClose} />
+      </AppStateProvider>,
+    );
+    const field = view.container.querySelector('textarea, input') as
+      | HTMLInputElement
+      | HTMLTextAreaElement;
     fireEvent.change(field, { target: { value: 'Required value' } });
-    const submit = Array.from(view.container.querySelectorAll('button')).at(-1) as HTMLButtonElement;
+    const submit = Array.from(view.container.querySelectorAll('button')).at(
+      -1,
+    ) as HTMLButtonElement;
     fireEvent.click(submit);
     view.unmount();
 
@@ -265,52 +476,88 @@ describe('Task 10 create mutation lifetime', () => {
   it.each([
     ['foreshadowing', CreateForeshadowingModal, 'createForeshadowing'],
     ['secret', CreateSecretModal, 'createSecret'],
-  ] as const)('ignores stale %s callbacks after an A-B-A world change', async (_name, Modal, method) => {
-    const creation = deferred<{ ok: boolean }>();
-    const onCreated = vi.fn();
-    const onClose = vi.fn();
-    vi.mocked(api[method]).mockReturnValue(creation.promise as never);
-    const renderModal = (worldId: string) => <AppStateProvider><Modal worldId={worldId} onCreated={onCreated} onClose={onClose} /></AppStateProvider>;
-    const view = render(renderModal('world-a'));
-    const field = view.container.querySelector('textarea, input') as HTMLInputElement | HTMLTextAreaElement;
-    fireEvent.change(field, { target: { value: 'Required value' } });
-    fireEvent.click(Array.from(view.container.querySelectorAll('button')).at(-1) as HTMLButtonElement);
-    view.rerender(renderModal('world-b'));
-    view.rerender(renderModal('world-a'));
+  ] as const)(
+    'ignores stale %s callbacks after an A-B-A world change',
+    async (_name, Modal, method) => {
+      const creation = deferred<{ ok: boolean }>();
+      const onCreated = vi.fn();
+      const onClose = vi.fn();
+      vi.mocked(api[method]).mockReturnValue(creation.promise as never);
+      const renderModal = (worldId: string) => (
+        <AppStateProvider>
+          <Modal worldId={worldId} onCreated={onCreated} onClose={onClose} />
+        </AppStateProvider>
+      );
+      const view = render(renderModal('world-a'));
+      const field = view.container.querySelector('textarea, input') as
+        | HTMLInputElement
+        | HTMLTextAreaElement;
+      fireEvent.change(field, { target: { value: 'Required value' } });
+      fireEvent.click(
+        Array.from(view.container.querySelectorAll('button')).at(-1) as HTMLButtonElement,
+      );
+      view.rerender(renderModal('world-b'));
+      view.rerender(renderModal('world-a'));
 
-    await act(async () => creation.resolve({ ok: true }));
+      await act(async () => creation.resolve({ ok: true }));
 
-    expect(onCreated).not.toHaveBeenCalled();
-    expect(onClose).not.toHaveBeenCalled();
-  });
+      expect(onCreated).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['foreshadowing', CreateForeshadowingModal, 'createForeshadowing'],
     ['secret', CreateSecretModal, 'createSecret'],
-  ] as const)('keeps the committed %s creation valid when another world render is suspended', async (_name, Modal, method) => {
-    const creation = deferred<{ ok: boolean }>();
-    const suspended = new Promise<never>(() => {});
-    vi.mocked(api[method]).mockReturnValue(creation.promise as never);
-    const SuspendRender = ({ active }: { active: boolean }) => { if (active) throw suspended; return null; };
-    const renderModal = (worldId: string, suspend: boolean) => <AppStateProvider><Suspense fallback={<p>Suspended</p>}><Modal worldId={worldId} onClose={vi.fn()} /><SuspendRender active={suspend} /></Suspense></AppStateProvider>;
-    const view = render(renderModal('world-a', false));
-    const field = view.container.querySelector('textarea, input') as HTMLInputElement | HTMLTextAreaElement;
-    fireEvent.change(field, { target: { value: 'Required value' } });
-    fireEvent.click(Array.from(view.container.querySelectorAll('button')).at(-1) as HTMLButtonElement);
+  ] as const)(
+    'keeps the committed %s creation valid when another world render is suspended',
+    async (_name, Modal, method) => {
+      const creation = deferred<{ ok: boolean }>();
+      const suspended = new Promise<never>(() => {});
+      vi.mocked(api[method]).mockReturnValue(creation.promise as never);
+      const SuspendRender = ({ active }: { active: boolean }) => {
+        if (active) throw suspended;
+        return null;
+      };
+      const renderModal = (worldId: string, suspend: boolean) => (
+        <AppStateProvider>
+          <Suspense fallback={<p>Suspended</p>}>
+            <Modal worldId={worldId} onClose={vi.fn()} />
+            <SuspendRender active={suspend} />
+          </Suspense>
+        </AppStateProvider>
+      );
+      const view = render(renderModal('world-a', false));
+      const field = view.container.querySelector('textarea, input') as
+        | HTMLInputElement
+        | HTMLTextAreaElement;
+      fireEvent.change(field, { target: { value: 'Required value' } });
+      fireEvent.click(
+        Array.from(view.container.querySelectorAll('button')).at(-1) as HTMLButtonElement,
+      );
 
-    act(() => { startTransition(() => view.rerender(renderModal('world-b', true))); });
-    await act(async () => creation.reject(new Error('Create failed')));
+      act(() => {
+        startTransition(() => view.rerender(renderModal('world-b', true)));
+      });
+      await act(async () => creation.reject(new Error('Create failed')));
 
-    expect(screen.getByText('Create failed')).toBeDefined();
-    expect(Array.from(view.container.querySelectorAll('button')).at(-1)).not.toBeDisabled();
-  });
+      expect(screen.getByText('Create failed')).toBeDefined();
+      expect(Array.from(view.container.querySelectorAll('button')).at(-1)).not.toBeDisabled();
+    },
+  );
 });
 
 describe('Secrets page', () => {
   const secrets = {
     ok: true,
     items: [
-      { id: 's1', title: 'The pact', truth: 'The crown is counterfeit', status: 'active', aware_character_ids: ['a1', 'missing'] },
+      {
+        id: 's1',
+        title: 'The pact',
+        truth: 'The crown is counterfeit',
+        status: 'active',
+        aware_character_ids: ['a1', 'missing'],
+      },
       { id: 's2', title: 'The oath', truth: 'The oath was staged', status: 'exposed' },
     ],
   };
@@ -320,7 +567,10 @@ describe('Secrets page', () => {
     vi.mocked(api.listForeshadowing).mockResolvedValue({ ok: true, items: [] });
     vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
     vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
-    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [{ id: 'a1', name: 'Mira', display_name: 'Mira', kind: 'character' }] });
+    vi.mocked(api.listAgents).mockResolvedValue({
+      ok: true,
+      agents: [{ id: 'a1', name: 'Mira', display_name: 'Mira', kind: 'character' }],
+    });
 
     const view = render(<SecretsPage worldId="world-1" />);
     fireEvent.click(await screen.findByRole('option', { name: /The pact/ }));
@@ -359,7 +609,10 @@ describe('Secrets page', () => {
 
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'exposed' } });
 
-    expect(screen.getByRole('option', { name: /The oath/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: /The oath/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     expect(screen.getByRole('heading', { name: 'The oath' })).toBeDefined();
   });
 
@@ -403,13 +656,21 @@ describe('Secrets page', () => {
 });
 
 describe('Foreshadowing and Secrets responsive layout', () => {
-  it.each(['ForeshadowingPage.module.css', 'SecretsPage.module.css'])('%s owns scrolling when context stacks', (file) => {
-    const css = readFileSync(join(process.cwd(), 'src/pages', file), 'utf8');
-    const responsive = css.slice(css.indexOf('@media (max-width: 1100px)'), css.indexOf('@media (max-width: 700px)'));
-    expect(css).toMatch(/\.workspace\s*\{[^}]*height:\s*100%[^}]*min-height:\s*0[^}]*overflow:\s*auto/s);
-    expect(responsive).toMatch(/\.workspace\s*\{[^}]*align-content:\s*start/s);
-    expect(responsive).not.toMatch(/\.contextPane\s*\{[^}]*display:\s*none/s);
-  });
+  it.each(['ForeshadowingPage.module.css', 'SecretsPage.module.css'])(
+    '%s owns scrolling when context stacks',
+    (file) => {
+      const css = readFileSync(join(process.cwd(), 'src/pages', file), 'utf8');
+      const responsive = css.slice(
+        css.indexOf('@media (max-width: 1100px)'),
+        css.indexOf('@media (max-width: 700px)'),
+      );
+      expect(css).toMatch(
+        /\.workspace\s*\{[^}]*height:\s*100%[^}]*min-height:\s*0[^}]*overflow:\s*auto/s,
+      );
+      expect(responsive).toMatch(/\.workspace\s*\{[^}]*align-content:\s*start/s);
+      expect(responsive).not.toMatch(/\.contextPane\s*\{[^}]*display:\s*none/s);
+    },
+  );
 });
 
 vi.mock('../api/worldbuilding', () => ({

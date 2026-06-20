@@ -10,7 +10,6 @@ import CreationRequestDialog from './components/CreationRequestDialog';
 import ErrorBoundary from './components/ErrorBoundary';
 import InspectorPanel from './components/InspectorPanel';
 import MainPanel from './components/MainPanel';
-import SettingsPage from './components/SettingsPage';
 import Skeleton from './components/Skeleton';
 import { ToastProvider } from './components/Toast';
 import WorldDashboard from './components/WorldDashboard';
@@ -34,6 +33,8 @@ const ChaptersPage = lazy(() => import('./pages/ChaptersPage'));
 const ScenesPage = lazy(() => import('./pages/ScenesPage'));
 const ForeshadowingPage = lazy(() => import('./pages/ForeshadowingPage'));
 const SecretsPage = lazy(() => import('./pages/SecretsPage'));
+const FilesPage = lazy(() => import('./pages/FilesPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 export function shouldReportWorldbuildingPartialFailure(
   overviewLoaded: boolean,
@@ -298,7 +299,12 @@ function AppInner() {
 
   // Page-based rendering (overrides phase when navigating away from workbench)
   if (state.currentPage === 'settings') {
-    return inDesktopShell(<SettingsPage />, narrativePageOverlays);
+    return inDesktopShell(
+      <Suspense fallback={<Skeleton />}>
+        <SettingsPage />
+      </Suspense>,
+      narrativePageOverlays,
+    );
   }
 
   if (state.currentPage === 'editor' && state.activeEditorChapterId && state.worldId) {
@@ -412,6 +418,15 @@ function AppInner() {
           narrativePageOverlays,
         )}
       </ToastProvider>
+    );
+  }
+
+  if (state.currentPage === 'files' && state.worldId) {
+    return inDesktopShell(
+      <Suspense fallback={<Skeleton />}>
+        <FilesPage worldId={state.worldId} />
+      </Suspense>,
+      narrativePageOverlays,
     );
   }
 

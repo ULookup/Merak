@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { AppStateProvider } from '../AppState';
 import SettingsPanel from '../components/Sidebar/SettingsPanel';
 import { I18nProvider } from '../i18n';
+import SettingsPage from '../pages/SettingsPage';
 
 vi.mock('../api/client', () => ({
   api: {
@@ -14,6 +16,12 @@ vi.mock('../api/client', () => ({
     }),
     saveConfig: vi.fn().mockResolvedValue({ ok: true }),
     testConfig: vi.fn().mockResolvedValue({ ok: true }),
+    getPreferences: vi.fn().mockResolvedValue({
+      default_genre: 'No preference',
+      preferred_style: 'concise',
+      allow_usage_logs: true,
+    }),
+    savePreferences: vi.fn().mockResolvedValue({ ok: true }),
   },
   formatApiError: vi.fn((error: unknown, fallback: string) =>
     error instanceof Error ? error.message : fallback,
@@ -50,6 +58,24 @@ describe('SettingsPanel polish', () => {
     expect(screen.getByLabelText('访问密钥')).toBeDefined();
     expect(screen.getByText('本地桌面状态')).toBeDefined();
     expect(screen.getByRole('button', { name: '导出故障报告' })).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/API Key|API Base URL|Runtime|Database|Diagnostics/i);
+    expect(document.body.textContent ?? '').not.toMatch(
+      /API Key|API Base URL|Runtime|Database|Diagnostics/i,
+    );
+  });
+});
+
+describe('Settings page capabilities', () => {
+  it('keeps API credentials masked and does not enable unsupported settings', async () => {
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+
+    const key = await screen.findByLabelText('API key');
+    expect(key).toHaveAttribute('type', 'password');
+    expect(screen.queryByRole('switch', { name: /auto.?save/i })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /theme/i })).toBeNull();
+    expect(screen.queryByRole('textbox', { name: /database/i })).toBeNull();
   });
 });
