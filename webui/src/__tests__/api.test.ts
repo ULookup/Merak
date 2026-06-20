@@ -1,8 +1,16 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { filesApi, worldbuildingApi } from '../api';
 import { request } from '../api/http';
 
 describe('api client', () => {
+  it('does not advertise unsupported narrative relationship fields', () => {
+    const client = readFileSync(join(process.cwd(), 'src/api/client.ts'), 'utf8');
+    const createSecret = client.slice(client.indexOf('createSecret:'), client.indexOf('// Prompt'));
+    expect(createSecret).not.toContain('related_foreshadowing_ids');
+  });
+
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
   });

@@ -1,5 +1,5 @@
 import { Eye, Lightbulb, Loader2, Tag, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
 import styles from './CreateModal.module.css';
@@ -18,6 +18,15 @@ export default function CreateForeshadowingModal({ worldId, onClose, onCreated }
   const [tags, setTags] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const worldRef = useRef(worldId);
+  worldRef.current = worldId;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !submitting) onClose(); }
@@ -26,7 +35,9 @@ export default function CreateForeshadowingModal({ worldId, onClose, onCreated }
   }, [onClose, submitting]);
 
   async function handleSubmit() {
-    if (!content.trim()) return;
+    if (!content.trim() || submittingRef.current) return;
+    const operationWorld = worldId;
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -37,12 +48,17 @@ export default function CreateForeshadowingModal({ worldId, onClose, onCreated }
         tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
         session_id: state.sessionId,
       });
-      await onCreated?.();
-      onClose();
+      if (mountedRef.current && worldRef.current === operationWorld) {
+        await onCreated?.();
+        if (mountedRef.current && worldRef.current === operationWorld) onClose();
+      }
     } catch (e) {
-      setError((e as Error).message);
+      if (mountedRef.current && worldRef.current === operationWorld) setError((e as Error).message);
     } finally {
-      setSubmitting(false);
+      if (mountedRef.current && worldRef.current === operationWorld) {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
     }
   }
 

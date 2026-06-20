@@ -89,6 +89,72 @@ describe('Foreshadowing page', () => {
     await waitFor(() => expect(api.deleteForeshadowing).toHaveBeenCalledWith('world-1', 'f1'));
     expect(screen.getByRole('option', { name: /Broken seal/ })).toHaveAttribute('aria-selected', 'true');
   });
+
+  it('selects only visible records when the status filter changes', async () => {
+    vi.mocked(api.listForeshadowing).mockResolvedValue({
+      ok: true,
+      items: [
+        { id: 'f1', content: 'Silver bell', status: 'open' },
+        { id: 'f2', content: 'Broken seal', status: 'paid' },
+      ],
+    });
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
+    render(<ForeshadowingPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /Silver bell/ }));
+
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'paid' } });
+
+    expect(screen.getByRole('option', { name: /Broken seal/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { name: 'Broken seal' })).toBeDefined();
+  });
+
+  it('ignores a completed delete after switching worlds and disables duplicate mutation', async () => {
+    const deletion = deferred<{ ok: boolean }>();
+    vi.mocked(api.deleteForeshadowing).mockClear();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.listForeshadowing).mockImplementation((worldId) => Promise.resolve({
+      ok: true,
+      items: [{ id: 'shared', content: worldId === 'world-1' ? 'Old thread' : 'New thread', status: 'open' }],
+    }));
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
+    vi.mocked(api.deleteForeshadowing).mockReturnValue(deletion.promise);
+    const view = render(<ForeshadowingPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /Old thread/ }));
+    const deleteButton = screen.getByRole('button', { name: 'Delete foreshadowing' });
+    fireEvent.click(deleteButton);
+    expect(deleteButton).toBeDisabled();
+    fireEvent.click(deleteButton);
+    expect(api.deleteForeshadowing).toHaveBeenCalledTimes(1);
+
+    view.rerender(<ForeshadowingPage worldId="world-2" />);
+    expect(await screen.findByRole('option', { name: /New thread/ })).toBeDefined();
+    await act(async () => deletion.resolve({ ok: true }));
+    expect(screen.getByRole('option', { name: /New thread/ })).toBeDefined();
+  });
+
+  it('closes the create mutation when the world changes', async () => {
+    vi.mocked(api.listForeshadowing).mockResolvedValue({ ok: true, items: [] });
+    const view = render(
+      <AppStateProvider>
+        <ForeshadowingPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    await screen.findByText('No foreshadowing matches this filter.');
+    fireEvent.click(screen.getByRole('button', { name: 'Create foreshadowing' }));
+    expect(screen.getByRole('dialog')).toBeDefined();
+
+    view.rerender(
+      <AppStateProvider>
+        <ForeshadowingPage worldId="world-2" />
+      </AppStateProvider>,
+    );
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
 });
 
 describe('Secrets page', () => {
@@ -96,7 +162,7 @@ describe('Secrets page', () => {
     ok: true,
     items: [
       { id: 's1', title: 'The pact', truth: 'The crown is counterfeit', status: 'active', aware_character_ids: ['a1', 'missing'] },
-      { id: 's2', title: 'The oath', truth: 'The oath was staged', status: 'active' },
+      { id: 's2', title: 'The oath', truth: 'The oath was staged', status: 'exposed' },
     ],
   };
 
@@ -131,6 +197,69 @@ describe('Secrets page', () => {
 
     expect(await screen.findByRole('option', { name: /The pact/ })).toBeDefined();
     expect(screen.getByRole('alert')).toHaveTextContent('Characters unavailable');
+  });
+
+  it('uses the exposed status and selects the first visible filtered secret', async () => {
+    vi.mocked(api.listSecrets).mockResolvedValue(secrets);
+    vi.mocked(api.listForeshadowing).mockResolvedValue({ ok: true, items: [] });
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
+    render(<SecretsPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /The pact/ }));
+
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'exposed' } });
+
+    expect(screen.getByRole('option', { name: /The oath/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('heading', { name: 'The oath' })).toBeDefined();
+  });
+
+  it('keeps revealed truth scoped to its secret across rerenders', async () => {
+    vi.mocked(api.listSecrets).mockResolvedValue(secrets);
+    vi.mocked(api.listForeshadowing).mockResolvedValue({ ok: true, items: [] });
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
+    const view = render(<SecretsPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /The pact/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal truth' }));
+    expect(screen.getByText('The crown is counterfeit')).toBeDefined();
+
+    view.rerender(<SecretsPage worldId="world-2" />);
+
+    expect(screen.queryByText('The crown is counterfeit')).toBeNull();
+    expect(screen.queryByText('The oath was staged')).toBeNull();
+  });
+
+  it('closes the create mutation when the world changes', async () => {
+    vi.mocked(api.listSecrets).mockResolvedValue({ ok: true, items: [] });
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
+    const view = render(
+      <AppStateProvider>
+        <SecretsPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    await screen.findByText('No secrets match this filter.');
+    fireEvent.click(screen.getByRole('button', { name: 'Create secret' }));
+    expect(screen.getByRole('dialog')).toBeDefined();
+
+    view.rerender(
+      <AppStateProvider>
+        <SecretsPage worldId="world-2" />
+      </AppStateProvider>,
+    );
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('Foreshadowing and Secrets responsive layout', () => {
+  it.each(['ForeshadowingPage.module.css', 'SecretsPage.module.css'])('%s owns scrolling when context stacks', (file) => {
+    const css = readFileSync(join(process.cwd(), 'src/pages', file), 'utf8');
+    const responsive = css.slice(css.indexOf('@media (max-width: 1100px)'), css.indexOf('@media (max-width: 700px)'));
+    expect(css).toMatch(/\.workspace\s*\{[^}]*height:\s*100%[^}]*min-height:\s*0[^}]*overflow:\s*auto/s);
+    expect(responsive).toMatch(/\.workspace\s*\{[^}]*align-content:\s*start/s);
+    expect(responsive).not.toMatch(/\.contextPane\s*\{[^}]*display:\s*none/s);
   });
 });
 
