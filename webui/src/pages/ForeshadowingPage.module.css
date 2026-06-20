@@ -1,0 +1,59 @@
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(240px, 310px) minmax(360px, 1fr) minmax(220px, 280px);
+  min-height: 100%;
+  background: var(--surface-muted);
+}
+.listPane, .contextPane { min-height: 0; padding: 20px 16px; background: var(--surface-strong); }
+.listPane { display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+.contextPane { border-left: 1px solid var(--border); overflow: auto; }
+.listPane header, .detailHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.listPane header > div > span, .detailHeader > div > span { color: var(--brand); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.listPane h1 { margin-top: 3px; font-size: 24px; }
+.tools, .actions { display: flex; gap: 7px; }
+.tools button, .actions button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); cursor: pointer; }
+.tools button { width: 34px; padding: 0; }
+.tools svg, .actions svg { width: 15px; height: 15px; }
+.filter { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 7px; margin: 14px 0; color: var(--muted); font-size: 12px; }
+.filter svg { width: 14px; }
+.filter select { min-height: 32px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); }
+.listItem { display: flex; gap: 10px; padding: 3px; }
+.listItem > svg { flex: 0 0 auto; width: 15px; color: var(--brand); }
+.listItem div { display: grid; gap: 5px; min-width: 0; }
+.listItem strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.listItem span, .listPane footer, .empty { color: var(--muted); font-size: 11px; }
+.listPane footer { margin-top: auto; padding-top: 12px; }
+.empty { padding: 20px 5px; }
+.warning { margin-bottom: 10px; padding: 9px; border-radius: 7px; background: var(--amber-soft); font-size: 12px; }
+.detail { min-width: 0; padding: 24px; overflow: auto; }
+.detailHeader { padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.detailHeader h2 { margin-top: 6px; font-size: 24px; overflow-wrap: anywhere; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.fact, .block, .truth { padding: 15px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-strong); }
+.fact { display: grid; gap: 5px; }
+.fact span { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.fact strong { overflow-wrap: anywhere; }
+.block, .truth { margin-top: 12px; }
+.block h3, .truth h3, .contextPane h2, .context h3 { margin-bottom: 9px; font-size: 13px; }
+.block p, .truth p, .contextPane p { color: var(--muted-strong); line-height: 1.55; overflow-wrap: anywhere; }
+.block textarea { width: 100%; min-height: 90px; padding: 10px; border: 1px solid var(--border); border-radius: 7px; resize: vertical; }
+.primary, .truth button { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; min-height: 35px; padding: 0 13px; border: 0; border-radius: 7px; background: var(--brand-strong); color: white; cursor: pointer; }
+.truth > div { display: grid; place-items: center; min-height: 170px; text-align: center; }
+.truth > div > svg { width: 25px; color: var(--muted); }
+.truth button svg { width: 15px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips span { max-width: 100%; padding: 5px 8px; border-radius: 999px; background: var(--brand-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.context { display: grid; gap: 12px; }
+.pick { display: grid; place-items: center; align-content: center; min-height: 420px; color: var(--muted); text-align: center; }
+.pick svg { width: 32px; height: 32px; }
+.pick h2 { margin: 12px 0 5px; color: var(--ink); }
+@media (max-width: 1100px) {
+  .workspace { grid-template-columns: minmax(230px, 290px) minmax(0, 1fr); }
+  .contextPane { grid-column: 1 / -1; border-top: 1px solid var(--border); border-left: 0; }
+}
+@media (max-width: 700px) {
+  .workspace { grid-template-columns: 1fr; overflow: auto; }
+  .listPane { border-right: 0; border-bottom: 1px solid var(--border); }
+  .detail { min-height: 480px; }
+  .cards { grid-template-columns: 1fr; }
+}

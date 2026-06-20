@@ -368,6 +368,12 @@ export const api = {
   patchSecret: (worldId: string, id: string, fields: Record<string, unknown>) =>
     request<OkResponse>('PATCH', `/api/worldbuilding/${worldId}/secrets/${id}`, { fields }),
 
+  deleteForeshadowing: (worldId: string, id: string) =>
+    request<OkResponse>('DELETE', `/api/worldbuilding/${worldId}/foreshadowing/${id}`),
+
+  deleteSecret: (worldId: string, id: string) =>
+    request<OkResponse>('DELETE', `/api/worldbuilding/${worldId}/secrets/${id}`),
+
   // Run audit
   fetchRunAudit: (runId: string) => request<RunAuditResponse>('GET', `/v1/runs/${runId}/audit`),
 

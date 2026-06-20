@@ -14,6 +14,8 @@ import ChaptersPage from '../pages/ChaptersPage';
 import CharactersPage from '../pages/CharactersPage';
 import OverviewPage from '../pages/OverviewPage';
 import ScenesPage from '../pages/ScenesPage';
+import ForeshadowingPage, { deriveForeshadowingStatus } from '../pages/ForeshadowingPage';
+import SecretsPage from '../pages/SecretsPage';
 import { selectWorldMetrics } from '../pages/selectors';
 import WorldPage from '../pages/WorldPage';
 
@@ -36,8 +38,101 @@ vi.mock('../api/client', () => ({
     readWorkspaceFile: vi.fn(),
     saveWorkspaceFile: vi.fn(),
     patchChapter: vi.fn(),
+    listForeshadowing: vi.fn(),
+    listSecrets: vi.fn(),
+    patchForeshadow: vi.fn(),
+    patchSecret: vi.fn(),
+    deleteForeshadowing: vi.fn(),
+    deleteSecret: vi.fn(),
+    createForeshadowing: vi.fn(),
+    createSecret: vi.fn(),
   },
 }));
+
+describe('Foreshadowing page', () => {
+  it('derives overdue only when planned and current chapter positions both exist', () => {
+    expect(deriveForeshadowingStatus({ status: 'open', planned_chapter_position: 2 }, 4)).toBeNull();
+    expect(
+      deriveForeshadowingStatus(
+        { status: 'open', planned_chapter_position: 2, current_chapter_position: 4 },
+        null,
+      ),
+    ).toBe('overdue');
+    expect(
+      deriveForeshadowingStatus(
+        { status: 'open', planned_chapter_position: 5, current_chapter_position: 4 },
+        null,
+      ),
+    ).toBeNull();
+  });
+
+  it('filters real records and keeps selection safe after deletion', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.listForeshadowing)
+      .mockResolvedValueOnce({
+        ok: true,
+        items: [
+          { id: 'f1', content: 'Silver bell', status: 'open' },
+          { id: 'f2', content: 'Broken seal', status: 'paid' },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, items: [{ id: 'f2', content: 'Broken seal', status: 'paid' }] });
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [] });
+    vi.mocked(api.deleteForeshadowing).mockResolvedValue({ ok: true });
+
+    render(<ForeshadowingPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /Silver bell/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete foreshadowing' }));
+
+    await waitFor(() => expect(api.deleteForeshadowing).toHaveBeenCalledWith('world-1', 'f1'));
+    expect(screen.getByRole('option', { name: /Broken seal/ })).toHaveAttribute('aria-selected', 'true');
+  });
+});
+
+describe('Secrets page', () => {
+  const secrets = {
+    ok: true,
+    items: [
+      { id: 's1', title: 'The pact', truth: 'The crown is counterfeit', status: 'active', aware_character_ids: ['a1', 'missing'] },
+      { id: 's2', title: 'The oath', truth: 'The oath was staged', status: 'active' },
+    ],
+  };
+
+  it('keeps truth absent from the DOM until explicit reveal and hides it on selection and world changes', async () => {
+    vi.mocked(api.listSecrets).mockResolvedValue(secrets);
+    vi.mocked(api.listForeshadowing).mockResolvedValue({ ok: true, items: [] });
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [{ id: 'a1', name: 'Mira', display_name: 'Mira', kind: 'character' }] });
+
+    const view = render(<SecretsPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /The pact/ }));
+    expect(screen.queryByText('The crown is counterfeit')).toBeNull();
+    expect(screen.queryByText('missing')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal truth' }));
+    expect(screen.getByText('The crown is counterfeit')).toBeDefined();
+    fireEvent.click(screen.getByRole('option', { name: /The oath/ }));
+    expect(screen.queryByText('The crown is counterfeit')).toBeNull();
+    expect(screen.queryByText('The oath was staged')).toBeNull();
+    view.rerender(<SecretsPage worldId="world-2" />);
+    expect(screen.queryByText('The oath was staged')).toBeNull();
+  });
+
+  it('retains the secret list when relationship context is partially unavailable', async () => {
+    vi.mocked(api.listSecrets).mockResolvedValue(secrets);
+    vi.mocked(api.listForeshadowing).mockResolvedValue({ ok: true, items: [] });
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
+    vi.mocked(api.listAgents).mockRejectedValue(new Error('Characters unavailable'));
+
+    render(<SecretsPage worldId="world-1" />);
+
+    expect(await screen.findByRole('option', { name: /The pact/ })).toBeDefined();
+    expect(screen.getByRole('alert')).toHaveTextContent('Characters unavailable');
+  });
+});
 
 vi.mock('../api/worldbuilding', () => ({
   worldbuildingApi: {

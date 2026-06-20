@@ -185,6 +185,12 @@ export interface ForeshadowingItem {
   tags?: string[];
   planted_at?: string;
   paid_at?: string;
+  planned_chapter_position?: number;
+  current_chapter_position?: number;
+  chapter_id?: string;
+  scene_id?: string;
+  related_agent_ids?: string[];
+  related_secret_ids?: string[];
 }
 
 export interface ForeshadowingListResponse {
@@ -203,6 +209,9 @@ export interface SecretItem {
   status?: string;
   aware_character_ids?: string[];
   suspicious_character_ids?: string[];
+  related_foreshadowing_ids?: string[];
+  chapter_id?: string;
+  scene_id?: string;
 }
 
 export interface SecretListResponse {

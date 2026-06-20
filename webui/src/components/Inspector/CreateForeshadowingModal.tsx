@@ -7,7 +7,7 @@ import styles from './CreateModal.module.css';
 interface Props {
   worldId: string;
   onClose: () => void;
-  onCreated?: () => void;
+  onCreated?: () => void | Promise<void>;
 }
 
 export default function CreateForeshadowingModal({ worldId, onClose, onCreated }: Props) {
@@ -37,7 +37,7 @@ export default function CreateForeshadowingModal({ worldId, onClose, onCreated }
         tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
         session_id: state.sessionId,
       });
-      onCreated?.();
+      await onCreated?.();
       onClose();
     } catch (e) {
       setError((e as Error).message);

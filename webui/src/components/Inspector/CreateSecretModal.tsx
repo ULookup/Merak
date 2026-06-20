@@ -7,7 +7,7 @@ import styles from './CreateModal.module.css';
 interface Props {
   worldId: string;
   onClose: () => void;
-  onCreated?: () => void;
+  onCreated?: () => void | Promise<void>;
 }
 
 export default function CreateSecretModal({ worldId, onClose, onCreated }: Props) {
@@ -41,7 +41,7 @@ export default function CreateSecretModal({ worldId, onClose, onCreated }: Props
         suspicious_character_ids: suspiciousIds ? suspiciousIds.split(',').map(t => t.trim()).filter(Boolean) : undefined,
         session_id: state.sessionId,
       });
-      onCreated?.();
+      await onCreated?.();
       onClose();
     } catch (e) {
       setError((e as Error).message);

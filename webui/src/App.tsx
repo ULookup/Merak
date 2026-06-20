@@ -32,6 +32,8 @@ const WorldPage = lazy(() => import('./pages/WorldPage'));
 const CharactersPage = lazy(() => import('./pages/CharactersPage'));
 const ChaptersPage = lazy(() => import('./pages/ChaptersPage'));
 const ScenesPage = lazy(() => import('./pages/ScenesPage'));
+const ForeshadowingPage = lazy(() => import('./pages/ForeshadowingPage'));
+const SecretsPage = lazy(() => import('./pages/SecretsPage'));
 
 export function shouldReportWorldbuildingPartialFailure(
   overviewLoaded: boolean,
@@ -380,6 +382,32 @@ function AppInner() {
         {inDesktopShell(
           <Suspense fallback={<Skeleton />}>
             <ScenesPage worldId={state.worldId} />
+          </Suspense>,
+          narrativePageOverlays,
+        )}
+      </ToastProvider>
+    );
+  }
+
+  if (state.currentPage === 'foreshadowing' && state.worldId) {
+    return (
+      <ToastProvider>
+        {inDesktopShell(
+          <Suspense fallback={<Skeleton />}>
+            <ForeshadowingPage worldId={state.worldId} />
+          </Suspense>,
+          narrativePageOverlays,
+        )}
+      </ToastProvider>
+    );
+  }
+
+  if (state.currentPage === 'secrets' && state.worldId) {
+    return (
+      <ToastProvider>
+        {inDesktopShell(
+          <Suspense fallback={<Skeleton />}>
+            <SecretsPage worldId={state.worldId} />
           </Suspense>,
           narrativePageOverlays,
         )}
