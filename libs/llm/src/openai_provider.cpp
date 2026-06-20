@@ -2,6 +2,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <future>
+#include <chrono>
 #include <thread>
 
 namespace merak {
@@ -130,6 +131,18 @@ std::future<AgentResponse> OpenAIProvider::chat(
             line_buffer.clear();
 
             CURL* curl = curl_easy_init();
+            if (!curl) {
+                res = CURLE_OUT_OF_MEMORY;
+                http_code = 0;
+                if (attempt == retry.max_retries) {
+                    throw AgentError(ErrorType::LLM_ERROR, "Failed to initialize curl handle");
+                }
+                spdlog::warn("Provider: retry {}/{} after {}ms (curl_easy_init failed)",
+                    attempt + 1, retry.max_retries, delay);
+                std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+                delay *= 2;
+                continue;
+            }
             struct curl_slist* hdrs = nullptr;
             hdrs = curl_slist_append(hdrs,
                 ("Authorization: Bearer " + config_.api_key).c_str());
