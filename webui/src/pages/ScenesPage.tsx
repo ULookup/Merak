@@ -12,7 +12,7 @@ export default function ScenesPage({ worldId }: { worldId: string }) {
   const resource = useResource(`scenes:${worldId}`, () => api.listScenes(worldId));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [completed, setCompleted] = useState<Record<string, EndSceneResponse>>({});
-  const [showEnd, setShowEnd] = useState(false);
+  const [endTarget, setEndTarget] = useState<StoryScene | null>(null);
   const scenes = resource.data?.scenes ?? [];
   const selectedBase = scenes.find((scene) => scene.id === selectedId) ?? null;
   const selected =
@@ -44,7 +44,11 @@ export default function ScenesPage({ worldId }: { worldId: string }) {
 
   return (
     <main className={styles.workspace}>
-      <aside className={styles.listPane}>
+      <aside
+        className={styles.listPane}
+        aria-hidden={endTarget ? 'true' : undefined}
+        inert={endTarget ? true : undefined}
+      >
         <header>
           <div>
             <span>Narrative plan</span>
@@ -73,7 +77,12 @@ export default function ScenesPage({ worldId }: { worldId: string }) {
           {scenes.length} {scenes.length === 1 ? 'scene' : 'scenes'}
         </footer>
       </aside>
-      <section className={styles.detail} aria-label="Scene detail">
+      <section
+        className={styles.detail}
+        aria-label="Scene detail"
+        aria-hidden={endTarget ? 'true' : undefined}
+        inert={endTarget ? true : undefined}
+      >
         {selected ? (
           <>
             <header className={styles.detailHeader}>
@@ -82,7 +91,7 @@ export default function ScenesPage({ worldId }: { worldId: string }) {
                 <h2>{selected.title}</h2>
               </div>
               {selected.status !== 'completed' ? (
-                <button type="button" onClick={() => setShowEnd(true)}>
+                <button type="button" onClick={() => setEndTarget(selected)}>
                   End scene
                 </button>
               ) : null}
@@ -124,13 +133,15 @@ export default function ScenesPage({ worldId }: { worldId: string }) {
           </div>
         )}
       </section>
-      {showEnd && selected ? (
+      {endTarget ? (
         <EndSceneModal
           worldId={worldId}
-          sceneId={selected.id}
-          sceneTitle={selected.title}
-          onClose={() => setShowEnd(false)}
-          onEnded={(result) => setCompleted((previous) => ({ ...previous, [selected.id]: result }))}
+          sceneId={endTarget.id}
+          sceneTitle={endTarget.title}
+          onClose={() => setEndTarget(null)}
+          onEnded={(result) =>
+            setCompleted((previous) => ({ ...previous, [endTarget.id]: result }))
+          }
         />
       ) : null}
     </main>

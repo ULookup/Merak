@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BookOpen, CheckCircle2, Loader2, ScrollText, Users, X } from 'lucide-react';
 import { api } from '../../api/client';
 import type { EndSceneResponse } from '../../api/types';
@@ -19,14 +19,44 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose, o
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<EndSceneResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const initialFocusRef = useRef<HTMLTextAreaElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const submittingRef = useRef(submitting);
+  onCloseRef.current = onClose;
+  submittingRef.current = submitting;
 
   useEffect(() => {
+    openerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    initialFocusRef.current?.focus();
+
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !submitting) onClose();
+      if (e.key === 'Escape' && !submittingRef.current) onCloseRef.current();
+      if (e.key !== 'Tab') return;
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, submitting]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      openerRef.current?.focus();
+    };
+  }, []);
 
   async function handleEnd() {
     setSubmitting(true);
@@ -49,7 +79,13 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose, o
   if (result) {
     return (
       <div className={styles.scrim} role="presentation">
-        <section className={styles.modal} role="dialog" aria-modal="true" aria-label="Scene ended">
+        <section
+          ref={dialogRef}
+          className={styles.modal}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Scene ended"
+        >
           <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
             <X size={17} aria-hidden="true" strokeWidth={2.4} />
           </button>
@@ -105,7 +141,13 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose, o
 
   return (
     <div className={styles.scrim} role="presentation">
-      <section className={styles.modal} role="dialog" aria-modal="true" aria-label="End scene">
+      <section
+        ref={dialogRef}
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-label="End scene"
+      >
         <button
           className={styles.closeBtn}
           onClick={onClose}
@@ -127,6 +169,7 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose, o
         <label className={styles.field}>
           <span>Final text (optional)</span>
           <textarea
+            ref={initialFocusRef}
             className={styles.textarea}
             value={finalMarkdown}
             onChange={(e) => setFinalMarkdown(e.target.value)}

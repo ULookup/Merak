@@ -128,12 +128,21 @@ export default function ChapterEditor({ chapterId, worldId, chapter: chapterProp
     try {
       const path = chapterFilePath(worldId, chapterId);
       const response = await api.saveWorkspaceFile(path, content, version);
-      if (title !== originalTitle) {
-        await api.patchChapter(worldId, chapterId, { title });
-      }
       setOriginalContent(content);
-      setOriginalTitle(title);
       setVersion(response.file.version);
+      if (title !== originalTitle) {
+        try {
+          await api.patchChapter(worldId, chapterId, { title });
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : 'Unable to update title.';
+          const message = `Chapter text saved, but title update failed: ${detail}`;
+          setSaveError(message);
+          setSaveStatus('idle');
+          dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'error', error: message });
+          return;
+        }
+      }
+      setOriginalTitle(title);
       setSaveStatus('saved');
       dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saved' });
       setTimeout(() => setSaveStatus('idle'), 2000);

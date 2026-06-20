@@ -184,6 +184,99 @@ describe('Scene completion flow', () => {
     expect(screen.getByText('relations updated').parentElement).toHaveTextContent('2');
     expect(screen.getByText('The archive glass remembers.')).toBeDefined();
   });
+
+  it('keeps the end-scene target fixed when the live scene selection changes', async () => {
+    vi.spyOn(api, 'listScenes').mockResolvedValue({
+      ok: true,
+      scenes: [
+        {
+          id: 'scene-1',
+          title: 'First scene',
+          chapter_id: 'chapter-1',
+          world_time: 'Dawn',
+          status: 'writing',
+          participant_ids: [],
+          updated_at: '2026-06-19T09:00:00Z',
+        },
+        {
+          id: 'scene-2',
+          title: 'Second scene',
+          chapter_id: 'chapter-1',
+          world_time: 'Noon',
+          status: 'writing',
+          participant_ids: [],
+          updated_at: '2026-06-19T10:00:00Z',
+        },
+      ],
+    });
+    vi.spyOn(api, 'endScene').mockResolvedValue({
+      ok: true,
+      diaries_written: [],
+      diary_count: 0,
+      relations_updated: 0,
+      proposed_foreshadowing: [],
+      leak_risks: 0,
+    });
+    render(
+      <AppStateProvider>
+        <ScenesPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('option', { name: /First scene/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'End scene' }));
+    fireEvent.click(screen.getAllByRole('option', { hidden: true })[1]);
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'End scene' })).getByRole('button', {
+        name: 'End Scene',
+      }),
+    );
+
+    await waitFor(() => expect(api.endScene).toHaveBeenCalled());
+    expect(api.endScene).toHaveBeenCalledWith('world-1', 'scene-1', expect.any(Object));
+  });
+
+  it('traps focus in the end-scene modal and restores focus to its opener', async () => {
+    vi.spyOn(api, 'listScenes').mockResolvedValue({
+      ok: true,
+      scenes: [
+        {
+          id: 'scene-1',
+          title: 'First scene',
+          chapter_id: 'chapter-1',
+          world_time: 'Dawn',
+          status: 'writing',
+          participant_ids: [],
+          updated_at: '2026-06-19T09:00:00Z',
+        },
+      ],
+    });
+    render(
+      <AppStateProvider>
+        <ScenesPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('option', { name: /First scene/ }));
+    const opener = screen.getByRole('button', { name: 'End scene' });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole('dialog', { name: 'End scene' });
+
+    expect(
+      screen.getByRole('listbox', { name: 'Scenes', hidden: true }).closest('aside'),
+    ).toHaveAttribute('inert');
+    expect(screen.getByRole('region', { hidden: true })).toHaveAttribute('aria-hidden', 'true');
+    await waitFor(() => expect(within(dialog).getByRole('textbox')).toHaveFocus());
+    const [close, cancel] = within(dialog).getAllByRole('button', { name: 'Cancel' });
+    const end = within(dialog).getByRole('button', { name: 'End Scene' });
+    close.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(end).toHaveFocus();
+    end.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(close).toHaveFocus();
+    fireEvent.click(cancel);
+    expect(opener).toHaveFocus();
+  });
 });
 
 describe('SetupWizard', () => {

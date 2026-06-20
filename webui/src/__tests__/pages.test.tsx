@@ -225,7 +225,11 @@ describe('Chapter and scene pages', () => {
     vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: chapterFixtures });
     vi.mocked(worldbuildingApi.reorderChapters).mockResolvedValue({ ok: true });
 
-    render(<ChaptersPage worldId="world-1" />);
+    render(
+      <AppStateProvider>
+        <ChaptersPage worldId="world-1" />
+      </AppStateProvider>,
+    );
     fireEvent.click(await screen.findByRole('button', { name: 'Move The Rain Archive previous' }));
 
     await waitFor(() =>
@@ -239,6 +243,63 @@ describe('Chapter and scene pages', () => {
     ).toEqual(['The Rain Archive', 'Ashes at Dawn']);
   });
 
+  it('disables chapter moves while a reorder request is pending', async () => {
+    const reorder = deferred<{ ok: boolean }>();
+    vi.mocked(worldbuildingApi.reorderChapters).mockClear();
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: chapterFixtures });
+    vi.mocked(worldbuildingApi.reorderChapters).mockReturnValue(reorder.promise);
+
+    render(
+      <AppStateProvider>
+        <ChaptersPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    const movePrevious = await screen.findByRole('button', {
+      name: 'Move The Rain Archive previous',
+    });
+    fireEvent.click(movePrevious);
+
+    const moveNext = screen.getByRole('button', { name: 'Move The Rain Archive next' });
+    expect(moveNext).toBeDisabled();
+    fireEvent.click(moveNext);
+    expect(worldbuildingApi.reorderChapters).toHaveBeenCalledTimes(1);
+
+    await act(async () => reorder.resolve({ ok: true }));
+    await waitFor(() => expect(moveNext).not.toBeDisabled());
+  });
+
+  it('reconciles local chapter order with a fresh server response', async () => {
+    vi.mocked(api.listChapters)
+      .mockResolvedValueOnce({ ok: true, chapters: chapterFixtures })
+      .mockResolvedValueOnce({
+        ok: true,
+        chapters: [
+          { ...chapterFixtures[1], title: 'Rain Archive Revised', status: 'completed' },
+          {
+            id: 'chapter-3',
+            title: 'A New Signal',
+            number: 3,
+            status: 'draft',
+            scene_count: 0,
+            updated_at: '2026-06-20T08:00:00Z',
+          },
+        ],
+      });
+    vi.mocked(worldbuildingApi.reorderChapters).mockResolvedValue({ ok: true });
+
+    render(
+      <AppStateProvider>
+        <ChaptersPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Move The Rain Archive previous' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+
+    expect(await screen.findByRole('heading', { name: 'Rain Archive Revised' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'A New Signal' })).toBeDefined();
+    expect(screen.queryByRole('heading', { name: 'Ashes at Dawn' })).toBeNull();
+  });
+
   it.each([
     ['Chapters', ChaptersPage, 'Loading chapters', 'No chapters yet', 'Chapter list unavailable'],
     ['Scenes', ScenesPage, 'Loading scenes', 'No scenes yet', 'Scene list unavailable'],
@@ -248,7 +309,11 @@ describe('Chapter and scene pages', () => {
       const list = _name === 'Chapters' ? api.listChapters : api.listScenes;
       const pending = deferred<never>();
       vi.mocked(list as typeof api.listChapters).mockReturnValueOnce(pending.promise);
-      const { unmount } = render(<Page worldId="world-1" />);
+      const { unmount } = render(
+        <AppStateProvider>
+          <Page worldId="world-1" />
+        </AppStateProvider>,
+      );
       expect(screen.getByRole('status', { name: loading })).toBeDefined();
       unmount();
 
@@ -257,12 +322,20 @@ describe('Chapter and scene pages', () => {
       } else {
         vi.mocked(api.listScenes).mockResolvedValueOnce({ ok: true, scenes: [] });
       }
-      const emptyRender = render(<Page worldId="world-1" />);
+      const emptyRender = render(
+        <AppStateProvider>
+          <Page worldId="world-1" />
+        </AppStateProvider>,
+      );
       expect(await screen.findByRole('heading', { name: empty })).toBeDefined();
       emptyRender.unmount();
 
       vi.mocked(list as typeof api.listChapters).mockRejectedValueOnce(new Error(error));
-      render(<Page worldId="world-1" />);
+      render(
+        <AppStateProvider>
+          <Page worldId="world-1" />
+        </AppStateProvider>,
+      );
       expect(await screen.findByRole('alert')).toHaveTextContent(error);
     },
   );
@@ -328,6 +401,87 @@ describe('Chapter and scene pages', () => {
     expect(screen.getByText('Unsaved changes')).toBeDefined();
   });
 
+  it('keeps the dirty chapter selected when switching is cancelled', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: chapterFixtures });
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: 'chapters/world-1/chapter-2.md',
+        content: 'Original draft.',
+        encoding: 'utf-8',
+        updated_at: '2026-06-19T09:00:00Z',
+        version: 'v7',
+      },
+    });
+
+    render(
+      <AppStateProvider>
+        <ChaptersPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit The Rain Archive' }));
+    const editor = await screen.findByRole('textbox', { name: 'Chapter content' });
+    fireEvent.change(editor, { target: { value: 'Unsaved rain.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Ashes at Dawn' }));
+
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('region', { name: 'Editing The Rain Archive' })).toBeDefined();
+    expect(editor).toHaveValue('Unsaved rain.');
+  });
+
+  it('commits a successful file version before reporting a title metadata failure', async () => {
+    vi.mocked(api.saveWorkspaceFile).mockClear();
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: chapterFixtures });
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: 'chapters/world-1/chapter-2.md',
+        content: 'Original draft.',
+        encoding: 'utf-8',
+        updated_at: '2026-06-19T09:00:00Z',
+        version: 'v7',
+      },
+    });
+    vi.mocked(api.saveWorkspaceFile)
+      .mockResolvedValueOnce({
+        ok: true,
+        file: { path: 'chapters/world-1/chapter-2.md', updated_at: 'now', version: 'v8' },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        file: { path: 'chapters/world-1/chapter-2.md', updated_at: 'later', version: 'v9' },
+      });
+    vi.mocked(api.patchChapter)
+      .mockRejectedValueOnce(new Error('Title service unavailable'))
+      .mockResolvedValueOnce({ ok: true });
+
+    render(
+      <AppStateProvider>
+        <ChaptersPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit The Rain Archive' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Chapter content' }), {
+      target: { value: 'Saved prose.' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Chapter title' }), {
+      target: { value: 'New title' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Chapter text saved, but title update failed: Title service unavailable',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter' }));
+    await waitFor(() => expect(api.saveWorkspaceFile).toHaveBeenCalledTimes(2));
+    expect(api.saveWorkspaceFile).toHaveBeenLastCalledWith(
+      'chapters/world-1/chapter-2.md',
+      'Saved prose.',
+      'v8',
+    );
+  });
+
   it('renders only actual scene fields and omits unsupported consistency content', async () => {
     vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: sceneFixtures });
     render(<ScenesPage worldId="world-1" />);
@@ -336,6 +490,16 @@ describe('Chapter and scene pages', () => {
     expect(screen.getByText('Day 4, dusk')).toBeDefined();
     expect(screen.getByText('lin, sora')).toBeDefined();
     expect(screen.queryByText(/consistency/i)).toBeNull();
+  });
+
+  it('lets the chapter editor toolbar wrap at narrow widths without clipping actions', () => {
+    const css = readFileSync(
+      join(process.cwd(), 'src/components/ChapterEditor.module.css'),
+      'utf8',
+    );
+    expect(css).toMatch(/\.container\s*\{[^}]*min-width:\s*0/s);
+    expect(css).toMatch(/\.toolbar\s*\{[^}]*flex-wrap:\s*wrap/s);
+    expect(css).toMatch(/\.toolbarRight\s*\{[^}]*overflow-x:\s*auto/s);
   });
 });
 

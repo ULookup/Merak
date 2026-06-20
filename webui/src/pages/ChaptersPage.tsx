@@ -1,25 +1,46 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, BookOpen, Edit3, RefreshCw } from 'lucide-react';
 import { api } from '../api/client';
 import type { StoryChapter } from '../api/types';
 import { worldbuildingApi } from '../api/worldbuilding';
+import { useAppState } from '../AppState';
 import ChapterEditor from '../components/ChapterEditor';
 import PageState from '../components/layout/PageState';
 import { useResource } from '../hooks/useResource';
 import styles from './ChaptersPage.module.css';
 
 export default function ChaptersPage({ worldId }: { worldId: string }) {
+  const { state } = useAppState();
   const resource = useResource(`chapters:${worldId}`, () => api.listChapters(worldId));
   const [localOrder, setLocalOrder] = useState<{ worldId: string; items: StoryChapter[] } | null>(
     null,
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reorderError, setReorderError] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
+  const reorderingRef = useRef(false);
   const chapters =
     localOrder?.worldId === worldId ? localOrder.items : (resource.data?.chapters ?? []);
   const selected = chapters.find((chapter) => chapter.id === selectedId) ?? null;
 
+  useEffect(() => {
+    setLocalOrder(null);
+  }, [resource.data]);
+
+  function selectChapter(chapter: StoryChapter) {
+    if (
+      selectedId &&
+      selectedId !== chapter.id &&
+      ['dirty', 'saving', 'error'].includes(state.editorSaveStatus) &&
+      !window.confirm('Discard unsaved chapter changes and switch chapters?')
+    ) {
+      return;
+    }
+    setSelectedId(chapter.id);
+  }
+
   async function moveChapter(index: number, offset: -1 | 1) {
+    if (reorderingRef.current) return;
     const target = index + offset;
     if (target < 0 || target >= chapters.length) return;
     const previous = chapters;
@@ -27,6 +48,8 @@ export default function ChaptersPage({ worldId }: { worldId: string }) {
     [next[index], next[target]] = [next[target], next[index]];
     setLocalOrder({ worldId, items: next });
     setReorderError(null);
+    reorderingRef.current = true;
+    setReordering(true);
     try {
       await worldbuildingApi.reorderChapters(
         worldId,
@@ -35,6 +58,9 @@ export default function ChaptersPage({ worldId }: { worldId: string }) {
     } catch (error) {
       setLocalOrder({ worldId, items: previous });
       setReorderError(error instanceof Error ? error.message : 'Unable to reorder chapters.');
+    } finally {
+      reorderingRef.current = false;
+      setReordering(false);
     }
   }
 
@@ -118,7 +144,7 @@ export default function ChaptersPage({ worldId }: { worldId: string }) {
             <div className={styles.actions}>
               <button
                 type="button"
-                onClick={() => setSelectedId(chapter.id)}
+                onClick={() => selectChapter(chapter)}
                 aria-label={`Edit ${chapter.title}`}
               >
                 <Edit3 aria-hidden="true" /> Edit
@@ -126,7 +152,7 @@ export default function ChaptersPage({ worldId }: { worldId: string }) {
               <button
                 type="button"
                 onClick={() => moveChapter(index, -1)}
-                disabled={index === 0}
+                disabled={reordering || index === 0}
                 aria-label={`Move ${chapter.title} previous`}
               >
                 <ArrowUp aria-hidden="true" />
@@ -134,7 +160,7 @@ export default function ChaptersPage({ worldId }: { worldId: string }) {
               <button
                 type="button"
                 onClick={() => moveChapter(index, 1)}
-                disabled={index === chapters.length - 1}
+                disabled={reordering || index === chapters.length - 1}
                 aria-label={`Move ${chapter.title} next`}
               >
                 <ArrowDown aria-hidden="true" />
