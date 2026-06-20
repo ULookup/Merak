@@ -3,6 +3,7 @@ import { ChevronDown, Globe2, Search } from 'lucide-react';
 import type { AppPage } from '../AppState';
 import { useAppState } from '../AppState';
 import merakLogo from '../assets/merak-logo.svg';
+import { useSafeNavigation } from '../hooks/useSafePageNavigation';
 import { useI18n } from '../i18n';
 import styles from './DesktopShell.module.css';
 import { desktopPages } from './navigation';
@@ -15,7 +16,8 @@ interface DesktopShellProps {
 }
 
 export default function DesktopShell({ page, onNavigate, children, overlays }: DesktopShellProps) {
-  const { state, dispatch } = useAppState();
+  const { state } = useAppState();
+  const { requestWorldChange } = useSafeNavigation();
   const { t } = useI18n();
   const selectedWorld = state.worlds.find((world) => world.id === state.worldId);
   const worldName = selectedWorld?.name || t('shell.noWorld');
@@ -63,9 +65,7 @@ export default function DesktopShell({ page, onNavigate, children, overlays }: D
             <select
               aria-label={t('shell.worldSelector')}
               value={state.worldId ?? ''}
-              onChange={(event) =>
-                dispatch({ type: 'SET_WORLD', worldId: event.target.value || null })
-              }
+              onChange={(event) => requestWorldChange(event.target.value || null)}
             >
               <option value="">{t('shell.noWorld')}</option>
               {state.worlds.map((world) => (

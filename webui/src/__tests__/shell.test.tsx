@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import type { ReactNode } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { shouldWarnBeforeClose } from '../App';
 import { AppStateProvider, useAppState } from '../AppState';
-import { useSafePageNavigation } from '../hooks/useSafePageNavigation';
+import { useSafeNavigation } from '../hooks/useSafePageNavigation';
 import { I18nProvider } from '../i18n';
 import DesktopShell from '../shell/DesktopShell';
 import { desktopPages, readStoredDesktopPage, writeStoredDesktopPage } from '../shell/navigation';
@@ -74,7 +75,8 @@ describe('desktop shell', () => {
 
   function SafeNavigationHarness() {
     const { state, dispatch } = useAppState();
-    const navigate = useSafePageNavigation();
+    const { requestPageChange } = useSafeNavigation();
+    const activeFile = state.workspaceFiles.find((file) => file.id === state.activeEditorFileId);
     return (
       <>
         <button onClick={() => dispatch({ type: 'SET_PAGE', page: 'chapters' })}>
@@ -86,8 +88,62 @@ describe('desktop shell', () => {
         <button onClick={() => dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saving' })}>
           Start saving
         </button>
+        <button
+          onClick={() => {
+            dispatch({
+              type: 'SET_WORLDS',
+              worlds: [
+                { id: 'world-1', name: 'World One', description: '', created_at: '' },
+                { id: 'world-2', name: 'World Two', description: '', created_at: '' },
+              ],
+            });
+            dispatch({ type: 'SET_WORLD', worldId: 'world-1' });
+          }}
+        >
+          Setup worlds
+        </button>
+        <button
+          onClick={() => {
+            dispatch({
+              type: 'SET_WORKSPACE_FILES',
+              files: [
+                {
+                  id: 'draft.md',
+                  path: 'draft.md',
+                  name: 'draft.md',
+                  ext: '.md',
+                  mime: 'text/markdown',
+                  size: 8,
+                  updated_at: '',
+                  dirty: false,
+                },
+              ],
+            });
+            dispatch({ type: 'OPEN_WORKSPACE_FILE', fileId: 'draft.md' });
+            dispatch({
+              type: 'SET_EDITOR_CONTENT',
+              fileId: 'draft.md',
+              content: {
+                path: 'draft.md',
+                content: 'Original',
+                encoding: 'utf-8',
+                updated_at: '',
+                version: 'v1',
+              },
+            });
+            dispatch({ type: 'UPDATE_EDITOR_BUFFER', fileId: 'draft.md', content: 'Unsaved draft' });
+          }}
+        >
+          Open workspace draft
+        </button>
         <output aria-label="Current page">{state.currentPage}</output>
-        <DesktopShell page={state.currentPage} onNavigate={navigate}>
+        <output aria-label="Editor buffer">
+          {state.activeEditorFileId ? state.editorBuffers[state.activeEditorFileId] : ''}
+        </output>
+        <output aria-label="Editor status">{state.editorSaveStatus}</output>
+        <output aria-label="File dirty">{String(activeFile?.dirty ?? false)}</output>
+        <output aria-label="Warn before close">{String(shouldWarnBeforeClose(state))}</output>
+        <DesktopShell page={state.currentPage} onNavigate={requestPageChange}>
           Embedded chapter editor
         </DesktopShell>
       </>
@@ -142,6 +198,58 @@ describe('desktop shell', () => {
 
     expect(screen.getByLabelText('Current page')).toHaveTextContent('chapters');
     expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('blocks world changes while saving without prompting', () => {
+    const confirm = vi.spyOn(window, 'confirm');
+    renderSafeNavigation();
+    fireEvent.click(screen.getByRole('button', { name: 'Setup worlds' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start saving' }));
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'world-2' } });
+
+    expect(screen.getByRole('combobox')).toHaveValue('world-1');
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('retains the current world on cancel and changes it after confirmed discard', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderSafeNavigation();
+    fireEvent.click(screen.getByRole('button', { name: 'Setup worlds' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make dirty' }));
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'world-2' } });
+    expect(screen.getByRole('combobox')).toHaveValue('world-1');
+    expect(screen.getByLabelText('Editor status')).toHaveTextContent('dirty');
+
+    confirm.mockReturnValue(true);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'world-2' } });
+    expect(screen.getByRole('combobox')).toHaveValue('world-2');
+    expect(screen.getByLabelText('Editor status')).toHaveTextContent('idle');
+    expect(confirm).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves a cancelled workspace draft and reverts it after confirmed navigation', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderSafeNavigation();
+    fireEvent.click(screen.getByRole('button', { name: 'Open workspace draft' }));
+    const navigation = screen.getByRole('navigation', { name: 'Primary navigation' });
+
+    fireEvent.click(within(navigation).getAllByRole('button')[5]);
+    expect(screen.getByLabelText('Current page')).toHaveTextContent('overview');
+    expect(screen.getByLabelText('Editor buffer')).toHaveTextContent('Unsaved draft');
+    expect(screen.getByLabelText('File dirty')).toHaveTextContent('true');
+    expect(screen.getByLabelText('Warn before close')).toHaveTextContent('true');
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(within(navigation).getAllByRole('button')[5]);
+    fireEvent.click(within(navigation).getAllByRole('button')[8]);
+
+    expect(screen.getByLabelText('Current page')).toHaveTextContent('files');
+    expect(screen.getByLabelText('Editor buffer')).toHaveTextContent('Original');
+    expect(screen.getByLabelText('File dirty')).toHaveTextContent('false');
+    expect(screen.getByLabelText('Editor status')).toHaveTextContent('idle');
+    expect(screen.getByLabelText('Warn before close')).toHaveTextContent('false');
   });
 
   it('renders exactly ten bilingual navigation buttons and dispatches navigation', () => {
