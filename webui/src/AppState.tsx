@@ -375,7 +375,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         sessionId: action.sessionId,
-        agentId: action.agentId ?? state.agentId,
+        agentId: action.agentId ?? null,
+        appPhase: action.sessionId ? 'ready' : state.worldId ? 'no_agent' : state.appPhase,
         messages: [],
         lastSeq: 0,
         currentRun: null,

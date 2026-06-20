@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { api } from './api/client';
 import styles from './App.module.css';
-import { AppStateProvider, useAppState, type AppState } from './AppState';
+import { AppStateProvider, useAppState, type AppPage, type AppState } from './AppState';
 import AskUserPrompt from './components/AskUserPrompt';
 import ChapterEditor from './components/ChapterEditor';
 import ConnectionBanner from './components/ConnectionBanner';
@@ -39,6 +39,10 @@ export function shouldWarnBeforeClose(state: AppState) {
   const runActive = Boolean(state.currentRun) && state.status !== 'idle';
   const editorUnsafe = state.editorSaveStatus === 'dirty' || state.editorSaveStatus === 'saving';
   return runActive || editorUnsafe;
+}
+
+export function shouldRenderSessionsPage(page: AppPage, phase: AppState['appPhase']) {
+  return page === 'sessions' && phase !== 'loading' && phase !== 'no_world';
 }
 
 function AppInner() {
@@ -287,7 +291,10 @@ function AppInner() {
     );
   }
 
-  if (state.appPhase === 'no_agent') {
+  if (
+    state.appPhase === 'no_agent' &&
+    !shouldRenderSessionsPage(state.currentPage, state.appPhase)
+  ) {
     return (
       <ToastProvider>
         {inDesktopShell(

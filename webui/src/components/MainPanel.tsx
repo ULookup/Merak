@@ -70,6 +70,8 @@ export default function MainPanel({
                 ? 'Close sidebar'
                 : 'Open sidebar'
           }
+          aria-controls="session-history-panel"
+          aria-expanded={onToggleHistory ? historyOpen : sidebarOpen}
           data-testid="menu-btn"
         >
           <Menu size={18} aria-hidden="true" strokeWidth={2.2} />
@@ -110,6 +112,8 @@ export default function MainPanel({
           className={styles.iconBtn}
           onClick={onToggleInspector}
           aria-label={inspectorOpen ? 'Close inspector' : 'Open inspector'}
+          aria-controls="session-inspector-panel"
+          aria-expanded={inspectorOpen}
           data-testid="inspector-btn"
         >
           <PanelRight size={18} aria-hidden="true" strokeWidth={2.2} />

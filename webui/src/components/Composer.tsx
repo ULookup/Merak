@@ -294,7 +294,7 @@ export default function Composer() {
           <button
             className={styles.sendBtn}
             onClick={send}
-            disabled={sending || !text.trim()}
+            disabled={sending || !text.trim() || !state.sessionId}
             data-testid="send-btn"
             aria-label="Send message"
           >

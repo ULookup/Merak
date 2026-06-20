@@ -37,21 +37,32 @@ export default function SessionList({ worldId, agentId }: SessionListProps) {
     try {
       const data = await api.createSession('', worldId, agentId);
       const id = data.session_id;
+      const session: SessionSummary = {
+        id,
+        title: '',
+        world_id: worldId ?? null,
+        agent_id: agentId ?? null,
+        last_seq: 0,
+        created_at: '',
+        updated_at: '',
+        archived_at: null,
+      };
       dispatch({
         type: 'SET_SESSIONS',
-        sessions: [
-          ...state.sessions,
-          { id, title: '', world_id: worldId ?? null, agent_id: agentId ?? null, last_seq: 0, created_at: '', updated_at: '', archived_at: null },
-        ],
+        sessions: [...state.sessions, session],
       });
-      select(id);
+      select(session);
     } catch {
       showToast('Failed to create session', 'error');
     }
   }
 
-  function select(id: string) {
-    dispatch({ type: 'SET_SESSION', sessionId: id });
+  function select(session: SessionSummary) {
+    dispatch({
+      type: 'SET_SESSION',
+      sessionId: session.id,
+      agentId: session.agent_id ?? undefined,
+    });
   }
 
   function startRename(session: { id: string; title: string }) {
@@ -139,7 +150,7 @@ export default function SessionList({ worldId, agentId }: SessionListProps) {
         className={`${styles.item} ${session.id === state.sessionId ? styles.itemActive : ''} ${
           session.archived_at ? styles.itemArchived : ''
         }`}
-        onClick={() => select(session.id)}
+        onClick={() => select(session)}
         onContextMenu={(e) => {
           e.preventDefault();
           startRename(session);

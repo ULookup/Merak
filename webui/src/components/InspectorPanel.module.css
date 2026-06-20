@@ -6,11 +6,15 @@
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(242, 242, 240, 0.82)),
     var(--surface-muted);
-  display: flex;
+  display: none;
   position: relative;
   z-index: 20;
   box-shadow: var(--shadow-md);
   animation: inspectorEnter 620ms var(--ease-spring) 80ms both;
+}
+
+.panelOpen {
+  display: flex;
 }
 
 .surface {

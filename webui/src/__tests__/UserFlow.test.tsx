@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { api } from '../api/client';
 import { AppStateProvider, useAppState } from '../AppState';
 import Composer from '../components/Composer';
 import ExportDialog from '../components/ExportDialog';
@@ -54,6 +55,7 @@ function SessionsPageHarness() {
 
 describe('Sessions workbench', () => {
   it('keeps session history, conversation, context, composer, and execution state together', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
     render(
       <AppStateProvider>
         <ToastProvider>
@@ -72,6 +74,55 @@ describe('Sessions workbench', () => {
     }
     expect(screen.getAllByText('Thinking').length).toBeGreaterThan(0);
     expect(await screen.findByText('Creation in progress')).toBeDefined();
+  });
+
+  it('hides and restores history and inspector panels with truthful toggle state', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <SessionsPageHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    const history = await screen.findByRole('region', { name: 'Session history' });
+    const inspector = screen.getByRole('complementary', { name: 'Story inspector' });
+    expect(history).toHaveAttribute('aria-hidden', 'false');
+    expect(inspector).toHaveAttribute('aria-hidden', 'false');
+
+    fireEvent.click(screen.getByTestId('menu-btn'));
+    expect(history).toHaveAttribute('aria-hidden', 'true');
+    expect(history.className).not.toContain('historyOpen');
+    expect(screen.getByRole('button', { name: 'Open session history' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+
+    fireEvent.click(screen.getByTestId('inspector-btn'));
+    expect(inspector).toHaveAttribute('aria-hidden', 'true');
+    expect(inspector.className).not.toContain('panelOpen');
+    expect(screen.getByRole('button', { name: 'Open inspector' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('opens the inspector from its tablet default without exposing a hidden-state mismatch', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <SessionsPageHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    const inspector = await screen.findByTestId('inspector-panel');
+    expect(inspector).toHaveAttribute('aria-hidden', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
+    expect(inspector).toHaveAttribute('aria-hidden', 'false');
+    expect(inspector.className).toContain('panelOpen');
   });
 });
 
@@ -291,5 +342,21 @@ describe('Composer', () => {
     expect(sendBtn).toBeDefined();
     // Send button is disabled when text is empty
     expect((sendBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('cannot start a run without a selected session', () => {
+    const startRun = vi.spyOn(api, 'startRun');
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <Composer />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    fireEvent.change(screen.getByTestId('composer-input'), { target: { value: 'Draft a scene' } });
+    expect(screen.getByTestId('send-btn')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('send-btn'));
+    expect(startRun).not.toHaveBeenCalled();
   });
 });

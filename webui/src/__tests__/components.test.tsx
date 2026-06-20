@@ -121,6 +121,47 @@ function SessionLifecycleHarness() {
   return <SessionList />;
 }
 
+function SessionSelectionHarness() {
+  const { state, dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'SET_AGENT_SESSION', sessionId: 'agent_session', agentId: 'agent_old' });
+    dispatch({
+      type: 'SET_SESSIONS',
+      sessions: [
+        {
+          id: 'agent_session',
+          title: 'Agent draft',
+          world_id: 'world_1',
+          agent_id: 'agent_old',
+          last_seq: 1,
+          created_at: '2026-06-06T10:30:00Z',
+          updated_at: '2026-06-06T10:30:00Z',
+          archived_at: null,
+        },
+        {
+          id: 'world_session',
+          title: 'World notes',
+          world_id: 'world_1',
+          agent_id: null,
+          last_seq: 2,
+          created_at: '2026-06-06T11:00:00Z',
+          updated_at: '2026-06-06T11:00:00Z',
+          archived_at: null,
+        },
+      ],
+    });
+  }, [dispatch]);
+
+  return (
+    <>
+      <SessionList worldId="world_1" />
+      <output aria-label="selected-session">{state.sessionId}</output>
+      <output aria-label="selected-agent">{state.agentId ?? 'none'}</output>
+    </>
+  );
+}
+
 function WorldIconHarness() {
   const { dispatch } = useAppState();
 
@@ -264,6 +305,21 @@ describe('Cell components', () => {
     expect(screen.getByText(/8 turns/)).toBeDefined();
     expect(screen.getByLabelText('Session Planning scene, 2 turns')).toBeDefined();
     expect(screen.getByLabelText('Session Old outline, archived, 8 turns')).toBeDefined();
+  });
+
+  it('SessionList selects the session agent and clears a stale agent when absent', () => {
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <SessionSelectionHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Session World notes, 2 turns'));
+
+    expect(screen.getByLabelText('selected-session')).toHaveTextContent('world_session');
+    expect(screen.getByLabelText('selected-agent')).toHaveTextContent('none');
   });
 
   it('UserCell renders text', () => {

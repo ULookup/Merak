@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { shouldReportWorldbuildingPartialFailure, shouldWarnBeforeClose } from '../App';
+import {
+  shouldRenderSessionsPage,
+  shouldReportWorldbuildingPartialFailure,
+  shouldWarnBeforeClose,
+} from '../App';
 import { initialState, reducer, type AppState } from '../AppState';
 
 function state(overrides: Partial<AppState> = {}): AppState {
@@ -27,6 +31,21 @@ describe('AppState reducer', () => {
     expect(next.status).toBe('idle');
     expect(next.pendingAsk).toBeNull();
     expect(next.pendingCreation).toBeNull();
+  });
+
+  it('SET_SESSION replaces the previous agent and clears it when the session has none', () => {
+    const withAgent = reducer(state({ agentId: 'old-agent' }), {
+      type: 'SET_SESSION',
+      sessionId: 'agent-session',
+      agentId: 'new-agent',
+    });
+    expect(withAgent.agentId).toBe('new-agent');
+
+    const withoutAgent = reducer(withAgent, {
+      type: 'SET_SESSION',
+      sessionId: 'world-session',
+    });
+    expect(withoutAgent.agentId).toBeNull();
   });
 
   it('SET_METADATA stores metadata and sets selectedModel', () => {
@@ -540,6 +559,17 @@ describe('worldbuilding bootstrap error policy', () => {
 
   it('reports secondary endpoint failures when no overview is available', () => {
     expect(shouldReportWorldbuildingPartialFailure(false, true)).toBe(true);
+  });
+});
+
+describe('sessions route policy', () => {
+  it('allows the sessions page while a world has no active agent session', () => {
+    expect(shouldRenderSessionsPage('sessions', 'no_agent')).toBe(true);
+  });
+
+  it('keeps loading and no-world phases on their truthful boundary pages', () => {
+    expect(shouldRenderSessionsPage('sessions', 'loading')).toBe(false);
+    expect(shouldRenderSessionsPage('sessions', 'no_world')).toBe(false);
   });
 });
 

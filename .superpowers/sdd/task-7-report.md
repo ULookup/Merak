@@ -48,3 +48,40 @@ Implemented the lazy `sessions` route as a three-column sessions workbench using
 - Confirmed overlays remain siblings of the lazy page and were not moved or duplicated.
 - Confirmed no fixture content was added to production UI.
 - No task-specific lint errors remain.
+
+## Review Fixes
+
+### RED
+
+Command:
+`npm test -- --run src/__tests__/UserFlow.test.tsx src/__tests__/components.test.tsx src/__tests__/AppState.test.ts`
+
+The new regressions demonstrated that:
+
+- `SET_SESSION` retained the previous agent when the selected session had no `agent_id`.
+- The sessions page exposed no `aria-hidden` state and desktop/tablet toggles did not control panel visibility.
+- A typed composer prompt could enable the send button without a selected session.
+- The App phase policy did not admit `sessions` during `no_agent`.
+
+### GREEN
+
+Focused command:
+`npm test -- --run src/__tests__/UserFlow.test.tsx src/__tests__/components.test.tsx src/__tests__/AppState.test.ts`
+
+Result: 98 passed, 0 failed across 3 test files.
+
+Build command: `npm run build`
+
+Result: TypeScript and Vite production build passed. The existing main-chunk size advisory remains; `SessionsPage` remains a separate lazy chunk.
+
+Lint command: `npm run lint`
+
+Result: 0 errors and the same 12 pre-existing unused-type warnings in `src/api/client.ts`.
+
+### Preserved constraints
+
+- `no_world` still renders onboarding before any sessions route can mount.
+- `no_agent` permits the sessions route so a user can select or create a session.
+- Selecting or creating a session atomically sets its agent, clears a missing agent, and moves the app to ready.
+- The composer send action stays disabled until both prompt text and a session ID exist; its handler guard remains intact.
+- Desktop and tablet toggles now collapse grid columns, remove hidden panels from interaction, and expose matching `aria-hidden` / `aria-expanded` state.

@@ -23,10 +23,17 @@ export default function SessionsPage({
   const conversationTitle = selectedSession?.title || 'New conversation';
 
   return (
-    <div className={styles.page} aria-label="Sessions workbench">
+    <div
+      className={`${styles.page} ${historyOpen ? '' : styles.historyClosed} ${
+        inspectorOpen ? '' : styles.inspectorClosed
+      }`}
+      aria-label="Sessions workbench"
+    >
       <section
+        id="session-history-panel"
         className={`${styles.history} ${historyOpen ? styles.historyOpen : ''}`}
         aria-label="Session history"
+        aria-hidden={!historyOpen}
       >
         <header className={styles.historyHeader}>
           <div>
