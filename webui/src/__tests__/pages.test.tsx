@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { useState } from 'react';
+import { startTransition, Suspense, useState } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
@@ -111,8 +111,9 @@ describe('Foreshadowing page', () => {
     vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [{ id: 'scene-1', title: 'The warning', status: 'planned', chapter_id: 'chapter-1' }] });
     render(<ForeshadowingPage worldId="world-1" />);
     fireEvent.click(await screen.findByRole('option', { name: /Silver bell/ }));
-    expect(screen.getByText('The warning')).toBeDefined();
-    expect(screen.getByText('Reckoning')).toBeDefined();
+    const positions = screen.getByRole('heading', { name: 'Narrative positions' }).parentElement!;
+    expect(within(positions).getByText('The warning')).toBeDefined();
+    expect(within(positions).getByText('Reckoning')).toBeDefined();
 
     vi.mocked(api.listChapters).mockRejectedValue(new Error('Chapters unavailable'));
     vi.mocked(api.listScenes).mockRejectedValue(new Error('Scenes unavailable'));
@@ -172,6 +173,27 @@ describe('Foreshadowing page', () => {
     expect(screen.getByRole('button', { name: 'Delete foreshadowing' })).toBeDisabled();
     expect(screen.getByRole('option', { name: /A thread/ })).toBeDefined();
     await act(async () => newDeletion.resolve({ ok: true }));
+  });
+
+  it('keeps the committed world mutation valid when a different world render is suspended', async () => {
+    const deletion = deferred<{ ok: boolean }>();
+    const suspended = new Promise<never>(() => {});
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.listForeshadowing).mockResolvedValue({ ok: true, items: [{ id: 'f1', content: 'Committed thread', status: 'open' }] });
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: [] });
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: [] });
+    vi.mocked(api.deleteForeshadowing).mockReset().mockReturnValue(deletion.promise);
+    const SuspendRender = ({ active }: { active: boolean }) => { if (active) throw suspended; return null; };
+    const page = (worldId: string, suspend: boolean) => <Suspense fallback={<p>Suspended</p>}><ForeshadowingPage worldId={worldId} /><SuspendRender active={suspend} /></Suspense>;
+    const view = render(page('world-a', false));
+    fireEvent.click(await screen.findByRole('option', { name: /Committed thread/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete foreshadowing' }));
+
+    act(() => { startTransition(() => view.rerender(page('world-b', true))); });
+    await act(async () => deletion.reject(new Error('Delete failed')));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Delete failed');
+    expect(screen.getByRole('button', { name: 'Delete foreshadowing' })).not.toBeDisabled();
   });
 
   it('closes the create mutation when the world changes', async () => {
@@ -260,6 +282,27 @@ describe('Task 10 create mutation lifetime', () => {
 
     expect(onCreated).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['foreshadowing', CreateForeshadowingModal, 'createForeshadowing'],
+    ['secret', CreateSecretModal, 'createSecret'],
+  ] as const)('keeps the committed %s creation valid when another world render is suspended', async (_name, Modal, method) => {
+    const creation = deferred<{ ok: boolean }>();
+    const suspended = new Promise<never>(() => {});
+    vi.mocked(api[method]).mockReturnValue(creation.promise as never);
+    const SuspendRender = ({ active }: { active: boolean }) => { if (active) throw suspended; return null; };
+    const renderModal = (worldId: string, suspend: boolean) => <AppStateProvider><Suspense fallback={<p>Suspended</p>}><Modal worldId={worldId} onClose={vi.fn()} /><SuspendRender active={suspend} /></Suspense></AppStateProvider>;
+    const view = render(renderModal('world-a', false));
+    const field = view.container.querySelector('textarea, input') as HTMLInputElement | HTMLTextAreaElement;
+    fireEvent.change(field, { target: { value: 'Required value' } });
+    fireEvent.click(Array.from(view.container.querySelectorAll('button')).at(-1) as HTMLButtonElement);
+
+    act(() => { startTransition(() => view.rerender(renderModal('world-b', true))); });
+    await act(async () => creation.reject(new Error('Create failed')));
+
+    expect(screen.getByText('Create failed')).toBeDefined();
+    expect(Array.from(view.container.querySelectorAll('button')).at(-1)).not.toBeDisabled();
   });
 });
 

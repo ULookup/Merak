@@ -46,18 +46,22 @@ export default function ForeshadowingPage({ worldId }: { worldId: string }) {
   const [pendingMutation, setPendingMutation] = useState<string | null>(null);
   const pendingMutationRef = useRef(false);
   const generationRef = useRef(0);
-  const renderedWorldRef = useRef(worldId);
-  if (renderedWorldRef.current !== worldId) {
-    renderedWorldRef.current = worldId;
-    generationRef.current += 1;
-  }
+  const committedWorldRef = useRef(worldId);
+  const mountedRef = useRef(false);
   const data: Data | null = resource.data;
   const items = useMemo(() => (data?.items ?? []).filter((item) => !removed.includes(item.id)), [data, removed]);
   const filtered = filter === 'all' ? items : items.filter((item) => item.status === filter);
   const selected = filtered.find((item) => item.id === selectedId) ?? null;
 
   useEffect(() => { setSelectedId(null); setRemoved([]); setEditing(false); setCreateOpen(false); setPendingMutation(null); pendingMutationRef.current = false; setMutationError(null); }, [worldId]);
-  useEffect(() => () => { generationRef.current += 1; }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    if (committedWorldRef.current !== worldId) {
+      committedWorldRef.current = worldId;
+      generationRef.current += 1;
+    }
+    return () => { mountedRef.current = false; generationRef.current += 1; };
+  }, [worldId]);
   useEffect(() => {
     if (selectedId && !filtered.some((item) => item.id === selectedId)) setSelectedId(filtered[0]?.id ?? null);
   }, [filtered, selectedId]);
@@ -70,9 +74,9 @@ export default function ForeshadowingPage({ worldId }: { worldId: string }) {
     pendingMutationRef.current = true;
     setPendingMutation('update');
     setMutationError(null);
-    try { await api.patchForeshadow(operationWorld, selected.id, { pay_off_idea: payoff }); if (generationRef.current === operationGeneration) { setEditing(false); resource.retry(); } }
-    catch (error) { if (generationRef.current === operationGeneration) setMutationError((error as Error).message); }
-    finally { if (generationRef.current === operationGeneration) { pendingMutationRef.current = false; setPendingMutation(null); } }
+    try { await api.patchForeshadow(operationWorld, selected.id, { pay_off_idea: payoff }); if (mountedRef.current && generationRef.current === operationGeneration) { setEditing(false); resource.retry(); } }
+    catch (error) { if (mountedRef.current && generationRef.current === operationGeneration) setMutationError((error as Error).message); }
+    finally { if (mountedRef.current && generationRef.current === operationGeneration) { pendingMutationRef.current = false; setPendingMutation(null); } }
   }
 
   async function remove() {
@@ -83,9 +87,9 @@ export default function ForeshadowingPage({ worldId }: { worldId: string }) {
     const operationGeneration = generationRef.current;
     pendingMutationRef.current = true;
     setPendingMutation('delete');
-    try { await api.deleteForeshadowing(operationWorld, id); if (generationRef.current === operationGeneration) { setRemoved((ids) => [...ids, id]); setSelectedId(filtered.find((item) => item.id !== id)?.id ?? null); resource.retry(); } }
-    catch (error) { if (generationRef.current === operationGeneration) setMutationError((error as Error).message); }
-    finally { if (generationRef.current === operationGeneration) { pendingMutationRef.current = false; setPendingMutation(null); } }
+    try { await api.deleteForeshadowing(operationWorld, id); if (mountedRef.current && generationRef.current === operationGeneration) { setRemoved((ids) => [...ids, id]); setSelectedId(filtered.find((item) => item.id !== id)?.id ?? null); resource.retry(); } }
+    catch (error) { if (mountedRef.current && generationRef.current === operationGeneration) setMutationError((error as Error).message); }
+    finally { if (mountedRef.current && generationRef.current === operationGeneration) { pendingMutationRef.current = false; setPendingMutation(null); } }
   }
 
   function changeFilter(nextFilter: string) {
@@ -123,5 +127,6 @@ function ForeshadowingContext({ item, data }: { item: ForeshadowingItem; data: D
   const resolve = (id?: string) => data.scenes.find((scene) => scene.id === id)?.title ?? data.chapters.find((chapter) => chapter.id === id)?.title;
   const planted = resolve(item.planted_at);
   const paid = resolve(item.paid_at);
-  return <div className={styles.context}>{planted ? <Fact label="Planted narrative position" value={planted} /> : null}{paid ? <Fact label="Paid narrative position" value={paid} /> : null}{!planted && !paid ? <p>No resolvable narrative positions recorded.</p> : null}</div>;
+  const positions = [planted, paid].filter(Boolean) as string[];
+  return <div className={styles.context}>{positions.length ? <div><h3>Narrative positions</h3><div className={styles.chips}>{positions.map((position) => <span key={position}>{position}</span>)}</div></div> : <p>No resolvable narrative positions recorded.</p>}</div>;
 }
