@@ -66,9 +66,19 @@ export default function CharactersPage({ worldId }: CharactersPageProps) {
     );
   }
 
+  const listWarning = agents.error ? (
+    <div className={styles.listWarning} role="alert">
+      <span>{agents.error.message}</span>
+      <button type="button" onClick={agents.retry} aria-label="Retry character list">
+        Retry
+      </button>
+    </div>
+  ) : null;
+
   if (items.length === 0) {
     return (
       <main className={styles.page}>
+        {listWarning}
         <section className={styles.empty}>
           <Users aria-hidden="true" />
           <h1>No characters yet</h1>
@@ -110,14 +120,7 @@ export default function CharactersPage({ worldId }: CharactersPageProps) {
           <RefreshCw aria-hidden="true" />
           Refresh
         </button>
-        {agents.error && agents.data ? (
-          <div className={styles.listWarning} role="alert">
-            <span>{agents.error.message}</span>
-            <button type="button" onClick={agents.retry} aria-label="Retry character list">
-              Retry
-            </button>
-          </div>
-        ) : null}
+        {listWarning}
         <ResourceList
           items={items}
           selectedId={selected}

@@ -788,6 +788,29 @@ describe('Characters page', () => {
     expect(screen.getByRole('option', { name: /Lin/ })).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('shows retained refresh failure beside empty state after deleting the only character', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.listAgents)
+      .mockResolvedValueOnce({ ok: true, agents: [lin] })
+      .mockRejectedValueOnce(new Error('List refresh failed'));
+    vi.mocked(api.fetchAgentDetail).mockResolvedValue(detail('lin', 'Lin'));
+    vi.mocked(api.fetchDiaries).mockResolvedValue({ ok: true, diaries: [] });
+    vi.mocked(api.fetchRelations).mockResolvedValue({ ok: true, relations: [] });
+    vi.mocked(api.fetchMemorySummaries).mockResolvedValue({ ok: true, summaries: [] });
+    vi.mocked(api.fetchAgentVoice).mockResolvedValue({ ok: true, voice: null });
+    vi.mocked(api.deleteAgent).mockResolvedValue({ ok: true });
+
+    render(<CharactersPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /Lin/ }));
+    await screen.findByRole('heading', { name: 'Lin' });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete character' }));
+
+    expect(await screen.findByRole('heading', { name: 'No characters yet' })).toBeDefined();
+    expect(screen.queryByRole('option', { name: /Lin/ })).toBeNull();
+    expect(await screen.findByRole('alert')).toHaveTextContent('List refresh failed');
+    expect(screen.getByRole('button', { name: 'Retry character list' })).toBeDefined();
+  });
+
   it('renders voice 404 as empty and voice 500 as retryable error', async () => {
     vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [lin, sora] });
     vi.mocked(api.fetchAgentDetail).mockImplementation((_worldId, id) =>
