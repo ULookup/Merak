@@ -9,6 +9,7 @@ export type ResourceListProps<T> = {
   onSelect: (id: string) => void;
   ariaLabel?: string;
   className?: string;
+  disabled?: boolean;
 };
 
 export default function ResourceList<T>({
@@ -19,6 +20,7 @@ export default function ResourceList<T>({
   onSelect,
   ariaLabel = 'Resources',
   className,
+  disabled = false,
 }: ResourceListProps<T>) {
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
@@ -32,7 +34,7 @@ export default function ResourceList<T>({
   }, [selectedIndex]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (items.length === 0) return;
+    if (items.length === 0 || disabled) return;
 
     let nextIndex: number | null = null;
 
@@ -65,6 +67,7 @@ export default function ResourceList<T>({
       aria-label={ariaLabel}
       aria-activedescendant={selectedIndex >= 0 ? `${listId}-option-${selectedIndex}` : undefined}
       tabIndex={0}
+      aria-disabled={disabled}
       onKeyDown={handleKeyDown}
     >
       {items.map((item, index) => {
@@ -80,7 +83,9 @@ export default function ResourceList<T>({
             key={id}
             role="option"
             aria-selected={selected}
+            aria-disabled={disabled}
             onClick={() => {
+              if (disabled) return;
               listRef.current?.focus();
               onSelect(id);
             }}

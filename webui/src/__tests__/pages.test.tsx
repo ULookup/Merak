@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startTransition, Suspense, useState } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
+import { filesApi } from '../api/files';
 import { worldbuildingApi } from '../api/worldbuilding';
 import { AppStateProvider } from '../AppState';
 import CreateForeshadowingModal from '../components/Inspector/CreateForeshadowingModal';
@@ -40,6 +41,7 @@ vi.mock('../api/client', () => ({
     endScene: vi.fn(),
     readWorkspaceFile: vi.fn(),
     saveWorkspaceFile: vi.fn(),
+    openWorkspacePath: vi.fn(),
     patchChapter: vi.fn(),
     listForeshadowing: vi.fn(),
     listSecrets: vi.fn(),
@@ -55,6 +57,8 @@ vi.mock('../api/client', () => ({
   ),
 }));
 
+vi.mock('../api/files', () => ({ filesApi: { listWorldFiles: vi.fn() } }));
+
 describe('Files page', () => {
   const file = {
     id: 'draft',
@@ -66,6 +70,10 @@ describe('Files page', () => {
     updated_at: '2026-06-20T00:00:00Z',
     dirty: false,
   };
+
+  beforeEach(() => {
+    vi.mocked(filesApi.listWorldFiles).mockResolvedValue({ ok: true, items: [] });
+  });
 
   it('loads file content only after selection', async () => {
     vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
@@ -182,6 +190,167 @@ describe('Files page', () => {
     );
 
     expect(screen.getByRole('textbox', { name: 'File content' })).toHaveValue('Newest A');
+  });
+
+  it('keeps save completion live while refresh and selection are blocked', async () => {
+    const saving = deferred<Awaited<ReturnType<typeof api.saveWorkspaceFile>>>();
+    const other = { ...file, id: 'notes', path: 'notes.md', name: 'notes.md' };
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file, other],
+    });
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: file.path,
+        content: 'Old',
+        encoding: 'utf-8',
+        updated_at: file.updated_at,
+        version: 'v1',
+      },
+    });
+    vi.mocked(api.saveWorkspaceFile).mockReturnValue(saving.promise);
+    render(<FilesPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /draft/i }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'File content' }), {
+      target: { value: 'Saved' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save file' }));
+    expect(screen.getByRole('button', { name: 'Refresh files' })).toBeDisabled();
+    expect(screen.getByRole('option', { name: /notes/i })).toHaveAttribute('aria-disabled', 'true');
+    await act(async () =>
+      saving.resolve({ ok: true, file: { path: file.path, updated_at: 'now', version: 'v2' } }),
+    );
+    expect(screen.getByRole('button', { name: 'Refresh files' })).not.toBeDisabled();
+    expect(screen.getByRole('option', { name: /notes/i })).toHaveAttribute(
+      'aria-disabled',
+      'false',
+    );
+  });
+
+  it('shows world-link request failure as unavailable rather than empty', async () => {
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file],
+    });
+    vi.mocked(filesApi.listWorldFiles).mockRejectedValue(new Error('Links offline'));
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: file.path,
+        content: 'Old',
+        encoding: 'utf-8',
+        updated_at: file.updated_at,
+        version: 'v1',
+      },
+    });
+    render(<FilesPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /draft/i }));
+    expect(await screen.findByText(/World links unavailable: Links offline/)).toBeDefined();
+    expect(screen.queryByText('No world links.')).toBeNull();
+  });
+
+  it('reloads the remote version and reports clipboard failures without losing the draft', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard denied'));
+    Object.assign(navigator, { clipboard: { writeText } });
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file],
+    });
+    vi.mocked(api.readWorkspaceFile)
+      .mockResolvedValueOnce({
+        ok: true,
+        file: {
+          path: file.path,
+          content: 'Old',
+          encoding: 'utf-8',
+          updated_at: file.updated_at,
+          version: 'v1',
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        file: {
+          path: file.path,
+          content: 'Remote',
+          encoding: 'utf-8',
+          updated_at: 'now',
+          version: 'v2',
+        },
+      });
+    vi.mocked(api.saveWorkspaceFile).mockRejectedValue(
+      Object.assign(new Error('Changed'), { status: 409, code: 'file_conflict' }),
+    );
+    render(<FilesPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /draft/i }));
+    const editor = await screen.findByRole('textbox', { name: 'File content' });
+    fireEvent.change(editor, { target: { value: 'Local' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save file' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Copy local draft' }));
+    expect(writeText).toHaveBeenCalledWith('Local');
+    expect(await screen.findByText('Clipboard denied')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Reload file' }));
+    expect(await screen.findByRole('textbox', { name: 'File content' })).toHaveValue('Remote');
+    fireEvent.change(screen.getByRole('textbox', { name: 'File content' }), {
+      target: { value: 'Next' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save file' }));
+    await waitFor(() =>
+      expect(api.saveWorkspaceFile).toHaveBeenLastCalledWith(file.path, 'Next', 'v2'),
+    );
+  });
+
+  it('opens the real workspace root and sends the selected type to the list API', async () => {
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file],
+    });
+    render(<FilesPage worldId="world-1" />);
+    expect(await screen.findByText('C:/story')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Open workspace' }));
+    expect(api.openWorkspacePath).toHaveBeenCalledWith('C:/story');
+    fireEvent.change(screen.getByLabelText('File type'), { target: { value: 'markdown' } });
+    await waitFor(() =>
+      expect(api.listWorkspaceFiles).toHaveBeenLastCalledWith({
+        world_id: 'world-1',
+        type: 'markdown',
+      }),
+    );
+  });
+
+  it('ignores a pending save completion after unmount', async () => {
+    const saving = deferred<Awaited<ReturnType<typeof api.saveWorkspaceFile>>>();
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file],
+    });
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: file.path,
+        content: 'Old',
+        encoding: 'utf-8',
+        updated_at: file.updated_at,
+        version: 'v1',
+      },
+    });
+    vi.mocked(api.saveWorkspaceFile).mockReturnValue(saving.promise);
+    const view = render(<FilesPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /draft/i }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'File content' }), {
+      target: { value: 'Local' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save file' }));
+    view.unmount();
+    await act(async () =>
+      saving.resolve({ ok: true, file: { path: file.path, updated_at: 'now', version: 'v2' } }),
+    );
+    expect(screen.queryByRole('textbox', { name: 'File content' })).toBeNull();
   });
 });
 

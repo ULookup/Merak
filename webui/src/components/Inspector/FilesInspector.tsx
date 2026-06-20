@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -43,6 +43,14 @@ export default function FilesInspector() {
   const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
   const [conflictFileId, setConflictFileId] = useState<string | null>(null);
   const requestGeneration = useRef(0);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+      requestGeneration.current += 1;
+    },
+    [],
+  );
   const activeFile =
     state.workspaceFiles.find((file) => file.id === state.activeEditorFileId) ?? null;
   const activeFileName = activeFile ? displayFileName(activeFile.name) : '';
@@ -82,7 +90,7 @@ export default function FilesInspector() {
   });
 
   async function openWorkspacePath(path: string | null, reveal = false) {
-    if (!path) return;
+    if (!path || state.editorSaveStatus === 'saving') return;
     setOpeningPath(path);
     try {
       await api.openWorkspacePath(path, reveal);
@@ -95,6 +103,7 @@ export default function FilesInspector() {
   }
 
   async function openFile(fileId: string) {
+    if (state.editorSaveStatus === 'saving') return;
     const file = state.workspaceFiles.find((item) => item.id === fileId);
     if (!file) return;
     dispatch({ type: 'OPEN_WORKSPACE_FILE', fileId });
@@ -103,7 +112,7 @@ export default function FilesInspector() {
     setLoadingFileId(fileId);
     try {
       const res = await api.readWorkspaceFile(file.path);
-      if (token === requestGeneration.current)
+      if (mounted.current && token === requestGeneration.current)
         dispatch({ type: 'SET_EDITOR_CONTENT', fileId, content: res.file });
     } catch (error) {
       showToast(formatApiError(error, 'Could not read file.'), 'error');
@@ -123,7 +132,7 @@ export default function FilesInspector() {
         state.editorBuffers[target.id] ?? '',
         state.editorVersions[target.id],
       );
-      if (token !== requestGeneration.current) return;
+      if (!mounted.current || token !== requestGeneration.current) return;
       dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saved' });
       dispatch({ type: 'COMMIT_EDITOR_BUFFER', fileId: target.id, version: res.file.version });
       dispatch({
@@ -136,7 +145,7 @@ export default function FilesInspector() {
       });
       showToast('File saved.', 'success');
     } catch (error) {
-      if (token !== requestGeneration.current) return;
+      if (!mounted.current || token !== requestGeneration.current) return;
       const conflict = error as { status?: number; code?: string };
       if (conflict.status === 409 || conflict.code === 'file_conflict')
         setConflictFileId(target.id);
@@ -165,7 +174,7 @@ export default function FilesInspector() {
         <button
           className={styles.entryButton}
           type="button"
-          disabled={!state.outputDirectory}
+          disabled={!state.outputDirectory || state.editorSaveStatus === 'saving'}
           aria-label="Open output folder"
           onClick={() => openWorkspacePath(state.outputDirectory)}
         >
@@ -186,6 +195,7 @@ export default function FilesInspector() {
             />
           </label>
           <select
+            disabled={state.editorSaveStatus === 'saving'}
             value={state.fileTypeFilter}
             onChange={(event) =>
               dispatch({ type: 'SET_FILE_TYPE_FILTER', value: event.target.value })
@@ -229,6 +239,7 @@ export default function FilesInspector() {
                         className={styles.entryButton}
                         type="button"
                         aria-label={`Open ${displayName} in editor`}
+                        disabled={state.editorSaveStatus === 'saving'}
                         onClick={() => openFile(file.id)}
                       >
                         <FileText size={14} aria-hidden="true" strokeWidth={2.3} />
@@ -238,7 +249,7 @@ export default function FilesInspector() {
                         className={styles.entryButton}
                         type="button"
                         aria-label={`Reveal ${displayName} in folder`}
-                        disabled={openingPath === file.path}
+                        disabled={openingPath === file.path || state.editorSaveStatus === 'saving'}
                         onClick={() => openWorkspacePath(file.path, true)}
                       >
                         <FolderOpen size={14} aria-hidden="true" strokeWidth={2.3} />

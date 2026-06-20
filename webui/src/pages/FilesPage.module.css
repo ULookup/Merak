@@ -27,6 +27,15 @@
   width: 100%;
   box-sizing: border-box;
 }
+.root {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.root code {
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+}
 .library strong,
 .library small {
   display: block;

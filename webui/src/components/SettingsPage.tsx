@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, formatApiError } from '../api/client';
-import type { LlmConfigFull } from '../api/types';
+import type { LlmConfigFull, RuntimeMetadata } from '../api/types';
 import {
   exportDiagnostics,
   getDesktopRuntimeLogs,
@@ -17,22 +17,26 @@ export default function SettingsPage() {
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
   const [genre, setGenre] = useState('');
   const [style, setStyle] = useState('');
   const [usageLogs, setUsageLogs] = useState(false);
   const [runtime, setRuntime] = useState<DesktopRuntimeStatus | null>(null);
+  const [metadata, setMetadata] = useState<RuntimeMetadata | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [message, setMessage] = useState('');
   const desktop = isDesktopApp();
 
   useEffect(() => {
     let active = true;
-    Promise.all([api.getConfig(), api.getPreferences()])
-      .then(([next, prefs]) => {
+    Promise.all([api.getConfig(), api.getPreferences(), api.metadata()])
+      .then(([next, prefs, runtimeMetadata]) => {
         if (!active) return;
         setConfig(next);
         setProvider(next.provider);
         setModel(next.default_model);
+        setBaseUrl(next.api_base_url);
+        setMetadata(runtimeMetadata);
         setGenre(prefs.default_genre ?? '');
         setStyle(prefs.preferred_style ?? '');
         setUsageLogs(prefs.allow_usage_logs ?? false);
@@ -47,9 +51,18 @@ export default function SettingsPage() {
   async function saveModel() {
     setMessage('');
     try {
-      await api.saveConfig({ provider, default_model: model, api_key: apiKey || undefined });
+      const result = await api.saveConfig({
+        provider,
+        default_model: model,
+        api_base_url: baseUrl,
+        api_key: apiKey || undefined,
+      });
       setApiKey('');
-      setMessage('Model settings saved.');
+      setMessage(
+        result.restart_required
+          ? 'Model settings saved. Runtime restart required.'
+          : 'Model settings saved.',
+      );
     } catch (error) {
       setMessage(formatApiError(error, 'Could not save model settings.'));
     }
@@ -97,6 +110,14 @@ export default function SettingsPage() {
               <label>
                 Default model
                 <input value={model} onChange={(event) => setModel(event.target.value)} />
+              </label>
+              <label>
+                API base URL
+                <input
+                  aria-label="API base URL"
+                  value={baseUrl}
+                  onChange={(event) => setBaseUrl(event.target.value)}
+                />
               </label>
               <label>
                 API key
@@ -166,6 +187,12 @@ export default function SettingsPage() {
                 <dd>{runtime?.phase ?? 'Unavailable'}</dd>
                 <dt>API</dt>
                 <dd>{runtime?.apiBaseUrl ?? 'Unavailable'}</dd>
+                {metadata ? (
+                  <>
+                    <dt>Permission mode</dt>
+                    <dd>{metadata.permission_mode}</dd>
+                  </>
+                ) : null}
                 {runtime?.pgStatus ? (
                   <>
                     <dt>PostgreSQL</dt>

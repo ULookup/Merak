@@ -1,5 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { api } from '../api/client';
 import { AppStateProvider } from '../AppState';
 import SettingsPanel from '../components/Sidebar/SettingsPanel';
 import { I18nProvider } from '../i18n';
@@ -22,6 +23,17 @@ vi.mock('../api/client', () => ({
       allow_usage_logs: true,
     }),
     savePreferences: vi.fn().mockResolvedValue({ ok: true }),
+    metadata: vi.fn().mockResolvedValue({
+      provider: 'openai',
+      model: 'gpt-4o',
+      models: [],
+      permission_mode: 'approval',
+      memory: { enabled: true },
+      tools: [],
+      mcp_servers: [],
+      agents: [],
+      delegation_patterns: [],
+    }),
   },
   formatApiError: vi.fn((error: unknown, fallback: string) =>
     error instanceof Error ? error.message : fallback,
@@ -77,5 +89,24 @@ describe('Settings page capabilities', () => {
     expect(screen.queryByRole('switch', { name: /auto.?save/i })).toBeNull();
     expect(screen.queryByRole('combobox', { name: /theme/i })).toBeNull();
     expect(screen.queryByRole('textbox', { name: /database/i })).toBeNull();
+  });
+
+  it('renders writable API base URL, read-only permission mode, and restart-required save result', async () => {
+    vi.mocked(api.saveConfig).mockResolvedValueOnce({ ok: true, restart_required: true } as never);
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+    expect(await screen.findByLabelText('API base URL')).toHaveValue('https://api.openai.com/v1');
+    expect(await screen.findByText('approval')).toBeDefined();
+    fireEvent.change(screen.getByLabelText('API base URL'), {
+      target: { value: 'http://localhost:11434/v1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save model settings' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/restart required/i);
+    expect(api.saveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ api_base_url: 'http://localhost:11434/v1' }),
+    );
   });
 });

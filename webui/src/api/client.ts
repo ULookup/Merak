@@ -181,7 +181,7 @@ export const api = {
     temperature?: number;
     context_memory_length?: 'short' | 'medium' | 'long';
     writer_model?: string;
-  }) => request<OkResponse>('POST', '/api/config/llm', config),
+  }) => request<OkResponse & { restart_required?: boolean }>('POST', '/api/config/llm', config),
 
   testConfig: () => request<OkResponse>('POST', '/api/config/llm/test'),
 

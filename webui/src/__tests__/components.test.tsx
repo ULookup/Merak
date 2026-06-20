@@ -1,11 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { useEffect } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { AppStateProvider, useAppState } from '../AppState';
-import { getDesktopRuntimeSteps } from '../DesktopBoot';
 import BrandMark from '../components/BrandMark';
 import AssistantCell from '../components/cells/AssistantCell';
 import StatusPill from '../components/cells/StatusPill';
@@ -20,6 +19,7 @@ import WorldSelector from '../components/Sidebar/WorldSelector';
 import { ToastProvider } from '../components/Toast';
 import WorldDashboard from '../components/WorldDashboard';
 import WorldOnboarding from '../components/WorldOnboarding';
+import { getDesktopRuntimeSteps } from '../DesktopBoot';
 
 function TimelineHarness() {
   const { dispatch } = useAppState();
@@ -513,7 +513,9 @@ describe('World onboarding', () => {
       target: { value: 'Snowbound border city' },
     });
     fireEvent.click(screen.getByRole('button', { name: /创建第一个|Create first/ }));
-    fireEvent.change(screen.getByLabelText(/Character Name|人物姓名|角色姓名/), { target: { value: 'Lian' } });
+    fireEvent.change(screen.getByLabelText(/Character Name|人物姓名|角色姓名/), {
+      target: { value: 'Lian' },
+    });
     fireEvent.change(screen.getByLabelText(/Identity|身份/), {
       target: { value: 'Archivist of the old passes' },
     });
@@ -904,7 +906,9 @@ describe('InspectorPanel', () => {
 
     expect(screen.getAllByText('Unsaved changes').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Revert chapter-12 to last loaded version' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Revert chapter-12 to last loaded version' }),
+    );
 
     expect((editor as HTMLTextAreaElement).value).toBe('Original draft.');
     expect(screen.queryByText('Unsaved changes')).toBeNull();
@@ -938,6 +942,53 @@ describe('InspectorPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save chapter-12' }));
 
     expect(await screen.findAllByText('Disk is locked')).toHaveLength(2);
+  });
+
+  it('blocks file switching during save and commits the returned version', async () => {
+    let resolveSave!: (value: Awaited<ReturnType<typeof api.saveWorkspaceFile>>) => void;
+    const pending = new Promise<Awaited<ReturnType<typeof api.saveWorkspaceFile>>>((resolve) => {
+      resolveSave = resolve;
+    });
+    vi.spyOn(api, 'readWorkspaceFile').mockResolvedValue({
+      ok: true,
+      file: {
+        path: '/Users/me/novel/chapter-12.md',
+        content: 'Original',
+        encoding: 'utf-8',
+        updated_at: 'old',
+        version: 'v1',
+      },
+    });
+    const save = vi
+      .spyOn(api, 'saveWorkspaceFile')
+      .mockReturnValueOnce(pending)
+      .mockResolvedValueOnce({
+        ok: true,
+        file: { path: '/Users/me/novel/chapter-12.md', updated_at: 'newer', version: 'v3' },
+      });
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
+    const editor = await screen.findByLabelText('Edit chapter-12');
+    fireEvent.change(editor, { target: { value: 'First save' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter-12' }));
+    expect(screen.getByRole('button', { name: 'Open chapter-12 in editor' })).toBeDisabled();
+    await act(async () =>
+      resolveSave({
+        ok: true,
+        file: { path: '/Users/me/novel/chapter-12.md', updated_at: 'new', version: 'v2' },
+      }),
+    );
+    fireEvent.change(editor, { target: { value: 'Second save' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter-12' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenLastCalledWith('/Users/me/novel/chapter-12.md', 'Second save', 'v2'),
+    );
   });
 
   it('renders a readable creation dashboard without mojibake copy', async () => {
