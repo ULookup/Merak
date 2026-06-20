@@ -516,12 +516,26 @@ export interface DiaryListResponse {
 
 export interface MemorySummary {
   id: string;
-  agent_id: string;
   period_start: string;
   period_end: string;
   summary: string;
   source_diary_ids: string[];
   created_at: string;
+}
+
+export interface VoiceFingerprint {
+  avg_sentence_length: number;
+  sentence_variance: number;
+  question_frequency: number;
+  modifier_ratio: number;
+  sample_count: number;
+  signature_words: string[];
+  tone_profile: Record<string, number>;
+}
+
+export interface VoiceFingerprintResponse {
+  ok: boolean;
+  voice: VoiceFingerprint;
 }
 
 export interface MemorySummaryListResponse {

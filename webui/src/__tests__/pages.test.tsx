@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { useState } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -25,6 +27,9 @@ vi.mock('../api/client', () => ({
     fetchDiaries: vi.fn(),
     fetchRelations: vi.fn(),
     createAgent: vi.fn(),
+    fetchMemorySummaries: vi.fn(),
+    fetchAgentVoice: vi.fn(),
+    deleteAgent: vi.fn(),
   },
 }));
 
@@ -640,6 +645,19 @@ describe('Characters page', () => {
     );
     vi.mocked(api.fetchDiaries).mockResolvedValue({ ok: true, diaries: [] });
     vi.mocked(api.fetchRelations).mockResolvedValue({ ok: true, relations: [] });
+    vi.mocked(api.fetchMemorySummaries).mockResolvedValue({ ok: true, summaries: [] });
+    vi.mocked(api.fetchAgentVoice).mockResolvedValue({
+      ok: true,
+      voice: {
+        avg_sentence_length: 8,
+        sentence_variance: 1,
+        question_frequency: 0,
+        modifier_ratio: 0,
+        sample_count: 2,
+        signature_words: [],
+        tone_profile: {},
+      },
+    });
 
     render(<CharactersPage worldId="world-1" />);
     fireEvent.click(await screen.findByRole('option', { name: /Sora/ }));
@@ -661,6 +679,94 @@ describe('Characters page', () => {
 
     expect(await screen.findByRole('heading', { name: 'No characters yet' })).toBeDefined();
     expect(api.fetchAgentDetail).not.toHaveBeenCalled();
+  });
+
+  it('renders memory, voice, and real relationship targets independently', async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [lin, sora] });
+    vi.mocked(api.fetchAgentDetail).mockResolvedValue(detail('lin', 'Lin'));
+    vi.mocked(api.fetchDiaries).mockResolvedValue({ ok: true, diaries: [] });
+    vi.mocked(api.fetchRelations).mockResolvedValue({
+      ok: true,
+      relations: [
+        { agent_id: 'lin', target_id: 'sora', relation_type: 'ally', updated_at: '2026-06-20' },
+        {
+          agent_id: 'lin',
+          target_id: 'missing-agent',
+          relation_type: 'rival',
+          updated_at: '2026-06-20',
+        },
+      ],
+    });
+    vi.mocked(api.fetchMemorySummaries).mockResolvedValue({
+      ok: true,
+      summaries: [
+        {
+          id: 'm1',
+          period_start: 'Day 1',
+          period_end: 'Day 2',
+          summary: 'Guarded the gate.',
+          source_diary_ids: ['d1'],
+          created_at: '2026-06-20',
+        },
+      ],
+    });
+    vi.mocked(api.fetchAgentVoice).mockResolvedValue({
+      ok: true,
+      voice: {
+        avg_sentence_length: 9,
+        sentence_variance: 2,
+        question_frequency: 0.1,
+        modifier_ratio: 0.2,
+        sample_count: 5,
+        signature_words: ['steady'],
+        tone_profile: { question_ratio: 0.1 },
+      },
+    });
+
+    render(<CharactersPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /Lin/ }));
+
+    expect(await screen.findByText('Guarded the gate.')).toBeDefined();
+    const relationships = screen.getByRole('heading', { name: 'Relationships' }).closest('section');
+    expect(relationships).not.toBeNull();
+    expect(within(relationships!).getByText('Sora')).toBeDefined();
+    expect(within(relationships!).getByText('missing-agent')).toBeDefined();
+    expect(screen.getByText('steady')).toBeDefined();
+  });
+
+  it('deletes with confirmation, refreshes the list, and selects a surviving neighbor', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.listAgents)
+      .mockResolvedValueOnce({ ok: true, agents: [lin, sora] })
+      .mockResolvedValueOnce({ ok: true, agents: [lin] });
+    vi.mocked(api.fetchAgentDetail).mockImplementation((_worldId, id) =>
+      Promise.resolve(detail(id, id === 'lin' ? 'Lin' : 'Sora')),
+    );
+    vi.mocked(api.fetchDiaries).mockResolvedValue({ ok: true, diaries: [] });
+    vi.mocked(api.fetchRelations).mockResolvedValue({ ok: true, relations: [] });
+    vi.mocked(api.fetchMemorySummaries).mockResolvedValue({ ok: true, summaries: [] });
+    vi.mocked(api.fetchAgentVoice).mockRejectedValue(new Error('Voice fingerprint not found'));
+    vi.mocked(api.deleteAgent).mockResolvedValue({ ok: true });
+
+    render(<CharactersPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /Sora/ }));
+    await screen.findByRole('heading', { name: 'Sora' });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete character' }));
+
+    await waitFor(() => expect(api.deleteAgent).toHaveBeenCalledWith('world-1', 'sora'));
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /Lin/ })).toHaveAttribute('aria-selected', 'true'),
+    );
+  });
+
+  it('keeps character context accessible below 1050px', () => {
+    const css = readFileSync(join(process.cwd(), 'src/pages/CharactersPage.module.css'), 'utf8');
+    const responsiveBlock = css.slice(
+      css.indexOf('@media (max-width: 1050px)'),
+      css.indexOf('@media (max-width: 700px)'),
+    );
+    expect(responsiveBlock).not.toMatch(/\.contextPane\s*\{[^}]*display:\s*none/s);
+    expect(responsiveBlock).toMatch(/\.contextPane\s*\{[^}]*grid-column:\s*1\s*\/\s*-1/s);
   });
 
   it('refreshes only the character list after creation', async () => {

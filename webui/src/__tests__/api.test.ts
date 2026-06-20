@@ -302,6 +302,59 @@ describe('api client', () => {
     expect(timeline.items).toEqual(timeline.events);
   });
 
+  it('uses the implemented agent memory, voice, and delete endpoints', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            summaries: [
+              {
+                id: 'm1',
+                period_start: 'Day 1',
+                period_end: 'Day 2',
+                summary: 'Kept watch.',
+                source_diary_ids: ['d1'],
+                created_at: '2026-06-20',
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            voice: {
+              avg_sentence_length: 8.5,
+              sentence_variance: 1.2,
+              question_frequency: 0.1,
+              modifier_ratio: 0.2,
+              sample_count: 4,
+              signature_words: ['steady'],
+              tone_profile: { question_ratio: 0.1 },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const { api } = await import('../api/client');
+
+    const memory = await api.fetchMemorySummaries('world one', 'agent/two');
+    const voice = await api.fetchAgentVoice('world one', 'agent/two');
+    await api.deleteAgent('world one', 'agent/two');
+
+    expect(memory.summaries[0].summary).toBe('Kept watch.');
+    expect(voice.voice.signature_words).toEqual(['steady']);
+    expect(vi.mocked(fetch).mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      ['/api/worldbuilding/world%20one/agents/agent%2Ftwo/memory-summaries', 'GET'],
+      ['/api/worldbuilding/world%20one/agents/agent%2Ftwo/voice', 'GET'],
+      ['/api/worldbuilding/world%20one/agents/agent%2Ftwo', 'DELETE'],
+    ]);
+  });
+
   it('preserves documented file-link target fields', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(

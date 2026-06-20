@@ -176,12 +176,52 @@
   cursor: pointer;
   font-weight: 700;
 }
+.deleteError {
+  margin: 12px;
+  padding: 10px;
+  border: 1px solid #efc8c2;
+  border-radius: 6px;
+  background: #fff3f1;
+  color: #923a2d;
+}
+.voiceMetrics {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+.voiceMetrics div {
+  display: flex;
+  justify-content: space-between;
+}
+.voiceMetrics dt {
+  color: #667085;
+}
+.voiceMetrics dd {
+  margin: 0;
+  font-weight: 700;
+}
+.voiceWords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+.voiceWords span {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #edf2ff;
+  color: #153981;
+}
 @media (max-width: 1050px) {
   .workspace {
     grid-template-columns: 230px 1fr;
+    overflow: auto;
   }
   .contextPane {
-    display: none;
+    grid-column: 1 / -1;
+    overflow: visible;
+    border-top: 1px solid #dfe6ef;
+    border-left: 0;
   }
 }
 @media (max-width: 700px) {

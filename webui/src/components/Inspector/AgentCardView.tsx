@@ -12,9 +12,16 @@ interface Props {
   agentId: string;
   onClose: () => void;
   onViewPrompt?: () => void;
+  onDelete?: () => Promise<void> | void;
 }
 
-export default function AgentCardView({ worldId, agentId, onClose, onViewPrompt }: Props) {
+export default function AgentCardView({
+  worldId,
+  agentId,
+  onClose,
+  onViewPrompt,
+  onDelete,
+}: Props) {
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -93,6 +100,11 @@ export default function AgentCardView({ worldId, agentId, onClose, onViewPrompt 
               Prompt
             </button>
           )}
+          {onDelete ? (
+            <button onClick={() => void onDelete()} className={styles.deleteBtn}>
+              Delete character
+            </button>
+          ) : null}
           <button onClick={() => setEditMode(true)} className={styles.editBtn}>
             <Pencil size={13} aria-hidden="true" />
             Edit

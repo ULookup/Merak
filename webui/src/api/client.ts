@@ -29,6 +29,7 @@ import type {
   ForeshadowingListResponse,
   GenerateTitleResponse,
   LlmConfigFull,
+  MemorySummaryListResponse,
   OkResponse,
   OpenWorkspacePathResponse,
   PatchAgentCardResponse,
@@ -49,6 +50,7 @@ import type {
   StoryOverviewResponse,
   UpdateSessionResponse,
   UpdateWorldResponse,
+  VoiceFingerprintResponse,
   WorkflowSummary,
   WorkspaceFileContentResponse,
   WorkspaceFileListResponse,
@@ -327,6 +329,24 @@ export const api = {
     request<RelationListResponse>(
       'GET',
       `/api/worldbuilding/${worldId}/agents/${agentId}/relations`,
+    ),
+
+  fetchMemorySummaries: (worldId: string, agentId: string) =>
+    request<MemorySummaryListResponse>(
+      'GET',
+      `/api/worldbuilding/${encodeURIComponent(worldId)}/agents/${encodeURIComponent(agentId)}/memory-summaries`,
+    ),
+
+  fetchAgentVoice: (worldId: string, agentId: string) =>
+    request<VoiceFingerprintResponse>(
+      'GET',
+      `/api/worldbuilding/${encodeURIComponent(worldId)}/agents/${encodeURIComponent(agentId)}/voice`,
+    ),
+
+  deleteAgent: (worldId: string, agentId: string) =>
+    request<OkResponse>(
+      'DELETE',
+      `/api/worldbuilding/${encodeURIComponent(worldId)}/agents/${encodeURIComponent(agentId)}`,
     ),
 
   // Patch other cards
