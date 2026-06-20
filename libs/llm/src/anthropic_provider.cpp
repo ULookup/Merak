@@ -2,6 +2,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 #include <future>
+#include <thread>
 
 namespace merak {
 
@@ -130,28 +131,6 @@ std::future<AgentResponse> AnthropicProvider::chat(
         std::string body_str = body.dump();
         spdlog::debug("Anthropic request: url={}, body_size={}", url, body_str.size());
 
-        CURL* curl = curl_easy_init();
-        struct curl_slist* headers = nullptr;
-        headers = curl_slist_append(headers,
-            ("x-api-key: " + config_.api_key).c_str());
-        headers = curl_slist_append(headers,
-            "anthropic-version: 2023-06-01");
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, body_str.c_str());
-        headers = curl_slist_append(headers, "Content-Type: application/json");
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
-        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
-            +[](void* userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
-                auto* token = static_cast<CancellationToken*>(userdata);
-                return token && token->cancelled() ? 1 : 0;
-            });
-        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancellation.get());
-
         // SSE 累积状态
         std::string response_text;
         int input_tokens = 0, output_tokens = 0;
@@ -279,49 +258,94 @@ std::future<AgentResponse> AnthropicProvider::chat(
             }
         };
 
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
-            +[](char* ptr, size_t size, size_t nmemb, void* userdata) -> size_t {
-                auto* cb = static_cast<decltype(&write_callback)>(userdata);
-                std::string data(ptr, size * nmemb);
-                (*cb)(data);
-                return size * nmemb;
-            });
-
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &write_callback);
-
-        CURLcode res = curl_easy_perform(curl);
-
+        RetryConfig retry;
+        int delay = retry.base_delay_ms;
+        CURLcode res = CURLE_OK;
         long http_code = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
-        if (res != CURLE_OK) {
-            spdlog::error("curl error: {}", curl_easy_strerror(res));
-            curl_easy_cleanup(curl);
-            curl_slist_free_all(headers);
-            throw AgentError(
-                cancellation && cancellation->cancelled()
-                    ? ErrorType::LLM_TIMEOUT : ErrorType::LLM_ERROR,
-                cancellation && cancellation->cancelled()
-                    ? "LLM request cancelled" : curl_easy_strerror(res));
-        }
+        for (int attempt = 0; attempt <= retry.max_retries; attempt++) {
+            response_text.clear();
+            input_tokens = 0;
+            output_tokens = 0;
+            has_usage = false;
+            pending_tools.clear();
+            preserved_content_blocks.clear();
+            accumulated_tool_calls.clear();
+            current_event.clear();
+            current_data.clear();
+            line_buffer.clear();
 
-        if (http_code >= 400) {
+            CURL* curl = curl_easy_init();
+            struct curl_slist* hdrs = nullptr;
+            hdrs = curl_slist_append(hdrs,
+                ("x-api-key: " + config_.api_key).c_str());
+            hdrs = curl_slist_append(hdrs,
+                "anthropic-version: 2023-06-01");
+            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+            curl_easy_setopt(curl, CURLOPT_COPYPOSTFIELDS, body_str.c_str());
+            hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hdrs);
+            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
+            curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+            curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L);
+            curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+            curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,
+                +[](void* userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
+                    auto* token = static_cast<CancellationToken*>(userdata);
+                    return token && token->cancelled() ? 1 : 0;
+                });
+            curl_easy_setopt(curl, CURLOPT_XFERINFODATA, cancellation.get());
+
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
+                +[](char* ptr, size_t size, size_t nmemb, void* userdata) -> size_t {
+                    auto* cb = static_cast<decltype(&write_callback)>(userdata);
+                    std::string data(ptr, size * nmemb);
+                    (*cb)(data);
+                    return size * nmemb;
+                });
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &write_callback);
+
+            res = curl_easy_perform(curl);
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
             curl_easy_cleanup(curl);
-            curl_slist_free_all(headers);
+            curl_slist_free_all(hdrs);
+
+            // Success
+            if (res == CURLE_OK && http_code < 400) break;
+
+            // Never retry cancellation
+            if (cancellation && cancellation->cancelled()) {
+                throw AgentError(ErrorType::LLM_TIMEOUT, "LLM request cancelled");
+            }
+
+            // Never retry auth errors
             if (http_code == 401 || http_code == 403) {
                 throw AgentError(ErrorType::LLM_ERROR,
                     "LLM authentication failed (HTTP " + std::to_string(http_code) + ")");
             }
-            if (http_code == 429) {
-                throw AgentError(ErrorType::LLM_ERROR,
-                    "Rate limited (HTTP 429)");
-            }
-            throw AgentError(ErrorType::LLM_ERROR,
-                "LLM API error (HTTP " + std::to_string(http_code) + ")");
-        }
 
-        curl_easy_cleanup(curl);
-        curl_slist_free_all(headers);
+            // Not retryable: other 4xx
+            if (http_code >= 400 && http_code < 500 && http_code != 429) {
+                throw AgentError(ErrorType::LLM_ERROR,
+                    "LLM API error (HTTP " + std::to_string(http_code) + ")");
+            }
+
+            // Exhausted retries
+            if (attempt == retry.max_retries) {
+                if (res != CURLE_OK) {
+                    throw AgentError(ErrorType::LLM_ERROR, curl_easy_strerror(res));
+                }
+                throw AgentError(ErrorType::LLM_ERROR,
+                    "LLM API error after retries (HTTP " + std::to_string(http_code) + ")");
+            }
+
+            // Backoff and retry
+            spdlog::warn("Provider: retry {}/{} after {}ms (HTTP {}, curl {})",
+                attempt + 1, retry.max_retries, delay, http_code, (int)res);
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+            delay *= 2;
+        }
 
         AgentResponse response;
         response.tool_calls = std::move(accumulated_tool_calls);
