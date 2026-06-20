@@ -33,6 +33,7 @@ AgentLoop::AgentLoop(
 void AgentLoop::restore_history(std::vector<Message> history) {
     session_history_ = std::move(history);
     compaction_summaries_.clear();
+    token_counter_->update_authoritative(0, 0);
 }
 
 void AgentLoop::set_system_prompt(const std::string& prompt) {
