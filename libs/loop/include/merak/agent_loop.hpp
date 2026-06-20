@@ -95,6 +95,8 @@ private:
     TurnIngestor turn_ingestor_;
 
     std::vector<Message> session_history_;
+    std::string system_prompt_;
+    std::vector<Message> compaction_summaries_;
     std::shared_ptr<std::atomic<bool>> plan_mode_;
     std::function<std::string()> working_memory_provider_;
     std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding_;

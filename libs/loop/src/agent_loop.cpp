@@ -34,11 +34,7 @@ void AgentLoop::restore_history(std::vector<Message> history) {
 }
 
 void AgentLoop::set_system_prompt(const std::string& prompt) {
-    if (!session_history_.empty() && session_history_[0].role == "system") {
-        session_history_[0].content = prompt;
-    } else {
-        session_history_.insert(session_history_.begin(), {"system", prompt, {}, {}, ""});
-    }
+    system_prompt_ = prompt;
 }
 
 void AgentLoop::transition_to(TurnState next, RunControl& control) {
@@ -501,11 +497,22 @@ std::vector<Message> AgentLoop::build_context() {
     }
     sources.conversation_messages = memory_->recent_history(config_.max_turns);
 
+    // Use runtime-updated system prompt if set, otherwise config default
+    const std::string& effective_system_prompt = system_prompt_.empty()
+        ? config_.system_prompt : system_prompt_;
+
     auto payload = pipeline_->planned_assemble(
-        config_.system_prompt, config_.default_model,
+        effective_system_prompt, config_.default_model,
         config_.model_max_tokens, session_history_, sources);
 
-    return payload.messages;
+    // Prepend compaction summaries before returning (they are NOT part
+    // of session_history_ to avoid index conflicts)
+    auto messages = payload.messages;
+    if (!compaction_summaries_.empty()) {
+        messages.insert(messages.begin(),
+            compaction_summaries_.begin(), compaction_summaries_.end());
+    }
+    return messages;
 }
 
 std::vector<ToolResult> AgentLoop::handle_tool_calls(
@@ -657,7 +664,7 @@ void AgentLoop::maybe_compact(RunControl& control) {
             Message summary_msg;
             summary_msg.role = "system";
             summary_msg.content = "[Previous conversation summary]\n" + result.summary;
-            session_history_.insert(session_history_.begin(), summary_msg);
+            compaction_summaries_.push_back(summary_msg);
             control.record_compaction(static_cast<int>(result.replaced.size()));
         }
     }
