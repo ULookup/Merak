@@ -1,5 +1,5 @@
-import { BookOpen, CheckCircle2, Loader2, ScrollText, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { BookOpen, CheckCircle2, Loader2, ScrollText, Users, X } from 'lucide-react';
 import { api } from '../../api/client';
 import type { EndSceneResponse } from '../../api/types';
 import { useAppState } from '../../AppState';
@@ -10,9 +10,10 @@ interface Props {
   sceneId: string;
   sceneTitle: string;
   onClose: () => void;
+  onEnded?: (result: EndSceneResponse) => void;
 }
 
-export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }: Props) {
+export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose, onEnded }: Props) {
   const { state, dispatch } = useAppState();
   const [finalMarkdown, setFinalMarkdown] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -36,6 +37,7 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }:
         session_id: state.sessionId,
       });
       setResult(res);
+      onEnded?.(res);
       dispatch({ type: 'SET_STORY_VERSION' });
     } catch (e) {
       setError((e as Error).message);
@@ -79,14 +81,17 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }:
             <div className={styles.foreshadowList}>
               <div className={styles.listTitle}>Suggested Foreshadowing</div>
               {result.proposed_foreshadowing.map((f) => (
-                <div key={f.id} className={styles.foreshadowItem}>{f.content}</div>
+                <div key={f.id} className={styles.foreshadowItem}>
+                  {f.content}
+                </div>
               ))}
             </div>
           )}
 
           {result.leak_risks > 0 && (
             <div className={styles.leakNotice}>
-              {result.leak_risks} secret leak risk{result.leak_risks > 1 ? 's' : ''} detected. Review knowledge boundaries.
+              {result.leak_risks} secret leak risk{result.leak_risks > 1 ? 's' : ''} detected.
+              Review knowledge boundaries.
             </div>
           )}
 
@@ -101,7 +106,12 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }:
   return (
     <div className={styles.scrim} role="presentation">
       <section className={styles.modal} role="dialog" aria-modal="true" aria-label="End scene">
-        <button className={styles.closeBtn} onClick={onClose} aria-label="Cancel" disabled={submitting}>
+        <button
+          className={styles.closeBtn}
+          onClick={onClose}
+          aria-label="Cancel"
+          disabled={submitting}
+        >
           <X size={17} aria-hidden="true" strokeWidth={2.4} />
         </button>
         <div className={styles.iconWrap}>
@@ -109,7 +119,10 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }:
         </div>
         <div className={styles.kicker}>End Scene</div>
         <h2>{sceneTitle}</h2>
-        <p>Ending this scene will write character diaries, update relationships, and suggest new foreshadowing threads.</p>
+        <p>
+          Ending this scene will write character diaries, update relationships, and suggest new
+          foreshadowing threads.
+        </p>
 
         <label className={styles.field}>
           <span>Final text (optional)</span>

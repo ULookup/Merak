@@ -10,8 +10,10 @@ import DetailPane from '../components/layout/DetailPane';
 import PageState from '../components/layout/PageState';
 import ResourceList from '../components/layout/ResourceList';
 import { useResource } from '../hooks/useResource';
+import ChaptersPage from '../pages/ChaptersPage';
 import CharactersPage from '../pages/CharactersPage';
 import OverviewPage from '../pages/OverviewPage';
+import ScenesPage from '../pages/ScenesPage';
 import { selectWorldMetrics } from '../pages/selectors';
 import WorldPage from '../pages/WorldPage';
 
@@ -30,6 +32,10 @@ vi.mock('../api/client', () => ({
     fetchMemorySummaries: vi.fn(),
     fetchAgentVoice: vi.fn(),
     deleteAgent: vi.fn(),
+    endScene: vi.fn(),
+    readWorkspaceFile: vi.fn(),
+    saveWorkspaceFile: vi.fn(),
+    patchChapter: vi.fn(),
   },
 }));
 
@@ -41,6 +47,7 @@ vi.mock('../api/worldbuilding', () => ({
     listFactions: vi.fn(),
     getTimeline: vi.fn(),
     listGraphEntities: vi.fn(),
+    reorderChapters: vi.fn(),
   },
 }));
 
@@ -179,6 +186,156 @@ describe('PageState', () => {
     rerender(<PageState isEmpty emptyTitle="No worlds" emptyDescription="Create one to begin." />);
     expect(screen.getByRole('heading', { name: 'No worlds' })).toBeDefined();
     expect(screen.getByText('Create one to begin.')).toBeDefined();
+  });
+});
+
+const chapterFixtures = [
+  {
+    id: 'chapter-1',
+    title: 'Ashes at Dawn',
+    number: 1,
+    status: 'completed',
+    scene_count: 2,
+    updated_at: '2026-06-18T08:00:00Z',
+  },
+  {
+    id: 'chapter-2',
+    title: 'The Rain Archive',
+    number: 2,
+    status: 'draft',
+    scene_count: 1,
+    updated_at: '2026-06-19T08:00:00Z',
+  },
+];
+
+const sceneFixtures = [
+  {
+    id: 'scene-1',
+    title: 'Crossing the flooded stacks',
+    chapter_id: 'chapter-2',
+    world_time: 'Day 4, dusk',
+    status: 'writing',
+    participant_ids: ['lin', 'sora'],
+    updated_at: '2026-06-19T09:00:00Z',
+  },
+];
+
+describe('Chapter and scene pages', () => {
+  it('moves chapters with keyboard-accessible controls and sends the exact ordered IDs', async () => {
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: chapterFixtures });
+    vi.mocked(worldbuildingApi.reorderChapters).mockResolvedValue({ ok: true });
+
+    render(<ChaptersPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Move The Rain Archive previous' }));
+
+    await waitFor(() =>
+      expect(worldbuildingApi.reorderChapters).toHaveBeenCalledWith('world-1', [
+        'chapter-2',
+        'chapter-1',
+      ]),
+    );
+    expect(
+      screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent),
+    ).toEqual(['The Rain Archive', 'Ashes at Dawn']);
+  });
+
+  it.each([
+    ['Chapters', ChaptersPage, 'Loading chapters', 'No chapters yet', 'Chapter list unavailable'],
+    ['Scenes', ScenesPage, 'Loading scenes', 'No scenes yet', 'Scene list unavailable'],
+  ] as const)(
+    'renders %s loading, empty, and error states',
+    async (_name, Page, loading, empty, error) => {
+      const list = _name === 'Chapters' ? api.listChapters : api.listScenes;
+      const pending = deferred<never>();
+      vi.mocked(list as typeof api.listChapters).mockReturnValueOnce(pending.promise);
+      const { unmount } = render(<Page worldId="world-1" />);
+      expect(screen.getByRole('status', { name: loading })).toBeDefined();
+      unmount();
+
+      if (_name === 'Chapters') {
+        vi.mocked(api.listChapters).mockResolvedValueOnce({ ok: true, chapters: [] });
+      } else {
+        vi.mocked(api.listScenes).mockResolvedValueOnce({ ok: true, scenes: [] });
+      }
+      const emptyRender = render(<Page worldId="world-1" />);
+      expect(await screen.findByRole('heading', { name: empty })).toBeDefined();
+      emptyRender.unmount();
+
+      vi.mocked(list as typeof api.listChapters).mockRejectedValueOnce(new Error(error));
+      render(<Page worldId="world-1" />);
+      expect(await screen.findByRole('alert')).toHaveTextContent(error);
+    },
+  );
+
+  it('opens the selected chapter in the reusable editor', async () => {
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: chapterFixtures });
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: 'chapters/world-1/chapter-2.md',
+        content: 'Rain pressed against the archive glass.',
+        encoding: 'utf-8',
+        updated_at: '2026-06-19T09:00:00Z',
+        version: 'v1',
+      },
+    });
+
+    render(
+      <AppStateProvider>
+        <ChaptersPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit The Rain Archive' }));
+
+    expect(await screen.findByRole('textbox', { name: 'Chapter content' })).toHaveValue(
+      'Rain pressed against the archive glass.',
+    );
+  });
+
+  it('keeps chapter editor dirty state and sends the loaded version when saving', async () => {
+    vi.mocked(api.listChapters).mockResolvedValue({ ok: true, chapters: chapterFixtures });
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: 'chapters/world-1/chapter-2.md',
+        content: 'Original draft.',
+        encoding: 'utf-8',
+        updated_at: '2026-06-19T09:00:00Z',
+        version: 'v7',
+      },
+    });
+    vi.mocked(api.saveWorkspaceFile).mockRejectedValue(new Error('Conflict: file changed on disk'));
+
+    render(
+      <AppStateProvider>
+        <ChaptersPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit The Rain Archive' }));
+    const editor = await screen.findByRole('textbox', { name: 'Chapter content' });
+    fireEvent.change(editor, { target: { value: 'Revised draft.' } });
+    expect(screen.getByText('Unsaved changes')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter' }));
+
+    await waitFor(() =>
+      expect(api.saveWorkspaceFile).toHaveBeenCalledWith(
+        'chapters/world-1/chapter-2.md',
+        'Revised draft.',
+        'v7',
+      ),
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent('Conflict: file changed on disk');
+    expect(screen.getByText('Unsaved changes')).toBeDefined();
+  });
+
+  it('renders only actual scene fields and omits unsupported consistency content', async () => {
+    vi.mocked(api.listScenes).mockResolvedValue({ ok: true, scenes: sceneFixtures });
+    render(<ScenesPage worldId="world-1" />);
+
+    fireEvent.click(await screen.findByRole('option', { name: /Crossing the flooded stacks/ }));
+    expect(screen.getByText('Day 4, dusk')).toBeDefined();
+    expect(screen.getByText('lin, sora')).toBeDefined();
+    expect(screen.queryByText(/consistency/i)).toBeNull();
   });
 });
 

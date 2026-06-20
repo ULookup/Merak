@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { AppStateProvider, useAppState } from '../AppState';
@@ -7,7 +7,16 @@ import Composer from '../components/Composer';
 import ExportDialog from '../components/ExportDialog';
 import SetupWizard from '../components/SetupWizard';
 import { ToastProvider } from '../components/Toast';
+import ScenesPage from '../pages/ScenesPage';
 import SessionsPage from '../pages/SessionsPage';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 function SessionsPageHarness() {
   const { dispatch } = useAppState();
@@ -126,6 +135,57 @@ describe('Sessions workbench', () => {
   });
 });
 
+describe('Scene completion flow', () => {
+  it('marks a scene complete only after endScene resolves and renders returned extraction counts', async () => {
+    const ending = deferred<Awaited<ReturnType<typeof api.endScene>>>();
+    vi.spyOn(api, 'listScenes').mockResolvedValue({
+      ok: true,
+      scenes: [
+        {
+          id: 'scene-1',
+          title: 'Crossing the flooded stacks',
+          chapter_id: 'chapter-2',
+          world_time: 'Day 4, dusk',
+          status: 'writing',
+          participant_ids: ['lin'],
+          updated_at: '2026-06-19T09:00:00Z',
+        },
+      ],
+    });
+    vi.spyOn(api, 'endScene').mockReturnValue(ending.promise);
+
+    render(
+      <AppStateProvider>
+        <ScenesPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('option', { name: /Crossing the flooded stacks/ }));
+    expect(screen.getByText('writing')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'End scene' }));
+    const dialog = screen.getByRole('dialog', { name: 'End scene' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'End Scene' }));
+
+    expect(screen.getByText('writing')).toBeDefined();
+    expect(screen.queryByText('completed')).toBeNull();
+
+    await act(async () =>
+      ending.resolve({
+        ok: true,
+        diaries_written: [{ id: 'diary-1', agent_id: 'lin', scene_id: 'scene-1' }],
+        diary_count: 1,
+        relations_updated: 2,
+        proposed_foreshadowing: [{ id: 'thread-1', content: 'The archive glass remembers.' }],
+        leak_risks: 0,
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByText('completed')).toBeDefined());
+    expect(screen.getByText('diaries written').parentElement).toHaveTextContent('1');
+    expect(screen.getByText('relations updated').parentElement).toHaveTextContent('2');
+    expect(screen.getByText('The archive glass remembers.')).toBeDefined();
+  });
+});
+
 describe('SetupWizard', () => {
   it('renders the provider selection step initially', () => {
     const onComplete = vi.fn();
@@ -194,9 +254,7 @@ describe('ExportDialog', () => {
 
   it('renders the export dialog with chapter checkboxes', () => {
     const onClose = vi.fn();
-    render(
-      <ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />,
-    );
+    render(<ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />);
 
     // Dialog title
     expect(screen.getByText('导出 TXT')).toBeDefined();
@@ -221,9 +279,7 @@ describe('ExportDialog', () => {
 
   it('all checking and unchecking of chapters via select-all and deselect-all', () => {
     const onClose = vi.fn();
-    render(
-      <ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />,
-    );
+    render(<ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />);
 
     // All checkboxes should be checked by default
     const checkbox1 = screen.getByLabelText(/第1章 The Beginning/) as HTMLInputElement;
@@ -248,9 +304,7 @@ describe('ExportDialog', () => {
 
   it('export button is disabled until title is entered and at least one chapter is selected', () => {
     const onClose = vi.fn();
-    render(
-      <ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />,
-    );
+    render(<ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />);
 
     const exportBtn = screen.getByRole('button', { name: '导出' });
 
@@ -272,9 +326,7 @@ describe('ExportDialog', () => {
 
   it('calls onClose when cancel button is clicked', () => {
     const onClose = vi.fn();
-    render(
-      <ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />,
-    );
+    render(<ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />);
 
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(onClose).toHaveBeenCalledTimes(1);

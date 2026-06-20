@@ -52,7 +52,8 @@
   cursor: pointer;
   font-size: 12px;
   white-space: nowrap;
-  transition: background var(--duration-fast) var(--ease),
+  transition:
+    background var(--duration-fast) var(--ease),
     border-color var(--duration-fast) var(--ease),
     transform var(--duration-fast) var(--ease);
 }
@@ -74,7 +75,8 @@
   font-size: 12px;
   font-weight: 650;
   white-space: nowrap;
-  transition: background var(--duration-fast) var(--ease),
+  transition:
+    background var(--duration-fast) var(--ease),
     transform var(--duration-fast) var(--ease);
 }
 
@@ -98,6 +100,22 @@
   overflow: hidden;
 }
 
+.dirty {
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--amber-soft);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 700;
+}
+.saveError {
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(183, 60, 31, 0.25);
+  background: #fff1ee;
+  color: #9b2c1f;
+  font-size: 12px;
+}
+
 .textarea {
   flex: 1;
   padding: 16px 20px;
@@ -106,7 +124,13 @@
   color: var(--ink);
   font-size: 15px;
   line-height: 1.8;
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   font-feature-settings: 'ss01', 'ss03';
   resize: none;
   outline: none;
@@ -169,7 +193,8 @@
   cursor: pointer;
   font-size: 11px;
   font-weight: 680;
-  transition: background var(--duration-fast) var(--ease),
+  transition:
+    background var(--duration-fast) var(--ease),
     border-color var(--duration-fast) var(--ease),
     transform var(--duration-fast) var(--ease);
 }
