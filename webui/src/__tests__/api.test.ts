@@ -355,6 +355,29 @@ describe('api client', () => {
     ]);
   });
 
+  it('normalizes only voice endpoint 404 to an empty fingerprint', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { code: 'not_found', message: 'Voice fingerprint not found' } }),
+          { status: 404 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { code: 'database_error', message: 'Voice store failed' } }),
+          { status: 500 },
+        ),
+      );
+    const { api } = await import('../api/client');
+
+    await expect(api.fetchAgentVoice('w1', 'a1')).resolves.toEqual({ ok: true, voice: null });
+    await expect(api.fetchAgentVoice('w1', 'a1')).rejects.toMatchObject({
+      status: 500,
+      message: 'Voice store failed',
+    });
+  });
+
   it('preserves documented file-link target fields', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(

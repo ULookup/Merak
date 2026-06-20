@@ -535,7 +535,7 @@ export interface VoiceFingerprint {
 
 export interface VoiceFingerprintResponse {
   ok: boolean;
-  voice: VoiceFingerprint;
+  voice: VoiceFingerprint | null;
 }
 
 export interface MemorySummaryListResponse {

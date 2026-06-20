@@ -68,6 +68,26 @@
 .refresh svg {
   width: 13px;
 }
+.listWarning {
+  display: grid;
+  gap: 6px;
+  margin: 0 16px 10px;
+  padding: 9px;
+  border: 1px solid #f0d7a6;
+  border-radius: 6px;
+  background: #fff9eb;
+  color: #7a4d0b;
+  font-size: 12px;
+}
+.listWarning button {
+  width: max-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #153981;
+  cursor: pointer;
+  font-weight: 700;
+}
 .listItem {
   display: flex;
   align-items: center;

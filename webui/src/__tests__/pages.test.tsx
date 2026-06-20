@@ -759,6 +759,55 @@ describe('Characters page', () => {
     );
   });
 
+  it('filters a confirmed deletion when retained list refresh fails', async () => {
+    const deletion = deferred<{ ok: boolean }>();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.mocked(api.listAgents)
+      .mockResolvedValueOnce({ ok: true, agents: [lin, sora] })
+      .mockRejectedValueOnce(new Error('List refresh failed'));
+    vi.mocked(api.fetchAgentDetail).mockImplementation((_worldId, id) =>
+      Promise.resolve(detail(id, id === 'lin' ? 'Lin' : 'Sora')),
+    );
+    vi.mocked(api.fetchDiaries).mockResolvedValue({ ok: true, diaries: [] });
+    vi.mocked(api.fetchRelations).mockResolvedValue({ ok: true, relations: [] });
+    vi.mocked(api.fetchMemorySummaries).mockResolvedValue({ ok: true, summaries: [] });
+    vi.mocked(api.fetchAgentVoice).mockResolvedValue({ ok: true, voice: null });
+    vi.mocked(api.deleteAgent).mockReturnValue(deletion.promise);
+
+    render(<CharactersPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /Sora/ }));
+    await screen.findByRole('heading', { name: 'Sora' });
+    fireEvent.click(screen.getByRole('button', { name: 'Delete character' }));
+    expect(screen.getByRole('option', { name: /Sora/ })).toBeDefined();
+
+    await act(async () => deletion.resolve({ ok: true }));
+
+    await waitFor(() => expect(screen.queryByRole('option', { name: /Sora/ })).toBeNull());
+    expect(await screen.findByRole('alert')).toHaveTextContent('List refresh failed');
+    expect(screen.getByRole('button', { name: 'Retry character list' })).toBeDefined();
+    expect(screen.getByRole('option', { name: /Lin/ })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('renders voice 404 as empty and voice 500 as retryable error', async () => {
+    vi.mocked(api.listAgents).mockResolvedValue({ ok: true, agents: [lin, sora] });
+    vi.mocked(api.fetchAgentDetail).mockImplementation((_worldId, id) =>
+      Promise.resolve(detail(id, id === 'lin' ? 'Lin' : 'Sora')),
+    );
+    vi.mocked(api.fetchDiaries).mockResolvedValue({ ok: true, diaries: [] });
+    vi.mocked(api.fetchRelations).mockResolvedValue({ ok: true, relations: [] });
+    vi.mocked(api.fetchMemorySummaries).mockResolvedValue({ ok: true, summaries: [] });
+    vi.mocked(api.fetchAgentVoice)
+      .mockResolvedValueOnce({ ok: true, voice: null })
+      .mockRejectedValueOnce(new Error('Voice store failed'));
+
+    render(<CharactersPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /Lin/ }));
+    expect(await screen.findByText('No voice fingerprint yet.')).toBeDefined();
+    fireEvent.click(screen.getByRole('option', { name: /Sora/ }));
+    expect(await screen.findByText('Voice store failed')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Retry voice fingerprint' })).toBeDefined();
+  });
+
   it('keeps character context accessible below 1050px', () => {
     const css = readFileSync(join(process.cwd(), 'src/pages/CharactersPage.module.css'), 'utf8');
     const responsiveBlock = css.slice(

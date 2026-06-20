@@ -337,11 +337,17 @@ export const api = {
       `/api/worldbuilding/${encodeURIComponent(worldId)}/agents/${encodeURIComponent(agentId)}/memory-summaries`,
     ),
 
-  fetchAgentVoice: (worldId: string, agentId: string) =>
-    request<VoiceFingerprintResponse>(
-      'GET',
-      `/api/worldbuilding/${encodeURIComponent(worldId)}/agents/${encodeURIComponent(agentId)}/voice`,
-    ),
+  fetchAgentVoice: async (worldId: string, agentId: string) => {
+    try {
+      return await request<VoiceFingerprintResponse>(
+        'GET',
+        `/api/worldbuilding/${encodeURIComponent(worldId)}/agents/${encodeURIComponent(agentId)}/voice`,
+      );
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return { ok: true, voice: null };
+      throw error;
+    }
+  },
 
   deleteAgent: (worldId: string, agentId: string) =>
     request<OkResponse>(

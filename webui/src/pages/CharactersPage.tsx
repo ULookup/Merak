@@ -25,7 +25,13 @@ export default function CharactersPage({ worldId }: CharactersPageProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const items = agents.data?.agents ?? [];
+  const [confirmedDeleted, setConfirmedDeleted] = useState<{
+    worldId: string;
+    ids: Set<string>;
+  }>(() => ({ worldId, ids: new Set() }));
+  const deletedIds =
+    confirmedDeleted.worldId === worldId ? confirmedDeleted.ids : new Set<string>();
+  const items = (agents.data?.agents ?? []).filter((agent) => !deletedIds.has(agent.id));
   const selected = selectedId && items.some((item) => item.id === selectedId) ? selectedId : null;
 
   async function deleteSelected() {
@@ -37,6 +43,11 @@ export default function CharactersPage({ worldId }: CharactersPageProps) {
     setDeleteError(null);
     try {
       await api.deleteAgent(worldId, selected);
+      setConfirmedDeleted((previous) => {
+        const ids = previous.worldId === worldId ? new Set(previous.ids) : new Set<string>();
+        ids.add(selected);
+        return { worldId, ids };
+      });
       setSelectedId(items[index + 1]?.id ?? items[index - 1]?.id ?? null);
       agents.retry();
     } catch (error) {
@@ -99,6 +110,14 @@ export default function CharactersPage({ worldId }: CharactersPageProps) {
           <RefreshCw aria-hidden="true" />
           Refresh
         </button>
+        {agents.error && agents.data ? (
+          <div className={styles.listWarning} role="alert">
+            <span>{agents.error.message}</span>
+            <button type="button" onClick={agents.retry} aria-label="Retry character list">
+              Retry
+            </button>
+          </div>
+        ) : null}
         <ResourceList
           items={items}
           selectedId={selected}
@@ -239,7 +258,7 @@ function CharacterContext({
 function VoiceSection({
   resource,
 }: {
-  resource: ReturnType<typeof useResource<{ ok: boolean; voice: VoiceFingerprint }>>;
+  resource: ReturnType<typeof useResource<{ ok: boolean; voice: VoiceFingerprint | null }>>;
 }) {
   const voice = resource.data?.voice;
   return (
@@ -254,6 +273,7 @@ function VoiceSection({
           </button>
         </div>
       ) : null}
+      {resource.data && !voice ? <p className={styles.muted}>No voice fingerprint yet.</p> : null}
       {voice ? (
         <article>
           <dl className={styles.voiceMetrics}>
