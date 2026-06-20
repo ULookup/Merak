@@ -31,6 +31,7 @@ AgentLoop::AgentLoop(
 
 void AgentLoop::restore_history(std::vector<Message> history) {
     session_history_ = std::move(history);
+    compaction_summaries_.clear();
 }
 
 void AgentLoop::set_system_prompt(const std::string& prompt) {

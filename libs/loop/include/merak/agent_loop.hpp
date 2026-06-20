@@ -50,7 +50,7 @@ public:
     // Load history from persistent storage (journal restore).
     void restore_history(std::vector<Message> history);
 
-    // Replace or insert system message at position 0.
+    // Store the runtime system prompt (used by build_context if non-empty).
     void set_system_prompt(const std::string& prompt);
 
     // Set a callback that provides narrative working memory context text.
