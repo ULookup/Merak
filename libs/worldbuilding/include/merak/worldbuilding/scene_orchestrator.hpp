@@ -50,6 +50,7 @@ struct SceneWrapUp {
     std::vector<LeakRisk> leak_risks;
     ForeshadowStats chapter_foreshadow_stats;
     std::vector<std::string> compressed_memories;  // 新增: summary_id from auto-compression
+    std::vector<std::string> warnings;  // non-critical errors from best-effort operations
 };
 
 class SceneOrchestrator {
