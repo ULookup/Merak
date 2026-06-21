@@ -12,6 +12,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <shared_mutex>
 
 namespace merak {
 
@@ -23,14 +24,16 @@ struct Delegation {
     std::string task;
 };
 
-class SubAgentRunner {
+class SubAgentRunner : public std::enable_shared_from_this<SubAgentRunner> {
 public:
     SubAgentRunner(
         std::shared_ptr<LlmProvider> llm,
         std::shared_ptr<MemoryStore> memory,
         std::shared_ptr<ToolRegistry> parent_tools,
         std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding = nullptr,
-        std::shared_ptr<skills::SkillRegistry> skill_registry = nullptr
+        std::shared_ptr<skills::SkillRegistry> skill_registry = nullptr,
+        std::shared_ptr<EmbeddingProvider> embedder = nullptr,
+        MemoryConfig memory_config = {}
     );
 
     void register_profile(const SubAgentConfig& config);
@@ -49,9 +52,7 @@ public:
     std::future<AgentResponse> sequential(
         const std::vector<Delegation>& pipeline
     );
-    bool has_agent(const std::string& id) const {
-        return profiles_.count(id) > 0;
-    }
+    bool has_agent(const std::string& id) const;
 
 private:
     std::shared_ptr<LlmProvider> llm_;
@@ -59,10 +60,13 @@ private:
     std::shared_ptr<ToolRegistry> parent_tools_;
     std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding_;
     std::shared_ptr<skills::SkillRegistry> skill_registry_;
+    std::shared_ptr<EmbeddingProvider> embedder_;
+    MemoryConfig memory_config_;
     std::optional<std::string> active_world_id_;
     std::optional<std::string> active_scene_id_;
     std::optional<std::string> caller_agent_id_;
     std::map<std::string, SubAgentConfig> profiles_;
+    mutable std::shared_mutex profiles_mutex_;
 
     std::unique_ptr<class AgentLoop> create_sub_agent(
         const SubAgentConfig& profile

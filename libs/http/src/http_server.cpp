@@ -295,6 +295,31 @@ HttpResult HttpServer::handle_run_detail(const std::string&id)const{
 }
 HttpResult HttpServer::handle_create_delegation(const std::string&id,const DelegationRequest&request){try{auto d=runtime_->start_delegation(id,request);return{202,{{"delegation_id",d.delegation_id},{"parent_run_id",d.parent_run_id},{"session_id",d.session_id}}};}catch(const RuntimeError&e){int status=e.code()=="session_busy"?409:e.code()=="session_not_found"||e.code()=="agent_not_found"?404:400;return error(e.code(),e.what(),status,e.retryable());}}
 void HttpServer::install_routes(){
+    server_.set_pre_routing_handler([this](const httplib::Request& req, httplib::Response& res) {
+        if (req.body.size() > limits_.max_body_size) {
+            res.status = 413;
+            res.set_content(R"({"error":{"code":"payload_too_large","message":"Request body too large"}})",
+                            "application/json");
+            return httplib::Server::HandlerResponse::Unhandled;
+        }
+        {
+            std::lock_guard<std::mutex> lock(rate_mutex_);
+            auto now = std::chrono::steady_clock::now();
+            auto window_start = now - std::chrono::minutes(1);
+            auto& timestamps = rate_buckets_[req.remote_addr];
+            while (!timestamps.empty() && timestamps.front() < window_start)
+                timestamps.pop_front();
+            if (timestamps.size() >= static_cast<size_t>(limits_.max_requests_per_minute)) {
+                res.status = 429;
+                res.set_content(
+                    R"({"error":{"code":"rate_limit_exceeded","message":"Too many requests"}})",
+                    "application/json");
+                return httplib::Server::HandlerResponse::Unhandled;
+            }
+            timestamps.push_back(now);
+        }
+        return httplib::Server::HandlerResponse::Unhandled;
+    });
     server_.Get("/v1/runtime",[this](const auto&,auto&r){json(r,handle_runtime_metadata());});
     server_.Get("/api/webui/capabilities",[this](const auto&req,auto&r){handle_capabilities(req,r);});
     server_.Post("/v1/sessions",[this](const auto&req,auto&r){try{auto body=req.body.empty()?nlohmann::json::object():nlohmann::json::parse(req.body);json(r,handle_create_session(body.value("title",""),body.value("world_id",""),body.value("agent_id","")));}catch(const std::exception&e){json(r,error("invalid_request",e.what(),400));}});
@@ -304,7 +329,7 @@ void HttpServer::install_routes(){
     server_.Post(R"(/v1/sessions/([^/]+)/archive)",[this](const httplib::Request&req,httplib::Response&res){try{auto body=req.body.empty()?nlohmann::json::object():nlohmann::json::parse(req.body);json(res,handle_archive_session(req.matches[1],body.value("archived",true)));}catch(const std::exception&e){json(res,error("invalid_request",e.what(),400));}});
     server_.Post(R"(/v1/sessions/([^/]+)/generate-title)",[this](const httplib::Request&req,httplib::Response&res){auto id=req.matches[1];try{std::string title=runtime_->generate_title(id);json(res,{200,{{"title",title}}});}catch(const std::exception&e){json(res,error("title_generation_failed",e.what(),500));}});
     server_.Get(R"(/v1/worlds/([^/]+)/agents/([^/]+)/session)",[this](const auto&req,auto&r){auto world_id=req.matches[1].str();auto agent_id=req.matches[2].str();auto sessions=runtime_->list_sessions(world_id);for(const auto&s:sessions){if(s.agent_id==agent_id&&s.archived_at.empty()){json(r,{200,{{"session",session_json(s)},{"created",false}}});return;}}auto s=runtime_->create_session("",world_id,agent_id);json(r,{201,{{"session",session_json(s)},{"created",true}}});});
-    server_.Get(R"(/v1/sessions/([^/]+)/events)",[this](const auto&req,auto&r){try{nlohmann::json a=nlohmann::json::array();for(const auto&e:runtime_->events_after(req.matches[1],after(req)))if(e.type!="message_appended"&&e.type!="compaction_applied")a.push_back(e);json(r,{200,{{"events",a}}});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),404,e.retryable()));}});
+    server_.Get(R"(/v1/sessions/([^/]+)/events)",[this](const auto&req,auto&r){try{nlohmann::json a=nlohmann::json::array();for(const auto&e:runtime_->events_after(req.matches[1],after(req)))a.push_back(e);json(r,{200,{{"events",a}}});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),404,e.retryable()));}});
     server_.Get(R"(/v1/sessions/([^/]+)/memory)",[this](const auto&req,auto&r){json(r,handle_session_memory(req.matches[1]));});
     server_.Post(R"(/v1/sessions/([^/]+)/runs)",[this](const auto&req,auto&r){try{auto b=nlohmann::json::parse(req.body);auto model=b.value("model",metadata_.model);auto run=runtime_->start_run(req.matches[1],b.value("message",""),model);json(r,{202,{{"run_id",run.id},{"session_id",run.session_id},{"model",model}}});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),e.code()=="session_busy"?409:400,e.retryable()));}catch(const std::exception&e){json(r,error("invalid_request",e.what(),400));}});
     server_.Post(R"(/v1/sessions/([^/]+)/delegations)",[this](const auto&req,auto&r){try{auto b=nlohmann::json::parse(req.body);json(r,handle_create_delegation(req.matches[1],delegation_request_from_json(b)));}catch(const std::exception&e){json(r,error("invalid_request",e.what(),400));}});
@@ -340,8 +365,11 @@ void HttpServer::install_routes(){
             json(r, error("invalid_request", e.what(), 400));
         }
     });
+    server_.Get("/v1/runs",[this](const auto&req,auto&r){auto sid=req.has_param("session_id")?req.get_param_value("session_id"):"";auto st=req.has_param("status")?req.get_param_value("status"):"";int lim=20,off=0;try{if(req.has_param("limit"))lim=std::stoi(req.get_param_value("limit"));}catch(...){}try{if(req.has_param("offset"))off=std::stoi(req.get_param_value("offset"));}catch(...){}auto result=runtime_->list_runs(sid,st,lim,off);nlohmann::json runs=nlohmann::json::array();for(const auto&run:result.runs)runs.push_back({{"id",run.id},{"session_id",run.session_id},{"status",run_status_json(run.status)},{"created_at",run.started_at},{"turn_count",0}});json(r,{200,{{"runs",runs},{"total",result.total}}});});
+    server_.Get(R"(/v1/runs/([^/]+)/output)",[this](const auto&req,auto&r){try{auto run=runtime_->get_run(req.matches[1]);if(!run){json(r,error("run_not_found","Run does not exist",404));return;}std::string text;for(const auto&e:runtime_->events_after(run->session_id,0)){if(e.run_id!=req.matches[1])continue;if(e.type=="text_delta"||e.type=="sub_run_text_delta")text+=e.payload.value("text","");}json(r,{200,{{"text",text},{"turn_count",0},{"status",run_status_json(run->status)}}});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),404,e.retryable()));}});
+    server_.Post(R"(/v1/runs/([^/]+)/resume)",[this](const auto&req,auto&r){try{auto new_run=runtime_->resume_run(req.matches[1]);json(r,{202,{{"run_id",new_run.id},{"session_id",new_run.session_id},{"status","resumed"}}});}catch(const RuntimeError&e){int status=e.code()=="run_not_resumable"?409:e.code()=="run_not_found"?404:400;json(r,error(e.code(),e.what(),status,e.retryable()));}catch(const std::exception&e){json(r,error("invalid_request",e.what(),400));}});
     server_.Get(R"(/v1/runs/([^/]+))",[this](const auto&req,auto&r){json(r,handle_run_detail(req.matches[1]));});
-    server_.Get(R"(/v1/sessions/([^/]+)/events/stream)",[this](const auto&req,auto&r){auto id=req.matches[1].str();auto cursor=after(req);try{auto subscription=runtime_->subscribe(id);auto backlog=runtime_->events_after(id,cursor);r.set_chunked_content_provider("text/event-stream",[subscription,backlog=std::move(backlog),cursor](size_t,httplib::DataSink&sink)mutable{auto send=[&](const RuntimeEvent&e){if(e.seq<=cursor||e.type=="message_appended"||e.type=="compaction_applied")return true;auto payload=nlohmann::json(e).dump();auto frame="id: "+std::to_string(e.seq)+"\nevent: "+e.type+"\ndata: "+payload+"\n\n";if(!sink.write(frame.data(),frame.size()))return false;cursor=e.seq;return true;};while(!backlog.empty()){auto e=backlog.front();backlog.erase(backlog.begin());if(!send(e))return false;}RuntimeEvent live;if(subscription->wait_next(live,std::chrono::milliseconds(1000)))return send(live);auto ping=std::string(": keepalive\n\n");return sink.write(ping.data(),ping.size());});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),404));}});
+    server_.Get(R"(/v1/sessions/([^/]+)/events/stream)",[this](const auto&req,auto&r){auto id=req.matches[1].str();auto cursor=after(req);try{auto subscription=runtime_->subscribe(id);auto backlog=runtime_->events_after(id,cursor);r.set_chunked_content_provider("text/event-stream",[subscription,backlog=std::move(backlog),cursor](size_t,httplib::DataSink&sink)mutable{auto send=[&](const RuntimeEvent&e){if(e.seq<=cursor)return true;auto payload=nlohmann::json(e).dump();auto frame="id: "+std::to_string(e.seq)+"\nevent: "+e.type+"\ndata: "+payload+"\n\n";if(!sink.write(frame.data(),frame.size()))return false;cursor=e.seq;return true;};while(!backlog.empty()){auto e=backlog.front();backlog.erase(backlog.begin());if(!send(e))return false;}while(sink.is_writable()){RuntimeEvent live;if(subscription->wait_next(live,std::chrono::seconds(5))){if(!send(live))return false;}else{auto heartbeat=std::string(": heartbeat\n\n");if(!sink.write(heartbeat.data(),heartbeat.size()))return false;}}return false;});}catch(const RuntimeError&e){json(r,error(e.code(),e.what(),404));}});
     server_.Get("/api/config/llm", [this](const auto& req, auto& res) { handle_config_get(req, res); });
     server_.Post("/api/config/llm", [this](const auto& req, auto& res) { handle_config_set(req, res); });
     server_.Post("/api/config/llm/test", [this](const auto& req, auto& res) { handle_config_test(req, res); });

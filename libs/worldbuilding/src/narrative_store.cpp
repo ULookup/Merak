@@ -670,8 +670,6 @@ bool NarrativeStore::patch_scene(const std::string& world_id,
     if (fields.contains("foreshadowing_ids")) json["foreshadowing_ids"] = fields["foreshadowing_ids"];
     if (fields.contains("style_overrides")) json["style_overrides"] = fields["style_overrides"];
 
-    write_json(path, json);
-
     // Build dynamic SET clause for DB update
     std::vector<std::string> set_parts;
     std::vector<std::string> params;
@@ -707,20 +705,26 @@ bool NarrativeStore::patch_scene(const std::string& world_id,
         params.push_back(fields["plot_goal"].get<std::string>());
     }
 
-    if (set_parts.empty()) return true;
+    // Step 1: DB update first (transactional)
+    if (!set_parts.empty()) {
+        std::string sql = "UPDATE scenes SET ";
+        for (size_t i = 0; i < set_parts.size(); i++) {
+            if (i > 0) sql += ", ";
+            sql += set_parts[i];
+        }
+        sql += ", updated_at = NOW() WHERE id = $" + std::to_string(param_idx++) +
+               " AND world_id = $" + std::to_string(param_idx++);
+        params.push_back(scene_id);
+        params.push_back(world_id);
 
-    std::string sql = "UPDATE scenes SET ";
-    for (size_t i = 0; i < set_parts.size(); i++) {
-        if (i > 0) sql += ", ";
-        sql += set_parts[i];
+        PgConn conn(*pool_);
+        conn.query(sql, params);
     }
-    sql += ", updated_at = NOW() WHERE id = $" + std::to_string(param_idx++) +
-           " AND world_id = $" + std::to_string(param_idx++);
-    params.push_back(scene_id);
-    params.push_back(world_id);
 
-    PgConn conn(*pool_);
-    conn.query(sql, params);
+    // Step 2: Write JSON file atomically (only after DB succeeds)
+    auto tmp_path = path.string() + ".tmp";
+    write_json(tmp_path, json);
+    std::filesystem::rename(tmp_path, path);
 
     return true;
 }
@@ -742,8 +746,6 @@ bool NarrativeStore::patch_chapter(const std::string& world_id,
     if (fields.contains("content")) json["content"] = fields["content"];
     if (fields.contains("number")) json["number"] = fields["number"];
     if (fields.contains("status")) json["status"] = fields["status"];
-
-    write_json(path, json);
 
     // Build dynamic SET clause for DB update
     std::vector<std::string> set_parts;
@@ -775,20 +777,26 @@ bool NarrativeStore::patch_chapter(const std::string& world_id,
         }
     }
 
-    if (set_parts.empty()) return true;
+    // Step 1: DB update first (transactional)
+    if (!set_parts.empty()) {
+        std::string sql = "UPDATE chapters SET ";
+        for (size_t i = 0; i < set_parts.size(); i++) {
+            if (i > 0) sql += ", ";
+            sql += set_parts[i];
+        }
+        sql += ", updated_at = NOW() WHERE id = $" + std::to_string(param_idx++) +
+               " AND world_id = $" + std::to_string(param_idx++);
+        params.push_back(chapter_id);
+        params.push_back(world_id);
 
-    std::string sql = "UPDATE chapters SET ";
-    for (size_t i = 0; i < set_parts.size(); i++) {
-        if (i > 0) sql += ", ";
-        sql += set_parts[i];
+        PgConn conn(*pool_);
+        conn.query(sql, params);
     }
-    sql += ", updated_at = NOW() WHERE id = $" + std::to_string(param_idx++) +
-           " AND world_id = $" + std::to_string(param_idx++);
-    params.push_back(chapter_id);
-    params.push_back(world_id);
 
-    PgConn conn(*pool_);
-    conn.query(sql, params);
+    // Step 2: Write JSON file atomically (only after DB succeeds)
+    auto tmp_path = path.string() + ".tmp";
+    write_json(tmp_path, json);
+    std::filesystem::rename(tmp_path, path);
 
     return true;
 }

@@ -108,6 +108,7 @@ struct SubAgentConfig {
     std::vector<std::string> tool_allowlist;
     std::string model;
     bool can_delegate = false;
+    int max_turns = 0;  // 0 = use default (10)
 };
 
 // ——— Knowledge Graph 配置 ———

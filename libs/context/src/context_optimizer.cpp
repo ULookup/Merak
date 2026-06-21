@@ -151,9 +151,13 @@ void ContextOptimizer::drop_rounds(std::vector<Message>& history,
     // Collect summaries
     std::vector<Message> summaries;
     for (size_t i = 0; i < futures.size(); i++) {
-      auto summary = futures[i].get();
-      if (!summary.empty()) {
-        summaries.push_back({"system", "[Compacted round " + std::to_string(i + 1) + "]: " + summary, {}, "", ""});
+      try {
+        auto summary = futures[i].get();
+        if (!summary.empty()) {
+          summaries.push_back({"system", "[Compacted round " + std::to_string(i + 1) + "]: " + summary, {}, "", ""});
+        }
+      } catch (const std::exception& e) {
+        spdlog::warn("Microcompaction round {} failed: {}", i, e.what());
       }
     }
     history.erase(history.begin(), history.begin() + static_cast<long>(keep_from));

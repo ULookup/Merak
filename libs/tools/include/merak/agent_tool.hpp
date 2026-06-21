@@ -5,6 +5,7 @@
 #include <functional>
 #include <future>
 #include <map>
+#include <mutex>
 #include <string>
 
 namespace merak { class RunControl; }
@@ -30,6 +31,9 @@ public:
 private:
     std::map<std::string, SubAgentConfig> profiles_;
     SubExecutor executor_;
+    std::map<std::string, std::future<std::string>> active_tasks_;
+    std::mutex tasks_mutex_;
+    static constexpr size_t kMaxConcurrentSubAgents = 8;
 };
 
 } // namespace merak::tools

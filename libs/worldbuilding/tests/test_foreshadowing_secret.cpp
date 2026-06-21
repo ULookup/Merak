@@ -490,3 +490,6 @@ TEST(SecretStore, ListFiltersByStatus) {
     EXPECT_EQ(abandoned.size(), 1);
     EXPECT_EQ(all.size(), 2);
 }
+
+// Leak detection integration tests (boundary match + public version) require
+// a running PostgreSQL instance with a WorldStore fixture -- covered manually.

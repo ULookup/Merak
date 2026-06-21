@@ -46,6 +46,7 @@ ToolMeta DescribeCharacterTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -137,6 +138,7 @@ ToolMeta SearchMyDiaryTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -210,6 +212,7 @@ ToolMeta ReadDiaryEntryTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -281,6 +284,7 @@ ToolMeta BrowseDiaryRangeTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -363,6 +367,7 @@ ToolMeta LookAroundTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -431,6 +436,7 @@ ToolMeta QueryMapTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -500,6 +506,7 @@ ToolMeta QueryHistoryTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -576,6 +583,7 @@ ToolMeta QueryMagicTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -640,6 +648,7 @@ ToolMeta QueryFactionTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -708,6 +717,7 @@ ToolMeta ReadCharacterCardTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -815,6 +825,7 @@ ToolMeta ReadSecretTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -891,6 +902,7 @@ ToolMeta ReadForeshadowingTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -954,6 +966,7 @@ ToolMeta ListOpenForeshadowingTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -1019,6 +1032,7 @@ ToolMeta AdvanceWorldTimeTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1118,6 +1132,7 @@ ToolMeta CreateCharacterTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1216,6 +1231,7 @@ ToolMeta CreateSceneTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1294,6 +1310,7 @@ ToolMeta CreateChapterTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1366,6 +1383,7 @@ ToolMeta CreateArcTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1438,6 +1456,7 @@ ToolMeta CreateSecretTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1510,6 +1529,7 @@ ToolMeta AddWorldKnowledgeTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1586,6 +1606,7 @@ ToolMeta CreateLocationTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1655,6 +1676,7 @@ ToolMeta PlantForeshadowingTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1734,6 +1756,7 @@ ToolMeta ExposeSecretTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1831,6 +1854,7 @@ ToolMeta EndSceneTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -1939,6 +1963,7 @@ ToolMeta SearchAgentTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 45;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -2026,6 +2051,7 @@ ToolMeta QueryWorldTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -2101,6 +2127,7 @@ ToolMeta QueryGroupTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -2199,6 +2226,7 @@ ToolMeta UpdateAgentPromptTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -2265,6 +2293,7 @@ ToolMeta UpdateCharacterCardTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -2420,6 +2449,7 @@ ToolMeta WriteMyDiaryTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -2546,6 +2576,7 @@ ToolMeta CompressMyMemoryTool::meta() const {
     m.intents = {IntentType::Memory};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::General;
     return m;
 }
 
@@ -2661,6 +2692,7 @@ ToolMeta AddRelationTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -2770,6 +2802,7 @@ ToolMeta UpdateForeshadowTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -2860,6 +2893,7 @@ ToolMeta QuerySubgraphTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -2919,6 +2953,7 @@ ToolMeta ExpandGraphTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -2984,6 +3019,7 @@ ToolMeta FindPathTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -3047,6 +3083,7 @@ ToolMeta CheckConsistencyTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -3128,6 +3165,7 @@ ToolMeta ExtractSceneRelationsTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -3254,6 +3292,7 @@ ToolMeta UpsertRelationTool::meta() const {
     m.intents = {IntentType::DomainWrite};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -3340,6 +3379,7 @@ ToolMeta DelegateToWriterTool::meta() const {
     m.intents = {IntentType::DomainRead};
     m.scope = Scope::Local;
     m.schema_tokens = 30;
+    m.domain = ToolDomain::WorldQuery;
     return m;
 }
 
@@ -3398,7 +3438,7 @@ std::future<ToolResult> DelegateToWriterTool::execute(ToolCall call, ToolExecuti
             if (!exec_ctx.caller_agent_id.empty()) sub_loop.set_caller_agent_id(exec_ctx.caller_agent_id);
 
             NullRunControl control;
-            auto response = sub_loop.run(material_package, control).get();
+            auto response = sub_loop.run(material_package, control);
 
             result.output = ok_response({{"scene_text", response.text}});
             result.is_error = false;

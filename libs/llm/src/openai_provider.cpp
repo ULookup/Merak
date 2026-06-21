@@ -39,6 +39,7 @@ std::future<AgentResponse> OpenAIProvider::chat(
 
         std::string response_text;
         int input_tokens = 0, output_tokens = 0;
+        int cache_read_tokens = 0;
         bool has_usage = false;
         nlohmann::json accumulated_tool_calls_json = nlohmann::json::array();
         std::string line_buffer;
@@ -104,10 +105,10 @@ std::future<AgentResponse> OpenAIProvider::chat(
                         has_usage = true;
                         auto& details = j["usage"]["prompt_tokens_details"];
                         if (!details.is_null()) {
-                            int cached = details.value("cached_tokens", 0);
-                            if (cached > 0) {
+                            cache_read_tokens = details.value("cached_tokens", 0);
+                            if (cache_read_tokens > 0) {
                                 stats_.cache_hits++;
-                                stats_.cache_read_tokens += cached;
+                                stats_.cache_read_tokens += cache_read_tokens;
                             }
                         }
                     }
@@ -223,6 +224,7 @@ std::future<AgentResponse> OpenAIProvider::chat(
         response.text = response_text;
         response.total_input_tokens = input_tokens;
         response.total_output_tokens = output_tokens;
+        response.total_cache_read_tokens = cache_read_tokens;
         response.has_usage = has_usage;
 
         stats_.total_requests++;

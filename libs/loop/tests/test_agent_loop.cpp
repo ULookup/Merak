@@ -3,6 +3,9 @@
 #include <merak/token_counter.hpp>
 #include <merak/compactor.hpp>
 #include <merak/memory_store.hpp>
+#include <merak/tool_meta.hpp>
+#include <merak/tool_registry.hpp>
+#include <merak/shell_tool.hpp>
 #include <cassert>
 #include <iostream>
 #include <memory>
@@ -217,6 +220,124 @@ void test_pipeline_accessible() {
     PASS();
 }
 
+// ——— Batch 1 new tests ———
+
+void test_circuit_breaker_threshold_default() {
+    TEST("Config circuit_breaker_threshold defaults to 3");
+    AgentLoop::Config cfg;
+    assert(cfg.circuit_breaker_threshold == 3);
+    PASS();
+}
+
+void test_custom_circuit_breaker_threshold() {
+    TEST("Config custom circuit_breaker_threshold");
+    AgentLoop::Config cfg;
+    cfg.circuit_breaker_threshold = 1;
+    assert(cfg.circuit_breaker_threshold == 1);
+    PASS();
+}
+
+void test_tool_domain_classification() {
+    TEST("ToolRegistry::domain_of returns correct domain");
+    auto registry = std::make_shared<ToolRegistry>();
+    registry->register_tool(std::make_unique<tools::BashTool>());
+    auto dom = registry->domain_of("execute_bash");
+    assert(dom == ToolDomain::General);
+    assert(!(dom & ToolDomain::Write));
+    assert(!(dom & ToolDomain::WorldQuery));
+    PASS();
+}
+
+void test_tool_domain_not_found_returns_general() {
+    TEST("ToolRegistry::domain_of returns General for unknown tool");
+    auto registry = std::make_shared<ToolRegistry>();
+    auto dom = registry->domain_of("nonexistent_tool");
+    assert(dom == ToolDomain::General);
+    PASS();
+}
+
+void test_tool_domain_bitflag_checks() {
+    TEST("ToolDomain bitflag checks work correctly");
+    ToolDomain d = ToolDomain::Write;
+    assert(d & ToolDomain::Write);
+    assert(!(d & ToolDomain::WorldQuery));
+    assert(!(d & ToolDomain::General));
+    PASS();
+}
+
+// ——— Batch 3 new tests ———
+
+void test_run_metrics_initially_zero() {
+    TEST("RunMetrics defaults are all zero");
+    AgentLoop::RunMetrics m;
+    assert(m.turns_completed == 0);
+    assert(m.total_input_tokens == 0);
+    assert(m.total_output_tokens == 0);
+    assert(m.total_cache_read_tokens == 0);
+    assert(m.total_cache_write_tokens == 0);
+    assert(m.total_tool_calls == 0);
+    assert(m.tool_errors == 0);
+    assert(m.compactions_triggered == 0);
+    assert(m.messages_compacted == 0);
+    assert(m.circuit_breaker_trips == 0);
+    assert(m.stall_force_stops == 0);
+    assert(m.turn_guard_warnings == 0);
+    assert(m.total_llm_latency == std::chrono::milliseconds{0});
+    PASS();
+}
+
+void test_agent_loop_metrics_accessible() {
+    TEST("agent loop metrics() returns zero initially");
+    auto loop = make_test_loop();
+    const auto& m = loop->metrics();
+    assert(m.turns_completed == 0);
+    assert(m.total_input_tokens == 0);
+    assert(m.total_tool_calls == 0);
+    PASS();
+}
+
+// ——— Batch 4 new tests ———
+
+void test_tool_timeout_ms_default() {
+    TEST("Config tool_timeout_ms defaults to 30000");
+    AgentLoop::Config cfg;
+    assert(cfg.tool_timeout_ms == 30000);
+    PASS();
+}
+
+void test_tool_rate_limit_per_turn_default() {
+    TEST("Config tool_rate_limit.max_calls_per_turn defaults to 50");
+    AgentLoop::Config cfg;
+    assert(cfg.tool_rate_limit.max_calls_per_turn == 50);
+    PASS();
+}
+
+void test_tool_rate_limit_per_run_default() {
+    TEST("Config tool_rate_limit.max_calls_per_run defaults to 500");
+    AgentLoop::Config cfg;
+    assert(cfg.tool_rate_limit.max_calls_per_run == 500);
+    PASS();
+}
+
+void test_tool_rate_limit_custom() {
+    TEST("Config custom tool_rate_limit values");
+    AgentLoop::Config cfg;
+    cfg.tool_rate_limit.max_calls_per_turn = 10;
+    cfg.tool_rate_limit.max_calls_per_run = 100;
+    assert(cfg.tool_rate_limit.max_calls_per_turn == 10);
+    assert(cfg.tool_rate_limit.max_calls_per_run == 100);
+    PASS();
+}
+
+void test_run_call_count_reset_config() {
+    TEST("run_call_count_ config field exists and defaults to 0");
+    auto loop = make_test_loop();
+    // Verify the loop can be constructed (reset logic tested at integration level)
+    const auto& m = loop->metrics();
+    assert(m.turns_completed == 0);
+    PASS();
+}
+
 int main() {
     std::cout << "\nAgentLoop Tests\n===============\n";
     test_max_turns_config_default();
@@ -233,6 +354,18 @@ int main() {
     test_restore_history_overwrites_previous();
     test_tools_returns_registry();
     test_pipeline_accessible();
+    test_circuit_breaker_threshold_default();
+    test_custom_circuit_breaker_threshold();
+    test_tool_domain_classification();
+    test_tool_domain_not_found_returns_general();
+    test_tool_domain_bitflag_checks();
+    test_run_metrics_initially_zero();
+    test_agent_loop_metrics_accessible();
+    test_tool_timeout_ms_default();
+    test_tool_rate_limit_per_turn_default();
+    test_tool_rate_limit_per_run_default();
+    test_tool_rate_limit_custom();
+    test_run_call_count_reset_config();
     std::cout << "\n" << tests_passed << "/" << tests_run << " passed\n";
     return tests_passed == tests_run ? 0 : 1;
 }

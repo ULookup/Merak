@@ -9,12 +9,16 @@ SubAgentRunner::SubAgentRunner(
     std::shared_ptr<MemoryStore> memory,
     std::shared_ptr<ToolRegistry> parent_tools,
     std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding,
-    std::shared_ptr<skills::SkillRegistry> skill_registry)
+    std::shared_ptr<skills::SkillRegistry> skill_registry,
+    std::shared_ptr<EmbeddingProvider> embedder,
+    MemoryConfig memory_config)
     : llm_(std::move(llm))
     , memory_(std::move(memory))
     , parent_tools_(std::move(parent_tools))
     , worldbuilding_(std::move(worldbuilding))
     , skill_registry_(std::move(skill_registry))
+    , embedder_(std::move(embedder))
+    , memory_config_(std::move(memory_config))
 {
 }
 
@@ -41,54 +45,72 @@ void SubAgentRunner::set_caller_agent_id(std::optional<std::string> caller_agent
 }
 
 void SubAgentRunner::register_profile(const SubAgentConfig& config) {
+    std::unique_lock<std::shared_mutex> lock(profiles_mutex_);
     profiles_[config.id] = config;
     spdlog::info("SubAgentRunner: registered agent '{}'",
         config.id);
+}
+
+bool SubAgentRunner::has_agent(const std::string& id) const {
+    std::shared_lock<std::shared_mutex> lock(profiles_mutex_);
+    return profiles_.count(id) > 0;
 }
 
 std::future<AgentResponse> SubAgentRunner::delegate(
     const std::string& agent_id,
     const std::string& task
 ) {
-    return std::async(std::launch::async, [this, agent_id, task]() -> AgentResponse {
-        auto it = profiles_.find(agent_id);
-        if (it == profiles_.end()) {
-            AgentResponse err;
-            err.text = "Agent not found: " + agent_id;
-            return err;
+    return std::async(std::launch::async, [self = shared_from_this(), agent_id, task]() -> AgentResponse {
+        SubAgentConfig cfg;
+        {
+            std::shared_lock<std::shared_mutex> lock(self->profiles_mutex_);
+            auto it = self->profiles_.find(agent_id);
+            if (it == self->profiles_.end()) {
+                AgentResponse err;
+                err.text = "Agent not found: " + agent_id;
+                return err;
+            }
+            cfg = it->second;  // copy out
         }
-
-        auto sub = create_sub_agent(it->second);
+        auto sub = self->create_sub_agent(cfg);
         spdlog::info("SubAgentRunner: delegating '{}' to '{}'",
             task.substr(0, 30), agent_id);
         NullRunControl control;
-        return sub->run(task, control).get();
+        return sub->run(task, control);
     });
 }
 
 std::future<std::map<std::string, AgentResponse>> SubAgentRunner::fan_out(
     const std::vector<Delegation>& tasks
 ) {
-    return std::async(std::launch::async, [this, tasks]()
+    return std::async(std::launch::async, [self = shared_from_this(), tasks]()
         -> std::map<std::string, AgentResponse>
     {
-        const int max_parallel = std::min(
-            4, (int)std::thread::hardware_concurrency());
+        const int max_parallel = std::max(1, std::min(4,
+            static_cast<int>(std::thread::hardware_concurrency())));
         std::map<std::string, AgentResponse> results;
-
         size_t idx = 0;
         while (idx < tasks.size()) {
+            size_t batch_start = idx;
             std::vector<std::future<std::pair<std::string, AgentResponse>>> batch;
             for (int i = 0; i < max_parallel && idx < tasks.size(); i++, idx++) {
                 batch.push_back(std::async(std::launch::async,
-                    [this, d = tasks[idx]]() -> std::pair<std::string, AgentResponse> {
-                        auto resp = delegate(d.agent_id, d.task).get();
+                    [self, d = tasks[idx]]() -> std::pair<std::string, AgentResponse> {
+                        auto resp = self->delegate(d.agent_id, d.task).get();
                         return {d.agent_id, resp};
                     }));
             }
-            for (auto& f : batch) {
-                auto [id, resp] = f.get();
-                results[id] = resp;
+            for (size_t i = 0; i < batch.size(); i++) {
+                try {
+                    auto result = batch[i].get();
+                    results[result.first] = result.second;
+                } catch (const std::exception& e) {
+                    AgentResponse err;
+                    err.text = std::string("Sub-agent error: ") + e.what();
+                    results[tasks[batch_start + i].agent_id] = err;
+                    spdlog::warn("SubAgentRunner: fan_out task '{}' failed: {}",
+                        tasks[batch_start + i].agent_id, e.what());
+                }
             }
         }
 
@@ -100,11 +122,16 @@ std::future<std::map<std::string, AgentResponse>> SubAgentRunner::fan_out(
 std::future<AgentResponse> SubAgentRunner::sequential(
     const std::vector<Delegation>& pipeline
 ) {
-    return std::async(std::launch::async, [this, pipeline]() -> AgentResponse {
+    return std::async(std::launch::async, [self = shared_from_this(), pipeline]() -> AgentResponse {
         std::string accumulated;
         for (auto& d : pipeline) {
-            auto resp = delegate(d.agent_id, d.task).get();
-            accumulated += "[" + d.agent_id + "]: " + resp.text + "\n";
+            try {
+                auto resp = self->delegate(d.agent_id, d.task).get();
+                accumulated += "[" + d.agent_id + "]: " + resp.text + "\n";
+            } catch (const std::exception& e) {
+                accumulated += "[" + d.agent_id + "]: ERROR: " + std::string(e.what()) + "\n";
+                spdlog::warn("SubAgentRunner: sequential step failed: {}", e.what());
+            }
         }
         AgentResponse final_resp;
         final_resp.text = accumulated;
@@ -117,7 +144,7 @@ std::unique_ptr<AgentLoop> SubAgentRunner::create_sub_agent(
 ) {
     AgentLoop::Config cfg;
     cfg.system_prompt = profile.system_prompt;
-    cfg.max_turns = 10;
+    cfg.max_turns = profile.max_turns > 0 ? profile.max_turns : 10;
 
     auto sub_tools = std::make_shared<ToolRegistry>();
 
@@ -141,8 +168,9 @@ std::unique_ptr<AgentLoop> SubAgentRunner::create_sub_agent(
 
     auto comp = std::make_shared<Compactor>(llm_, counter);
 
+    auto sub_memory = std::make_shared<MemoryStore>(memory_config_, embedder_);
     auto loop = std::make_unique<AgentLoop>(
-        cfg, llm_, sub_tools, memory_, comp, worldbuilding_, skill_registry_);
+        cfg, llm_, sub_tools, sub_memory, comp, worldbuilding_, skill_registry_);
     loop->set_active_world_id(active_world_id_);
     loop->set_active_scene_id(active_scene_id_);
     loop->set_caller_agent_id(caller_agent_id_.value_or(profile.id));

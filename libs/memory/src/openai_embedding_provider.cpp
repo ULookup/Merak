@@ -9,6 +9,7 @@ namespace merak {
 
 OpenAIEmbeddingProvider::OpenAIEmbeddingProvider(const Config& config)
     : config_(config)
+    , dimension_(config.model.find("large") != std::string::npos ? 3072 : 1536)
 {
     if (config_.api_key.empty()) {
         spdlog::warn("OpenAIEmbeddingProvider: api_key is empty, embedding will fail");

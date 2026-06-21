@@ -3,6 +3,10 @@
 #include <merak/runtime_service.hpp>
 #include <httplib.h>
 #include <nlohmann/json.hpp>
+#include <chrono>
+#include <deque>
+#include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 #include <memory>
@@ -25,6 +29,11 @@ struct RuntimeMetadata {
     std::vector<AgentMetadata> agents;
 };
 struct HttpResult { int status; nlohmann::json body; };
+
+struct HttpLimits {
+    size_t max_body_size = 10 * 1024 * 1024;  // 10 MB
+    int max_requests_per_minute = 120;
+};
 
 class HttpServer {
 public:
@@ -65,6 +74,9 @@ private:
     void handle_workspace_file_delete(const httplib::Request&, httplib::Response&);
     void handle_workspace_file_rename(const httplib::Request&, httplib::Response&);
 
+    HttpLimits limits_;
+    std::map<std::string, std::deque<std::chrono::steady_clock::time_point>> rate_buckets_;
+    std::mutex rate_mutex_;
     std::shared_ptr<LlmProvider> llm_provider_;
     nlohmann::json cached_config_;
     static void json(httplib::Response& response, const HttpResult& result);

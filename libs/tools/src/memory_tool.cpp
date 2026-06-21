@@ -67,6 +67,7 @@ ToolMeta MemoryTool::meta() const {
     m.intents = {IntentType::Memory};
     m.scope = Scope::CrossSession;
     m.schema_tokens = 40;
+    m.domain = ToolDomain::General;
     return m;
 }
 

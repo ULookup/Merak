@@ -8,6 +8,7 @@
 #include <shared_mutex>
 #include <string>
 #include <vector>
+#include <filesystem>
 
 namespace pqxx { class connection; }
 namespace merak::kg { class KnowledgeGraphProvider; }
@@ -29,6 +30,9 @@ public:
 
     // Knowledge Graph integration
     void set_kg_provider(merak::kg::KnowledgeGraphProvider* provider) { kg_provider_ = provider; }
+
+    // File system base directory for scene narrative checks
+    void set_worlds_base_dir(std::filesystem::path path) { worlds_base_dir_ = std::move(path); }
 
     // Register all built-in condition types and checks (public, callable from tests)
     void register_all_builtins();
@@ -65,6 +69,7 @@ private:
     std::map<std::string, ConditionEvalFn> registry_;
     std::map<std::string, ConditionEvalFn> check_registry_;
     merak::kg::KnowledgeGraphProvider* kg_provider_ = nullptr;
+    std::filesystem::path worlds_base_dir_;
     mutable Stats stats_;
 };
 
@@ -109,10 +114,6 @@ ConditionResult eval_relation_currency(const ConditionDef& cond,
 ConditionResult eval_orphaned_foreshadowing(const ConditionDef& cond,
                                               const PipelineState& state,
                                               pqxx::connection& conn);
-
-ConditionResult eval_scene_completeness(const ConditionDef& cond,
-                                         const PipelineState& state,
-                                         pqxx::connection& conn);
 
 ConditionResult eval_character_consistency(const ConditionDef& cond,
                                             const PipelineState& state,

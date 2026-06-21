@@ -65,7 +65,8 @@ ToolMeta GitTool::meta() const {
     m.intents = {IntentType::Git};
     m.scope = Scope::LocalGit;
     m.schema_tokens = 50;
-    return m;
+    m.domain = ToolDomain::General;
+    return m; // GitTool
 }
 
 PermissionLevel GitTool::permission() const {

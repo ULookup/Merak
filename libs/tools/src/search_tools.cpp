@@ -44,6 +44,7 @@ ToolMeta GlobTool::meta() const {
     m.intents = {IntentType::CodeRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::General;
     return m;
 }
 
@@ -156,6 +157,7 @@ ToolMeta GrepTool::meta() const {
     m.intents = {IntentType::CodeRead};
     m.scope = Scope::Local;
     m.schema_tokens = 40;
+    m.domain = ToolDomain::General;
     return m;
 }
 

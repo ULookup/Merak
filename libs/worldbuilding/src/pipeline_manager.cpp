@@ -66,6 +66,9 @@ PipelineManager::PipelineManager(Dependencies deps) : deps_(std::move(deps)) {
     if (!deps_.pg_connection_factory) {
         throw std::invalid_argument("PipelineManager: pg_connection_factory is required");
     }
+    if (!deps_.worlds_base_dir.empty()) {
+        deps_.condition_evaluator->set_worlds_base_dir(deps_.worlds_base_dir);
+    }
     start_time_ = std::chrono::steady_clock::now();
 }
 PipelineManager::~PipelineManager() = default;

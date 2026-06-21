@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstddef>
 #include <string>
+#include <mutex>
 
 namespace merak {
 
@@ -51,6 +52,7 @@ private:
   Config config_;
   std::deque<RoundRecord> recent_rounds_;
   int turn_counter_ = 0;
+  mutable std::mutex mutex_;
 
   static bool rounds_match(const std::vector<ToolCallSignature>& a,
                             const std::vector<ToolCallSignature>& b);

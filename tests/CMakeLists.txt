@@ -90,6 +90,13 @@ add_executable(merak-agent-loop-test
 target_link_libraries(merak-agent-loop-test PRIVATE merak-loop)
 add_test(NAME merak-agent-loop-test COMMAND merak-agent-loop-test)
 
+# TurnGuard tests
+add_executable(merak-turn-guard-test
+    ${CMAKE_SOURCE_DIR}/libs/loop/tests/test_turn_guard.cpp
+)
+target_link_libraries(merak-turn-guard-test PRIVATE merak-loop)
+add_test(NAME merak-turn-guard-test COMMAND merak-turn-guard-test)
+
 # SubAgentRunner tests
 add_executable(merak-sub-agent-runner-test
     ${CMAKE_SOURCE_DIR}/libs/loop/tests/test_sub_agent_runner.cpp

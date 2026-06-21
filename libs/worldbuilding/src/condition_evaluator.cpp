@@ -4,10 +4,17 @@
 #include <pqxx/pqxx>
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
+#include <fstream>
 #include <set>
 #include <sstream>
 
 namespace merak::worldbuilding {
+
+// Forward declaration: used in lambdas before full definition
+ConditionResult eval_scene_completeness(const ConditionDef& cond,
+                                         const PipelineState& state,
+                                         pqxx::connection& conn,
+                                         const std::filesystem::path& worlds_base_dir);
 
 // ═══════════════════════════════════════════════════════════════
 // entity_count table name whitelist
@@ -104,7 +111,18 @@ void ConditionEvaluator::register_all_builtins() {
     registry_["diary_completeness"] = eval_diary_completeness;
     registry_["relation_currency"] = eval_relation_currency;
     registry_["orphaned_foreshadowing"] = eval_orphaned_foreshadowing;
-    registry_["scene_completeness"] = eval_scene_completeness;
+    registry_["scene_completeness"] = [this](const ConditionDef& cond,
+                                              const PipelineState& state,
+                                              pqxx::connection& conn) -> ConditionResult {
+        return eval_scene_completeness(cond, state, conn, worlds_base_dir_);
+    };
+
+    // all_checks_passed is a compound type dispatched inside evaluate()
+    // (checks check_registry_ directly). Registered so list_condition_types()
+    // includes it; the function below is never actually called.
+    registry_["all_checks_passed"] = [](const ConditionDef&, const PipelineState&, pqxx::connection&) {
+        return ConditionResult{"all_checks_passed", true, std::nullopt, std::nullopt, {}};
+    };
 
     // all_checks_passed is a compound type dispatched inside evaluate()
     // (checks check_registry_ directly). Registered so list_condition_types()
@@ -172,7 +190,11 @@ void ConditionEvaluator::register_all_builtins() {
     check_registry_["character_consistency"] = eval_character_consistency;
     check_registry_["diary_completeness"] = eval_diary_completeness;
     check_registry_["relation_currency"] = eval_relation_currency;
-    check_registry_["scene_completeness"] = eval_scene_completeness;
+    check_registry_["scene_completeness"] = [this](const ConditionDef& cond,
+                                               const PipelineState& state,
+                                               pqxx::connection& conn) -> ConditionResult {
+        return eval_scene_completeness(cond, state, conn, worlds_base_dir_);
+    };
 }
 
 void ConditionEvaluator::register_condition(const std::string& type, ConditionEvalFn fn) {
@@ -520,12 +542,22 @@ ConditionResult eval_user_confirmed(const ConditionDef& cond,
     return result;
 }
 
+// ─── Helper: scene JSON path ──────────────────────────────────────────
+namespace {
+std::filesystem::path scene_json_path(const std::filesystem::path& worlds_base_dir,
+                                       const std::string& world_id,
+                                       const std::string& scene_id) {
+    return worlds_base_dir / world_id / "scenes" / (scene_id + ".json");
+}
+} // namespace
+
 // ═══════════════════════════════════════════════════════════════
-// eval_scene_completeness
+// eval_scene_completeness — checks filesystem for non-empty narrative
 // ═══════════════════════════════════════════════════════════════
 ConditionResult eval_scene_completeness(const ConditionDef& cond,
                                          const PipelineState& state,
-                                         pqxx::connection& conn) {
+                                         pqxx::connection& conn,
+                                         const std::filesystem::path& worlds_base_dir) {
     ConditionResult result{cond.message, false, std::nullopt, 0, {}};
     if (!state.active_chapter_id) {
         result.met = false;
@@ -534,18 +566,44 @@ ConditionResult eval_scene_completeness(const ConditionDef& cond,
     }
     try {
         pqxx::read_transaction txn(conn);
+
+        // Count draft scenes
         auto draft_row = txn.exec_params1(R"(
             SELECT COUNT(*) FROM scenes
             WHERE chapter_id = $1 AND status = 'draft'
         )", *state.active_chapter_id);
         int draft_count = draft_row[0].as<int>();
 
-        auto empty_row = txn.exec_params1(R"(
-            SELECT COUNT(*) FROM scenes
+        // Get completed scenes and check narrative in JSON files
+        auto completed_rows = txn.exec_params(R"(
+            SELECT id FROM scenes
             WHERE chapter_id = $1 AND status = 'completed'
-            AND (narrative IS NULL OR narrative = '')
         )", *state.active_chapter_id);
-        int empty_narrative = empty_row[0].as<int>();
+
+        int empty_narrative = 0;
+        for (auto const& row : completed_rows) {
+            auto scene_id = row["id"].as<std::string>();
+            auto path = scene_json_path(worlds_base_dir, state.world_id, scene_id);
+            if (!std::filesystem::exists(path)) {
+                empty_narrative++;
+                continue;
+            }
+            std::ifstream f(path);
+            if (!f.is_open()) {
+                empty_narrative++;
+                continue;
+            }
+            auto json = nlohmann::json::parse(f, nullptr, false);
+            if (json.is_discarded()) {
+                empty_narrative++;
+                continue;
+            }
+            auto it = json.find("narrative");
+            if (it == json.end() || it->is_null() ||
+                (it->is_string() && it->get_ref<const std::string&>().empty())) {
+                empty_narrative++;
+            }
+        }
 
         int total_incomplete = draft_count + empty_narrative;
         result.current = total_incomplete;

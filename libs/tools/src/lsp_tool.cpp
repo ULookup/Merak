@@ -151,6 +151,7 @@ ToolMeta LspTool::meta() const {
     m.intents = {IntentType::CodeIntel};
     m.scope = Scope::Local;
     m.schema_tokens = 90;
+    m.domain = ToolDomain::General;
     return m;
 }
 
