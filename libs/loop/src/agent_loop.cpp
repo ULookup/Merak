@@ -134,10 +134,6 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         std::vector<ToolCall> accumulated_tool_calls;
 
-        // Provider layer handles all retry internally (exponential backoff).
-        // AgentLoop only catches to handle context-window recovery.
-        AgentResponse llm_response;
-
         auto llm_future = llm_->chat(req,
             [&](StreamChunk chunk) {
                 auto token = control.cancellation_token();
@@ -149,6 +145,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
                 }
             }, control.cancellation_token());
 
+        AgentResponse llm_response;
         try {
             llm_response = llm_future.get();
         } catch (const std::exception& e) {
