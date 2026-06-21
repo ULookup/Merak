@@ -3,6 +3,9 @@
 #include <merak/token_counter.hpp>
 #include <merak/compactor.hpp>
 #include <merak/memory_store.hpp>
+#include <merak/tool_meta.hpp>
+#include <merak/tool_registry.hpp>
+#include <merak/shell_tool.hpp>
 #include <cassert>
 #include <iostream>
 #include <memory>
@@ -217,6 +220,51 @@ void test_pipeline_accessible() {
     PASS();
 }
 
+// ——— Batch 1 new tests ———
+
+void test_circuit_breaker_threshold_default() {
+    TEST("Config circuit_breaker_threshold defaults to 3");
+    AgentLoop::Config cfg;
+    assert(cfg.circuit_breaker_threshold == 3);
+    PASS();
+}
+
+void test_custom_circuit_breaker_threshold() {
+    TEST("Config custom circuit_breaker_threshold");
+    AgentLoop::Config cfg;
+    cfg.circuit_breaker_threshold = 1;
+    assert(cfg.circuit_breaker_threshold == 1);
+    PASS();
+}
+
+void test_tool_domain_classification() {
+    TEST("ToolRegistry::domain_of returns correct domain");
+    auto registry = std::make_shared<ToolRegistry>();
+    registry->register_tool(std::make_unique<tools::BashTool>());
+    auto dom = registry->domain_of("execute_bash");
+    assert(dom == ToolDomain::General);
+    assert(!(dom & ToolDomain::Write));
+    assert(!(dom & ToolDomain::WorldQuery));
+    PASS();
+}
+
+void test_tool_domain_not_found_returns_general() {
+    TEST("ToolRegistry::domain_of returns General for unknown tool");
+    auto registry = std::make_shared<ToolRegistry>();
+    auto dom = registry->domain_of("nonexistent_tool");
+    assert(dom == ToolDomain::General);
+    PASS();
+}
+
+void test_tool_domain_bitflag_checks() {
+    TEST("ToolDomain bitflag checks work correctly");
+    ToolDomain d = ToolDomain::Write;
+    assert(d & ToolDomain::Write);
+    assert(!(d & ToolDomain::WorldQuery));
+    assert(!(d & ToolDomain::General));
+    PASS();
+}
+
 int main() {
     std::cout << "\nAgentLoop Tests\n===============\n";
     test_max_turns_config_default();
@@ -233,6 +281,11 @@ int main() {
     test_restore_history_overwrites_previous();
     test_tools_returns_registry();
     test_pipeline_accessible();
+    test_circuit_breaker_threshold_default();
+    test_custom_circuit_breaker_threshold();
+    test_tool_domain_classification();
+    test_tool_domain_not_found_returns_general();
+    test_tool_domain_bitflag_checks();
     std::cout << "\n" << tests_passed << "/" << tests_run << " passed\n";
     return tests_passed == tests_run ? 0 : 1;
 }
