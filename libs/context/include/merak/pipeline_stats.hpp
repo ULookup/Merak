@@ -37,6 +37,8 @@ public:
   double avg_schema_tokens() const { return avg_schema_tokens_.value; }
   int schema_count() const { return schema_count_; }
 
+  int hard_trims = 0;
+
   void reset();
 
 private:
