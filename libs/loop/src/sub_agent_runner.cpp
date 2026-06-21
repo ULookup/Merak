@@ -76,7 +76,7 @@ std::future<AgentResponse> SubAgentRunner::delegate(
         spdlog::info("SubAgentRunner: delegating '{}' to '{}'",
             task.substr(0, 30), agent_id);
         NullRunControl control;
-        return sub->run(task, control).get();
+        return sub->run(task, control);
     });
 }
 

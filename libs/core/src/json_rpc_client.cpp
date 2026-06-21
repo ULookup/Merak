@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -109,6 +110,8 @@ void JsonRpcClient::write_message(const nlohmann::json& msg) {
 }
 
 nlohmann::json JsonRpcClient::read_message() {
+    std::lock_guard<std::mutex> lock(read_mutex_);
+
     // Use a FILE* wrapper around the fd so we can use getline() conveniently.
     // dup the fd first so closing the FILE* does not close the underlying fd.
     int fd = dup(stdout_fd_);
@@ -169,25 +172,34 @@ std::future<nlohmann::json> JsonRpcClient::send_request(
     write_message(req);
 
     return std::async(std::launch::async, [this, id]() -> nlohmann::json {
-        nlohmann::json resp = read_message();
+        // Inner async: the actual read+retry loop (now serialized via read_mutex_)
+        auto read_fut = std::async(std::launch::async, [this, id]() -> nlohmann::json {
+            nlohmann::json resp = read_message();
 
-        // Wait for a response matching our id (retry a few times in case
-        // stray notifications arrive first).
-        constexpr int kMaxRetries = 10;
-        for (int i = 0; i < kMaxRetries; ++i) {
-            if (resp.contains("id") && resp["id"] == id) {
-                return resp;
+            constexpr int kMaxRetries = 10;
+            for (int i = 0; i < kMaxRetries; ++i) {
+                if (resp.contains("id") && resp["id"] == id) {
+                    return resp;
+                }
+                resp = read_message();
             }
-            // Read another message (may be a notification without id, etc.)
-            resp = read_message();
-        }
 
-        // If we still can't find our id, return an error object
-        nlohmann::json err;
-        err["jsonrpc"] = "2.0";
-        err["id"] = id;
-        err["error"] = {{"code", -1}, {"message", "no matching response received"}};
-        return err;
+            nlohmann::json err;
+            err["jsonrpc"] = "2.0";
+            err["id"] = id;
+            err["error"] = {{"code", -1}, {"message", "no matching response received"}};
+            return err;
+        });
+
+        // 30s timeout — prevent indefinite blocking on hung child process
+        if (read_fut.wait_for(std::chrono::seconds(30)) == std::future_status::timeout) {
+            nlohmann::json err;
+            err["jsonrpc"] = "2.0";
+            err["id"] = id;
+            err["error"] = {{"code", -1}, {"message", "read timeout"}};
+            return err;
+        }
+        return read_fut.get();
     });
 }
 

@@ -3438,7 +3438,7 @@ std::future<ToolResult> DelegateToWriterTool::execute(ToolCall call, ToolExecuti
             if (!exec_ctx.caller_agent_id.empty()) sub_loop.set_caller_agent_id(exec_ctx.caller_agent_id);
 
             NullRunControl control;
-            auto response = sub_loop.run(material_package, control).get();
+            auto response = sub_loop.run(material_package, control);
 
             result.output = ok_response({{"scene_text", response.text}});
             result.is_error = false;

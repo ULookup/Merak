@@ -83,14 +83,19 @@ public:
     // When not set (default), working_memory_text returns empty string.
     void set_working_memory_provider(std::function<std::string()> provider);
 
+    AgentLoop(const AgentLoop&) = delete;
+    AgentLoop& operator=(const AgentLoop&) = delete;
+    AgentLoop(AgentLoop&&) = delete;
+    AgentLoop& operator=(AgentLoop&&) = delete;
+
     // Process a user message. Appends user msg to session_history_,
     // then enters the ReAct loop. Returns final response.
-    std::future<AgentResponse> run(
+    AgentResponse run(
         const std::string& user_message,
         RunControl& control);
 
     // Resume the ReAct loop without appending a new user message.
-    std::future<AgentResponse> resume(RunControl& control);
+    AgentResponse resume(RunControl& control);
 
     TurnState current_state() const { return state_; }
     const RunMetrics& metrics() const { return run_metrics_; }
@@ -143,6 +148,7 @@ private:
     int current_turn_ = 0;
 
     std::string last_user_query_;
+    std::string last_compaction_text_;
     int turn_call_count_ = 0;
 
     ToolDomain restricted_domains_ = ToolDomain::General;

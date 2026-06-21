@@ -35,7 +35,7 @@ std::string LocalFileImageStore::save(const std::string& key, const ImageData& d
     return key;
 }
 
-ImageData LocalFileImageStore::load(const std::string& key) {
+ImageData LocalFileImageStore::load(const std::string& key) const {
     // Path traversal guard
     fs::path target = fs::weakly_canonical(fs::path(base_dir_) / key);
     fs::path base = fs::weakly_canonical(fs::path(base_dir_));

@@ -364,7 +364,7 @@ std::string RuntimeService::generate_title(const std::string&session_id){
     if(!loop_factory_)return"";
     auto loop=loop_factory_("");
     NullRunControl control;
-    auto response=loop->run(prompt,control).get();
+    auto response=loop->run(prompt,control);
     std::string result=response.text;
     size_t start=result.find_first_not_of(" \t\n\r");
     if(start==std::string::npos)return"";
@@ -525,7 +525,7 @@ void RuntimeService::execute_run(RunRecord r,std::string model){if(auto current=
                 loop->set_system_prompt(composed);
             }
         }
-        loop->run(r.user_message,*control).get();if(token->cancelled()){if(store_->get_run(r.id)->status!=RunStatus::Cancelled){store_->update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_->update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed",{{"pipeline_snapshot",(session&&!session->world_id.empty()&&pipeline_mgr_)?pipeline_mgr_->snapshot_to_json(session->world_id):""}});}}catch(const std::exception&e){if(token->cancelled()){if(store_->get_run(r.id)->status!=RunStatus::Cancelled){store_->update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_->update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
+        loop->run(r.user_message,*control);if(token->cancelled()){if(store_->get_run(r.id)->status!=RunStatus::Cancelled){store_->update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_->update_run_status(r.id,RunStatus::Completed);emit(r.session_id,r.id,"run_completed",{{"pipeline_snapshot",(session&&!session->world_id.empty()&&pipeline_mgr_)?pipeline_mgr_->snapshot_to_json(session->world_id):""}});}}catch(const std::exception&e){if(token->cancelled()){if(store_->get_run(r.id)->status!=RunStatus::Cancelled){store_->update_run_status(r.id,RunStatus::Cancelled);emit(r.session_id,r.id,"run_cancelled");}}else{store_->update_run_status(r.id,RunStatus::Failed,e.what());emit(r.session_id,r.id,"run_failed",{{"error",e.what()}});}}std::lock_guard lock(mutex_);tokens_.erase(r.id);controls_.erase(r.id);}
 AgentResponse RuntimeService::execute_sub_run(const SubAgentConfig& agent_, const std::string& task, const RunRecord& parent, const std::string& delegation_id, std::optional<std::string> previous_output) {
     // Enhance system_prompt with PromptCompositor output for platform agents
     SubAgentConfig agent = agent_;
@@ -851,7 +851,7 @@ void RuntimeService::resume_after_restarted_approval(RunRecord run,ApprovalRecor
     else{result.is_error=true;result.output="User denied permission for tool: "+call.name;}
     control->emit_tool_completed(call,result);Message tool;tool.role="tool";tool.content=result.output;tool.tool_call_id=result.call_id;history.push_back(tool);control->append_message(tool);
     auto loop=std::shared_ptr<AgentLoop>(std::move(loop_factory_("")));loop->restore_history(std::move(history));configure_loop_for_run(*loop,run);{std::lock_guard lock(session_loops_mutex_);if(session_loops_.count(run.session_id))spdlog::warn("Resume after restart: overwriting existing session loop for {}",run.session_id);session_loops_[run.session_id]=loop;}
-    std::thread([self=shared_from_this(),run,control,token,loop]()mutable{try{loop->resume(*control).get();if(token->cancelled()){self->store_->update_run_status(run.id,RunStatus::Cancelled);self->emit(run.session_id,run.id,"run_cancelled");}else{self->store_->update_run_status(run.id,RunStatus::Completed);self->emit(run.session_id,run.id,"run_completed");}}catch(const std::exception&e){self->store_->update_run_status(run.id,RunStatus::Failed,e.what());self->emit(run.session_id,run.id,"run_failed",{{"error",e.what()}});}std::lock_guard lock(self->mutex_);self->tokens_.erase(run.id);self->controls_.erase(run.id);}).detach();
+    std::thread([self=shared_from_this(),run,control,token,loop]()mutable{try{loop->resume(*control);if(token->cancelled()){self->store_->update_run_status(run.id,RunStatus::Cancelled);self->emit(run.session_id,run.id,"run_cancelled");}else{self->store_->update_run_status(run.id,RunStatus::Completed);self->emit(run.session_id,run.id,"run_completed");}}catch(const std::exception&e){self->store_->update_run_status(run.id,RunStatus::Failed,e.what());self->emit(run.session_id,run.id,"run_failed",{{"error",e.what()}});}std::lock_guard lock(self->mutex_);self->tokens_.erase(run.id);self->controls_.erase(run.id);}).detach();
 }
 void RuntimeService::set_session_ephemeral(const std::string& session_id, int ttl_minutes) {
     store_->set_session_ephemeral(session_id, ttl_minutes);
