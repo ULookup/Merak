@@ -134,12 +134,6 @@ private:
     std::optional<std::string> caller_agent_id_;
     std::map<std::string, int> tool_failure_streak_;
 
-    struct RunMetrics {
-        int abandoned_tasks = 0;
-    };
-    RunMetrics run_metrics_{};
-
-
     int consecutive_read_only_rounds_ = 0;
     int consecutive_world_query_rounds_ = 0;
     int consecutive_content_avoidance_ = 0;

@@ -105,7 +105,6 @@ public:
         const std::string& status = "",
         int limit = 20,
         int offset = 0) const;
-    RunRecord resume_run(const std::string& run_id);
     RunRecord create_run_record(const std::string& session_id, const std::string& message);
     RunRecord resume_run(const std::string& run_id);
     RunRecord start_run(const std::string& session_id, const std::string& message,

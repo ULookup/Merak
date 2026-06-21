@@ -1,5 +1,6 @@
 #pragma once
 #include <merak/section_kind.hpp>
+#include <merak/tool_meta.hpp>
 #include <merak/message.hpp>
 #include <merak/stall_detector.hpp>
 #include <string>
