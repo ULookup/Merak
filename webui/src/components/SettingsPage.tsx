@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, formatApiError } from '../api/client';
 import type { LlmConfigFull, RuntimeMetadata } from '../api/types';
 import {
@@ -29,11 +29,15 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('');
   const [configError, setConfigError] = useState('');
   const [preferencesError, setPreferencesError] = useState('');
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [metadataError, setMetadataError] = useState('');
   const [desktopError, setDesktopError] = useState('');
+  const lifecycle = useRef(0);
+  const desktopToken = useRef(0);
   const desktop = isDesktopApp();
 
   useEffect(() => {
+    const life = ++lifecycle.current;
     let active = true;
     Promise.allSettled([api.getConfig(), api.getPreferences(), api.metadata()]).then(
       ([configResult, preferencesResult, metadataResult]) => {
@@ -51,6 +55,7 @@ export default function SettingsPage() {
           setGenre(prefs.default_genre ?? '');
           setStyle(prefs.preferred_style ?? '');
           setUsageLogs(prefs.allow_usage_logs ?? false);
+          setPreferencesLoaded(true);
         } else setPreferencesError(formatApiError(preferencesResult.reason, 'Request failed.'));
         if (metadataResult.status === 'fulfilled') setMetadata(metadataResult.value);
         else
@@ -61,7 +66,11 @@ export default function SettingsPage() {
     );
     if (desktop)
       getDesktopRuntimeStatus()
-        .then((value) => active && setRuntime(value))
+        .then((value) => {
+          if (!active || life !== lifecycle.current) return;
+          if (value) setRuntime(value);
+          else setDesktopError('Desktop Runtime unavailable: Request failed.');
+        })
         .catch(
           (error) =>
             active &&
@@ -71,6 +80,8 @@ export default function SettingsPage() {
         );
     return () => {
       active = false;
+      lifecycle.current += 1;
+      desktopToken.current += 1;
     };
   }, [desktop]);
 
@@ -96,6 +107,10 @@ export default function SettingsPage() {
 
   async function savePreferences() {
     setMessage('');
+    if (!preferencesLoaded) {
+      setMessage('Preferences are unavailable and cannot be saved.');
+      return;
+    }
     if (!STYLE_OPTIONS.includes(style as (typeof STYLE_OPTIONS)[number])) {
       setMessage('Choose a supported preferred style before saving.');
       return;
@@ -111,6 +126,56 @@ export default function SettingsPage() {
       setMessage(formatApiError(error, 'Could not save preferences.'));
     }
   }
+
+  async function runDesktopAction(
+    operation: (isCurrent: () => boolean) => Promise<void>,
+    fallback: string,
+  ) {
+    const life = lifecycle.current;
+    const token = ++desktopToken.current;
+    setDesktopError('');
+    try {
+      await operation(() => life === lifecycle.current && token === desktopToken.current);
+    } catch (error) {
+      if (life === lifecycle.current && token === desktopToken.current)
+        setDesktopError(formatApiError(error, fallback));
+    }
+  }
+
+  const refreshRuntime = () =>
+    runDesktopAction(async (isCurrent) => {
+      const result = await getDesktopRuntimeStatus();
+      if (!result) throw new Error('Refresh runtime status failed.');
+      if (isCurrent()) setRuntime(result);
+    }, 'Refresh runtime status failed.');
+
+  const restartRuntime = () =>
+    runDesktopAction(async (isCurrent) => {
+      const result = await restartDesktopRuntime();
+      if (!result?.ok || !result.status)
+        throw new Error(result?.error || 'Restart runtime failed.');
+      if (isCurrent()) setRuntime(result.status);
+    }, 'Restart runtime failed.');
+
+  const openDiagnostics = () =>
+    runDesktopAction(async () => {
+      const result = await openDiagnosticsFolder();
+      if (!result?.ok) throw new Error(result?.error || 'Open diagnostics failed.');
+    }, 'Open diagnostics failed.');
+
+  const exportDiagnosticReport = () =>
+    runDesktopAction(async (isCurrent) => {
+      const result = await exportDiagnostics();
+      if (!result?.ok) throw new Error(result?.error || 'Export diagnostics failed.');
+      if (isCurrent()) setMessage(`Diagnostics exported to ${result.path}`);
+    }, 'Export diagnostics failed.');
+
+  const viewRuntimeLogs = () =>
+    runDesktopAction(async (isCurrent) => {
+      const result = await getDesktopRuntimeLogs();
+      if (!result || result.error) throw new Error(result?.error || 'View logs failed.');
+      if (isCurrent()) setLogs(result.lines);
+    }, 'View logs failed.');
 
   return (
     <main className={styles.page}>
@@ -202,41 +267,47 @@ export default function SettingsPage() {
 
         <section className={styles.card}>
           <h2>Writing preferences</h2>
-          <label>
-            Default genre
-            <input value={genre} onChange={(event) => setGenre(event.target.value)} />
-          </label>
-          <label>
-            Preferred style
-            <select
-              aria-label="Preferred style"
-              value={style}
-              onChange={(event) => setStyle(event.target.value)}
-            >
-              {STYLE_OPTIONS.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={styles.check}>
-            <input
-              type="checkbox"
-              checked={usageLogs}
-              onChange={(event) => setUsageLogs(event.target.checked)}
-            />
-            Allow usage logs
-          </label>
-          <div className={styles.actions}>
-            <button
-              type="button"
-              disabled={!STYLE_OPTIONS.includes(style as (typeof STYLE_OPTIONS)[number])}
-              onClick={savePreferences}
-            >
-              Save preferences
-            </button>
-          </div>
+          {preferencesLoaded ? (
+            <>
+              <label>
+                Default genre
+                <input value={genre} onChange={(event) => setGenre(event.target.value)} />
+              </label>
+              <label>
+                Preferred style
+                <select
+                  aria-label="Preferred style"
+                  value={style}
+                  onChange={(event) => setStyle(event.target.value)}
+                >
+                  {STYLE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.check}>
+                <input
+                  type="checkbox"
+                  checked={usageLogs}
+                  onChange={(event) => setUsageLogs(event.target.checked)}
+                />
+                Allow usage logs
+              </label>
+              <div className={styles.actions}>
+                <button
+                  type="button"
+                  disabled={!STYLE_OPTIONS.includes(style as (typeof STYLE_OPTIONS)[number])}
+                  onClick={savePreferences}
+                >
+                  Save preferences
+                </button>
+              </div>
+            </>
+          ) : (
+            <p>{preferencesError ? 'Preferences are unavailable.' : 'Loading preferences...'}</p>
+          )}
         </section>
 
         <section className={styles.card}>
@@ -263,40 +334,19 @@ export default function SettingsPage() {
               </dl>
               {runtime?.error && <p role="alert">{runtime.error}</p>}
               <div className={styles.actions}>
-                <button type="button" onClick={() => getDesktopRuntimeStatus().then(setRuntime)}>
+                <button type="button" onClick={refreshRuntime}>
                   Refresh
                 </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    restartDesktopRuntime().then((result) => setRuntime(result?.status ?? null))
-                  }
-                >
+                <button type="button" onClick={restartRuntime}>
                   Restart Runtime
                 </button>
-                <button type="button" onClick={() => openDiagnosticsFolder()}>
+                <button type="button" onClick={openDiagnostics}>
                   Open diagnostics
                 </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    exportDiagnostics().then(
-                      (result) =>
-                        result &&
-                        setMessage(
-                          result.ok ? `Diagnostics exported to ${result.path}` : result.path,
-                        ),
-                    )
-                  }
-                >
+                <button type="button" onClick={exportDiagnosticReport}>
                   Export diagnostics
                 </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    getDesktopRuntimeLogs().then((result) => setLogs(result?.lines ?? []))
-                  }
-                >
+                <button type="button" onClick={viewRuntimeLogs}>
                   View logs
                 </button>
               </div>

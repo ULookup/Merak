@@ -244,6 +244,7 @@ export interface OkResponse {
 export interface OpenWorkspacePathResponse {
   ok: boolean;
   path: string;
+  error?: string;
 }
 
 export interface UiCapabilities {

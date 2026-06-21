@@ -252,6 +252,20 @@ describe('Files page', () => {
     expect(screen.queryByText('No world links.')).toBeNull();
   });
 
+  it('shows content loading failures separately from list and link state', async () => {
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file],
+    });
+    vi.mocked(api.readWorkspaceFile).mockRejectedValue(new Error('Content offline'));
+    render(<FilesPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /draft/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Content offline');
+    expect(screen.getByRole('option', { name: /draft/i })).toBeDefined();
+    expect(screen.queryByText(/World links unavailable/)).toBeNull();
+  });
+
   it('reloads the remote version and reports clipboard failures without losing the draft', async () => {
     const writeText = vi.fn().mockRejectedValue(new Error('Clipboard denied'));
     Object.assign(navigator, { clipboard: { writeText } });
@@ -320,6 +334,53 @@ describe('Files page', () => {
         type: 'markdown',
       }),
     );
+  });
+
+  it('keeps the previous list and shows a local warning when refresh or type loading fails', async () => {
+    vi.mocked(api.listWorkspaceFiles)
+      .mockResolvedValueOnce({ ok: true, root: 'C:/story', files: [file] })
+      .mockRejectedValueOnce(new Error('Refresh offline'))
+      .mockRejectedValueOnce(new Error('Type offline'));
+    render(<FilesPage worldId="world-1" />);
+    expect(await screen.findByRole('option', { name: /draft/i })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh files' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Refresh offline');
+    expect(screen.getByRole('option', { name: /draft/i })).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText('File type'), { target: { value: 'markdown' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Type offline');
+    expect(screen.getByRole('option', { name: /draft/i })).toBeDefined();
+  });
+
+  it('locks root Open while pending and reports null, false, and rejected results', async () => {
+    const opening = deferred<Awaited<ReturnType<typeof api.openWorkspacePath>>>();
+    vi.mocked(api.openWorkspacePath).mockClear();
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [],
+    });
+    vi.mocked(api.openWorkspacePath)
+      .mockReturnValueOnce(opening.promise)
+      .mockResolvedValueOnce(null as never)
+      .mockResolvedValueOnce({ ok: false, path: '', error: 'Open denied' } as never)
+      .mockRejectedValueOnce(new Error('Open crashed'));
+    render(<FilesPage worldId="world-1" />);
+    const open = await screen.findByRole('button', { name: 'Open workspace' });
+
+    fireEvent.click(open);
+    expect(open).toBeDisabled();
+    fireEvent.click(open);
+    expect(api.openWorkspacePath).toHaveBeenCalledTimes(1);
+    await act(async () => opening.resolve({ ok: true, path: 'C:/story' } as never));
+    expect(open).not.toBeDisabled();
+
+    for (const failure of [/open workspace failed/i, /Open denied/i, /Open crashed/i]) {
+      fireEvent.click(open);
+      expect(await screen.findByRole('alert')).toHaveTextContent(failure);
+      expect(open).not.toBeDisabled();
+    }
   });
 
   it('ignores a pending save completion after unmount', async () => {

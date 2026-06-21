@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { AppStateProvider } from '../AppState';
 import SettingsPanel from '../components/Sidebar/SettingsPanel';
-import { getDesktopRuntimeStatus } from '../desktop';
+import {
+  exportDiagnostics,
+  getDesktopRuntimeLogs,
+  getDesktopRuntimeStatus,
+  openDiagnosticsFolder,
+  restartDesktopRuntime,
+} from '../desktop';
 import { I18nProvider } from '../i18n';
 import SettingsPage from '../pages/SettingsPage';
 
@@ -55,7 +61,8 @@ vi.mock('../desktop', () => ({
     error: null,
   }),
   isDesktopApp: vi.fn(() => true),
-  openDiagnosticsFolder: vi.fn(),
+  getDesktopRuntimeLogs: vi.fn().mockResolvedValue({ lines: ['runtime ready'] }),
+  openDiagnosticsFolder: vi.fn().mockResolvedValue({ ok: true, path: 'C:/Users/me/logs' }),
   restartDesktopRuntime: vi.fn().mockResolvedValue({ ok: true, status: null }),
 }));
 
@@ -120,7 +127,53 @@ describe('Settings page capabilities', () => {
     );
     expect(await screen.findByLabelText('API key')).toBeDefined();
     expect(screen.getByText(/Preferences unavailable: Preferences offline/)).toBeDefined();
+    expect(screen.queryByLabelText('Default genre')).toBeNull();
+    expect(screen.queryByLabelText('Preferred style')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save preferences' })).toBeNull();
+    expect(api.savePreferences).not.toHaveBeenCalled();
     expect(screen.queryByText('Loading model settings...')).toBeNull();
+  });
+
+  it('reports null and unsuccessful desktop action results without discarding runtime state', async () => {
+    vi.mocked(getDesktopRuntimeStatus)
+      .mockResolvedValueOnce({
+        phase: 'ready',
+        apiBaseUrl: 'http://127.0.0.1:3888',
+        port: 3888,
+        pid: 1234,
+        version: '0.1.0',
+        pgStatus: 'ready',
+        configPath: 'C:/config.json',
+        logPath: 'C:/desktop.log',
+        error: null,
+      })
+      .mockResolvedValueOnce(null);
+    vi.mocked(restartDesktopRuntime).mockResolvedValueOnce(null);
+    vi.mocked(openDiagnosticsFolder).mockResolvedValueOnce({
+      ok: false,
+      path: '',
+      error: 'Folder unavailable',
+    } as never);
+    vi.mocked(exportDiagnostics).mockResolvedValueOnce(null);
+    vi.mocked(getDesktopRuntimeLogs).mockResolvedValueOnce(null);
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+    expect(await screen.findByText('http://127.0.0.1:3888')).toBeDefined();
+
+    for (const [name, failure] of [
+      ['Refresh', /refresh runtime status failed/i],
+      ['Restart Runtime', /restart runtime failed/i],
+      ['Open diagnostics', /Folder unavailable/i],
+      ['Export diagnostics', /export diagnostics failed/i],
+      ['View logs', /view logs failed/i],
+    ] as const) {
+      fireEvent.click(screen.getByRole('button', { name }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(failure);
+      expect(screen.getByText('http://127.0.0.1:3888')).toBeDefined();
+    }
   });
 
   it('restricts preferred style to the backend enum', async () => {

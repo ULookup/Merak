@@ -30,6 +30,7 @@ function matchesType(file: WorkspaceFile, type: FileType) {
 
 export default function FilesPage({ worldId }: Props) {
   const [files, setFiles] = useState<WorkspaceFile[]>([]);
+  const [loadedWorld, setLoadedWorld] = useState<string | null>(null);
   const [root, setRoot] = useState('');
   const [links, setLinks] = useState<LinksState>({ status: 'loading', items: [] });
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -38,22 +39,26 @@ export default function FilesPage({ worldId }: Props) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState<FileType>('all');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [contentError, setContentError] = useState<string | null>(null);
   const [clipboardError, setClipboardError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [openingRoot, setOpeningRoot] = useState(false);
   const [conflict, setConflict] = useState(false);
   const lifecycle = useRef(0);
   const listToken = useRef(0);
   const readToken = useRef(0);
   const saveToken = useRef(0);
   const savingRef = useRef(false);
+  const openingRootRef = useRef(false);
+  const openRootToken = useRef(0);
 
   const loadList = useCallback(async () => {
     if (savingRef.current) return;
     const life = lifecycle.current;
     const token = ++listToken.current;
     setLoading(true);
-    setError(null);
+    setListError(null);
     try {
       const result = await api.listWorkspaceFiles({
         world_id: worldId,
@@ -61,12 +66,13 @@ export default function FilesPage({ worldId }: Props) {
       });
       if (life !== lifecycle.current || token !== listToken.current) return;
       setFiles(result.files);
+      setLoadedWorld(worldId);
       setRoot(result.root);
       setSelectedPath(null);
       setLoaded(null);
     } catch (reason) {
       if (life === lifecycle.current && token === listToken.current)
-        setError(formatApiError(reason, 'Could not load files.'));
+        setListError(formatApiError(reason, 'Could not load files.'));
     } finally {
       if (life === lifecycle.current && token === listToken.current) setLoading(false);
     }
@@ -76,6 +82,8 @@ export default function FilesPage({ worldId }: Props) {
     lifecycle.current += 1;
     savingRef.current = false;
     setSaving(false);
+    openingRootRef.current = false;
+    setOpeningRoot(false);
     setConflict(false);
     setLinks({ status: 'loading', items: [] });
     loadList();
@@ -118,7 +126,7 @@ export default function FilesPage({ worldId }: Props) {
     setSelectedPath(path);
     setLoaded(null);
     setConflict(false);
-    setError(null);
+    setContentError(null);
     setClipboardError(null);
     try {
       const result = await api.readWorkspaceFile(path);
@@ -127,7 +135,7 @@ export default function FilesPage({ worldId }: Props) {
       setDraft(result.file.content);
     } catch (reason) {
       if (life === lifecycle.current && token === readToken.current)
-        setError(formatApiError(reason, 'Could not read file.'));
+        setContentError(formatApiError(reason, 'Could not read file.'));
     }
   }
 
@@ -140,7 +148,7 @@ export default function FilesPage({ worldId }: Props) {
     const version = loaded.version;
     savingRef.current = true;
     setSaving(true);
-    setError(null);
+    setContentError(null);
     setConflict(false);
     try {
       const result = await api.saveWorkspaceFile(target, content, version);
@@ -158,11 +166,33 @@ export default function FilesPage({ worldId }: Props) {
     } catch (reason) {
       if (life !== lifecycle.current || token !== saveToken.current) return;
       setConflict(isConflict(reason));
-      setError(formatApiError(reason, 'Save failed.'));
+      setContentError(formatApiError(reason, 'Save failed.'));
     } finally {
       if (life === lifecycle.current && token === saveToken.current) {
         savingRef.current = false;
         setSaving(false);
+      }
+    }
+  }
+
+  async function openRoot() {
+    if (!root || savingRef.current || openingRootRef.current) return;
+    const life = lifecycle.current;
+    const token = ++openRootToken.current;
+    openingRootRef.current = true;
+    setOpeningRoot(true);
+    setListError(null);
+    try {
+      const result = await api.openWorkspacePath(root);
+      if (life !== lifecycle.current || token !== openRootToken.current) return;
+      if (!result?.ok) throw new Error(result?.error || 'Open workspace failed.');
+    } catch (reason) {
+      if (life === lifecycle.current && token === openRootToken.current)
+        setListError(formatApiError(reason, 'Open workspace failed.'));
+    } finally {
+      if (life === lifecycle.current && token === openRootToken.current) {
+        openingRootRef.current = false;
+        setOpeningRoot(false);
       }
     }
   }
@@ -179,8 +209,9 @@ export default function FilesPage({ worldId }: Props) {
 
   const selected = files.find((file) => file.path === selectedPath) ?? null;
   const linked = selected ? links.items.filter((link) => link.file_path === selected.path) : [];
-  if (loading) return <PageState loading loadingLabel="Loading files" />;
-  if (error && files.length === 0) return <PageState error={new Error(error)} onRetry={loadList} />;
+  if (loading && loadedWorld !== worldId) return <PageState loading loadingLabel="Loading files" />;
+  if (listError && loadedWorld !== worldId)
+    return <PageState error={new Error(listError)} onRetry={loadList} />;
   return (
     <div className={styles.page}>
       <aside className={styles.library} aria-label="File library">
@@ -190,11 +221,16 @@ export default function FilesPage({ worldId }: Props) {
             Refresh
           </button>
         </header>
+        {listError && (
+          <div role="alert" className={styles.error}>
+            {listError}
+          </div>
+        )}
         {root && (
           <div className={styles.root}>
             <code>{root}</code>
-            <button type="button" onClick={() => api.openWorkspacePath(root)}>
-              Open workspace
+            <button type="button" disabled={saving || openingRoot} onClick={openRoot}>
+              {openingRoot ? 'Opening...' : 'Open workspace'}
             </button>
           </div>
         )}
@@ -277,9 +313,9 @@ export default function FilesPage({ worldId }: Props) {
           }
           inspectorLabel="File details"
         >
-          {error && (
+          {contentError && (
             <div role="alert" className={styles.error}>
-              {error}
+              {contentError}
             </div>
           )}
           {clipboardError && (
@@ -308,11 +344,18 @@ export default function FilesPage({ worldId }: Props) {
           />
         </DetailPane>
       ) : (
-        <PageState
-          isEmpty
-          emptyTitle={selected ? 'Loading file content' : 'Select a file'}
-          emptyDescription="File content is loaded only when you select it."
-        />
+        <div>
+          {contentError && (
+            <div role="alert" className={styles.error}>
+              {contentError}
+            </div>
+          )}
+          <PageState
+            isEmpty
+            emptyTitle={selected ? 'File content unavailable' : 'Select a file'}
+            emptyDescription="File content is loaded only when you select it."
+          />
+        </div>
       )}
     </div>
   );
