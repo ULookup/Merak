@@ -100,7 +100,7 @@ public:
     std::vector<SessionRecord> list_sessions(const std::string& world_id = "") const;
     std::optional<SessionRecord> get_session(const std::string& id) const;
     std::optional<RunRecord> get_run(const std::string& id) const;
-    SessionStore::RunListResult list_runs(
+    RunListResult list_runs(
         const std::string& session_id = "",
         const std::string& status = "",
         int limit = 20,
