@@ -20,20 +20,20 @@ TurnGuard::Verdict TurnGuard::evaluate(const RoundInput& in) {
   if (in.consecutive_world_query_rounds >= config_.max_consecutive_world_query_rounds) {
     v.severity = Severity::Critical;
     v.reason = std::to_string(config_.max_consecutive_world_query_rounds) + "+ rounds of world-only queries without narrative output";
-    v.restricted_tools = {"query_map", "query_world", "query_history", "query_magic", "query_faction"};
+    v.restricted_domains = ToolDomain::WorldQuery;
     v.turn_penalty = -4;
     return v;
   }
 
   if (in.consecutive_read_only_rounds >= config_.max_consecutive_read_only_rounds) {
     v.severity = Severity::Warning;
-    v.reason = "3+ rounds without write operations";
+    v.reason = std::to_string(config_.max_consecutive_read_only_rounds) + "+ rounds without write operations";
     v.nudge = config_.nudge_prefix + config_.nudge_write_now;
   }
 
   if (in.consecutive_content_avoidance >= config_.max_consecutive_content_avoidance) {
     v.severity = Severity::Warning;
-    v.reason = "3x refusal to advance narrative";
+    v.reason = std::to_string(config_.max_consecutive_content_avoidance) + "x refusal to advance narrative";
     v.nudge = config_.nudge_prefix + config_.nudge_accept_imperfection;
   }
 
@@ -65,7 +65,7 @@ TurnGuard::Verdict TurnGuard::evaluate(const RoundInput& in) {
     }
     if (warning_count_ >= config_.max_warnings_before_critical) {
       v.severity = Severity::Critical;
-      v.reason = "4+ warnings in this run";
+      v.reason = std::to_string(config_.max_warnings_before_critical) + "+ warnings in this run";
     }
   }
 

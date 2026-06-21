@@ -36,7 +36,7 @@ public:
     std::string reason;
     std::optional<std::string> nudge;
     std::optional<int> turn_penalty;
-    std::vector<std::string> restricted_tools;
+    ToolDomain restricted_domains = ToolDomain::General;
   };
 
   struct RoundInput {
