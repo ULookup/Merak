@@ -231,7 +231,8 @@ ToolMeta BashTool::meta() const {
     m.intents = {IntentType::CodeEdit, IntentType::CodeRead, IntentType::Git};
     m.scope = Scope::Local;
     m.schema_tokens = 35;
-    return m;
+    m.domain = ToolDomain::General;
+    return m; // BashTool
 }
 
 std::future<ToolResult> BashTool::execute(ToolCall call, ToolExecutionContext context) {

@@ -97,7 +97,8 @@ ToolMeta WebSearchTool::meta() const {
     m.intents = {IntentType::Network};
     m.scope = Scope::External;
     m.schema_tokens = 25;
-    return m;
+    m.domain = ToolDomain::General;
+    return m; // WebSearchTool
 }
 
 PermissionLevel WebSearchTool::permission() const {

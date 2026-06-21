@@ -99,6 +99,7 @@ ToolMeta TaskTool::meta() const {
     m.intents = {IntentType::TaskMgmt};
     m.scope = Scope::CrossSession;
     m.schema_tokens = 30;
+    m.domain = ToolDomain::General;
     return m;
 }
 

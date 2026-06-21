@@ -71,6 +71,7 @@ ToolMeta ReadFileTool::meta() const {
     m.intents = {IntentType::CodeRead};
     m.scope = Scope::Local;
     m.schema_tokens = 35;
+    m.domain = ToolDomain::General;
     return m;
 }
 
@@ -256,6 +257,7 @@ ToolMeta WriteFileTool::meta() const {
     m.intents = {IntentType::CodeEdit};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -351,6 +353,7 @@ ToolMeta StrReplaceTool::meta() const {
     m.intents = {IntentType::CodeEdit};
     m.scope = Scope::Local;
     m.schema_tokens = 40;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -488,6 +491,7 @@ ToolMeta MultiEditTool::meta() const {
     m.intents = {IntentType::CodeEdit};
     m.scope = Scope::Local;
     m.schema_tokens = 30;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -636,6 +640,7 @@ ToolMeta DeleteFileTool::meta() const {
     m.intents = {IntentType::CodeEdit};
     m.scope = Scope::Local;
     m.schema_tokens = 15;
+    m.domain = ToolDomain::Write;
     return m;
 }
 
@@ -755,6 +760,7 @@ ToolMeta ListDirTool::meta() const {
     m.intents = {IntentType::CodeRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::General;
     return m;
 }
 
