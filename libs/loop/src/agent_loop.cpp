@@ -397,7 +397,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         if (verdict.nudge) {
             Message nudge_msg;
             nudge_msg.role = "system";
-            nudge_msg.content = "[校正] " + *verdict.nudge;
+            nudge_msg.content = *verdict.nudge;
             session_history_.push_back(nudge_msg);
             control.append_message(nudge_msg);
         }
@@ -545,12 +545,13 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
         control.emit_tool_started(call);
 
         auto it = tool_failure_streak_.find(call.name);
-        if (it != tool_failure_streak_.end() && it->second >= kCircuitBreakerThreshold) {
+        if (it != tool_failure_streak_.end() && it->second >= config_.circuit_breaker_threshold) {
             ToolResult blocked;
             blocked.call_id = call.id;
             blocked.is_error = true;
-            blocked.output = "Tool '" + call.name +
-                "' blocked (3 consecutive failures). Try a different approach.";
+            blocked.output = "Tool '" + call.name + "' blocked (" +
+                std::to_string(config_.circuit_breaker_threshold) +
+                " consecutive failures). Try a different approach.";
             results.push_back(blocked);
             control.emit_tool_completed(call, blocked);
 
