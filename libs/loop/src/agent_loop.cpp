@@ -1,6 +1,7 @@
 #include <merak/agent_loop.hpp>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
 #include <spdlog/spdlog.h>
+#include <chrono>
 #include <sstream>
 #include <thread>
 #include <unordered_set>
@@ -134,6 +135,12 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         std::vector<ToolCall> accumulated_tool_calls;
 
+        // Snapshot: if LLM streaming fails mid-flight, chunks already emitted
+        // via the callback would be duplicated by the retry. Save and restore
+        // the pre-attempt text length so only the successful response is kept.
+        const auto text_len_before_attempt = response.text.size();
+
+        auto llm_start = std::chrono::steady_clock::now();
         auto llm_future = llm_->chat(req,
             [&](StreamChunk chunk) {
                 auto token = control.cancellation_token();
@@ -152,6 +159,13 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
             spdlog::error("Loop: LLM request failed after provider retries: {}", e.what());
             throw;
         }
+        run_metrics_.total_llm_latency += std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - llm_start);
+        run_metrics_.total_input_tokens += llm_response.total_input_tokens;
+        run_metrics_.total_output_tokens += llm_response.total_output_tokens;
+        run_metrics_.total_cache_read_tokens += llm_response.total_cache_read_tokens;
+        run_metrics_.total_cache_write_tokens += llm_response.total_cache_write_tokens;
+
         response.total_input_tokens += llm_response.total_input_tokens;
         response.total_output_tokens += llm_response.total_output_tokens;
         response.has_usage = response.has_usage || llm_response.has_usage;
@@ -168,9 +182,11 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         // Ingest turn for observability
         auto ingested = turn_ingestor_.ingest(
             accumulated_tool_calls.data(), accumulated_tool_calls.size(),
-            {llm_response.total_input_tokens, llm_response.total_output_tokens, 0, 0},
+            {llm_response.total_input_tokens, llm_response.total_output_tokens,
+             llm_response.total_cache_read_tokens, llm_response.total_cache_write_tokens},
             llm_response.text,
-            std::chrono::milliseconds{0},
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - llm_start),
             turn_count
         );
 
@@ -200,6 +216,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         // Stall detection
         auto stall = stall_detector_.check(accumulated_tool_calls);
         if (stall.level == StallLevel::ForceStop) {
+            run_metrics_.stall_force_stops++;
             spdlog::warn("Loop: force_stop triggered after 5 consecutive identical rounds");
             // Force text-only final call
             ChatRequest final_req;
@@ -246,7 +263,12 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
             throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
         }
 
+        run_metrics_.total_tool_calls += static_cast<int>(tool_results.size());
         for (auto& tr : tool_results) {
+            if (tr.is_error) {
+                run_metrics_.tool_errors++;
+                ingested.had_error = true;
+            }
             response.tool_results.push_back(tr);
 
             Message tool_msg;
@@ -322,6 +344,9 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         }
 
         auto verdict = turn_guard_.evaluate(guard_in);
+        if (verdict.severity >= Severity::Warning) {
+            run_metrics_.turn_guard_warnings++;
+        }
         restricted_tools_ = verdict.restricted_tools;
 
         if (verdict.turn_penalty) {
@@ -339,6 +364,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
             control.append_message(nudge_msg);
         }
 
+        run_metrics_.turns_completed = turn_count;
         transition_to(TurnState::ContextReady, control);
     }
 
@@ -509,6 +535,7 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
             session_history_.push_back(sys_msg);
             control.append_message(sys_msg);
 
+            run_metrics_.circuit_breaker_trips++;
             spdlog::warn("Circuit breaker: blocked '{}' after {} consecutive failures",
                 call.name, it->second);
             continue;
@@ -601,6 +628,8 @@ void AgentLoop::maybe_compact(RunControl& control) {
         int keep_recent = config_.max_turns * 2;
         auto result = compactor_->compact_history(session_history_, keep_recent).get();
         if (!result.summary.empty()) {
+            run_metrics_.compactions_triggered++;
+            run_metrics_.messages_compacted += static_cast<int>(result.replaced.size());
             Message summary_msg;
             summary_msg.role = "system";
             summary_msg.content = "[Previous conversation summary]\n" + result.summary;

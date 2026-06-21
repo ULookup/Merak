@@ -15,6 +15,7 @@
 #include <merak/turn_ingestor.hpp>
 #include <merak/skills/skill_registry.hpp>
 #include <merak/execution.hpp>
+#include <chrono>
 #include <optional>
 #include <atomic>
 #include <functional>
@@ -37,6 +38,22 @@ public:
         int circuit_breaker_threshold = 3;
         bool enable_compaction = true;
         bool enable_cache = true;
+    };
+
+    struct RunMetrics {
+        int turns_completed = 0;
+        int total_input_tokens = 0;
+        int total_output_tokens = 0;
+        int total_cache_read_tokens = 0;
+        int total_cache_write_tokens = 0;
+        int total_tool_calls = 0;
+        int tool_errors = 0;
+        int compactions_triggered = 0;
+        int messages_compacted = 0;
+        int circuit_breaker_trips = 0;
+        int stall_force_stops = 0;
+        int turn_guard_warnings = 0;
+        std::chrono::milliseconds total_llm_latency{0};
     };
 
     AgentLoop(
@@ -69,6 +86,7 @@ public:
     std::future<AgentResponse> resume(RunControl& control);
 
     TurnState current_state() const { return state_; }
+    const RunMetrics& metrics() const { return run_metrics_; }
     std::shared_ptr<ToolRegistry> tools() { return tools_; }
     const std::vector<Message>& session_history() const { return session_history_; }
 
@@ -115,6 +133,7 @@ private:
     int current_turn_ = 0;
 
     std::vector<std::string> restricted_tools_;
+    RunMetrics run_metrics_;
 
     void transition_to(TurnState next, RunControl& control);
     std::vector<Message> build_context();
