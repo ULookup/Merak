@@ -360,6 +360,47 @@ std::optional<RunRecord> SessionStore::get_run(const std::string& id) const {
     return run_from_row(r[0]);
 }
 
+RunListResult SessionStore::list_runs(
+    const std::string& session_id,
+    const std::string& status_filter,
+    int limit,
+    int offset) const {
+
+    std::lock_guard lock(mutex_);
+    auto& conn = require_connection();
+    pqxx::work txn(conn);
+
+    std::vector<std::string> clauses;
+    if (!session_id.empty()) clauses.push_back("session_id = " + txn.quote(session_id));
+    if (!status_filter.empty()) clauses.push_back("status = " + txn.quote(status_filter));
+
+    std::ostringstream where_sql;
+    for (size_t i = 0; i < clauses.size(); ++i) {
+        where_sql << (i == 0 ? " WHERE " : " AND ") << clauses[i];
+    }
+    std::string where_str = where_sql.str();
+
+    std::ostringstream count_sql;
+    count_sql << "SELECT COUNT(*) FROM runs" << where_str;
+    auto cr = txn.exec(count_sql.str());
+    int total = cr[0][0].as<int>();
+
+    std::ostringstream select_sql;
+    select_sql << "SELECT id, session_id, status, user_message, started_at, finished_at, error, "
+                  "parent_run_id, delegation_id, agent_id, run_kind "
+               << "FROM runs" << where_str
+               << " ORDER BY started_at DESC LIMIT " << limit << " OFFSET " << offset;
+    auto r = txn.exec(select_sql.str());
+    txn.commit();
+
+    RunListResult result;
+    result.total = total;
+    for (const auto& row : r) {
+        result.runs.push_back(run_from_row(row));
+    }
+    return result;
+}
+
 bool SessionStore::has_unfinished_run(const std::string& session_id) const {
     std::lock_guard lock(mutex_);
 
