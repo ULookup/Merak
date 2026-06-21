@@ -96,7 +96,7 @@ export default function DesktopShell({ page, onNavigate, children, overlays }: D
               aria-current={page === pageId ? 'page' : undefined}
               onClick={() => {
                 onNavigate(pageId);
-                closeNavigation(false);
+                closeNavigation();
               }}
             >
               <Icon size={16} aria-hidden="true" strokeWidth={2} />

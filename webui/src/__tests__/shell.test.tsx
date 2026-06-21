@@ -376,6 +376,30 @@ describe('desktop shell', () => {
     expect(controls.at(-1)).toHaveFocus();
   });
 
+  it('returns focus to the menu trigger after a compact navigation item succeeds', () => {
+    const navigate = vi.fn();
+    renderShell('overview', navigate);
+    const trigger = screen.getByRole('button', { name: 'Open navigation' });
+    fireEvent.click(trigger);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Characters/ }));
+    expect(navigate).toHaveBeenCalledWith('characters');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('returns focus to the menu trigger when dirty navigation is cancelled', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderSafeNavigation();
+    fireEvent.click(screen.getByRole('button', { name: 'Start chapters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Make dirty' }));
+    const trigger = screen.getByRole('button', { name: 'Open navigation' });
+    fireEvent.click(trigger);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Scenes/ }));
+    expect(screen.getByLabelText('Current page')).toHaveTextContent('chapters');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
   it('defines the approved shared visual tokens and responsive shell contracts', () => {
     const globalCss = readFileSync('src/styles/global.css', 'utf8');
     const shellCss = readFileSync('src/shell/DesktopShell.module.css', 'utf8');
