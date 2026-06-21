@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import styles from './DetailPane.module.css';
 
 export type DetailPaneProps = {
@@ -23,12 +23,40 @@ export default function DetailPane({
   const titleId = useId();
   const inspectorId = useId();
   const inspectorToggleRef = useRef<HTMLButtonElement>(null);
+  const inspectorRef = useRef<HTMLElement>(null);
+  const [compact, setCompact] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
 
   function closeInspector(restoreFocus = false) {
     setInspectorOpen(false);
     if (restoreFocus) inspectorToggleRef.current?.focus();
   }
+
+  useEffect(() => {
+    const query = window.matchMedia?.('(max-width: 1180px)');
+    if (!query) return;
+    const update = () => {
+      setCompact(query.matches);
+      setInspectorOpen(!query.matches);
+    };
+    update();
+    query.addEventListener?.('change', update);
+    return () => query.removeEventListener?.('change', update);
+  }, []);
+
+  useEffect(() => {
+    if (!compact || !inspectorOpen) return;
+    inspectorRef.current
+      ?.querySelector<HTMLElement>(
+        'button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      )
+      ?.focus();
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeInspector(true);
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [compact, inspectorOpen]);
 
   return (
     <section
@@ -61,12 +89,24 @@ export default function DetailPane({
       </header>
       <div className={styles.body}>
         <div className={styles.content}>{children}</div>
+        {inspectorOpen ? (
+          <button
+            type="button"
+            className={styles.backdrop}
+            aria-label={`Close ${inspectorLabel}`}
+            onClick={() => closeInspector(true)}
+          />
+        ) : null}
         {inspector ? (
           <aside
+            ref={inspectorRef}
             id={inspectorId}
             className={styles.inspector}
             aria-label={inspectorLabel}
+            data-open={inspectorOpen}
             aria-hidden={!inspectorOpen}
+            role={compact && inspectorOpen ? 'dialog' : undefined}
+            aria-modal={compact && inspectorOpen ? true : undefined}
             onKeyDown={(event) => {
               if (event.key === 'Escape') closeInspector(true);
             }}

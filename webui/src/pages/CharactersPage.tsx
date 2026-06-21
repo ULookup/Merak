@@ -13,6 +13,7 @@ import AgentCardView from '../components/Inspector/AgentCardView';
 import CreateAgentModal from '../components/Inspector/CreateAgentModal';
 import PageState from '../components/layout/PageState';
 import ResourceList from '../components/layout/ResourceList';
+import ResponsivePane from '../components/layout/ResponsivePane';
 import { useResource } from '../hooks/useResource';
 import styles from './CharactersPage.module.css';
 
@@ -101,7 +102,7 @@ export default function CharactersPage({ worldId }: CharactersPageProps) {
 
   return (
     <main className={styles.workspace}>
-      <aside className={styles.listPane}>
+      <ResponsivePane label="Characters" className={styles.listPane} closeOnSelect>
         <header>
           <div>
             <span>World cast</span>
@@ -132,7 +133,7 @@ export default function CharactersPage({ worldId }: CharactersPageProps) {
         <footer>
           {items.length} {items.length === 1 ? 'character' : 'characters'}
         </footer>
-      </aside>
+      </ResponsivePane>
 
       <section className={styles.detailPane}>
         {deleteError ? (

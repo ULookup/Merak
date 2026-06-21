@@ -352,6 +352,17 @@ describe('desktop shell', () => {
     expect(css).toMatch(/\.navigation\s*\{[^}]*overflow-y:\s*auto/s);
   });
 
+  it('opens and closes compact navigation with Escape and restores focus', () => {
+    renderShell('overview');
+    const trigger = screen.getByRole('button', { name: 'Open navigation' });
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog', { name: /navigation|导航/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Close navigation' })[1]).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
   it('defines the approved shared visual tokens and responsive shell contracts', () => {
     const globalCss = readFileSync('src/styles/global.css', 'utf8');
     const shellCss = readFileSync('src/shell/DesktopShell.module.css', 'utf8');

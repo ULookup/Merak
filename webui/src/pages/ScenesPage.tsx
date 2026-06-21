@@ -5,6 +5,7 @@ import type { EndSceneResponse, StoryScene } from '../api/types';
 import EndSceneModal from '../components/Inspector/EndSceneModal';
 import PageState from '../components/layout/PageState';
 import ResourceList from '../components/layout/ResourceList';
+import ResponsivePane from '../components/layout/ResponsivePane';
 import { useResource } from '../hooks/useResource';
 import styles from './ScenesPage.module.css';
 
@@ -44,7 +45,9 @@ export default function ScenesPage({ worldId }: { worldId: string }) {
 
   return (
     <main className={styles.workspace}>
-      <aside
+      <ResponsivePane
+        label="Scenes"
+        closeOnSelect
         className={styles.listPane}
         aria-hidden={endTarget ? 'true' : undefined}
         inert={endTarget ? true : undefined}
@@ -76,7 +79,7 @@ export default function ScenesPage({ worldId }: { worldId: string }) {
         <footer>
           {scenes.length} {scenes.length === 1 ? 'scene' : 'scenes'}
         </footer>
-      </aside>
+      </ResponsivePane>
       <section
         className={styles.detail}
         aria-label="Scene detail"

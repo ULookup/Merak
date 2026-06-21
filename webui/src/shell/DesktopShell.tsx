@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { ChevronDown, Globe2, Search } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown, Globe2, Menu, Search, X } from 'lucide-react';
 import type { AppPage } from '../AppState';
 import { useAppState } from '../AppState';
 import merakLogo from '../assets/merak-logo.svg';
@@ -21,10 +21,61 @@ export default function DesktopShell({ page, onNavigate, children, overlays }: D
   const { t } = useI18n();
   const selectedWorld = state.worlds.find((world) => world.id === state.worldId);
   const worldName = selectedWorld?.name || t('shell.noWorld');
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationTriggerRef = useRef<HTMLButtonElement>(null);
+  const navigationCloseRef = useRef<HTMLButtonElement>(null);
+  const closeNavigation = (restoreFocus = true) => {
+    setNavigationOpen(false);
+    if (restoreFocus) navigationTriggerRef.current?.focus();
+  };
+
+  useEffect(() => setNavigationOpen(false), [page]);
+  useEffect(() => {
+    if (!navigationOpen) return;
+    navigationCloseRef.current?.focus();
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeNavigation();
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [navigationOpen]);
 
   return (
     <div className={styles.shell}>
-      <aside className={styles.sidebar}>
+      <button
+        ref={navigationTriggerRef}
+        type="button"
+        className={styles.menuButton}
+        aria-label="Open navigation"
+        aria-expanded={navigationOpen}
+        onClick={() => setNavigationOpen(true)}
+      >
+        <Menu aria-hidden="true" />
+      </button>
+      {navigationOpen ? (
+        <button
+          type="button"
+          className={styles.navBackdrop}
+          aria-label="Close navigation"
+          onClick={() => closeNavigation()}
+        />
+      ) : null}
+      <aside
+        className={styles.sidebar}
+        data-open={navigationOpen}
+        role={navigationOpen ? 'dialog' : undefined}
+        aria-modal={navigationOpen ? true : undefined}
+        aria-label={navigationOpen ? t('shell.primaryNavigation') : undefined}
+      >
+        <button
+          ref={navigationCloseRef}
+          type="button"
+          className={styles.navClose}
+          aria-label="Close navigation"
+          onClick={() => closeNavigation()}
+        >
+          <X aria-hidden="true" />
+        </button>
         <div className={styles.brand}>
           <img src={merakLogo} alt="Merak" />
         </div>
@@ -48,7 +99,10 @@ export default function DesktopShell({ page, onNavigate, children, overlays }: D
               type="button"
               className={styles.navButton}
               aria-current={page === pageId ? 'page' : undefined}
-              onClick={() => onNavigate(pageId)}
+              onClick={() => {
+                onNavigate(pageId);
+                closeNavigation(false);
+              }}
             >
               <Icon size={16} aria-hidden="true" strokeWidth={2} />
               <span>{label}</span>

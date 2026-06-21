@@ -64,10 +64,10 @@
 
 .success {
   padding: 8px 10px;
-  border: 1px solid #bbf7d0;
+  border: 1px solid var(--green-soft);
   border-radius: var(--rounded-md);
   background: var(--green-soft);
-  color: #166534;
+  color: var(--green);
 }
 .conflict {
   display: flex;

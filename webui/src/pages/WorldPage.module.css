@@ -2,19 +2,19 @@
   height: 100%;
   overflow: auto;
   padding: 20px;
-  background: #f7f9fc;
-  color: #17213b;
+  background: var(--surface-strong);
+  color: var(--ink);
 }
 .heading {
   display: flex;
   gap: 14px;
   padding: 20px;
-  border: 1px solid #dfe6ef;
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--surface);
 }
 .heading span {
-  color: #667085;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
@@ -25,7 +25,7 @@
 }
 .heading p {
   margin: 0;
-  color: #59667c;
+  color: var(--muted-strong);
   line-height: 1.55;
 }
 .titleIcon {
@@ -35,8 +35,8 @@
   flex: 0 0 auto;
   place-items: center;
   border-radius: 9px;
-  background: #eaf0ff;
-  color: #123b91;
+  background: var(--brand-soft);
+  color: var(--brand);
 }
 .stats {
   display: grid;
@@ -49,10 +49,10 @@
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  border: 1px solid #dfe6ef;
+  border: 1px solid var(--border);
   border-radius: 9px;
-  background: #fff;
-  color: #153981;
+  background: var(--surface);
+  color: var(--brand);
 }
 .stats article div {
   display: flex;
@@ -62,7 +62,7 @@
   font-size: 20px;
 }
 .stats span {
-  color: #667085;
+  color: var(--muted);
   font-size: 12px;
 }
 .grid {
@@ -73,9 +73,9 @@
 .panel {
   min-height: 220px;
   padding: 16px;
-  border: 1px solid #dfe6ef;
+  border: 1px solid var(--border);
   border-radius: 9px;
-  background: #fff;
+  background: var(--surface);
 }
 .wide {
   grid-column: 1 / -1;
@@ -86,11 +86,11 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 14px;
-  color: #153981;
+  color: var(--brand);
 }
 .panel h2 {
   font-size: 15px;
-  color: #17213b;
+  color: var(--ink);
 }
 .cards {
   display: grid;
@@ -99,32 +99,32 @@
 }
 .cards article {
   padding: 12px;
-  border: 1px solid #e3e8f0;
+  border: 1px solid var(--border);
   border-radius: 7px;
 }
 .cards p,
 .rows p,
 .timeline p {
   margin: 5px 0 0;
-  color: #667085;
+  color: var(--muted);
   line-height: 1.45;
 }
 .rows article,
 .timeline article {
   padding: 10px 4px;
-  border-bottom: 1px solid #edf0f4;
+  border-bottom: 1px solid var(--surface-muted);
 }
 .rows small {
-  color: #7b86a0;
+  color: var(--muted);
 }
 .currentTime {
   margin-bottom: 6px;
-  color: #153981;
+  color: var(--brand);
   font-size: 12px;
   font-weight: 700;
 }
 .timeline strong {
-  color: #153981;
+  color: var(--brand);
   font-size: 12px;
 }
 .entityList {
@@ -137,17 +137,17 @@
   gap: 7px;
   align-items: center;
   padding: 8px 10px;
-  border: 1px solid #dfe6ef;
+  border: 1px solid var(--border);
   border-radius: 7px;
 }
 .entityList small {
-  color: #667085;
+  color: var(--muted);
   text-transform: uppercase;
 }
 .empty,
 .loading {
   margin: 34px 0;
-  color: #7a8699;
+  color: var(--muted);
   text-align: center;
 }
 .inlineError {
@@ -156,15 +156,15 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px;
-  border: 1px solid #f0d7a6;
+  border: 1px solid var(--amber-soft);
   border-radius: 7px;
-  background: #fff9eb;
-  color: #7a4d0b;
+  background: var(--amber-soft);
+  color: var(--amber);
 }
 .inlineError button {
   border: 0;
   background: transparent;
-  color: #153981;
+  color: var(--brand);
   font-weight: 700;
   cursor: pointer;
 }

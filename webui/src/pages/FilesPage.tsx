@@ -5,6 +5,7 @@ import type { WorkspaceFile, WorkspaceFileContent, WorldFileLinkRecord } from '.
 import DetailPane from '../components/layout/DetailPane';
 import PageState from '../components/layout/PageState';
 import ResourceList from '../components/layout/ResourceList';
+import ResponsivePane from '../components/layout/ResponsivePane';
 import styles from './FilesPage.module.css';
 
 type Props = { worldId: string };
@@ -59,6 +60,12 @@ export default function FilesPage({ worldId }: Props) {
   const openRootToken = useRef(0);
   const revealToken = useRef(0);
 
+  function invalidateReveal() {
+    revealToken.current += 1;
+    setRevealingPath(null);
+    setRevealMessage(null);
+  }
+
   const loadList = useCallback(async () => {
     if (savingRef.current) return;
     const life = lifecycle.current;
@@ -90,8 +97,7 @@ export default function FilesPage({ worldId }: Props) {
     setSaving(false);
     openingRootRef.current = false;
     setOpeningRoot(false);
-    setRevealingPath(null);
-    setRevealMessage(null);
+    invalidateReveal();
     setConflict(false);
     setLinks({ status: 'loading', items: [] });
     loadList();
@@ -112,6 +118,7 @@ export default function FilesPage({ worldId }: Props) {
       });
     return () => {
       lifecycle.current += 1;
+      revealToken.current += 1;
       savingRef.current = false;
     };
   }, [loadList, worldId]);
@@ -129,6 +136,7 @@ export default function FilesPage({ worldId }: Props) {
 
   async function selectFile(path: string) {
     if (savingRef.current) return;
+    invalidateReveal();
     const life = lifecycle.current;
     const token = ++readToken.current;
     setSelectedPath(path);
@@ -241,7 +249,7 @@ export default function FilesPage({ worldId }: Props) {
     return <PageState error={new Error(listError)} onRetry={loadList} />;
   return (
     <div className={styles.page}>
-      <aside className={styles.library} aria-label="File library">
+      <ResponsivePane label="File library" className={styles.library} closeOnSelect>
         <header>
           <h1>Files</h1>
           <button type="button" aria-label="Refresh files" disabled={saving} onClick={loadList}>
@@ -296,7 +304,7 @@ export default function FilesPage({ worldId }: Props) {
         ) : (
           <p>No files in this view.</p>
         )}
-      </aside>
+      </ResponsivePane>
       {selected && loaded ? (
         <DetailPane
           title={selected.name}

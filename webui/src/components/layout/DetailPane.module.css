@@ -83,6 +83,9 @@
   background: var(--surface-strong);
 }
 
+.backdrop {
+  display: none;
+}
 .inspector[aria-hidden='true'] {
   display: none;
 }
@@ -104,6 +107,7 @@
   }
 
   .inspector {
+    display: none;
     position: absolute;
     z-index: 20;
     inset: 0 0 0 auto;
@@ -112,6 +116,18 @@
     background: var(--surface);
     box-shadow: var(--shadow-md);
     overscroll-behavior: contain;
+  }
+  .inspector[data-open='true'] {
+    display: block;
+  }
+  .backdrop {
+    display: block;
+    position: absolute;
+    z-index: 19;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    background: rgb(15 23 42 / 38%);
   }
 }
 

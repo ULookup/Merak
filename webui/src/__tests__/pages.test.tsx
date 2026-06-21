@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { startTransition, Suspense, useState } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -12,6 +12,7 @@ import CreateSecretModal from '../components/Inspector/CreateSecretModal';
 import DetailPane from '../components/layout/DetailPane';
 import PageState from '../components/layout/PageState';
 import ResourceList from '../components/layout/ResourceList';
+import ResponsivePane from '../components/layout/ResponsivePane';
 import { useResource } from '../hooks/useResource';
 import ChaptersPage from '../pages/ChaptersPage';
 import CharactersPage from '../pages/CharactersPage';
@@ -420,6 +421,57 @@ describe('Files page', () => {
       fireEvent.click(reveal);
       expect(await screen.findByRole('alert')).toHaveTextContent(failure);
       expect(reveal).not.toBeDisabled();
+    }
+  });
+
+  it('invalidates pending Reveal feedback when another file is selected', async () => {
+    const revealing = deferred<Awaited<ReturnType<typeof api.openWorkspacePath>>>();
+    const second = { ...file, path: 'C:/story/second.md', name: 'second.md' };
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file, second],
+    });
+    vi.mocked(api.readWorkspaceFile).mockImplementation(async (path) => ({
+      ok: true,
+      file: { path, content: path, encoding: 'utf-8', updated_at: '', version: 'v1' },
+    }));
+    vi.mocked(api.openWorkspacePath).mockReturnValue(revealing.promise);
+    render(<FilesPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /draft/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Reveal selected file' }));
+    fireEvent.click(screen.getByRole('option', { name: /second/i }));
+    expect(await screen.findByRole('button', { name: 'Reveal selected file' })).not.toBeDisabled();
+    await act(async () => revealing.resolve({ ok: true, path: file.path } as never));
+    expect(screen.queryByText('File revealed in workspace.')).toBeNull();
+  });
+
+  it('uses one shared responsive resource pane across the five rail pages', () => {
+    for (const page of [
+      'CharactersPage',
+      'FilesPage',
+      'ScenesPage',
+      'ForeshadowingPage',
+      'SecretsPage',
+    ]) {
+      const source = readFileSync(join(process.cwd(), `src/pages/${page}.tsx`), 'utf8');
+      expect(source).toContain('ResponsivePane');
+    }
+  });
+
+  it('keeps all page styles on approved global palette tokens', () => {
+    const pagesDir = join(process.cwd(), 'src/pages');
+    const files = readdirSync(pagesDir).filter((name) => name.endsWith('.module.css'));
+    const allowed = new Set(['#06266f', '#ffffff']);
+    for (const name of files) {
+      const css = readFileSync(join(pagesDir, name), 'utf8');
+      const colors = css.match(/#[0-9a-f]{3,8}\b/gi) ?? [];
+      expect(
+        colors.filter((color) => !allowed.has(color.toLowerCase())),
+        name,
+      ).toEqual([]);
+      if (css.includes('{'))
+        expect(css, name).toMatch(/var\(--(?:brand|surface|border|ink|muted|ruby|green|amber)/);
     }
   });
 
@@ -1624,6 +1676,30 @@ describe('DetailPane', () => {
     fireEvent.keyDown(inspector, { key: 'Escape' });
     expect(screen.queryByRole('complementary', { name: 'Relations' })).toBeNull();
     expect(toggle).toHaveFocus();
+  });
+});
+
+describe('ResponsivePane', () => {
+  it('opens as a compact dialog, moves focus, closes on Escape, and restores focus', () => {
+    vi.stubGlobal('matchMedia', () => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    render(
+      <ResponsivePane label="Story resources">
+        <button type="button">First resource</button>
+      </ResponsivePane>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Open Story resources' });
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Story resources' });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Close Story resources' })).toHaveFocus();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Story resources' })).toBeNull();
+    expect(trigger).toHaveFocus();
+    vi.unstubAllGlobals();
   });
 });
 

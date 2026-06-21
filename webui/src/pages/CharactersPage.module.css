@@ -3,23 +3,23 @@
   grid-template-columns: 260px minmax(420px, 1fr) 280px;
   height: 100%;
   min-height: 0;
-  background: #f7f9fc;
-  color: #17213b;
+  background: var(--surface-strong);
+  color: var(--ink);
 }
 .listPane,
 .contextPane {
   min-height: 0;
   overflow: auto;
-  background: #fff;
+  background: var(--surface);
 }
 .listPane {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #dfe6ef;
+  border-right: 1px solid var(--border);
 }
 .contextPane {
   padding: 16px;
-  border-left: 1px solid #dfe6ef;
+  border-left: 1px solid var(--border);
 }
 .detailPane {
   min-width: 0;
@@ -32,7 +32,7 @@
   padding: 16px;
 }
 .listPane header span {
-  color: #667085;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -46,10 +46,10 @@
   width: 32px;
   height: 32px;
   place-items: center;
-  border: 1px solid #d7dfeb;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: #fff;
-  color: #153981;
+  background: var(--surface);
+  color: var(--brand);
   cursor: pointer;
 }
 .refresh {
@@ -58,10 +58,10 @@
   gap: 6px;
   margin: 0 16px 10px;
   padding: 7px 9px;
-  border: 1px solid #dfe6ef;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #fff;
-  color: #536178;
+  background: var(--surface);
+  color: var(--muted-strong);
   cursor: pointer;
   font-size: 12px;
 }
@@ -73,10 +73,10 @@
   gap: 6px;
   margin: 0 16px 10px;
   padding: 9px;
-  border: 1px solid #f0d7a6;
+  border: 1px solid var(--amber-soft);
   border-radius: 6px;
-  background: #fff9eb;
-  color: #7a4d0b;
+  background: var(--amber-soft);
+  color: var(--amber);
   font-size: 12px;
 }
 .listWarning button {
@@ -84,7 +84,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: #153981;
+  color: var(--brand);
   cursor: pointer;
   font-weight: 700;
 }
@@ -104,14 +104,14 @@
   white-space: nowrap;
 }
 .listItem span {
-  color: #7a8699;
+  color: var(--muted);
   font-size: 11px;
 }
 .listPane footer {
   margin-top: auto;
   padding: 12px 16px;
-  border-top: 1px solid #edf0f4;
-  color: #7a8699;
+  border-top: 1px solid var(--surface-muted);
+  color: var(--muted);
   font-size: 12px;
 }
 .pick,
@@ -127,7 +127,7 @@
 .empty svg {
   width: 34px;
   height: 34px;
-  color: #153981;
+  color: var(--brand);
 }
 .pick h2,
 .empty h1 {
@@ -137,7 +137,7 @@
 .pick p,
 .empty p,
 .muted {
-  color: #7a8699;
+  color: var(--muted);
 }
 .empty button {
   display: flex;
@@ -147,14 +147,14 @@
   padding: 9px 13px;
   border: 0;
   border-radius: 6px;
-  background: #103687;
-  color: #fff;
+  background: var(--brand);
+  color: var(--surface);
   cursor: pointer;
 }
 .page {
   height: 100%;
   overflow: auto;
-  background: #f7f9fc;
+  background: var(--surface-strong);
 }
 .contextStack {
   display: grid;
@@ -162,7 +162,7 @@
 }
 .contextSection {
   padding: 14px;
-  border: 1px solid #dfe6ef;
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 .contextSection h2 {
@@ -171,7 +171,7 @@
 }
 .contextSection article {
   padding: 9px 0;
-  border-bottom: 1px solid #edf0f4;
+  border-bottom: 1px solid var(--surface-muted);
 }
 .contextSection article:last-child {
   border-bottom: 0;
@@ -181,28 +181,28 @@
   line-height: 1.45;
 }
 .contextSection small {
-  color: #7a8699;
+  color: var(--muted);
 }
 .contextError {
   display: grid;
   gap: 8px;
-  color: #9b3a25;
+  color: var(--ruby);
 }
 .contextError button {
   width: max-content;
   border: 0;
   background: transparent;
-  color: #153981;
+  color: var(--brand);
   cursor: pointer;
   font-weight: 700;
 }
 .deleteError {
   margin: 12px;
   padding: 10px;
-  border: 1px solid #efc8c2;
+  border: 1px solid var(--ruby-soft);
   border-radius: 6px;
-  background: #fff3f1;
-  color: #923a2d;
+  background: var(--ruby-soft);
+  color: var(--ruby);
 }
 .voiceMetrics {
   display: grid;
@@ -214,7 +214,7 @@
   justify-content: space-between;
 }
 .voiceMetrics dt {
-  color: #667085;
+  color: var(--muted);
 }
 .voiceMetrics dd {
   margin: 0;
@@ -229,8 +229,8 @@
 .voiceWords span {
   padding: 3px 6px;
   border-radius: 4px;
-  background: #edf2ff;
-  color: #153981;
+  background: var(--brand-wash);
+  color: var(--brand);
 }
 @media (max-width: 1050px) {
   .workspace {
@@ -240,7 +240,7 @@
   .contextPane {
     grid-column: 1 / -1;
     overflow: visible;
-    border-top: 1px solid #dfe6ef;
+    border-top: 1px solid var(--border);
     border-left: 0;
   }
 }
@@ -251,6 +251,6 @@
   .listPane {
     max-height: 42%;
     border-right: 0;
-    border-bottom: 1px solid #dfe6ef;
+    border-bottom: 1px solid var(--border);
   }
 }
