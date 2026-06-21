@@ -34,6 +34,7 @@ public:
         int max_output_tokens = 4096;
         int max_retries = 3;
         int model_max_tokens = 128000;
+        int circuit_breaker_threshold = 3;
         bool enable_compaction = true;
         bool enable_cache = true;
     };
@@ -107,7 +108,6 @@ private:
     std::optional<std::string> active_scene_id_;
     std::optional<std::string> caller_agent_id_;
     std::map<std::string, int> tool_failure_streak_;
-    static constexpr int kCircuitBreakerThreshold = 3;
 
     int consecutive_read_only_rounds_ = 0;
     int consecutive_world_query_rounds_ = 0;
