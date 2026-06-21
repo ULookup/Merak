@@ -378,6 +378,8 @@ std::vector<SessionRecord> RuntimeService::list_sessions(const std::string& worl
 }
 std::optional<SessionRecord>RuntimeService::get_session(const std::string&id)const{return store_->get_session(id);}
 std::optional<RunRecord>RuntimeService::get_run(const std::string&id)const{return store_->get_run(id);}
+SessionStore::RunListResult RuntimeService::list_runs(const std::string&session_id,const std::string&status,int limit,int offset)const{return store_->list_runs(session_id,status,limit,offset);}
+RunRecord RuntimeService::resume_run(const std::string&run_id){auto existing=store_->get_run(run_id);if(!existing)throw RuntimeError("run_not_found","Run does not exist");if(existing->status!=RunStatus::Interrupted&&existing->status!=RunStatus::Failed)throw RuntimeError("run_not_resumable","Run is not in a resumable state");auto new_run=store_->create_run(existing->session_id,existing->user_message,existing->id,existing->delegation_id,existing->agent_id,existing->run_kind);return new_run;}
 RunRecord RuntimeService::create_run_record(const std::string&s,const std::string&m){if(!store_->get_session(s))throw RuntimeError("session_not_found","Session does not exist");if(store_->has_unfinished_run(s))throw RuntimeError("session_busy","Session already has an unfinished run");auto r=store_->create_run(s,m);emit(s,r.id,"run_started",{{"message",m}});
     auto session = store_->get_session(s);
     if (session && session->last_seq == 0 && session->title.empty()) {
