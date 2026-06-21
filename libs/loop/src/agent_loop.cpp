@@ -134,10 +134,9 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         std::vector<ToolCall> accumulated_tool_calls;
 
-        // Snapshot: if LLM streaming fails mid-flight, chunks already emitted
-        // via the callback would be duplicated by the retry. Save and restore
-        // the pre-attempt text length so only the successful response is kept.
-        const auto text_len_before_attempt = response.text.size();
+        // Provider layer handles all retry internally (exponential backoff).
+        // AgentLoop only catches to handle context-window recovery.
+        AgentResponse llm_response;
 
         auto llm_future = llm_->chat(req,
             [&](StreamChunk chunk) {
@@ -150,65 +149,11 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
                 }
             }, control.cancellation_token());
 
-        AgentResponse llm_response;
-        int attempt = 0;
-        while (true) {
-            try {
-                llm_response = llm_future.get();
-                break;
-            } catch (const std::exception& e) {
-                // Restore text to pre-attempt state so retry doesn't duplicate
-                // partial chunks already emitted by the failed future.
-                response.text.resize(text_len_before_attempt);
-                attempt++;
-                int http_status = 0;
-                std::string msg = e.what();
-                auto pos = msg.rfind("(HTTP ");
-                if (pos != std::string::npos) {
-                    http_status = std::stoi(msg.substr(pos + 6));
-                }
-                auto error_class = turn_ingestor_.classify_error(http_status, msg);
-
-                if (attempt > config_.max_retries) {
-                    spdlog::error("Loop: max retries ({}) exceeded", config_.max_retries);
-                    throw;
-                }
-
-                switch (error_class) {
-                case LlmErrorClass::Auth:
-                case LlmErrorClass::Cancelled:
-                    throw; // never retry these
-                case LlmErrorClass::ContextWindow:
-                    spdlog::warn("Loop: context window error, triggering compaction");
-                    maybe_compact(control);
-                    break;
-                case LlmErrorClass::RateLimit:
-                case LlmErrorClass::StreamTransport:
-                case LlmErrorClass::StreamIdle:
-                case LlmErrorClass::Unknown:
-                default: {
-                    int delay_ms = std::min(2000 * (1 << (attempt - 1)), 30000);
-                    spdlog::warn("Loop: retry {}/{} after {}ms ({}: {})",
-                        attempt, config_.max_retries, delay_ms,
-                        (int)error_class, e.what());
-                    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
-                    break;
-                }
-                case LlmErrorClass::None:
-                    break;
-                }
-
-                llm_future = llm_->chat(req,
-                    [&](StreamChunk chunk) {
-                        auto token = control.cancellation_token();
-                        if (token && token->should_stop()) return;
-                        if (chunk.is_final) return;
-                        if (!chunk.is_tool_call) {
-                            control.emit_text_delta(chunk.text);
-                            response.text += chunk.text;
-                        }
-                    }, control.cancellation_token());
-            }
+        try {
+            llm_response = llm_future.get();
+        } catch (const std::exception& e) {
+            spdlog::error("Loop: LLM request failed after provider retries: {}", e.what());
+            throw;
         }
         response.total_input_tokens += llm_response.total_input_tokens;
         response.total_output_tokens += llm_response.total_output_tokens;
