@@ -134,10 +134,6 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         std::vector<ToolCall> accumulated_tool_calls;
 
-        // Provider layer handles all retry internally (exponential backoff).
-        // AgentLoop only retries context-window errors: trim history and retry once.
-        AgentResponse llm_response;
-
         auto llm_future = llm_->chat(req,
             [&](StreamChunk chunk) {
                 auto token = control.cancellation_token();
@@ -149,36 +145,12 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
                 }
             }, control.cancellation_token());
 
+        AgentResponse llm_response;
         try {
             llm_response = llm_future.get();
-        } catch (const std::exception& e) {
-            // Context-window errors need trim + retry; all others are final.
-            int http_status = 0;
-            std::string msg = e.what();
-            auto pos = msg.rfind("(HTTP ");
-            if (pos != std::string::npos) {
-                http_status = std::stoi(msg.substr(pos + 6));
-            }
-            auto error_class = turn_ingestor_.classify_error(http_status, msg);
-
-            if (error_class == LlmErrorClass::ContextWindow) {
-                spdlog::warn("Loop: context window error, triggering compaction and retry");
-                maybe_compact(control);
-                llm_future = llm_->chat(req,
-                    [&](StreamChunk chunk) {
-                        auto token = control.cancellation_token();
-                        if (token && token->should_stop()) return;
-                        if (chunk.is_final) return;
-                        if (!chunk.is_tool_call) {
-                            control.emit_text_delta(chunk.text);
-                            response.text += chunk.text;
-                        }
-                    }, control.cancellation_token());
-                llm_response = llm_future.get();
-            } else {
-                spdlog::error("Loop: LLM request failed after provider retries: {}", e.what());
-                throw;
-            }
+        } catch (const std::exception&) {
+            spdlog::error("Loop: LLM request failed after provider retries");
+            throw;
         }
         response.total_input_tokens += llm_response.total_input_tokens;
         response.total_output_tokens += llm_response.total_output_tokens;
