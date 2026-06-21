@@ -253,7 +253,7 @@ std::future<ToolResult> BashTool::execute(ToolCall call, ToolExecutionContext co
                 auto it = readonly_cache_.find(command);
                 if (it != readonly_cache_.end()) {
                     auto age = std::chrono::steady_clock::now() - it->second.timestamp;
-                    if (age < std::chrono::seconds(60)) {
+                    if (age < std::chrono::seconds(kCacheTTLSeconds)) {
                         result.output = it->second.output;
                         result.exit_code = it->second.exit_code;
                         result.is_error = (it->second.exit_code != 0);
