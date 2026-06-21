@@ -296,6 +296,39 @@ void test_agent_loop_metrics_accessible() {
     PASS();
 }
 
+// ——— Batch 4 new tests ———
+
+void test_tool_timeout_ms_default() {
+    TEST("Config tool_timeout_ms defaults to 30000");
+    AgentLoop::Config cfg;
+    assert(cfg.tool_timeout_ms == 30000);
+    PASS();
+}
+
+void test_tool_rate_limit_per_turn_default() {
+    TEST("Config tool_rate_limit.max_calls_per_turn defaults to 50");
+    AgentLoop::Config cfg;
+    assert(cfg.tool_rate_limit.max_calls_per_turn == 50);
+    PASS();
+}
+
+void test_tool_rate_limit_per_run_default() {
+    TEST("Config tool_rate_limit.max_calls_per_run defaults to 500");
+    AgentLoop::Config cfg;
+    assert(cfg.tool_rate_limit.max_calls_per_run == 500);
+    PASS();
+}
+
+void test_tool_rate_limit_custom() {
+    TEST("Config custom tool_rate_limit values");
+    AgentLoop::Config cfg;
+    cfg.tool_rate_limit.max_calls_per_turn = 10;
+    cfg.tool_rate_limit.max_calls_per_run = 100;
+    assert(cfg.tool_rate_limit.max_calls_per_turn == 10);
+    assert(cfg.tool_rate_limit.max_calls_per_run == 100);
+    PASS();
+}
+
 int main() {
     std::cout << "\nAgentLoop Tests\n===============\n";
     test_max_turns_config_default();
@@ -319,6 +352,10 @@ int main() {
     test_tool_domain_bitflag_checks();
     test_run_metrics_initially_zero();
     test_agent_loop_metrics_accessible();
+    test_tool_timeout_ms_default();
+    test_tool_rate_limit_per_turn_default();
+    test_tool_rate_limit_per_run_default();
+    test_tool_rate_limit_custom();
     std::cout << "\n" << tests_passed << "/" << tests_run << " passed\n";
     return tests_passed == tests_run ? 0 : 1;
 }
