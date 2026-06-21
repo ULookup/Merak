@@ -3,7 +3,7 @@
 #include <spdlog/spdlog.h>
 #include <sstream>
 #include <thread>
-#include <unordered_set>
+#include <chrono>
 #include <merak/skills/skill_executor.hpp>
 #include <merak/utilities.hpp>
 
@@ -31,6 +31,7 @@ AgentLoop::AgentLoop(
 
 void AgentLoop::restore_history(std::vector<Message> history) {
     session_history_ = std::move(history);
+    run_call_count_ = 0;
 }
 
 void AgentLoop::set_system_prompt(const std::string& prompt) {
@@ -67,6 +68,7 @@ std::future<AgentResponse> AgentLoop::run(
             consecutive_read_only_rounds_ = 0;
             consecutive_world_query_rounds_ = 0;
             consecutive_content_avoidance_ = 0;
+            run_call_count_ = 0;
 
             return run_loop(control);
         });
@@ -82,7 +84,9 @@ std::future<AgentResponse> AgentLoop::resume(RunControl& control) {
             tool_failure_streak_.clear();
             turn_guard_.reset();
             stall_detector_.reset();
+            run_call_count_ = 0;
             return run_loop(control);
+
         });
 }
 
@@ -94,6 +98,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
     current_turn_ = 0;
 
     while (turn_count < config_.max_turns) {
+        drain_abandoned_tasks();
         if (config_.enable_compaction) {
             maybe_compact(control);
         }
@@ -118,16 +123,16 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         req.enable_cache = config_.enable_cache;
 
         auto tool_specs = tools_->pinned_schemas();
-        if (!restricted_tools_.empty()) {
-            std::unordered_set<std::string> blocked(
-                restricted_tools_.begin(), restricted_tools_.end());
+        if (restricted_domains_ != ToolDomain::General) {
             std::vector<ToolSpec> filtered;
             filtered.reserve(tool_specs.size());
             for (auto& ts : tool_specs) {
-                if (!blocked.count(ts.name)) filtered.push_back(ts);
+                if (!(tools_->domain_of(ts.name) & restricted_domains_)) {
+                    filtered.push_back(ts);
+                }
             }
             req.tools = std::move(filtered);
-            restricted_tools_.clear();
+            restricted_domains_ = ToolDomain::General;
         } else {
             req.tools = tool_specs;
         }
@@ -385,7 +390,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         }
 
         auto verdict = turn_guard_.evaluate(guard_in);
-        restricted_tools_ = verdict.restricted_tools;
+        restricted_domains_ = verdict.restricted_domains;
 
         if (verdict.turn_penalty) {
             config_.max_turns = std::max(1, config_.max_turns + *verdict.turn_penalty);
@@ -593,7 +598,31 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
         ctx.world_id = active_world_id_.value_or("");
         ctx.scene_id = active_scene_id_.value_or("");
         ctx.caller_agent_id = caller_agent_id_.value_or("");
+        auto cancel_token = ctx.cancellation;
         auto result_future = tools_->execute(call, std::move(ctx));
+        const auto timeout_dur = std::chrono::milliseconds(config_.tool_timeout_ms);
+        auto status = result_future.wait_for(timeout_dur);
+        if (status == std::future_status::timeout) {
+            if (cancel_token) {
+                cancel_token->cancel();
+            }
+            ToolResult timeout_result;
+            timeout_result.call_id = call.id;
+            timeout_result.is_error = true;
+            timeout_result.output = "Tool '" + call.name + "' timed out after " +
+                std::to_string(timeout_dur.count()) + "ms";
+            results.push_back(timeout_result);
+            control.emit_tool_completed(call, timeout_result);
+            tool_failure_streak_[call.name]++;
+            run_metrics_.abandoned_tasks++;
+            if (abandoned_tasks_.size() >= kMaxAbandonedTasks) {
+                spdlog::error("Loop: abandoned task overflow ({}), draining oldest", abandoned_tasks_.size());
+                abandoned_tasks_.front().get();
+                abandoned_tasks_.erase(abandoned_tasks_.begin());
+            }
+            abandoned_tasks_.push_back(std::move(result_future));
+            continue;
+        }
         auto result = result_future.get();
 
         if (call.name == "ask_user") {
@@ -662,4 +691,13 @@ void AgentLoop::maybe_compact(RunControl& control) {
     }
 }
 
+
+void AgentLoop::drain_abandoned_tasks() {
+    abandoned_tasks_.erase(
+        std::remove_if(abandoned_tasks_.begin(), abandoned_tasks_.end(),
+            [](std::future<ToolResult>& f) {
+                return f.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready;
+            }),
+        abandoned_tasks_.end());
+}
 } // namespace merak

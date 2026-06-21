@@ -35,6 +35,7 @@ public:
         int model_max_tokens = 128000;
         bool enable_compaction = true;
         bool enable_cache = true;
+        int tool_timeout_ms = 30000;
     };
 
     AgentLoop(
@@ -105,12 +106,21 @@ private:
     std::map<std::string, int> tool_failure_streak_;
     static constexpr int kCircuitBreakerThreshold = 3;
 
+    struct RunMetrics {
+        int abandoned_tasks = 0;
+    };
+    RunMetrics run_metrics_{};
+
+
     int consecutive_read_only_rounds_ = 0;
     int consecutive_world_query_rounds_ = 0;
     int consecutive_content_avoidance_ = 0;
+    int run_call_count_ = 0;
+    std::vector<std::future<ToolResult>> abandoned_tasks_;
+    static constexpr size_t kMaxAbandonedTasks = 32;
     int current_turn_ = 0;
 
-    std::vector<std::string> restricted_tools_;
+    ToolDomain restricted_domains_ = ToolDomain::General;
 
     void transition_to(TurnState next, RunControl& control);
     std::vector<Message> build_context();
@@ -119,6 +129,7 @@ private:
         RunControl& control
     );
     void maybe_compact(RunControl& control);
+    void drain_abandoned_tasks();
 
     AgentResponse run_loop(RunControl& control);
 };

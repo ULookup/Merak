@@ -34,6 +34,8 @@ public:
     }
     size_t size() const { return tools_.size(); }
 
+    ToolDomain domain_of(const std::string& name) const;
+
     std::future<ToolResult> execute(const ToolCall& call, ToolExecutionContext context = {});
 
     bool check_permission(const std::string& tool_name,

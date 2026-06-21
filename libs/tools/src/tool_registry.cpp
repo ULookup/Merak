@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cctype>
 #include <sstream>
+#include <unordered_set>
 
 namespace merak {
 
@@ -277,4 +278,12 @@ void ToolRegistry::register_platform_basics() {
     register_tool(std::make_unique<tools::BashTool>());
 }
 
+
+ToolDomain ToolRegistry::domain_of(const std::string& name) const {
+    static const std::unordered_set<std::string> world_query = {
+        "query_map", "query_world", "query_history", "query_magic", "query_faction"
+    };
+    if (world_query.count(name)) return ToolDomain::WorldQuery;
+    return ToolDomain::General;
+}
 } // namespace merak

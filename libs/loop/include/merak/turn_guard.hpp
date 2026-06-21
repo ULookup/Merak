@@ -1,5 +1,6 @@
 #pragma once
 #include <merak/section_kind.hpp>
+#include <merak/tool_meta.hpp>
 #include <merak/message.hpp>
 #include <merak/stall_detector.hpp>
 #include <string>
@@ -15,7 +16,7 @@ public:
     std::string reason;
     std::optional<std::string> nudge;
     std::optional<int> turn_penalty;
-    std::vector<std::string> restricted_tools;
+    ToolDomain restricted_domains = ToolDomain::General;
   };
 
   struct RoundInput {
@@ -30,6 +31,13 @@ public:
     StallResult stall;
   };
 
+  struct Config {
+    int max_consecutive_world_query_rounds = 5;
+    int max_consecutive_read_only_rounds = 3;
+    int max_consecutive_content_avoidance = 3;
+    int max_warnings_before_critical = 4;
+  };
+
   TurnGuard() = default;
 
   Verdict evaluate(const RoundInput& input);
@@ -39,6 +47,7 @@ public:
   int warning_count() const { return warning_count_; }
 
 private:
+    Config config_{};
   int warning_count_ = 0;
 
   int penalty_for(int count) const;
