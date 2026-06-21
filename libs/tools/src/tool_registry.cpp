@@ -4,12 +4,86 @@
 #include <merak/builtin_tools.hpp>
 #include <merak/tool_search_tool.hpp>
 #include <merak/shell_tool.hpp>
+#include <merak/tool_meta.hpp>
 #include <spdlog/spdlog.h>
 #include <algorithm>
 #include <cctype>
 #include <sstream>
 
 namespace merak {
+
+namespace {
+
+int match_score(const std::string& query, const std::string& text) {
+    int score = 0;
+    std::string q_lower = query;
+    std::string t_lower = text;
+    std::transform(q_lower.begin(), q_lower.end(), q_lower.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    std::transform(t_lower.begin(), t_lower.end(), t_lower.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+
+    if (t_lower.find(q_lower) != std::string::npos) {
+        score += 10;
+    }
+
+    std::istringstream q_stream(q_lower);
+    std::string word;
+    while (q_stream >> word) {
+        if (t_lower.find(word) != std::string::npos) {
+            score += 1;
+        }
+    }
+
+    return score;
+}
+
+struct ValidationResult { bool ok = true; std::string error; };
+
+ValidationResult validate_arguments(
+    const std::string& args_json,
+    const std::string& schema_json)
+{
+    try {
+        auto schema = nlohmann::json::parse(schema_json);
+        auto args = nlohmann::json::parse(args_json);
+        if (!args.is_object()) {
+            return {false, "arguments must be a JSON object"};
+        }
+        // Check required fields
+        if (schema.contains("required") && schema["required"].is_array()) {
+            for (auto& req : schema["required"]) {
+                if (!args.contains(req.get<std::string>())) {
+                    return {false, "missing required field: " + req.get<std::string>()};
+                }
+            }
+        }
+        // Check type constraints on properties
+        if (schema.contains("properties") && schema["properties"].is_object()) {
+            for (auto& [key, prop] : schema["properties"].items()) {
+                if (!args.contains(key)) continue;
+                auto& val = args[key];
+                if (prop.contains("type")) {
+                    std::string expected = prop["type"].get<std::string>();
+                    bool type_ok = false;
+                    if (expected == "string") type_ok = val.is_string();
+                    else if (expected == "number" || expected == "integer") type_ok = val.is_number();
+                    else if (expected == "boolean") type_ok = val.is_boolean();
+                    else if (expected == "array") type_ok = val.is_array();
+                    else if (expected == "object") type_ok = val.is_object();
+                    if (!type_ok) {
+                        return {false, "field '" + key + "' expected type " + expected};
+                    }
+                }
+            }
+        }
+        return {true, ""};
+    } catch (const nlohmann::json::exception& e) {
+        return {false, std::string("JSON parse error: ") + e.what()};
+    }
+}
+
+} // anonymous namespace
 
 void ToolRegistry::register_tool(std::unique_ptr<Tool> tool) {
     auto spec = tool->spec();
@@ -106,6 +180,22 @@ std::future<ToolResult> ToolRegistry::execute(
         });
     }
 
+    // Validate arguments against tool's JSON Schema
+    auto spec = it->second->spec();
+    if (!spec.parameters_json.empty()) {
+        auto validation = validate_arguments(call.arguments, spec.parameters_json);
+        if (!validation.ok) {
+            return std::async(std::launch::deferred,
+                [call, error = std::move(validation.error)]() -> ToolResult {
+                    ToolResult invalid;
+                    invalid.call_id = call.id;
+                    invalid.is_error = true;
+                    invalid.output = "Invalid arguments for '" + call.name + "': " + error;
+                    return invalid;
+                });
+        }
+    }
+
     if (!check_permission(call.name, permission_mode_)) {
         return std::async(std::launch::deferred, [call, mode = permission_mode_]() -> ToolResult {
             ToolResult result;
@@ -153,34 +243,6 @@ bool ToolRegistry::requires_approval(const std::string& tool_name) const {
     return it->second->permission() == PermissionLevel::ask
         && permission_mode_ == "ask";
 }
-
-namespace {
-
-int match_score(const std::string& query, const std::string& text) {
-    int score = 0;
-    std::string q_lower = query;
-    std::string t_lower = text;
-    std::transform(q_lower.begin(), q_lower.end(), q_lower.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    std::transform(t_lower.begin(), t_lower.end(), t_lower.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-
-    if (t_lower.find(q_lower) != std::string::npos) {
-        score += 10;
-    }
-
-    std::istringstream q_stream(q_lower);
-    std::string word;
-    while (q_stream >> word) {
-        if (t_lower.find(word) != std::string::npos) {
-            score += 1;
-        }
-    }
-
-    return score;
-}
-
-} // anonymous namespace
 
 std::vector<ToolSpec> ToolRegistry::pinned_schemas() const {
     std::vector<ToolSpec> result;
