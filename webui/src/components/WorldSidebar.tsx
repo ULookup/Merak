@@ -15,12 +15,13 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useAppState } from '../AppState';
+import { useSafePageNavigation } from '../hooks/useSafePageNavigation';
 import BrandMark from './BrandMark';
 import ContextMeter from './Sidebar/ContextMeter';
 import ModelSelector from './Sidebar/ModelSelector';
 import PipelineNavigator from './Sidebar/PipelineNavigator';
-import WorkflowMonitor from './Sidebar/WorkflowMonitor';
 import SessionList from './Sidebar/SessionList';
+import WorkflowMonitor from './Sidebar/WorkflowMonitor';
 import WorldSelector from './Sidebar/WorldSelector';
 import styles from './WorldSidebar.module.css';
 
@@ -33,15 +34,19 @@ function AgentIcon({ kind }: { kind: string }) {
   const common = { size: 15, 'aria-hidden': true as const, strokeWidth: 2.3 };
   if (kind === 'god' || kind === '0' || kind === 'ruler') return <Crown {...common} />;
   if (kind === 'map_manager' || kind === '1' || kind === 'cartographer') return <Map {...common} />;
-  if (kind === 'history_manager' || kind === '2' || kind === 'scribe') return <ScrollText {...common} />;
-  if (kind === 'magic_system_manager' || kind === '3' || kind === 'oracle') return <Sparkles {...common} />;
-  if (kind === 'faction_manager' || kind === '4' || kind === 'warrior') return <Swords {...common} />;
+  if (kind === 'history_manager' || kind === '2' || kind === 'scribe')
+    return <ScrollText {...common} />;
+  if (kind === 'magic_system_manager' || kind === '3' || kind === 'oracle')
+    return <Sparkles {...common} />;
+  if (kind === 'faction_manager' || kind === '4' || kind === 'warrior')
+    return <Swords {...common} />;
   if (kind === 'group' || kind === '6' || kind === 'collective') return <UsersRound {...common} />;
   return <UserRound {...common} />;
 }
 
 export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps) {
   const { state, dispatch } = useAppState();
+  const safeNavigate = useSafePageNavigation();
 
   const currentWorld = state.worlds.find((w) => w.id === state.worldId);
 
@@ -63,12 +68,17 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
       </div>
 
       {/* World Header — click to go back to dashboard */}
-      <div className={styles.worldHeader} onClick={handleBackToDashboard} role="button" tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter') handleBackToDashboard(); }}>
+      <div
+        className={styles.worldHeader}
+        onClick={handleBackToDashboard}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') handleBackToDashboard();
+        }}
+      >
         <ArrowLeft size={15} aria-hidden="true" strokeWidth={2.4} />
-        <span className={styles.worldHeaderName}>
-          {currentWorld?.name ?? 'Select World'}
-        </span>
+        <span className={styles.worldHeaderName}>{currentWorld?.name ?? 'Select World'}</span>
       </div>
 
       <WorldSelector />
@@ -139,16 +149,18 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
               <div
                 key={agent.id}
                 className={
-                  agent.id === state.agentId
-                    ? styles.agentListItemActive
-                    : styles.agentListItem
+                  agent.id === state.agentId ? styles.agentListItemActive : styles.agentListItem
                 }
                 onClick={handleAgentClick}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleAgentClick(); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAgentClick();
+                }}
               >
-                <span className={styles.agentIcon}><AgentIcon kind={kind} /></span>
+                <span className={styles.agentIcon}>
+                  <AgentIcon kind={kind} />
+                </span>
                 <span>{agent.name ?? agent.id}</span>
               </div>
             );
@@ -163,10 +175,12 @@ export default function WorldSidebar({ open = true, onClose }: WorldSidebarProps
 
       <div
         className={styles.settingsTrigger}
-        onClick={() => dispatch({ type: 'SET_PAGE', page: 'settings' })}
+        onClick={() => safeNavigate('settings')}
         role="button"
         tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter') dispatch({ type: 'SET_PAGE', page: 'settings' }); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') safeNavigate('settings');
+        }}
       >
         <Settings size={15} aria-hidden="true" strokeWidth={2.3} />
         Settings

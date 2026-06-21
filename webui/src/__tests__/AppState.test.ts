@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { shouldReportWorldbuildingPartialFailure, shouldWarnBeforeClose } from '../App';
+import {
+  shouldRenderSessionsPage,
+  shouldReportWorldbuildingPartialFailure,
+  shouldWarnBeforeClose,
+} from '../App';
 import { initialState, reducer, type AppState } from '../AppState';
 
 function state(overrides: Partial<AppState> = {}): AppState {
@@ -8,13 +12,40 @@ function state(overrides: Partial<AppState> = {}): AppState {
 
 describe('AppState reducer', () => {
   it('SET_SESSION resets messages and sets sessionId', () => {
-    const prev = state({ messages: [{ id: 'm1', kind: 'user', text: 'hi' }], lastSeq: 5 });
+    const prev = state({
+      messages: [{ id: 'm1', kind: 'user', text: 'hi' }],
+      lastSeq: 5,
+      pendingAsk: {
+        runId: 'old-run',
+        callId: 'old-call',
+        question: 'Old question',
+        multiSelect: false,
+      },
+      pendingCreation: { id: 'old-creation', runId: 'old-run', toolName: 'create_scene' },
+    });
     const next = reducer(prev, { type: 'SET_SESSION', sessionId: 'new-id' });
     expect(next.sessionId).toBe('new-id');
     expect(next.messages).toHaveLength(0);
     expect(next.lastSeq).toBe(0);
     expect(next.currentRun).toBeNull();
     expect(next.status).toBe('idle');
+    expect(next.pendingAsk).toBeNull();
+    expect(next.pendingCreation).toBeNull();
+  });
+
+  it('SET_SESSION replaces the previous agent and clears it when the session has none', () => {
+    const withAgent = reducer(state({ agentId: 'old-agent' }), {
+      type: 'SET_SESSION',
+      sessionId: 'agent-session',
+      agentId: 'new-agent',
+    });
+    expect(withAgent.agentId).toBe('new-agent');
+
+    const withoutAgent = reducer(withAgent, {
+      type: 'SET_SESSION',
+      sessionId: 'world-session',
+    });
+    expect(withoutAgent.agentId).toBeNull();
   });
 
   it('SET_METADATA stores metadata and sets selectedModel', () => {
@@ -42,7 +73,16 @@ describe('AppState reducer', () => {
     const next = reducer(prev, {
       type: 'SET_SESSIONS',
       sessions: [
-        { id: 's1', title: 'Test', world_id: null, agent_id: null, last_seq: 0, created_at: '', updated_at: '', archived_at: null },
+        {
+          id: 's1',
+          title: 'Test',
+          world_id: null,
+          agent_id: null,
+          last_seq: 0,
+          created_at: '',
+          updated_at: '',
+          archived_at: null,
+        },
       ],
     });
     expect(next.sessions).toHaveLength(1);
@@ -200,6 +240,179 @@ describe('AppState reducer', () => {
     expect(next2.lastSeq).toBe(7);
   });
 
+  it('tracks and resolves interactive SSE requests', () => {
+    const askFrame = {
+      seq: 10,
+      type: 'ask_user_requested',
+      payload: {
+        run_id: 'r1',
+        call_id: 'call_1',
+        question: 'Choose POV',
+        options: ['First person', 'Third person'],
+      },
+    };
+    const asked = reducer(state(), { type: 'APPLY_SSE', frame: askFrame });
+    expect(asked.pendingAsk).toEqual({
+      runId: 'r1',
+      callId: 'call_1',
+      question: 'Choose POV',
+      choices: ['First person', 'Third person'],
+      multiSelect: false,
+    });
+    expect(reducer(asked, { type: 'RESOLVE_ASK', callId: 'call_1' }).pendingAsk).toBeNull();
+
+    const creationFrame = {
+      seq: 11,
+      type: 'creation_requested',
+      payload: {
+        run_id: 'r1',
+        creation_id: 'creation_1',
+        tool: 'create_scene',
+        preview: { title: 'Arrival' },
+      },
+    };
+    const requested = reducer(asked, { type: 'APPLY_SSE', frame: creationFrame });
+    expect(requested.pendingCreation).toEqual({
+      id: 'creation_1',
+      runId: 'r1',
+      toolName: 'create_scene',
+      preview: { title: 'Arrival' },
+    });
+    expect(
+      reducer(requested, {
+        type: 'APPLY_SSE',
+        frame: {
+          seq: 12,
+          type: 'creation_resolved',
+          payload: { creation_id: 'creation_1', decision: 'allow' },
+        },
+      }).pendingCreation,
+    ).toBeNull();
+    expect(
+      reducer(requested, { type: 'RESOLVE_CREATION', creationId: 'creation_1' }).pendingCreation,
+    ).toBeNull();
+  });
+
+  it('retains a creation request when its resolving SSE result fails', () => {
+    const prev = state({
+      pendingCreation: { id: 'creation_1', runId: 'run_1', toolName: 'create_scene' },
+      lastSeq: 4,
+    });
+    const next = reducer(prev, {
+      type: 'APPLY_SSE',
+      frame: {
+        seq: 5,
+        type: 'creation_resolved',
+        payload: { creation_id: 'creation_1', result: { ok: false } },
+      },
+    });
+    expect(next.pendingCreation).toEqual(prev.pendingCreation);
+  });
+
+  it('does not let stale local resolutions clear newer requests', () => {
+    const prev = state({
+      pendingAsk: {
+        runId: 'run_2',
+        callId: 'call_2',
+        question: 'New question',
+        multiSelect: false,
+      },
+      pendingCreation: { id: 'creation_2', runId: 'run_2', toolName: 'create_scene' },
+    });
+    expect(reducer(prev, { type: 'RESOLVE_ASK', callId: 'call_1' }).pendingAsk).toEqual(
+      prev.pendingAsk,
+    );
+    expect(
+      reducer(prev, { type: 'RESOLVE_CREATION', creationId: 'creation_1' }).pendingCreation,
+    ).toEqual(prev.pendingCreation);
+  });
+
+  it.each(['run_completed', 'run_failed', 'run_cancelled', 'run_interrupted'])(
+    'clears matching pending requests on %s',
+    (type) => {
+      const prev = state({
+        currentRun: 'run_1',
+        pendingAsk: {
+          runId: 'run_1',
+          callId: 'call_1',
+          question: 'Question',
+          multiSelect: false,
+        },
+        pendingCreation: { id: 'creation_1', runId: 'run_1', toolName: 'create_scene' },
+      });
+      const next = reducer(prev, {
+        type: 'APPLY_SSE',
+        frame: { seq: 8, type, payload: { run_id: 'run_1' } },
+      });
+      expect(next.pendingAsk).toBeNull();
+      expect(next.pendingCreation).toBeNull();
+    },
+  );
+
+  it('keeps newer pending requests when an older run terminates', () => {
+    const prev = state({
+      currentRun: 'run_2',
+      pendingAsk: {
+        runId: 'run_2',
+        callId: 'call_2',
+        question: 'Question',
+        multiSelect: false,
+      },
+      pendingCreation: { id: 'creation_2', runId: 'run_2', toolName: 'create_scene' },
+    });
+    const next = reducer(prev, {
+      type: 'APPLY_SSE',
+      frame: { seq: 8, type: 'run_completed', payload: { run_id: 'run_1' } },
+    });
+    expect(next.pendingAsk).toEqual(prev.pendingAsk);
+    expect(next.pendingCreation).toEqual(prev.pendingCreation);
+  });
+
+  it('retains a creation from another run even when currentRun matches the terminal event', () => {
+    const pendingCreation = { id: 'creation_2', runId: 'run_2', toolName: 'create_scene' };
+    const next = reducer(state({ currentRun: 'run_1', pendingCreation }), {
+      type: 'APPLY_SSE',
+      frame: { seq: 8, type: 'run_completed', payload: { run_id: 'run_1' } },
+    });
+    expect(next.pendingCreation).toEqual(pendingCreation);
+  });
+
+  it('clears a creation matching the terminal run even when currentRun has moved on', () => {
+    const next = reducer(
+      state({
+        currentRun: 'run_3',
+        pendingCreation: { id: 'creation_2', runId: 'run_2', toolName: 'create_scene' },
+      }),
+      {
+        type: 'APPLY_SSE',
+        frame: { seq: 8, type: 'run_failed', payload: { run_id: 'run_2', error: 'stopped' } },
+      },
+    );
+    expect(next.pendingCreation).toBeNull();
+  });
+
+  it('ignores duplicate and stale nonzero SSE frames before applying their effects', () => {
+    const askFrame = {
+      seq: 10,
+      type: 'ask_user_requested',
+      payload: { run_id: 'r1', question: 'Choose POV' },
+    };
+    const prev = state({ lastSeq: 10 });
+    expect(reducer(prev, { type: 'APPLY_SSE', frame: askFrame })).toEqual(prev);
+
+    const zeroSeq = reducer(prev, {
+      type: 'APPLY_SSE',
+      frame: { ...askFrame, seq: 0 },
+    });
+    expect(zeroSeq.pendingAsk).toEqual({
+      runId: 'r1',
+      callId: '',
+      question: 'Choose POV',
+      multiSelect: false,
+    });
+    expect(zeroSeq.lastSeq).toBe(10);
+  });
+
   describe('SSE frame: run_started', () => {
     it('creates user message from payload.message', () => {
       const prev = state();
@@ -346,6 +559,17 @@ describe('worldbuilding bootstrap error policy', () => {
 
   it('reports secondary endpoint failures when no overview is available', () => {
     expect(shouldReportWorldbuildingPartialFailure(false, true)).toBe(true);
+  });
+});
+
+describe('sessions route policy', () => {
+  it('allows the sessions page while a world has no active agent session', () => {
+    expect(shouldRenderSessionsPage('sessions', 'no_agent')).toBe(true);
+  });
+
+  it('keeps loading and no-world phases on their truthful boundary pages', () => {
+    expect(shouldRenderSessionsPage('sessions', 'loading')).toBe(false);
+    expect(shouldRenderSessionsPage('sessions', 'no_world')).toBe(false);
   });
 });
 

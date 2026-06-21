@@ -1,0 +1,94 @@
+.page {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.library {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 24px;
+  border-right: 1px solid var(--border-subtle);
+  overflow: auto;
+}
+.library header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.library h1 {
+  margin: 0;
+}
+.library input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.root {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.root code {
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+}
+.library strong,
+.library small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.library small {
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+.page textarea {
+  width: 100%;
+  min-height: 420px;
+  box-sizing: border-box;
+  resize: vertical;
+  font:
+    14px/1.65 ui-monospace,
+    Consolas,
+    monospace;
+}
+.error {
+  margin-bottom: 12px;
+  color: var(--danger);
+}
+
+.success {
+  padding: 8px 10px;
+  border: 1px solid var(--green-soft);
+  border-radius: var(--rounded-md);
+  background: var(--green-soft);
+  color: var(--green);
+}
+.conflict {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+@media (max-width: 1050px) {
+  .page {
+    grid-template-columns: 260px minmax(0, 1fr);
+    overflow: auto;
+  }
+}
+@media (max-width: 700px) {
+  .page {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .library {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    max-height: 280px;
+  }
+}

@@ -1,0 +1,91 @@
+.content {
+  min-width: 0;
+  min-height: 0;
+}
+
+.state,
+.loading {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-xl);
+  text-align: center;
+  color: var(--muted-strong);
+}
+
+.state h2 {
+  color: var(--ink);
+  font-size: 16px;
+}
+
+.state p {
+  max-width: 480px;
+  line-height: 1.5;
+}
+
+.state button,
+.warning button {
+  padding: 7px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--rounded-md);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.error {
+  color: var(--ruby);
+}
+
+.warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+  padding: 9px 12px;
+  border: 1px solid #f5c2c7;
+  border-radius: var(--rounded-md);
+  background: var(--ruby-soft);
+  color: var(--ruby);
+}
+
+.refreshing {
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.skeleton,
+.skeletonShort {
+  width: min(520px, 100%);
+  height: 18px;
+  border-radius: var(--rounded-md);
+  background: linear-gradient(90deg, var(--surface-muted), var(--surface), var(--surface-muted));
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.skeletonShort {
+  width: min(340px, 70%);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton,
+  .skeletonShort {
+    animation: none;
+  }
+}

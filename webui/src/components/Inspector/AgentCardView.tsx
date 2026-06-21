@@ -2,24 +2,26 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Pencil } from 'lucide-react';
 import { api } from '../../api/client';
 import type { AgentDetail } from '../../api/types';
-import { useAppState } from '../../AppState';
 import AgentAvatar from '../AgentAvatar';
 import AgentCardEdit from './AgentCardEdit';
 import styles from './AgentCardView.module.css';
 import AgentImageGallery from './AgentImageGallery';
 
 interface Props {
+  worldId: string;
   agentId: string;
   onClose: () => void;
   onViewPrompt?: () => void;
+  onDelete?: () => Promise<void> | void;
 }
 
-function fallback(value: string | number | null | undefined) {
-  return value || 'Not set';
-}
-
-export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props) {
-  const { state } = useAppState();
+export default function AgentCardView({
+  worldId,
+  agentId,
+  onClose,
+  onViewPrompt,
+  onDelete,
+}: Props) {
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -27,14 +29,13 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
   const abortRef = useRef<AbortController | undefined>(undefined);
 
   const load = useCallback(async () => {
-    if (!state.worldId) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setLoading(true);
     setError(null);
     try {
-      const res = await api.fetchAgentDetail(state.worldId, agentId);
+      const res = await api.fetchAgentDetail(worldId, agentId);
       if (!controller.signal.aborted) {
         setDetail(res.agent);
         setLoading(false);
@@ -45,7 +46,7 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
         setLoading(false);
       }
     }
-  }, [agentId, state.worldId]);
+  }, [agentId, worldId]);
 
   useEffect(() => {
     load();
@@ -68,10 +69,9 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
   if (!detail) return <div className={styles.container}>Agent not found</div>;
 
   if (editMode) {
-    if (!state.worldId) return <div className={styles.container}>No world selected</div>;
     return (
       <AgentCardEdit
-        worldId={state.worldId}
+        worldId={worldId}
         agentId={agentId}
         detail={detail}
         onSave={(updated) => {
@@ -100,6 +100,11 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
               Prompt
             </button>
           )}
+          {onDelete ? (
+            <button onClick={() => void onDelete()} className={styles.deleteBtn}>
+              Delete character
+            </button>
+          ) : null}
           <button onClick={() => setEditMode(true)} className={styles.editBtn}>
             <Pencil size={13} aria-hidden="true" />
             Edit
@@ -112,47 +117,45 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
         <div className={styles.profileText}>
           <h3>{displayName}</h3>
           <span>{detail.kind}</span>
-          <p>{cc.identity || cc.appearance || 'Character profile ready for worldbuilding context.'}</p>
-        </div>
-      </section>
-
-      {state.worldId && (
-        <section className={styles.section}>
-          <AgentImageGallery
-            worldId={state.worldId}
-            agentId={agentId}
-            imageType="avatar"
-            images={images.avatar}
-            onChanged={load}
-          />
-        </section>
-      )}
-
-      {state.worldId && (
-        <section className={styles.section}>
-          <AgentImageGallery
-            worldId={state.worldId}
-            agentId={agentId}
-            imageType="design"
-            images={images.design}
-            onChanged={load}
-          />
-        </section>
-      )}
-
-      <section className={styles.section}>
-        <h4>Basics</h4>
-        <div className={styles.fieldRow}>
-          <span>Age: {fallback(cc.age)}</span>
-          <span>Gender: {fallback(cc.gender)}</span>
-          <span>Race: {fallback(cc.race)}</span>
-          <span>Identity: {fallback(cc.identity)}</span>
+          {cc.identity || cc.appearance ? <p>{cc.identity || cc.appearance}</p> : null}
         </div>
       </section>
 
       <section className={styles.section}>
-        <h4>Core Traits</h4>
-        {cc.core_traits?.length ? (
+        <AgentImageGallery
+          worldId={worldId}
+          agentId={agentId}
+          imageType="avatar"
+          images={images.avatar}
+          onChanged={load}
+        />
+      </section>
+
+      <section className={styles.section}>
+        <AgentImageGallery
+          worldId={worldId}
+          agentId={agentId}
+          imageType="design"
+          images={images.design}
+          onChanged={load}
+        />
+      </section>
+
+      {cc.age !== undefined || cc.gender || cc.race || cc.identity ? (
+        <section className={styles.section}>
+          <h4>Basics</h4>
+          <div className={styles.fieldRow}>
+            {cc.age !== undefined ? <span>Age: {cc.age}</span> : null}
+            {cc.gender ? <span>Gender: {cc.gender}</span> : null}
+            {cc.race ? <span>Race: {cc.race}</span> : null}
+            {cc.identity ? <span>Identity: {cc.identity}</span> : null}
+          </div>
+        </section>
+      ) : null}
+
+      {cc.core_traits?.length ? (
+        <section className={styles.section}>
+          <h4>Core Traits</h4>
           <div className={styles.tags}>
             {cc.core_traits.map((trait) => (
               <span key={trait} className={styles.tag}>
@@ -160,10 +163,8 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
               </span>
             ))}
           </div>
-        ) : (
-          <p>Not set</p>
-        )}
-      </section>
+        </section>
+      ) : null}
 
       {cc.emotional_tendency && (
         <section className={styles.section}>
@@ -172,25 +173,33 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
         </section>
       )}
 
-      <section className={styles.section}>
-        <h4>Speaking Style</h4>
-        <p>{fallback(cc.speaking_style)}</p>
-      </section>
+      {cc.speaking_style ? (
+        <section className={styles.section}>
+          <h4>Speaking Style</h4>
+          <p>{cc.speaking_style}</p>
+        </section>
+      ) : null}
 
-      <section className={styles.section}>
-        <h4>Core Desire</h4>
-        <p>{fallback(cc.core_desire)}</p>
-      </section>
+      {cc.core_desire ? (
+        <section className={styles.section}>
+          <h4>Core Desire</h4>
+          <p>{cc.core_desire}</p>
+        </section>
+      ) : null}
 
-      <section className={styles.section}>
-        <h4>Deep Fear</h4>
-        <p>{fallback(cc.deep_fear)}</p>
-      </section>
+      {cc.deep_fear ? (
+        <section className={styles.section}>
+          <h4>Deep Fear</h4>
+          <p>{cc.deep_fear}</p>
+        </section>
+      ) : null}
 
-      <section className={styles.section}>
-        <h4>Daily Goal</h4>
-        <p>{fallback(cc.daily_goal)}</p>
-      </section>
+      {cc.daily_goal ? (
+        <section className={styles.section}>
+          <h4>Daily Goal</h4>
+          <p>{cc.daily_goal}</p>
+        </section>
+      ) : null}
 
       {cc.background && (
         <section className={styles.section}>
@@ -199,10 +208,12 @@ export default function AgentCardView({ agentId, onClose, onViewPrompt }: Props)
         </section>
       )}
 
-      <section className={styles.section}>
-        <h4>Knowledge Scope</h4>
-        <p>{fallback(cc.knowledge_scope)}</p>
-      </section>
+      {cc.knowledge_scope ? (
+        <section className={styles.section}>
+          <h4>Knowledge Scope</h4>
+          <p>{cc.knowledge_scope}</p>
+        </section>
+      ) : null}
 
       {cc.appearance && (
         <section className={styles.section}>

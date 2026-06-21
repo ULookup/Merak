@@ -1,11 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { useEffect } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode, useEffect } from 'react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api/client';
 import { AppStateProvider, useAppState } from '../AppState';
-import { getDesktopRuntimeSteps } from '../DesktopBoot';
 import BrandMark from '../components/BrandMark';
 import AssistantCell from '../components/cells/AssistantCell';
 import StatusPill from '../components/cells/StatusPill';
@@ -20,6 +19,7 @@ import WorldSelector from '../components/Sidebar/WorldSelector';
 import { ToastProvider } from '../components/Toast';
 import WorldDashboard from '../components/WorldDashboard';
 import WorldOnboarding from '../components/WorldOnboarding';
+import { getDesktopRuntimeSteps } from '../DesktopBoot';
 
 function TimelineHarness() {
   const { dispatch } = useAppState();
@@ -121,6 +121,47 @@ function SessionLifecycleHarness() {
   return <SessionList />;
 }
 
+function SessionSelectionHarness() {
+  const { state, dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'SET_AGENT_SESSION', sessionId: 'agent_session', agentId: 'agent_old' });
+    dispatch({
+      type: 'SET_SESSIONS',
+      sessions: [
+        {
+          id: 'agent_session',
+          title: 'Agent draft',
+          world_id: 'world_1',
+          agent_id: 'agent_old',
+          last_seq: 1,
+          created_at: '2026-06-06T10:30:00Z',
+          updated_at: '2026-06-06T10:30:00Z',
+          archived_at: null,
+        },
+        {
+          id: 'world_session',
+          title: 'World notes',
+          world_id: 'world_1',
+          agent_id: null,
+          last_seq: 2,
+          created_at: '2026-06-06T11:00:00Z',
+          updated_at: '2026-06-06T11:00:00Z',
+          archived_at: null,
+        },
+      ],
+    });
+  }, [dispatch]);
+
+  return (
+    <>
+      <SessionList worldId="world_1" />
+      <output aria-label="selected-session">{state.sessionId}</output>
+      <output aria-label="selected-agent">{state.agentId ?? 'none'}</output>
+    </>
+  );
+}
+
 function WorldIconHarness() {
   const { dispatch } = useAppState();
 
@@ -194,17 +235,56 @@ describe('Cell components', () => {
     render(
       <AppStateProvider>
         <ToastProvider>
-          <MainPanel connectionState="connected" />
+          <MainPanel connectionState="connected" onToggleHistory={() => {}} />
         </ToastProvider>
       </AppStateProvider>,
     );
 
-    expect(screen.getByRole('button', { name: 'Open sidebar' }).querySelector('svg')).toBeDefined();
+    expect(
+      screen.getByRole('button', { name: 'Open session history' }).querySelector('svg'),
+    ).toBeDefined();
     expect(
       screen.getByRole('button', { name: 'Open inspector' }).querySelector('svg'),
     ).toBeDefined();
     expect(screen.queryByText('☰')).toBeNull();
     expect(screen.queryByText('◫')).toBeNull();
+  });
+
+  it('MainPanel only references session history controls in sessions mode', () => {
+    const { rerender } = render(
+      <AppStateProvider>
+        <ToastProvider>
+          <MainPanel connectionState="connected" onToggleSidebar={() => {}} />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Open sidebar' })).not.toHaveAttribute(
+      'aria-controls',
+    );
+
+    rerender(
+      <AppStateProvider>
+        <ToastProvider>
+          <MainPanel connectionState="connected" onToggleHistory={() => {}} />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Open session history' })).toHaveAttribute(
+      'aria-controls',
+      'session-history-panel',
+    );
+  });
+
+  it('keeps the sessions center column shrinkable before inspector overlay mode', () => {
+    const css = readFileSync(join(process.cwd(), 'src/pages/SessionsPage.module.css'), 'utf8');
+    const basePageRule = css.match(/^\.page\s*\{([^}]*)\}/m)?.[1] ?? '';
+
+    expect(basePageRule).toMatch(
+      /grid-template-columns:\s*var\(--history-width\)\s+minmax\(0,\s*1fr\)\s+var\(--inspector-width\)/,
+    );
+    expect(css).toMatch(/@media\s*\(max-width:\s*1179px\)/);
   });
 
   it('MainPanel opens an in-workbench guide from the help control', () => {
@@ -262,6 +342,21 @@ describe('Cell components', () => {
     expect(screen.getByText(/8 turns/)).toBeDefined();
     expect(screen.getByLabelText('Session Planning scene, 2 turns')).toBeDefined();
     expect(screen.getByLabelText('Session Old outline, archived, 8 turns')).toBeDefined();
+  });
+
+  it('SessionList selects the session agent and clears a stale agent when absent', () => {
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <SessionSelectionHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Session World notes, 2 turns'));
+
+    expect(screen.getByLabelText('selected-session')).toHaveTextContent('world_session');
+    expect(screen.getByLabelText('selected-agent')).toHaveTextContent('none');
   });
 
   it('UserCell renders text', () => {
@@ -418,7 +513,9 @@ describe('World onboarding', () => {
       target: { value: 'Snowbound border city' },
     });
     fireEvent.click(screen.getByRole('button', { name: /创建第一个|Create first/ }));
-    fireEvent.change(screen.getByLabelText(/Character Name|人物姓名|角色姓名/), { target: { value: 'Lian' } });
+    fireEvent.change(screen.getByLabelText(/Character Name|人物姓名|角色姓名/), {
+      target: { value: 'Lian' },
+    });
     fireEvent.change(screen.getByLabelText(/Identity|身份/), {
       target: { value: 'Archivist of the old passes' },
     });
@@ -688,10 +785,17 @@ function AgentsPanelHarness() {
   return <InspectorPanel open={true} onClose={() => {}} />;
 }
 
-function FilesHarness() {
+function FilesHarness({
+  twoFiles = false,
+  worldId = 'world-a',
+}: {
+  twoFiles?: boolean;
+  worldId?: string;
+}) {
   const { dispatch } = useAppState();
 
   useEffect(() => {
+    dispatch({ type: 'SET_WORLD', worldId });
     dispatch({
       type: 'SET_OUTPUT_DIRECTORY',
       path: '/Users/me/novel',
@@ -706,7 +810,13 @@ function FilesHarness() {
       },
     });
     dispatch({ type: 'SET_INSPECTOR_TAB', tab: 'files' });
-  }, [dispatch]);
+    if (twoFiles) {
+      dispatch({
+        type: 'REGISTER_GENERATED_FILE',
+        file: { id: 'file_2', title: 'notes', path: '/Users/me/novel/notes.txt', updatedAt: 2 },
+      });
+    }
+  }, [dispatch, twoFiles, worldId]);
 
   return <InspectorPanel open={true} onClose={() => {}} />;
 }
@@ -728,8 +838,8 @@ describe('InspectorPanel', () => {
     expect(screen.getByText('Lian')).toBeDefined();
     expect(screen.getByText('The bell tower never rings at noon')).toBeDefined();
     expect(screen.getByText('Lian knows the passphrase')).toBeDefined();
-    expect(screen.getByText('World time control')).toBeDefined();
-    expect(screen.getByText('Current: Day 4, dusk')).toBeDefined();
+    expect(screen.getByText('世界时间')).toBeDefined();
+    expect(screen.getByText('当前：Day 4, dusk')).toBeDefined();
     expect(screen.queryByText(/[�鈥鈫鈭]/)).toBeNull();
   });
 
@@ -809,7 +919,9 @@ describe('InspectorPanel', () => {
 
     expect(screen.getAllByText('Unsaved changes').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Revert chapter-12 to last loaded version' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Revert chapter-12 to last loaded version' }),
+    );
 
     expect((editor as HTMLTextAreaElement).value).toBe('Original draft.');
     expect(screen.queryByText('Unsaved changes')).toBeNull();
@@ -829,11 +941,13 @@ describe('InspectorPanel', () => {
     vi.spyOn(api, 'saveWorkspaceFile').mockRejectedValue(new Error('Disk is locked'));
 
     render(
-      <AppStateProvider>
-        <ToastProvider>
-          <FilesHarness />
-        </ToastProvider>
-      </AppStateProvider>,
+      <StrictMode>
+        <AppStateProvider>
+          <ToastProvider>
+            <FilesHarness />
+          </ToastProvider>
+        </AppStateProvider>
+      </StrictMode>,
     );
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
@@ -845,6 +959,263 @@ describe('InspectorPanel', () => {
     expect(await screen.findAllByText('Disk is locked')).toHaveLength(2);
   });
 
+  it('blocks file switching during save and commits the returned version', async () => {
+    let resolveSave!: (value: Awaited<ReturnType<typeof api.saveWorkspaceFile>>) => void;
+    const pending = new Promise<Awaited<ReturnType<typeof api.saveWorkspaceFile>>>((resolve) => {
+      resolveSave = resolve;
+    });
+    vi.spyOn(api, 'readWorkspaceFile').mockResolvedValue({
+      ok: true,
+      file: {
+        path: '/Users/me/novel/chapter-12.md',
+        content: 'Original',
+        encoding: 'utf-8',
+        updated_at: 'old',
+        version: 'v1',
+      },
+    });
+    const save = vi
+      .spyOn(api, 'saveWorkspaceFile')
+      .mockReturnValueOnce(pending)
+      .mockResolvedValueOnce({
+        ok: true,
+        file: { path: '/Users/me/novel/chapter-12.md', updated_at: 'newer', version: 'v3' },
+      });
+    render(
+      <StrictMode>
+        <AppStateProvider>
+          <ToastProvider>
+            <FilesHarness />
+          </ToastProvider>
+        </AppStateProvider>
+      </StrictMode>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
+    const editor = await screen.findByLabelText('Edit chapter-12');
+    fireEvent.change(editor, { target: { value: 'First save' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter-12' }));
+    expect(screen.getByRole('button', { name: 'Open chapter-12 in editor' })).toBeDisabled();
+    await act(async () =>
+      resolveSave({
+        ok: true,
+        file: { path: '/Users/me/novel/chapter-12.md', updated_at: 'new', version: 'v2' },
+      }),
+    );
+    fireEvent.change(editor, { target: { value: 'Second save' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter-12' }));
+    await waitFor(() =>
+      expect(save).toHaveBeenLastCalledWith('/Users/me/novel/chapter-12.md', 'Second save', 'v2'),
+    );
+  });
+
+  it('ignores stale read errors and finally callbacks across A-B-A overlap', async () => {
+    let rejectA!: (reason: Error) => void;
+    let resolveB!: (value: Awaited<ReturnType<typeof api.readWorkspaceFile>>) => void;
+    let resolveNewestA!: (value: Awaited<ReturnType<typeof api.readWorkspaceFile>>) => void;
+    const oldA = new Promise<never>((_, reject) => {
+      rejectA = reject;
+    });
+    const oldB = new Promise<Awaited<ReturnType<typeof api.readWorkspaceFile>>>((resolve) => {
+      resolveB = resolve;
+    });
+    const newestA = new Promise<Awaited<ReturnType<typeof api.readWorkspaceFile>>>((resolve) => {
+      resolveNewestA = resolve;
+    });
+    vi.spyOn(api, 'readWorkspaceFile')
+      .mockReturnValueOnce(oldA)
+      .mockReturnValueOnce(oldB)
+      .mockReturnValueOnce(newestA);
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness twoFiles />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    const a = await screen.findByRole('button', { name: 'Open chapter-12 in editor' });
+    const b = screen.getByRole('button', { name: 'Open notes in editor' });
+    fireEvent.click(a);
+    fireEvent.click(b);
+    fireEvent.click(a);
+    await act(async () => rejectA(new Error('Old A failed')));
+    await act(async () =>
+      resolveB({
+        ok: true,
+        file: {
+          path: '/Users/me/novel/notes.txt',
+          content: 'Old B',
+          encoding: 'utf-8',
+          updated_at: 'old',
+          version: 'b1',
+        },
+      }),
+    );
+    expect(screen.queryByText('Old A failed')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Open chapter-12 in editor' })).toHaveTextContent(
+      'Loading...',
+    );
+    await act(async () =>
+      resolveNewestA({
+        ok: true,
+        file: {
+          path: '/Users/me/novel/chapter-12.md',
+          content: 'Newest A',
+          encoding: 'utf-8',
+          updated_at: 'new',
+          version: 'a2',
+        },
+      }),
+    );
+    expect(await screen.findByLabelText('Edit chapter-12')).toHaveValue('Newest A');
+  });
+
+  it('invalidates a pending read and resets loading when the world changes', async () => {
+    let rejectRead!: (reason: Error) => void;
+    vi.spyOn(api, 'readWorkspaceFile').mockReturnValue(
+      new Promise<never>((_, reject) => {
+        rejectRead = reject;
+      }),
+    );
+    const view = render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-a" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
+    expect(screen.getByRole('button', { name: 'Open chapter-12 in editor' })).toHaveTextContent(
+      'Loading...',
+    );
+    view.rerender(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-b" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Open chapter-12 in editor' })).toHaveTextContent(
+        'Edit',
+      ),
+    );
+    await act(async () => rejectRead(new Error('Old world read failed')));
+    expect(screen.queryByText('Old world read failed')).toBeNull();
+  });
+
+  it('invalidates save completion after a world switch', async () => {
+    let resolveSave!: (value: Awaited<ReturnType<typeof api.saveWorkspaceFile>>) => void;
+    vi.spyOn(api, 'readWorkspaceFile').mockResolvedValue({
+      ok: true,
+      file: {
+        path: '/Users/me/novel/chapter-12.md',
+        content: 'Old',
+        encoding: 'utf-8',
+        updated_at: 'old',
+        version: 'v1',
+      },
+    });
+    vi.spyOn(api, 'saveWorkspaceFile').mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const view = render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-a" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
+    fireEvent.change(await screen.findByLabelText('Edit chapter-12'), {
+      target: { value: 'Local A' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter-12' }));
+    view.rerender(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-b" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    await act(async () =>
+      resolveSave({
+        ok: true,
+        file: { path: '/Users/me/novel/chapter-12.md', updated_at: 'new', version: 'v2' },
+      }),
+    );
+    expect(screen.queryByText('File saved.')).toBeNull();
+    expect(screen.queryByText('Saved')).toBeNull();
+  });
+
+  it('does not let an A-B-A open completion clear the newest open operation', async () => {
+    let resolveOld!: (value: { ok: boolean; path: string }) => void;
+    let resolveNew!: (value: { ok: boolean; path: string }) => void;
+    vi.spyOn(api, 'openWorkspacePath')
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveNew = resolve;
+        }),
+      );
+    const view = render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-a" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Open output folder' }));
+    view.rerender(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-b" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    view.rerender(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-a" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Open output folder' }));
+    await act(async () => resolveOld({ ok: true, path: '/old' }));
+    expect(screen.getByRole('button', { name: 'Open output folder' })).toHaveTextContent(
+      'Opening...',
+    );
+    await act(async () => resolveNew({ ok: true, path: '/new' }));
+    expect(screen.getByRole('button', { name: 'Open output folder' })).toHaveTextContent(
+      'Open folder',
+    );
+  });
+
+  it('ignores pending Inspector callbacks after unmount', async () => {
+    let rejectRead!: (reason: Error) => void;
+    vi.spyOn(api, 'readWorkspaceFile').mockReturnValue(
+      new Promise<never>((_, reject) => {
+        rejectRead = reject;
+      }),
+    );
+    const view = render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
+    view.unmount();
+    await act(async () => rejectRead(new Error('Unmounted read')));
+    expect(screen.queryByText('Unmounted read')).toBeNull();
+  });
+
   it('renders a readable creation dashboard without mojibake copy', async () => {
     render(
       <AppStateProvider>
@@ -853,8 +1224,8 @@ describe('InspectorPanel', () => {
     );
 
     expect(await screen.findByRole('heading', { name: 'Creation Panel' })).toBeDefined();
-    expect(screen.getByRole('tab', { name: /Foreshadowing/ })).toBeDefined();
-    expect(screen.getByText('Plant and track narrative threads.')).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Create' })).toBeDefined();
+    expect(await screen.findByText('Plant and track narrative threads.')).toBeDefined();
     expect(screen.getByText('Open Threads')).toBeDefined();
     expect(screen.getByText('The old bell never rings at noon.')).toBeDefined();
     expect(screen.queryByText(/[�鈥鈫鈭]/)).toBeNull();

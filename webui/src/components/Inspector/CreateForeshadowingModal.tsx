@@ -1,5 +1,5 @@
 import { Eye, Lightbulb, Loader2, Tag, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client';
 import { useAppState } from '../../AppState';
 import styles from './CreateModal.module.css';
@@ -7,7 +7,7 @@ import styles from './CreateModal.module.css';
 interface Props {
   worldId: string;
   onClose: () => void;
-  onCreated?: () => void;
+  onCreated?: () => void | Promise<void>;
 }
 
 export default function CreateForeshadowingModal({ worldId, onClose, onCreated }: Props) {
@@ -18,6 +18,19 @@ export default function CreateForeshadowingModal({ worldId, onClose, onCreated }
   const [tags, setTags] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
+  const generationRef = useRef(0);
+  const committedWorldRef = useRef(worldId);
+  const mountedRef = useRef(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    if (committedWorldRef.current !== worldId) {
+      committedWorldRef.current = worldId;
+      generationRef.current += 1;
+    }
+    return () => { mountedRef.current = false; generationRef.current += 1; };
+  }, [worldId]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !submitting) onClose(); }
@@ -26,7 +39,9 @@ export default function CreateForeshadowingModal({ worldId, onClose, onCreated }
   }, [onClose, submitting]);
 
   async function handleSubmit() {
-    if (!content.trim()) return;
+    if (!content.trim() || submittingRef.current) return;
+    const operationGeneration = generationRef.current;
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -37,12 +52,17 @@ export default function CreateForeshadowingModal({ worldId, onClose, onCreated }
         tags: tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
         session_id: state.sessionId,
       });
-      onCreated?.();
-      onClose();
+      if (mountedRef.current && generationRef.current === operationGeneration) {
+        await onCreated?.();
+        if (mountedRef.current && generationRef.current === operationGeneration) onClose();
+      }
     } catch (e) {
-      setError((e as Error).message);
+      if (mountedRef.current && generationRef.current === operationGeneration) setError((e as Error).message);
     } finally {
-      setSubmitting(false);
+      if (mountedRef.current && generationRef.current === operationGeneration) {
+        submittingRef.current = false;
+        setSubmitting(false);
+      }
     }
   }
 

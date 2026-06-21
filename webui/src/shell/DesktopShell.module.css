@@ -1,0 +1,285 @@
+.shell {
+  --shell-navy: var(--brand);
+  display: grid;
+  grid-template-columns: 244px minmax(0, 1fr);
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--surface-strong);
+  color: var(--ink);
+}
+.menuButton,
+.navClose,
+.navBackdrop {
+  display: none;
+}
+
+.sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 14px 18px;
+  border-right: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.brand {
+  height: 54px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+}
+
+.brand img {
+  width: 122px;
+  height: auto;
+}
+
+.worldCard,
+.search,
+.worldSelector {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #dce3ed;
+  border-radius: 7px;
+  background: #fff;
+  color: #17213b;
+}
+
+.worldCard {
+  min-height: 48px;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.worldCard span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search {
+  min-height: 36px;
+  padding: 0 10px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.search span {
+  flex: 1;
+}
+
+.search kbd {
+  padding: 2px 5px;
+  border: 1px solid #e3e8ef;
+  border-radius: 4px;
+  background: #f8fafc;
+  font: inherit;
+}
+
+.navigation {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.navButton {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #263653;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.navButton:hover {
+  background: #f1f5fb;
+}
+
+.navButton[aria-current='page'] {
+  background: var(--shell-navy);
+  color: #fff;
+  font-weight: 700;
+}
+
+.stage {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: 66px minmax(0, 1fr);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.worldSelector {
+  min-width: 190px;
+  height: 38px;
+  padding: 0 11px;
+}
+
+.worldSelector select {
+  min-width: 0;
+  flex: 1;
+  appearance: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+}
+
+.content {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pageContent {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 1180px) {
+  .stage {
+    grid-template-rows: 58px minmax(0, 1fr);
+  }
+
+  .topbar {
+    padding-inline: 16px;
+  }
+}
+
+@media (max-width: 980px) {
+  .shell {
+    position: relative;
+    display: block;
+  }
+
+  .stage {
+    height: 100%;
+  }
+  .menuButton {
+    display: inline-flex;
+    position: absolute;
+    z-index: 31;
+    top: 13px;
+    left: 12px;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: var(--rounded-md);
+    background: var(--surface);
+    color: var(--brand);
+  }
+  .navBackdrop {
+    display: block;
+    position: absolute;
+    z-index: 39;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    background: rgb(15 23 42 / 38%);
+  }
+  .sidebar {
+    display: none;
+    position: absolute;
+    z-index: 40;
+    inset: 0 auto 0 0;
+    width: min(280px, 86vw);
+    padding-inline: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+  .sidebar[data-open='true'] {
+    display: flex;
+  }
+  .navClose {
+    display: inline-flex;
+    position: absolute;
+    z-index: 1;
+    top: 10px;
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: var(--rounded-md);
+    background: var(--surface);
+    color: var(--brand);
+  }
+  .topbar {
+    padding-left: 58px;
+  }
+
+  .navButton {
+    font-size: 12px;
+  }
+
+  .brand img {
+    width: 108px;
+  }
+
+  .worldSelector {
+    min-width: 164px;
+  }
+}
+
+@media (max-height: 640px) {
+  .brand {
+    height: 38px;
+  }
+
+  .sidebar {
+    gap: 6px;
+    padding-block: 8px;
+  }
+
+  .worldCard {
+    min-height: 40px;
+  }
+
+  .stage {
+    grid-template-rows: 52px minmax(0, 1fr);
+  }
+}

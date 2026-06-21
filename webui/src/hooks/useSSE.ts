@@ -71,7 +71,6 @@ export function useSSE(url: string | null, dispatch: Dispatch<Action>, lastSeq: 
             const frame = parseSseFrame(part);
             if (frame) {
               dispatchRef.current({ type: 'APPLY_SSE', frame });
-              dispatchRef.current({ type: 'SET_LAST_SEQ', seq: frame.seq });
             }
           }
         }

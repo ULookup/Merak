@@ -1,10 +1,283 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { useEffect } from 'react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { AppStateProvider } from '../AppState';
+import { api } from '../api/client';
+import { AppStateProvider, useAppState } from '../AppState';
 import Composer from '../components/Composer';
 import ExportDialog from '../components/ExportDialog';
-import { ToastProvider } from '../components/Toast';
 import SetupWizard from '../components/SetupWizard';
+import { ToastProvider } from '../components/Toast';
+import ScenesPage from '../pages/ScenesPage';
+import SessionsPage from '../pages/SessionsPage';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+function SessionsPageHarness() {
+  const { dispatch } = useAppState();
+
+  useEffect(() => {
+    dispatch({ type: 'SET_WORLD', worldId: 'world_1' });
+    dispatch({ type: 'SET_SESSION', sessionId: 'session_1' });
+    dispatch({ type: 'SET_CURRENT_RUN', runId: 'run_1' });
+    dispatch({ type: 'SET_STATUS', status: 'thinking' });
+    dispatch({
+      type: 'SET_WORLDBUILDING_DATA',
+      worlds: [
+        {
+          id: 'world_1',
+          name: 'Northreach',
+          description: 'Snowbound border city',
+          created_at: '2026-06-06T10:00:00Z',
+        },
+      ],
+      agents: [],
+      foreshadowing: [],
+      secrets: [],
+      worldTime: 'Day 4, dusk',
+    });
+    dispatch({
+      type: 'SET_SESSIONS',
+      sessions: [
+        {
+          id: 'session_1',
+          title: 'Plan the rain invasion',
+          world_id: 'world_1',
+          agent_id: null,
+          last_seq: 6,
+          created_at: '2026-06-06T10:30:00Z',
+          updated_at: '2026-06-06T10:35:00Z',
+          archived_at: null,
+        },
+      ],
+    });
+    dispatch({ type: 'SET_INSPECTOR_TAB', tab: 'run' });
+  }, [dispatch]);
+
+  return <SessionsPage connectionState="connected" />;
+}
+
+describe('Sessions workbench', () => {
+  it('keeps session history, conversation, context, composer, and execution state together', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <SessionsPageHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    expect(await screen.findByRole('region', { name: 'Session history' })).toBeDefined();
+    expect(screen.getByRole('main', { name: 'Conversation' })).toBeDefined();
+    expect(screen.getByRole('complementary', { name: 'Story inspector' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Plan the rain invasion' })).toBeDefined();
+    expect(screen.getByTestId('composer-input')).toBeDefined();
+    for (const tab of ['Story', 'Files', 'Agents', 'Create', 'Run']) {
+      expect(screen.getByRole('tab', { name: tab })).toBeDefined();
+    }
+    expect(screen.getAllByText('Thinking').length).toBeGreaterThan(0);
+    expect(await screen.findByText('Creation in progress')).toBeDefined();
+  });
+
+  it('hides and restores history and inspector panels with truthful toggle state', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <SessionsPageHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    const history = await screen.findByRole('region', { name: 'Session history' });
+    const inspector = screen.getByRole('complementary', { name: 'Story inspector' });
+    expect(history).toHaveAttribute('aria-hidden', 'false');
+    expect(inspector).toHaveAttribute('aria-hidden', 'false');
+
+    fireEvent.click(screen.getByTestId('menu-btn'));
+    expect(history).toHaveAttribute('aria-hidden', 'true');
+    expect(history.className).not.toContain('historyOpen');
+    expect(screen.getByRole('button', { name: 'Open session history' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+
+    fireEvent.click(screen.getByTestId('inspector-btn'));
+    expect(inspector).toHaveAttribute('aria-hidden', 'true');
+    expect(inspector.className).not.toContain('panelOpen');
+    expect(screen.getByRole('button', { name: 'Open inspector' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('opens the inspector from its tablet default without exposing a hidden-state mismatch', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <SessionsPageHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    const inspector = await screen.findByTestId('inspector-panel');
+    expect(inspector).toHaveAttribute('aria-hidden', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
+    expect(inspector).toHaveAttribute('aria-hidden', 'false');
+    expect(inspector.className).toContain('panelOpen');
+  });
+});
+
+describe('Scene completion flow', () => {
+  it('marks a scene complete only after endScene resolves and renders returned extraction counts', async () => {
+    const ending = deferred<Awaited<ReturnType<typeof api.endScene>>>();
+    vi.spyOn(api, 'listScenes').mockResolvedValue({
+      ok: true,
+      scenes: [
+        {
+          id: 'scene-1',
+          title: 'Crossing the flooded stacks',
+          chapter_id: 'chapter-2',
+          world_time: 'Day 4, dusk',
+          status: 'writing',
+          participant_ids: ['lin'],
+          updated_at: '2026-06-19T09:00:00Z',
+        },
+      ],
+    });
+    vi.spyOn(api, 'endScene').mockReturnValue(ending.promise);
+
+    render(
+      <AppStateProvider>
+        <ScenesPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('option', { name: /Crossing the flooded stacks/ }));
+    expect(screen.getByText('writing')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'End scene' }));
+    const dialog = screen.getByRole('dialog', { name: 'End scene' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'End Scene' }));
+
+    expect(screen.getByText('writing')).toBeDefined();
+    expect(screen.queryByText('completed')).toBeNull();
+
+    await act(async () =>
+      ending.resolve({
+        ok: true,
+        diaries_written: [{ id: 'diary-1', agent_id: 'lin', scene_id: 'scene-1' }],
+        diary_count: 1,
+        relations_updated: 2,
+        proposed_foreshadowing: [{ id: 'thread-1', content: 'The archive glass remembers.' }],
+        leak_risks: 0,
+      }),
+    );
+
+    await waitFor(() => expect(screen.getByText('completed')).toBeDefined());
+    expect(screen.getByText('diaries written').parentElement).toHaveTextContent('1');
+    expect(screen.getByText('relations updated').parentElement).toHaveTextContent('2');
+    expect(screen.getByText('The archive glass remembers.')).toBeDefined();
+  });
+
+  it('keeps the end-scene target fixed when the live scene selection changes', async () => {
+    vi.spyOn(api, 'listScenes').mockResolvedValue({
+      ok: true,
+      scenes: [
+        {
+          id: 'scene-1',
+          title: 'First scene',
+          chapter_id: 'chapter-1',
+          world_time: 'Dawn',
+          status: 'writing',
+          participant_ids: [],
+          updated_at: '2026-06-19T09:00:00Z',
+        },
+        {
+          id: 'scene-2',
+          title: 'Second scene',
+          chapter_id: 'chapter-1',
+          world_time: 'Noon',
+          status: 'writing',
+          participant_ids: [],
+          updated_at: '2026-06-19T10:00:00Z',
+        },
+      ],
+    });
+    vi.spyOn(api, 'endScene').mockResolvedValue({
+      ok: true,
+      diaries_written: [],
+      diary_count: 0,
+      relations_updated: 0,
+      proposed_foreshadowing: [],
+      leak_risks: 0,
+    });
+    render(
+      <AppStateProvider>
+        <ScenesPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('option', { name: /First scene/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'End scene' }));
+    fireEvent.click(screen.getAllByRole('option', { hidden: true })[1]);
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: 'End scene' })).getByRole('button', {
+        name: 'End Scene',
+      }),
+    );
+
+    await waitFor(() => expect(api.endScene).toHaveBeenCalled());
+    expect(api.endScene).toHaveBeenCalledWith('world-1', 'scene-1', expect.any(Object));
+  });
+
+  it('traps focus in the end-scene modal and restores focus to its opener', async () => {
+    vi.spyOn(api, 'listScenes').mockResolvedValue({
+      ok: true,
+      scenes: [
+        {
+          id: 'scene-1',
+          title: 'First scene',
+          chapter_id: 'chapter-1',
+          world_time: 'Dawn',
+          status: 'writing',
+          participant_ids: [],
+          updated_at: '2026-06-19T09:00:00Z',
+        },
+      ],
+    });
+    render(
+      <AppStateProvider>
+        <ScenesPage worldId="world-1" />
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('option', { name: /First scene/ }));
+    const opener = screen.getByRole('button', { name: 'End scene' });
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole('dialog', { name: 'End scene' });
+
+    expect(
+      screen.getByRole('listbox', { name: 'Scenes', hidden: true }).closest('aside'),
+    ).toHaveAttribute('inert');
+    expect(screen.getByRole('region', { hidden: true })).toHaveAttribute('aria-hidden', 'true');
+    await waitFor(() => expect(within(dialog).getByRole('textbox')).toHaveFocus());
+    const [close, cancel] = within(dialog).getAllByRole('button', { name: 'Cancel' });
+    const end = within(dialog).getByRole('button', { name: 'End Scene' });
+    close.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(end).toHaveFocus();
+    end.focus();
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(close).toHaveFocus();
+    fireEvent.click(cancel);
+    expect(opener).toHaveFocus();
+  });
+});
 
 describe('SetupWizard', () => {
   it('renders the provider selection step initially', () => {
@@ -74,9 +347,7 @@ describe('ExportDialog', () => {
 
   it('renders the export dialog with chapter checkboxes', () => {
     const onClose = vi.fn();
-    render(
-      <ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />,
-    );
+    render(<ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />);
 
     // Dialog title
     expect(screen.getByText('导出 TXT')).toBeDefined();
@@ -101,9 +372,7 @@ describe('ExportDialog', () => {
 
   it('all checking and unchecking of chapters via select-all and deselect-all', () => {
     const onClose = vi.fn();
-    render(
-      <ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />,
-    );
+    render(<ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />);
 
     // All checkboxes should be checked by default
     const checkbox1 = screen.getByLabelText(/第1章 The Beginning/) as HTMLInputElement;
@@ -128,9 +397,7 @@ describe('ExportDialog', () => {
 
   it('export button is disabled until title is entered and at least one chapter is selected', () => {
     const onClose = vi.fn();
-    render(
-      <ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />,
-    );
+    render(<ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />);
 
     const exportBtn = screen.getByRole('button', { name: '导出' });
 
@@ -152,9 +419,7 @@ describe('ExportDialog', () => {
 
   it('calls onClose when cancel button is clicked', () => {
     const onClose = vi.fn();
-    render(
-      <ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />,
-    );
+    render(<ExportDialog worldId="world_1" chapters={chapters} onClose={onClose} />);
 
     fireEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -222,5 +487,21 @@ describe('Composer', () => {
     expect(sendBtn).toBeDefined();
     // Send button is disabled when text is empty
     expect((sendBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('cannot start a run without a selected session', () => {
+    const startRun = vi.spyOn(api, 'startRun');
+    render(
+      <AppStateProvider>
+        <ToastProvider>
+          <Composer />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+
+    fireEvent.change(screen.getByTestId('composer-input'), { target: { value: 'Draft a scene' } });
+    expect(screen.getByTestId('send-btn')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('send-btn'));
+    expect(startRun).not.toHaveBeenCalled();
   });
 });

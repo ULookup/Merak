@@ -1,7 +1,17 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { api } from '../api/client';
+import { AppStateProvider } from '../AppState';
 import SettingsPanel from '../components/Sidebar/SettingsPanel';
+import {
+  exportDiagnostics,
+  getDesktopRuntimeLogs,
+  getDesktopRuntimeStatus,
+  openDiagnosticsFolder,
+  restartDesktopRuntime,
+} from '../desktop';
 import { I18nProvider } from '../i18n';
+import SettingsPage from '../pages/SettingsPage';
 
 vi.mock('../api/client', () => ({
   api: {
@@ -14,6 +24,23 @@ vi.mock('../api/client', () => ({
     }),
     saveConfig: vi.fn().mockResolvedValue({ ok: true }),
     testConfig: vi.fn().mockResolvedValue({ ok: true }),
+    getPreferences: vi.fn().mockResolvedValue({
+      default_genre: 'No preference',
+      preferred_style: '简洁',
+      allow_usage_logs: true,
+    }),
+    savePreferences: vi.fn().mockResolvedValue({ ok: true }),
+    metadata: vi.fn().mockResolvedValue({
+      provider: 'openai',
+      model: 'gpt-4o',
+      models: [],
+      permission_mode: 'approval',
+      memory: { enabled: true },
+      tools: [],
+      mcp_servers: [],
+      agents: [],
+      delegation_patterns: [],
+    }),
   },
   formatApiError: vi.fn((error: unknown, fallback: string) =>
     error instanceof Error ? error.message : fallback,
@@ -34,7 +61,8 @@ vi.mock('../desktop', () => ({
     error: null,
   }),
   isDesktopApp: vi.fn(() => true),
-  openDiagnosticsFolder: vi.fn(),
+  getDesktopRuntimeLogs: vi.fn().mockResolvedValue({ lines: ['runtime ready'] }),
+  openDiagnosticsFolder: vi.fn().mockResolvedValue({ ok: true, path: 'C:/Users/me/logs' }),
   restartDesktopRuntime: vi.fn().mockResolvedValue({ ok: true, status: null }),
 }));
 
@@ -50,6 +78,130 @@ describe('SettingsPanel polish', () => {
     expect(screen.getByLabelText('访问密钥')).toBeDefined();
     expect(screen.getByText('本地桌面状态')).toBeDefined();
     expect(screen.getByRole('button', { name: '导出故障报告' })).toBeDefined();
-    expect(document.body.textContent ?? '').not.toMatch(/API Key|API Base URL|Runtime|Database|Diagnostics/i);
+    expect(document.body.textContent ?? '').not.toMatch(
+      /API Key|API Base URL|Runtime|Database|Diagnostics/i,
+    );
+  });
+});
+
+describe('Settings page capabilities', () => {
+  it('keeps API credentials masked and does not enable unsupported settings', async () => {
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+
+    const key = await screen.findByLabelText('API key');
+    expect(key).toHaveAttribute('type', 'password');
+    expect(screen.queryByRole('switch', { name: /auto.?save/i })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: /theme/i })).toBeNull();
+    expect(screen.queryByRole('textbox', { name: /database/i })).toBeNull();
+  });
+
+  it('renders writable API base URL, read-only permission mode, and restart-required save result', async () => {
+    vi.mocked(api.saveConfig).mockResolvedValueOnce({ ok: true, restart_required: true } as never);
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+    expect(await screen.findByLabelText('API base URL')).toHaveValue('https://api.openai.com/v1');
+    expect(await screen.findByText('approval')).toBeDefined();
+    fireEvent.change(screen.getByLabelText('API base URL'), {
+      target: { value: 'http://localhost:11434/v1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save model settings' }));
+    expect(await screen.findByRole('status')).toHaveTextContent(/restart required/i);
+    expect(api.saveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ api_base_url: 'http://localhost:11434/v1' }),
+    );
+  });
+
+  it('keeps model settings editable when preferences fail and reports a local warning', async () => {
+    vi.mocked(api.getPreferences).mockRejectedValueOnce(new Error('Preferences offline'));
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+    expect(await screen.findByLabelText('API key')).toBeDefined();
+    expect(screen.getByText(/Preferences unavailable: Preferences offline/)).toBeDefined();
+    expect(screen.queryByLabelText('Default genre')).toBeNull();
+    expect(screen.queryByLabelText('Preferred style')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save preferences' })).toBeNull();
+    expect(api.savePreferences).not.toHaveBeenCalled();
+    expect(screen.queryByText('Loading model settings...')).toBeNull();
+  });
+
+  it('reports null and unsuccessful desktop action results without discarding runtime state', async () => {
+    vi.mocked(getDesktopRuntimeStatus)
+      .mockResolvedValueOnce({
+        phase: 'ready',
+        apiBaseUrl: 'http://127.0.0.1:3888',
+        port: 3888,
+        pid: 1234,
+        version: '0.1.0',
+        pgStatus: 'ready',
+        configPath: 'C:/config.json',
+        logPath: 'C:/desktop.log',
+        error: null,
+      })
+      .mockResolvedValueOnce(null);
+    vi.mocked(restartDesktopRuntime).mockResolvedValueOnce(null);
+    vi.mocked(openDiagnosticsFolder).mockResolvedValueOnce({
+      ok: false,
+      path: '',
+      error: 'Folder unavailable',
+    } as never);
+    vi.mocked(exportDiagnostics).mockResolvedValueOnce(null);
+    vi.mocked(getDesktopRuntimeLogs).mockResolvedValueOnce(null);
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+    expect(await screen.findByText('http://127.0.0.1:3888')).toBeDefined();
+
+    for (const [name, failure] of [
+      ['Refresh', /refresh runtime status failed/i],
+      ['Restart Runtime', /restart runtime failed/i],
+      ['Open diagnostics', /Folder unavailable/i],
+      ['Export diagnostics', /export diagnostics failed/i],
+      ['View logs', /view logs failed/i],
+    ] as const) {
+      fireEvent.click(screen.getByRole('button', { name }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(failure);
+      expect(screen.getByText('http://127.0.0.1:3888')).toBeDefined();
+    }
+  });
+
+  it('restricts preferred style to the backend enum', async () => {
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+    const style = await screen.findByLabelText('Preferred style');
+    expect(style.tagName).toBe('SELECT');
+    expect(
+      within(style)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['轻松', '严肃', '诗意', '简洁']);
+  });
+
+  it('keeps config available when runtime sources fail', async () => {
+    vi.mocked(api.metadata).mockRejectedValueOnce(new Error('Metadata offline'));
+    vi.mocked(getDesktopRuntimeStatus).mockRejectedValueOnce(new Error('Desktop offline'));
+    render(
+      <AppStateProvider>
+        <SettingsPage />
+      </AppStateProvider>,
+    );
+    expect(await screen.findByLabelText('API key')).toBeDefined();
+    expect(screen.getByText(/Runtime metadata unavailable: Metadata offline/)).toBeDefined();
+    expect(screen.getByText(/Desktop Runtime unavailable: Desktop offline/)).toBeDefined();
+    expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0);
   });
 });

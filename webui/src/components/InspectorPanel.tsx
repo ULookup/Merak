@@ -49,8 +49,10 @@ export default function InspectorPanel({ open = true, onClose }: InspectorPanelP
 
   return (
     <aside
+      id="session-inspector-panel"
       className={`${styles.panel} ${open ? styles.panelOpen : ''}`}
       aria-label="Story inspector"
+      aria-hidden={!open}
       data-testid="inspector-panel"
     >
       <div className={styles.mobileScrim} onClick={onClose} />

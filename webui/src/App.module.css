@@ -1,7 +1,7 @@
 .layout {
   position: relative;
   display: flex;
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
   padding: 10px;
   gap: 10px;
@@ -154,7 +154,9 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 120ms ease, transform 120ms ease;
+  transition:
+    background 120ms ease,
+    transform 120ms ease;
 }
 
 .editorBackBtn:hover {
@@ -175,6 +177,12 @@
 }
 
 @keyframes pageIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

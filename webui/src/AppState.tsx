@@ -1,9 +1,18 @@
-import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useReducer,
+  type Dispatch,
+  type ReactNode,
+} from 'react';
 import type {
   ChapterReviewItem,
   ConditionState,
   ForeshadowingItem,
   Message,
+  PendingAsk,
+  PendingCreation,
   PhaseTransition,
   PipelineViewData,
   RuntimeMetadata,
@@ -18,9 +27,21 @@ import type {
   WorldAgent,
   WorldSummary,
 } from './api/types';
+import { readStoredDesktopPage, writeStoredDesktopPage } from './shell/navigation';
 
 export type InspectorTab = 'story' | 'files' | 'agents' | 'run' | 'creation';
-export type AppPage = 'workbench' | 'settings' | 'editor';
+export type AppPage =
+  | 'overview'
+  | 'sessions'
+  | 'world'
+  | 'characters'
+  | 'chapters'
+  | 'scenes'
+  | 'foreshadowing'
+  | 'secrets'
+  | 'files'
+  | 'settings'
+  | 'editor';
 export type WorldbuildingStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface GeneratedFileEntry {
@@ -48,6 +69,8 @@ export interface AppState {
   sessionId: string;
   lastSeq: number;
   currentRun: string | null;
+  pendingAsk: PendingAsk | null;
+  pendingCreation: PendingCreation | null;
   lastRunId: string | null;
   messages: Message[];
   status: StatusLabel;
@@ -109,13 +132,15 @@ export interface AppState {
 
 export const initialState: AppState = {
   appPhase: 'loading',
-  currentPage: 'workbench',
+  currentPage: 'overview',
   activeEditorChapterId: null,
   activeEditorChapterTitle: '',
   agentId: null,
   sessionId: '',
   lastSeq: 0,
   currentRun: null,
+  pendingAsk: null,
+  pendingCreation: null,
   lastRunId: null,
   messages: [],
   status: 'idle',
@@ -308,6 +333,8 @@ export type Action =
   | { type: 'COMMIT_ACTIVE' }
   | { type: 'SET_STORY_VERSION' }
   | { type: 'APPLY_SSE'; frame: SseFrame }
+  | { type: 'RESOLVE_ASK'; callId: string }
+  | { type: 'RESOLVE_CREATION'; creationId: string }
   | { type: 'SET_PIPELINE_CONDITIONS'; conditions: ConditionState[] }
   | { type: 'SET_PIPELINE_VIEW'; view: Partial<PipelineViewData> }
   | { type: 'DISMISS_PHASE_PROMPT' }
@@ -339,6 +366,8 @@ export function reducer(state: AppState, action: Action): AppState {
         lastSeq: 0,
         currentRun: null,
         lastRunId: null,
+        pendingAsk: null,
+        pendingCreation: null,
         status: 'idle',
       };
 
@@ -346,11 +375,14 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         sessionId: action.sessionId,
-        agentId: action.agentId ?? state.agentId,
+        agentId: action.agentId ?? null,
+        appPhase: action.sessionId ? 'ready' : state.worldId ? 'no_agent' : state.appPhase,
         messages: [],
         lastSeq: 0,
         currentRun: null,
         lastRunId: null,
+        pendingAsk: null,
+        pendingCreation: null,
         status: 'idle',
       };
 
@@ -485,7 +517,8 @@ export function reducer(state: AppState, action: Action): AppState {
         ...state,
         editorBuffers: {
           ...state.editorBuffers,
-          [action.fileId]: state.editorOriginals[action.fileId] ?? state.editorBuffers[action.fileId] ?? '',
+          [action.fileId]:
+            state.editorOriginals[action.fileId] ?? state.editorBuffers[action.fileId] ?? '',
         },
         workspaceFiles: state.workspaceFiles.map((file) =>
           file.id === action.fileId ? { ...file, dirty: false } : file,
@@ -678,9 +711,18 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'APPLY_SSE': {
       const { frame } = action;
+      if (frame.seq > 0 && frame.seq <= state.lastSeq) return state;
       if (frame.seq > 0) state = { ...state, lastSeq: Math.max(state.lastSeq, frame.seq) };
       return applySseFrame(state, frame);
     }
+
+    case 'RESOLVE_ASK':
+      return state.pendingAsk?.callId === action.callId ? { ...state, pendingAsk: null } : state;
+
+    case 'RESOLVE_CREATION':
+      return state.pendingCreation?.id === action.creationId
+        ? { ...state, pendingCreation: null }
+        : state;
 
     case 'SET_PIPELINE_CONDITIONS':
       return { ...state, pipelineConditions: action.conditions };
@@ -868,6 +910,42 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
     case 'approval_resolved':
       return reducer(state, { type: 'CLEAR_APPROVAL' });
 
+    case 'ask_user_requested': {
+      const choices = Array.isArray(p.options)
+        ? p.options.filter((choice): choice is string => typeof choice === 'string')
+        : undefined;
+      return {
+        ...state,
+        pendingAsk: {
+          runId: (p.run_id as string) || state.currentRun || '',
+          callId: (p.call_id as string) ?? '',
+          question: (p.question as string) ?? '',
+          ...(choices?.length ? { choices } : {}),
+          multiSelect: p.multi_select === true,
+        },
+      };
+    }
+
+    case 'creation_requested':
+      return {
+        ...state,
+        pendingCreation: {
+          id: (p.creation_id as string) ?? '',
+          runId: (p.run_id as string) || state.currentRun || '',
+          toolName: (p.tool as string) ?? '',
+          ...(p.preview && typeof p.preview === 'object'
+            ? { preview: p.preview as Record<string, unknown> }
+            : {}),
+        },
+      };
+
+    case 'creation_resolved': {
+      const result = p.result as Record<string, unknown> | undefined;
+      if (result?.ok === false) return state;
+      const creationId = (p.creation_id as string) ?? '';
+      return reducer(state, { type: 'RESOLVE_CREATION', creationId });
+    }
+
     case 'usage_updated':
       return reducer(state, {
         type: 'SET_USAGE',
@@ -884,7 +962,8 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         message: { id: msgId(), kind: 'system', text: `${type} — ${JSON.stringify(p)}` },
       });
 
-    case 'run_completed':
+    case 'run_completed': {
+      state = clearPendingForTerminalRun(state, (p.run_id as string) || state.currentRun || '');
       return reducer(
         reducer(reducer(state, { type: 'COMMIT_ACTIVE' }), {
           type: 'SET_CURRENT_RUN',
@@ -892,10 +971,12 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
         }),
         { type: 'SET_STATUS', status: 'idle' },
       );
+    }
 
     case 'run_failed':
     case 'run_cancelled':
     case 'run_interrupted':
+      state = clearPendingForTerminalRun(state, (p.run_id as string) || state.currentRun || '');
       state = reducer(reducer(state, { type: 'COMMIT_ACTIVE' }), {
         type: 'SET_CURRENT_RUN',
         runId: null,
@@ -1077,6 +1158,15 @@ function applySseFrame(state: AppState, frame: SseFrame): AppState {
   }
 }
 
+function clearPendingForTerminalRun(state: AppState, runId: string): AppState {
+  if (!runId) return state;
+  return {
+    ...state,
+    pendingAsk: state.pendingAsk?.runId === runId ? null : state.pendingAsk,
+    pendingCreation: state.pendingCreation?.runId === runId ? null : state.pendingCreation,
+  };
+}
+
 function generatedFilesFromText(text: string): GeneratedFileEntry[] {
   const paths = new Set<string>();
   const filePattern =
@@ -1133,7 +1223,14 @@ const AppContext = createContext<{
 } | null>(null);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, baseDispatch] = useReducer(reducer, initialState, (baseState) => ({
+    ...baseState,
+    currentPage: readStoredDesktopPage(),
+  }));
+  const dispatch = useCallback<Dispatch<Action>>((action) => {
+    if (action.type === 'SET_PAGE') writeStoredDesktopPage(action.page);
+    baseDispatch(action);
+  }, []);
   return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>;
 }
 
