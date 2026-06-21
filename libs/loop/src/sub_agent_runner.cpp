@@ -89,9 +89,9 @@ std::future<std::map<std::string, AgentResponse>> SubAgentRunner::fan_out(
         const int max_parallel = std::max(1, std::min(4,
             static_cast<int>(std::thread::hardware_concurrency())));
         std::map<std::string, AgentResponse> results;
-
         size_t idx = 0;
         while (idx < tasks.size()) {
+            size_t batch_start = idx;
             std::vector<std::future<std::pair<std::string, AgentResponse>>> batch;
             for (int i = 0; i < max_parallel && idx < tasks.size(); i++, idx++) {
                 batch.push_back(std::async(std::launch::async,
@@ -100,14 +100,16 @@ std::future<std::map<std::string, AgentResponse>> SubAgentRunner::fan_out(
                         return {d.agent_id, resp};
                     }));
             }
-            for (auto& f : batch) {
+            for (size_t i = 0; i < batch.size(); i++) {
                 try {
-                    auto result = f.get();
+                    auto result = batch[i].get();
                     results[result.first] = result.second;
                 } catch (const std::exception& e) {
                     AgentResponse err;
                     err.text = std::string("Sub-agent error: ") + e.what();
-                    spdlog::warn("SubAgentRunner: fan_out task failed: {}", e.what());
+                    results[tasks[batch_start + i].agent_id] = err;
+                    spdlog::warn("SubAgentRunner: fan_out task '{}' failed: {}",
+                        tasks[batch_start + i].agent_id, e.what());
                 }
             }
         }
