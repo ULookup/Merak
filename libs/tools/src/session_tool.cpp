@@ -38,6 +38,7 @@ ToolMeta SessionTool::meta() const {
     m.intents = {IntentType::Introspect};
     m.scope = Scope::Local;
     m.schema_tokens = 60;
+    m.domain = ToolDomain::General;
     return m;
 }
 

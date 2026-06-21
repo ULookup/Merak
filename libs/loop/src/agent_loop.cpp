@@ -353,20 +353,12 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         bool had_write = false;
         bool had_world_query_only = true;
         for (auto& tc : accumulated_tool_calls) {
-            if (tc.name == "write_file" || tc.name == "str_replace" ||
-                tc.name == "create_character" || tc.name == "create_scene" ||
-                tc.name == "create_chapter" || tc.name == "add_world_knowledge" ||
-                tc.name == "create_location" || tc.name == "plant_foreshadowing" ||
-                tc.name == "expose_secret") {
+            auto dom = tools_->domain_of(tc.name);
+            if (dom & ToolDomain::Write) {
                 had_write = true;
                 had_world_query_only = false;
             }
-            if (tc.name != "query_map" && tc.name != "query_world" &&
-                tc.name != "query_history" && tc.name != "query_magic" &&
-                tc.name != "query_faction" && tc.name != "search_agent" &&
-                tc.name != "look_around" && tc.name != "read_character_card" &&
-                tc.name != "read_secret" && tc.name != "read_foreshadowing" &&
-                tc.name != "search_my_diary" && tc.name != "read_file") {
+            if (!(dom & ToolDomain::WorldQuery)) {
                 had_world_query_only = false;
             }
         }

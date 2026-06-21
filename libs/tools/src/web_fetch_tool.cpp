@@ -227,7 +227,8 @@ ToolMeta WebFetchTool::meta() const {
     m.intents = {IntentType::Network};
     m.scope = Scope::External;
     m.schema_tokens = 25;
-    return m;
+    m.domain = ToolDomain::General;
+    return m; // WebFetchTool
 }
 
 PermissionLevel WebFetchTool::permission() const {

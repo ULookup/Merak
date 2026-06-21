@@ -44,6 +44,7 @@ ToolMeta AgentTool::meta() const {
     m.intents = {IntentType::AgentOp};
     m.scope = Scope::External;
     m.schema_tokens = 40;
+    m.domain = ToolDomain::General;
     return m;
 }
 

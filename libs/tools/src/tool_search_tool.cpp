@@ -44,6 +44,7 @@ ToolMeta ToolSearchTool::meta() const {
     m.intents = {IntentType::CodeRead};
     m.scope = Scope::Local;
     m.schema_tokens = 25;
+    m.domain = ToolDomain::General;
     return m;
 }
 
