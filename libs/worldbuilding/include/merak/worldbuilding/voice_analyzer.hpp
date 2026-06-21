@@ -24,6 +24,10 @@ public:
     group_voices(const std::vector<VoiceFingerprint>& fingerprints) const;
 
 private:
+    // In-memory only, not persisted. Fingerprints are session-scoped and cheap to
+    // recompute (deterministic heuristic, ~10ms for 50 turns). Persistence would
+    // introduce sync issues with mutable dialogue history.
+    // See https://github.com/ULookup/Merak/issues/25
     std::map<std::string, VoiceFingerprint> fingerprints_;
 };
 
