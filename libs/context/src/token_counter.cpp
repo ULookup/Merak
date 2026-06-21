@@ -22,6 +22,15 @@ int TokenCounter::count(const Message& msg) const {
 }
 
 int TokenCounter::count(const std::vector<Message>& messages) const {
+    // Hybrid: authoritative baseline from API + heuristic for new messages
+    if (authoritative_total_ > 0 && (int)messages.size() >= authoritative_message_count_) {
+        int incremental = 0;
+        for (int i = authoritative_message_count_; i < (int)messages.size(); i++) {
+            incremental += count(messages[i]);
+        }
+        return authoritative_total_ + incremental;
+    }
+    // Cold start: pure heuristic
     int total = 0;
     for (auto& msg : messages) {
         total += count(msg);

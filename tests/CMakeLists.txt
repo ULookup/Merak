@@ -68,3 +68,31 @@ target_include_directories(merak-agent-endpoint-test PRIVATE
 )
 target_link_libraries(merak-agent-endpoint-test PRIVATE merak-worldbuilding GTest::gtest_main)
 add_test(NAME merak-agent-endpoint-test COMMAND merak-agent-endpoint-test)
+
+# OpenAI provider tests
+add_executable(merak-openai-provider-test
+    ${CMAKE_SOURCE_DIR}/libs/llm/tests/test_openai_provider.cpp
+)
+target_link_libraries(merak-openai-provider-test PRIVATE merak-llm)
+add_test(NAME merak-openai-provider-test COMMAND merak-openai-provider-test)
+
+# Anthropic provider tests
+add_executable(merak-anthropic-provider-test
+    ${CMAKE_SOURCE_DIR}/libs/llm/tests/test_anthropic_provider.cpp
+)
+target_link_libraries(merak-anthropic-provider-test PRIVATE merak-llm)
+add_test(NAME merak-anthropic-provider-test COMMAND merak-anthropic-provider-test)
+
+# AgentLoop tests
+add_executable(merak-agent-loop-test
+    ${CMAKE_SOURCE_DIR}/libs/loop/tests/test_agent_loop.cpp
+)
+target_link_libraries(merak-agent-loop-test PRIVATE merak-loop)
+add_test(NAME merak-agent-loop-test COMMAND merak-agent-loop-test)
+
+# SubAgentRunner tests
+add_executable(merak-sub-agent-runner-test
+    ${CMAKE_SOURCE_DIR}/libs/loop/tests/test_sub_agent_runner.cpp
+)
+target_link_libraries(merak-sub-agent-runner-test PRIVATE merak-loop)
+add_test(NAME merak-sub-agent-runner-test COMMAND merak-sub-agent-runner-test)
