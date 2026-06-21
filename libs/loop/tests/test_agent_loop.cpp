@@ -265,6 +265,37 @@ void test_tool_domain_bitflag_checks() {
     PASS();
 }
 
+// ——— Batch 3 new tests ———
+
+void test_run_metrics_initially_zero() {
+    TEST("RunMetrics defaults are all zero");
+    AgentLoop::RunMetrics m;
+    assert(m.turns_completed == 0);
+    assert(m.total_input_tokens == 0);
+    assert(m.total_output_tokens == 0);
+    assert(m.total_cache_read_tokens == 0);
+    assert(m.total_cache_write_tokens == 0);
+    assert(m.total_tool_calls == 0);
+    assert(m.tool_errors == 0);
+    assert(m.compactions_triggered == 0);
+    assert(m.messages_compacted == 0);
+    assert(m.circuit_breaker_trips == 0);
+    assert(m.stall_force_stops == 0);
+    assert(m.turn_guard_warnings == 0);
+    assert(m.total_llm_latency == std::chrono::milliseconds{0});
+    PASS();
+}
+
+void test_agent_loop_metrics_accessible() {
+    TEST("agent loop metrics() returns zero initially");
+    auto loop = make_test_loop();
+    const auto& m = loop->metrics();
+    assert(m.turns_completed == 0);
+    assert(m.total_input_tokens == 0);
+    assert(m.total_tool_calls == 0);
+    PASS();
+}
+
 int main() {
     std::cout << "\nAgentLoop Tests\n===============\n";
     test_max_turns_config_default();
@@ -286,6 +317,8 @@ int main() {
     test_tool_domain_classification();
     test_tool_domain_not_found_returns_general();
     test_tool_domain_bitflag_checks();
+    test_run_metrics_initially_zero();
+    test_agent_loop_metrics_accessible();
     std::cout << "\n" << tests_passed << "/" << tests_run << " passed\n";
     return tests_passed == tests_run ? 0 : 1;
 }
