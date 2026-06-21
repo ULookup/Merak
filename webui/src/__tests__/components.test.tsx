@@ -785,10 +785,17 @@ function AgentsPanelHarness() {
   return <InspectorPanel open={true} onClose={() => {}} />;
 }
 
-function FilesHarness({ twoFiles = false }: { twoFiles?: boolean }) {
+function FilesHarness({
+  twoFiles = false,
+  worldId = 'world-a',
+}: {
+  twoFiles?: boolean;
+  worldId?: string;
+}) {
   const { dispatch } = useAppState();
 
   useEffect(() => {
+    dispatch({ type: 'SET_WORLD', worldId });
     dispatch({
       type: 'SET_OUTPUT_DIRECTORY',
       path: '/Users/me/novel',
@@ -809,7 +816,7 @@ function FilesHarness({ twoFiles = false }: { twoFiles?: boolean }) {
         file: { id: 'file_2', title: 'notes', path: '/Users/me/novel/notes.txt', updatedAt: 2 },
       });
     }
-  }, [dispatch, twoFiles]);
+  }, [dispatch, twoFiles, worldId]);
 
   return <InspectorPanel open={true} onClose={() => {}} />;
 }
@@ -1060,6 +1067,153 @@ describe('InspectorPanel', () => {
       }),
     );
     expect(await screen.findByLabelText('Edit chapter-12')).toHaveValue('Newest A');
+  });
+
+  it('invalidates a pending read and resets loading when the world changes', async () => {
+    let rejectRead!: (reason: Error) => void;
+    vi.spyOn(api, 'readWorkspaceFile').mockReturnValue(
+      new Promise<never>((_, reject) => {
+        rejectRead = reject;
+      }),
+    );
+    const view = render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-a" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
+    expect(screen.getByRole('button', { name: 'Open chapter-12 in editor' })).toHaveTextContent(
+      'Loading...',
+    );
+    view.rerender(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-b" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Open chapter-12 in editor' })).toHaveTextContent(
+        'Edit',
+      ),
+    );
+    await act(async () => rejectRead(new Error('Old world read failed')));
+    expect(screen.queryByText('Old world read failed')).toBeNull();
+  });
+
+  it('invalidates save completion after a world switch', async () => {
+    let resolveSave!: (value: Awaited<ReturnType<typeof api.saveWorkspaceFile>>) => void;
+    vi.spyOn(api, 'readWorkspaceFile').mockResolvedValue({
+      ok: true,
+      file: {
+        path: '/Users/me/novel/chapter-12.md',
+        content: 'Old',
+        encoding: 'utf-8',
+        updated_at: 'old',
+        version: 'v1',
+      },
+    });
+    vi.spyOn(api, 'saveWorkspaceFile').mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const view = render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-a" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
+    fireEvent.change(await screen.findByLabelText('Edit chapter-12'), {
+      target: { value: 'Local A' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save chapter-12' }));
+    view.rerender(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-b" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    await act(async () =>
+      resolveSave({
+        ok: true,
+        file: { path: '/Users/me/novel/chapter-12.md', updated_at: 'new', version: 'v2' },
+      }),
+    );
+    expect(screen.queryByText('File saved.')).toBeNull();
+    expect(screen.queryByText('Saved')).toBeNull();
+  });
+
+  it('does not let an A-B-A open completion clear the newest open operation', async () => {
+    let resolveOld!: (value: { ok: boolean; path: string }) => void;
+    let resolveNew!: (value: { ok: boolean; path: string }) => void;
+    vi.spyOn(api, 'openWorkspacePath')
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveNew = resolve;
+        }),
+      );
+    const view = render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-a" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Open output folder' }));
+    view.rerender(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-b" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    view.rerender(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness worldId="world-a" />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Open output folder' }));
+    await act(async () => resolveOld({ ok: true, path: '/old' }));
+    expect(screen.getByRole('button', { name: 'Open output folder' })).toHaveTextContent(
+      'Opening...',
+    );
+    await act(async () => resolveNew({ ok: true, path: '/new' }));
+    expect(screen.getByRole('button', { name: 'Open output folder' })).toHaveTextContent(
+      'Open folder',
+    );
+  });
+
+  it('ignores pending Inspector callbacks after unmount', async () => {
+    let rejectRead!: (reason: Error) => void;
+    vi.spyOn(api, 'readWorkspaceFile').mockReturnValue(
+      new Promise<never>((_, reject) => {
+        rejectRead = reject;
+      }),
+    );
+    const view = render(
+      <AppStateProvider>
+        <ToastProvider>
+          <FilesHarness />
+        </ToastProvider>
+      </AppStateProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Open chapter-12 in editor' }));
+    view.unmount();
+    await act(async () => rejectRead(new Error('Unmounted read')));
+    expect(screen.queryByText('Unmounted read')).toBeNull();
   });
 
   it('renders a readable creation dashboard without mojibake copy', async () => {

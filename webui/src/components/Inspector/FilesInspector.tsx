@@ -44,16 +44,29 @@ export default function FilesInspector() {
   const [conflictFileId, setConflictFileId] = useState<string | null>(null);
   const lifecycleGeneration = useRef(0);
   const readGeneration = useRef(0);
+  const saveGeneration = useRef(0);
+  const openGeneration = useRef(0);
+  const committedWorld = useRef<string | null>(null);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
+    committedWorld.current = state.worldId;
     const lifecycle = ++lifecycleGeneration.current;
+    readGeneration.current += 1;
+    saveGeneration.current += 1;
+    openGeneration.current += 1;
+    setLoadingFileId(null);
+    setOpeningPath(null);
+    setConflictFileId(null);
+    dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'idle' });
     return () => {
       mounted.current = false;
       if (lifecycleGeneration.current === lifecycle) lifecycleGeneration.current += 1;
       readGeneration.current += 1;
+      saveGeneration.current += 1;
+      openGeneration.current += 1;
     };
-  }, []);
+  }, [dispatch, state.worldId]);
   const activeFile =
     state.workspaceFiles.find((file) => file.id === state.activeEditorFileId) ?? null;
   const activeFileName = activeFile ? displayFileName(activeFile.name) : '';
@@ -94,14 +107,37 @@ export default function FilesInspector() {
 
   async function openWorkspacePath(path: string | null, reveal = false) {
     if (!path || state.editorSaveStatus === 'saving') return;
+    const lifecycle = lifecycleGeneration.current;
+    const worldId = state.worldId;
+    const token = ++openGeneration.current;
     setOpeningPath(path);
     try {
       await api.openWorkspacePath(path, reveal);
+      if (
+        !mounted.current ||
+        lifecycle !== lifecycleGeneration.current ||
+        worldId !== committedWorld.current ||
+        token !== openGeneration.current
+      )
+        return;
       showToast(reveal ? 'File revealed in workspace.' : 'Workspace folder opened.', 'success');
     } catch (error) {
+      if (
+        !mounted.current ||
+        lifecycle !== lifecycleGeneration.current ||
+        worldId !== committedWorld.current ||
+        token !== openGeneration.current
+      )
+        return;
       showToast(formatApiError(error, 'Could not open workspace path.'), 'error');
     } finally {
-      setOpeningPath(null);
+      if (
+        mounted.current &&
+        lifecycle === lifecycleGeneration.current &&
+        worldId === committedWorld.current &&
+        token === openGeneration.current
+      )
+        setOpeningPath(null);
     }
   }
 
@@ -111,6 +147,7 @@ export default function FilesInspector() {
     if (!file) return;
     dispatch({ type: 'OPEN_WORKSPACE_FILE', fileId });
     const lifecycle = lifecycleGeneration.current;
+    const worldId = state.worldId;
     const token = ++readGeneration.current;
     setConflictFileId(null);
     setLoadingFileId(fileId);
@@ -119,6 +156,7 @@ export default function FilesInspector() {
       if (
         mounted.current &&
         lifecycle === lifecycleGeneration.current &&
+        worldId === committedWorld.current &&
         token === readGeneration.current
       )
         dispatch({ type: 'SET_EDITOR_CONTENT', fileId, content: res.file });
@@ -126,6 +164,7 @@ export default function FilesInspector() {
       if (
         mounted.current &&
         lifecycle === lifecycleGeneration.current &&
+        worldId === committedWorld.current &&
         token === readGeneration.current
       )
         showToast(formatApiError(error, 'Could not read file.'), 'error');
@@ -133,6 +172,7 @@ export default function FilesInspector() {
       if (
         mounted.current &&
         lifecycle === lifecycleGeneration.current &&
+        worldId === committedWorld.current &&
         token === readGeneration.current
       )
         setLoadingFileId(null);
@@ -143,6 +183,8 @@ export default function FilesInspector() {
     if (!activeFile) return;
     const target = activeFile;
     const lifecycle = lifecycleGeneration.current;
+    const worldId = state.worldId;
+    const token = ++saveGeneration.current;
     dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saving' });
     try {
       const res = await api.saveWorkspaceFile(
@@ -150,7 +192,13 @@ export default function FilesInspector() {
         state.editorBuffers[target.id] ?? '',
         state.editorVersions[target.id],
       );
-      if (!mounted.current || lifecycle !== lifecycleGeneration.current) return;
+      if (
+        !mounted.current ||
+        lifecycle !== lifecycleGeneration.current ||
+        worldId !== committedWorld.current ||
+        token !== saveGeneration.current
+      )
+        return;
       dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saved' });
       dispatch({ type: 'COMMIT_EDITOR_BUFFER', fileId: target.id, version: res.file.version });
       dispatch({
@@ -163,7 +211,13 @@ export default function FilesInspector() {
       });
       showToast('File saved.', 'success');
     } catch (error) {
-      if (!mounted.current || lifecycle !== lifecycleGeneration.current) return;
+      if (
+        !mounted.current ||
+        lifecycle !== lifecycleGeneration.current ||
+        worldId !== committedWorld.current ||
+        token !== saveGeneration.current
+      )
+        return;
       const conflict = error as { status?: number; code?: string };
       if (conflict.status === 409 || conflict.code === 'file_conflict')
         setConflictFileId(target.id);
