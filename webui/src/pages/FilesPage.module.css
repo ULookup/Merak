@@ -61,6 +61,14 @@
   margin-bottom: 12px;
   color: var(--danger);
 }
+
+.success {
+  padding: 8px 10px;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--rounded-md);
+  background: var(--green-soft);
+  color: #166534;
+}
 .conflict {
   display: flex;
   gap: 8px;

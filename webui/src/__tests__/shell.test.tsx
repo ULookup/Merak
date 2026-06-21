@@ -131,7 +131,11 @@ describe('desktop shell', () => {
                 version: 'v1',
               },
             });
-            dispatch({ type: 'UPDATE_EDITOR_BUFFER', fileId: 'draft.md', content: 'Unsaved draft' });
+            dispatch({
+              type: 'UPDATE_EDITOR_BUFFER',
+              fileId: 'draft.md',
+              content: 'Unsaved draft',
+            });
           }}
         >
           Open workspace draft
@@ -346,6 +350,18 @@ describe('desktop shell', () => {
   it('keeps all navigation buttons reachable in short windows', () => {
     const css = readFileSync('src/shell/DesktopShell.module.css', 'utf8');
     expect(css).toMatch(/\.navigation\s*\{[^}]*overflow-y:\s*auto/s);
+  });
+
+  it('defines the approved shared visual tokens and responsive shell contracts', () => {
+    const globalCss = readFileSync('src/styles/global.css', 'utf8');
+    const shellCss = readFileSync('src/shell/DesktopShell.module.css', 'utf8');
+
+    expect(globalCss).toContain('--brand: #06266f');
+    expect(globalCss).toContain('--page: #ffffff');
+    expect(globalCss).toMatch(/:focus-visible/);
+    expect(globalCss).toMatch(/prefers-reduced-motion:\s*reduce/);
+    expect(shellCss).toMatch(/@media \(max-width: 1180px\)/);
+    expect(shellCss).toMatch(/@media \(max-width: 980px\)/);
   });
 
   it('gives the world dashboard a definite scroll-container height', () => {

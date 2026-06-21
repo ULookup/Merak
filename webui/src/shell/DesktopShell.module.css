@@ -1,5 +1,5 @@
 .shell {
-  --shell-navy: #082a78;
+  --shell-navy: var(--brand);
   display: grid;
   grid-template-columns: 244px minmax(0, 1fr);
   width: 100%;
@@ -172,9 +172,19 @@
   border: 0;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1180px) {
+  .stage {
+    grid-template-rows: 58px minmax(0, 1fr);
+  }
+
+  .topbar {
+    padding-inline: 16px;
+  }
+}
+
+@media (max-width: 980px) {
   .shell {
-    grid-template-columns: 202px minmax(0, 1fr);
+    grid-template-columns: 184px minmax(0, 1fr);
   }
 
   .sidebar {
@@ -183,5 +193,32 @@
 
   .navButton {
     font-size: 12px;
+  }
+
+  .brand img {
+    width: 108px;
+  }
+
+  .worldSelector {
+    min-width: 164px;
+  }
+}
+
+@media (max-height: 640px) {
+  .brand {
+    height: 38px;
+  }
+
+  .sidebar {
+    gap: 6px;
+    padding-block: 8px;
+  }
+
+  .worldCard {
+    min-height: 40px;
+  }
+
+  .stage {
+    grid-template-rows: 52px minmax(0, 1fr);
   }
 }

@@ -44,6 +44,11 @@ export default function FilesPage({ worldId }: Props) {
   const [clipboardError, setClipboardError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [openingRoot, setOpeningRoot] = useState(false);
+  const [revealingPath, setRevealingPath] = useState<string | null>(null);
+  const [revealMessage, setRevealMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
   const [conflict, setConflict] = useState(false);
   const lifecycle = useRef(0);
   const listToken = useRef(0);
@@ -52,6 +57,7 @@ export default function FilesPage({ worldId }: Props) {
   const savingRef = useRef(false);
   const openingRootRef = useRef(false);
   const openRootToken = useRef(0);
+  const revealToken = useRef(0);
 
   const loadList = useCallback(async () => {
     if (savingRef.current) return;
@@ -84,6 +90,8 @@ export default function FilesPage({ worldId }: Props) {
     setSaving(false);
     openingRootRef.current = false;
     setOpeningRoot(false);
+    setRevealingPath(null);
+    setRevealMessage(null);
     setConflict(false);
     setLinks({ status: 'loading', items: [] });
     loadList();
@@ -197,6 +205,25 @@ export default function FilesPage({ worldId }: Props) {
     }
   }
 
+  async function revealSelectedFile(path: string) {
+    if (savingRef.current || revealingPath) return;
+    const life = lifecycle.current;
+    const token = ++revealToken.current;
+    setRevealingPath(path);
+    setRevealMessage(null);
+    try {
+      const result = await api.openWorkspacePath(path, true);
+      if (life !== lifecycle.current || token !== revealToken.current) return;
+      if (!result?.ok) throw new Error(result?.error || 'Reveal file failed.');
+      setRevealMessage({ type: 'success', text: 'File revealed in workspace.' });
+    } catch (reason) {
+      if (life === lifecycle.current && token === revealToken.current)
+        setRevealMessage({ type: 'error', text: formatApiError(reason, 'Reveal file failed.') });
+    } finally {
+      if (life === lifecycle.current && token === revealToken.current) setRevealingPath(null);
+    }
+  }
+
   async function copyDraft() {
     setClipboardError(null);
     try {
@@ -278,10 +305,11 @@ export default function FilesPage({ worldId }: Props) {
             <>
               <button
                 type="button"
-                disabled={saving}
-                onClick={() => api.openWorkspacePath(selected.path, true)}
+                aria-label="Reveal selected file"
+                disabled={saving || revealingPath === selected.path}
+                onClick={() => revealSelectedFile(selected.path)}
               >
-                Reveal
+                {revealingPath === selected.path ? 'Revealing...' : 'Reveal'}
               </button>
               <button
                 type="button"
@@ -313,6 +341,14 @@ export default function FilesPage({ worldId }: Props) {
           }
           inspectorLabel="File details"
         >
+          {revealMessage ? (
+            <div
+              role={revealMessage.type === 'error' ? 'alert' : 'status'}
+              className={revealMessage.type === 'error' ? styles.error : styles.success}
+            >
+              {revealMessage.text}
+            </div>
+          ) : null}
           {contentError && (
             <div role="alert" className={styles.error}>
               {contentError}

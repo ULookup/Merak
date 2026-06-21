@@ -383,6 +383,46 @@ describe('Files page', () => {
     }
   });
 
+  it('locks selected-file Reveal and reports null, false, and rejected results', async () => {
+    const revealing = deferred<Awaited<ReturnType<typeof api.openWorkspacePath>>>();
+    vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
+      ok: true,
+      root: 'C:/story',
+      files: [file],
+    });
+    vi.mocked(api.readWorkspaceFile).mockResolvedValue({
+      ok: true,
+      file: {
+        path: file.path,
+        content: 'Original text',
+        encoding: 'utf-8',
+        updated_at: file.updated_at,
+        version: 'v1',
+      },
+    });
+    vi.mocked(api.openWorkspacePath)
+      .mockReturnValueOnce(revealing.promise)
+      .mockResolvedValueOnce(null as never)
+      .mockResolvedValueOnce({ ok: false, path: '', error: 'Reveal denied' } as never)
+      .mockRejectedValueOnce(new Error('Reveal crashed'));
+
+    render(<FilesPage worldId="world-1" />);
+    fireEvent.click(await screen.findByRole('option', { name: /draft/i }));
+    const reveal = await screen.findByRole('button', { name: 'Reveal selected file' });
+
+    fireEvent.click(reveal);
+    expect(reveal).toBeDisabled();
+    expect(reveal).toHaveTextContent('Revealing...');
+    await act(async () => revealing.resolve({ ok: true, path: file.path } as never));
+    expect(await screen.findByRole('status')).toHaveTextContent('File revealed in workspace.');
+
+    for (const failure of [/reveal file failed/i, /Reveal denied/i, /Reveal crashed/i]) {
+      fireEvent.click(reveal);
+      expect(await screen.findByRole('alert')).toHaveTextContent(failure);
+      expect(reveal).not.toBeDisabled();
+    }
+  });
+
   it('ignores a pending save completion after unmount', async () => {
     const saving = deferred<Awaited<ReturnType<typeof api.saveWorkspaceFile>>>();
     vi.mocked(api.listWorkspaceFiles).mockResolvedValue({
@@ -445,6 +485,10 @@ describe('Files page', () => {
 });
 
 describe('Foreshadowing page', () => {
+  it('keys relation chips by relation type and target id', () => {
+    const source = readFileSync(join(process.cwd(), 'src/pages/ForeshadowingPage.tsx'), 'utf8');
+    expect(source).toMatch(/key=\{`\$\{position\.type\}:\$\{position\.id\}`\}/);
+  });
   it('derives overdue only when planned and current chapter positions both exist', () => {
     expect(
       deriveForeshadowingStatus({ status: 'open', plannedPosition: 2, currentPosition: null }),
@@ -1562,6 +1606,24 @@ describe('DetailPane', () => {
     expect(screen.getByRole('region', { name: 'Lian' })).toBeDefined();
     expect(screen.getByRole('button', { name: 'Edit' })).toBeDefined();
     expect(screen.getByRole('complementary')).toHaveTextContent('Related chapters');
+  });
+
+  it('keeps a collapsed inspector reachable and restores trigger focus after Escape', () => {
+    render(
+      <DetailPane title="Lian" inspector={<p>Related chapters</p>} inspectorLabel="Relations">
+        <p>Character details</p>
+      </DetailPane>,
+    );
+
+    const toggle = screen.getByRole('button', { name: 'Hide Relations' });
+    fireEvent.click(toggle);
+    expect(screen.queryByRole('complementary', { name: 'Relations' })).toBeNull();
+    expect(toggle).toHaveAccessibleName('Show Relations');
+    fireEvent.click(toggle);
+    const inspector = screen.getByRole('complementary', { name: 'Relations' });
+    fireEvent.keyDown(inspector, { key: 'Escape' });
+    expect(screen.queryByRole('complementary', { name: 'Relations' })).toBeNull();
+    expect(toggle).toHaveFocus();
   });
 });
 
