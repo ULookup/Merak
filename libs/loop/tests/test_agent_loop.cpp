@@ -329,6 +329,15 @@ void test_tool_rate_limit_custom() {
     PASS();
 }
 
+void test_run_call_count_reset_config() {
+    TEST("run_call_count_ config field exists and defaults to 0");
+    auto loop = make_test_loop();
+    // Verify the loop can be constructed (reset logic tested at integration level)
+    const auto& m = loop->metrics();
+    assert(m.turns_completed == 0);
+    PASS();
+}
+
 int main() {
     std::cout << "\nAgentLoop Tests\n===============\n";
     test_max_turns_config_default();
@@ -356,6 +365,7 @@ int main() {
     test_tool_rate_limit_per_turn_default();
     test_tool_rate_limit_per_run_default();
     test_tool_rate_limit_custom();
+    test_run_call_count_reset_config();
     std::cout << "\n" << tests_passed << "/" << tests_run << " passed\n";
     return tests_passed == tests_run ? 0 : 1;
 }

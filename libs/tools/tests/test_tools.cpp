@@ -111,6 +111,7 @@ int main() {
     TEST("validation passes for tool without schema");
     {
         ToolRegistry reg5;
+        reg5.register_tool(std::make_unique<tools::ReadFileTool>());
         // ReadFileTool has no parameters_json schema
         ToolCall call;
         call.name = "read_file";

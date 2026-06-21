@@ -225,6 +225,24 @@ void test_sequential_continues_after_missing_agent() {
     PASS();
 }
 
+void test_fan_out_stores_error_for_unknown_agent() {
+    TEST("fan_out stores error for unknown agent");
+    auto runner = make_test_runner();
+    SubAgentConfig cfg;
+    cfg.id = "agent_x"; cfg.system_prompt = "test"; runner->register_profile(cfg);
+
+    std::vector<Delegation> tasks = {
+        {"agent_x", "succeed_task"},
+        {"nonexistent", "should_fail"},
+    };
+    auto results = runner->fan_out(tasks).get();
+    assert(results.size() == 2);
+    assert(results.count("agent_x") == 1);
+    assert(results.count("nonexistent") == 1);
+    assert(results["nonexistent"].text.find("Agent not found") != std::string::npos);
+    PASS();
+}
+
 int main() {
     std::cout << "\nSubAgentRunner Tests\n====================\n";
     test_has_agent_returns_false_initially();
@@ -235,6 +253,7 @@ int main() {
     test_concurrent_register_and_read();
     test_custom_max_turns();
     test_sequential_continues_after_missing_agent();
+    test_fan_out_stores_error_for_unknown_agent();
     std::cout << "\n" << tests_passed << "/" << tests_run << " passed\n";
     return tests_passed == tests_run ? 0 : 1;
 }

@@ -160,6 +160,26 @@ void test_config_default_values() {
     PASS();
 }
 
+void test_restricted_domains_defaults_to_general() {
+    TEST("restricted_tools defaults to empty (no restriction)");
+    TurnGuard::Verdict v;
+    assert(v.restricted_tools.empty());
+    PASS();
+}
+
+void test_reason_messages_use_config_thresholds() {
+    TEST("reason messages contain configured threshold values");
+    TurnGuardConfig cfg;
+    cfg.max_consecutive_world_query_rounds = 3;
+    TurnGuard guard(cfg);
+    TurnGuard::RoundInput in;
+    in.consecutive_world_query_rounds = 3;
+    auto v = guard.evaluate(in);
+    assert(v.severity == Severity::Critical);
+    assert(v.reason.find("3+ rounds") != std::string::npos);
+    PASS();
+}
+
 int main() {
     std::cout << "\nTurnGuard Tests\n===============\n";
     test_default_config_matches_hardcoded_thresholds();
@@ -174,6 +194,8 @@ int main() {
     test_reset_clears_warning_count();
     test_default_constructor_uses_default_config();
     test_config_default_values();
+    test_restricted_domains_defaults_to_general();
+    test_reason_messages_use_config_thresholds();
     std::cout << "\n" << tests_passed << "/" << tests_run << " passed\n";
     return tests_passed == tests_run ? 0 : 1;
 }

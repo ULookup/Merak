@@ -19,7 +19,7 @@ TurnGuard::Verdict TurnGuard::evaluate(const RoundInput& in) {
 
   if (in.consecutive_world_query_rounds >= config_.max_consecutive_world_query_rounds) {
     v.severity = Severity::Critical;
-    v.reason = "5+ rounds of world-only queries without narrative output";
+    v.reason = std::to_string(config_.max_consecutive_world_query_rounds) + "+ rounds of world-only queries without narrative output";
     v.restricted_tools = {"query_map", "query_world", "query_history", "query_magic", "query_faction"};
     v.turn_penalty = -4;
     return v;

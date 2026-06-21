@@ -98,17 +98,6 @@ std::future<ToolResult> AgentTool::execute(ToolCall call, ToolExecutionContext) 
                     auto agent_cfg = it->second;
                     auto exec = executor_;
 
-                    auto fut = std::async(std::launch::async,
-                        [exec = std::move(exec), agent_cfg = std::move(agent_cfg), task_text]() -> std::string {
-                            try {
-                                NullRunControl control;
-                                return exec(agent_cfg, task_text, control);
-                            } catch (const std::exception& e) {
-                                spdlog::error("AgentTool: sub-agent failed: {}", e.what());
-                                return std::string("Error: ") + e.what();
-                            }
-                        });
-
                     std::string task_id = "task_" + std::to_string(
                         std::chrono::steady_clock::now().time_since_epoch().count());
 
@@ -119,7 +108,16 @@ std::future<ToolResult> AgentTool::execute(ToolCall call, ToolExecutionContext) 
                             result.is_error = true;
                             return result;
                         }
-                        active_tasks_[task_id] = std::move(fut);
+                        active_tasks_[task_id] = std::async(std::launch::async,
+                            [exec = std::move(exec), agent_cfg = std::move(agent_cfg), task_text]() -> std::string {
+                                try {
+                                    NullRunControl control;
+                                    return exec(agent_cfg, task_text, control);
+                                } catch (const std::exception& e) {
+                                    spdlog::error("AgentTool: sub-agent failed: {}", e.what());
+                                    return std::string("Error: ") + e.what();
+                                }
+                            });
                     }
 
                     nlohmann::json out;
