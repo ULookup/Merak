@@ -3,7 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
-#include <thread>
+#include <chrono>
 
 namespace merak::tools {
 
@@ -18,8 +18,8 @@ ToolSpec AgentTool::spec() const {
   "properties": {
     "action": {
       "type": "string",
-      "enum": ["spawn", "list"],
-      "description": "Action: spawn a sub-agent or list available profiles"
+      "enum": ["spawn", "list", "get_result"],
+      "description": "Action: spawn a sub-agent, list available profiles, or get result of a spawned task"
     },
     "agent_id": {
       "type": "string",
@@ -28,6 +28,10 @@ ToolSpec AgentTool::spec() const {
     "task": {
       "type": "string",
       "description": "Task description for the sub-agent"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task ID returned by spawn. Required for get_result."
     }
   },
   "required": ["action"]
@@ -38,7 +42,7 @@ ToolSpec AgentTool::spec() const {
 ToolMeta AgentTool::meta() const {
     ToolMeta m;
     m.name = "agent";
-    m.description = "Multi-agent: spawn (create sub-agent), get_result, send_message, list";
+    m.description = "Multi-agent: spawn (create sub-agent), get_result, list";
     m.triggers = {"agent", "spawn", "orchestrate", "sub-agent"};
     m.pinned = false;
     m.intents = {IntentType::AgentOp};
@@ -91,25 +95,61 @@ std::future<ToolResult> AgentTool::execute(ToolCall call, ToolExecutionContext) 
                     result.output = out.dump();
                     result.is_error = true;
                 } else {
-                    // Launch sub-agent asynchronously via executor
                     auto agent_cfg = it->second;
                     auto exec = executor_;
 
-                    std::thread([exec = std::move(exec), agent_cfg = std::move(agent_cfg), task_text]() {
-                        try {
-                            NullRunControl control;
-                            exec(agent_cfg, task_text, control);
-                        } catch (const std::exception& e) {
-                            spdlog::error("AgentTool: sub-agent failed: {}", e.what());
+                    auto fut = std::async(std::launch::async,
+                        [exec = std::move(exec), agent_cfg = std::move(agent_cfg), task_text]() -> std::string {
+                            try {
+                                NullRunControl control;
+                                return exec(agent_cfg, task_text, control);
+                            } catch (const std::exception& e) {
+                                spdlog::error("AgentTool: sub-agent failed: {}", e.what());
+                                return std::string("Error: ") + e.what();
+                            }
+                        });
+
+                    std::string task_id = "task_" + std::to_string(
+                        std::chrono::steady_clock::now().time_since_epoch().count());
+
+                    {
+                        std::lock_guard<std::mutex> lock(tasks_mutex_);
+                        if (active_tasks_.size() >= kMaxConcurrentSubAgents) {
+                            result.output = R"({"status":"error","message":"Too many concurrent sub-agents"})";
+                            result.is_error = true;
+                            return result;
                         }
-                    }).detach();
+                        active_tasks_[task_id] = std::move(fut);
+                    }
 
                     nlohmann::json out;
                     out["status"] = "ok";
                     out["message"] = "Sub-agent spawned";
+                    out["task_id"] = task_id;
                     out["agent_id"] = agent_id;
                     out["task"] = task_text;
                     result.output = out.dump();
+                }
+            }
+            else if (action == "get_result") {
+                std::string task_id = json.value("task_id", "");
+                std::lock_guard<std::mutex> lock(tasks_mutex_);
+                auto it = active_tasks_.find(task_id);
+                if (it == active_tasks_.end()) {
+                    result.output = R"({"status":"error","message":"Unknown task_id"})";
+                    result.is_error = true;
+                } else {
+                    auto status = it->second.wait_for(std::chrono::milliseconds(100));
+                    if (status == std::future_status::ready) {
+                        auto output = it->second.get();
+                        active_tasks_.erase(it);
+                        nlohmann::json out;
+                        out["status"] = "ok";
+                        out["result"] = output;
+                        result.output = out.dump();
+                    } else {
+                        result.output = R"({"status":"pending","message":"Task still running"})";
+                    }
                 }
             }
             else {

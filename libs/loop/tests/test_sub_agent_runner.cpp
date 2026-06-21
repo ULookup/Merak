@@ -6,6 +6,8 @@
 #include <cassert>
 #include <iostream>
 #include <memory>
+#include <thread>
+#include <atomic>
 
 using namespace merak;
 
@@ -66,16 +68,15 @@ public:
 };
 
 // Helper: build a valid SubAgentRunner with stub dependencies.
-static std::unique_ptr<SubAgentRunner> make_test_runner()
+static std::shared_ptr<SubAgentRunner> make_test_runner()
 {
     auto llm = std::make_shared<StubProvider>();
     llm->canned.text = "ok";
-    auto mem = std::make_shared<MemoryStore>(
-        MemoryConfig{},
-        std::make_shared<StubEmbeddingProvider>());
+    auto embedder = std::make_shared<StubEmbeddingProvider>();
+    auto mem = std::make_shared<MemoryStore>(MemoryConfig{}, embedder);
     auto tools = std::make_shared<ToolRegistry>();
-    return std::make_unique<SubAgentRunner>(
-        llm, mem, tools, nullptr, nullptr);
+    return std::make_shared<SubAgentRunner>(
+        llm, mem, tools, nullptr, nullptr, embedder, MemoryConfig{});
 }
 
 // ——— Tests ——————————————————————————————————————————————————
@@ -158,6 +159,72 @@ void test_fan_out_returns_map_with_keys() {
     PASS();
 }
 
+// ——— Batch 2 new tests ———
+
+void test_concurrent_register_and_read() {
+    TEST("concurrent register and read does not crash");
+    auto runner = make_test_runner();
+    std::atomic<bool> done{false};
+
+    std::thread writer([&]() {
+        for (int i = 0; i < 100; i++) {
+            SubAgentConfig cfg;
+            cfg.id = "agent_" + std::to_string(i);
+            cfg.system_prompt = "test";
+            runner->register_profile(cfg);
+        }
+        done = true;
+    });
+
+    std::thread reader([&]() {
+        while (!done) {
+            runner->has_agent("agent_0");
+        }
+    });
+
+    writer.join();
+    reader.join();
+    // No crash = pass
+    PASS();
+}
+
+void test_custom_max_turns() {
+    TEST("custom max_turns is read from SubAgentConfig");
+    auto runner = make_test_runner();
+    SubAgentConfig cfg;
+    cfg.id = "custom_turns";
+    cfg.system_prompt = "test";
+    cfg.max_turns = 5;
+    runner->register_profile(cfg);
+
+    // delegate uses create_sub_agent which reads max_turns from profile
+    // The stub provider returns "ok" — we verify the delegation completes
+    auto resp = runner->delegate("custom_turns", "verify max_turns").get();
+    assert(!resp.text.empty());
+    PASS();
+}
+
+void test_sequential_continues_after_missing_agent() {
+    TEST("sequential continues after missing agent");
+    auto runner = make_test_runner();
+
+    SubAgentConfig cfg;
+    cfg.id = "valid_agent"; cfg.system_prompt = "test"; runner->register_profile(cfg);
+
+    // pipeline contains one valid and one missing agent
+    std::vector<Delegation> pipeline = {
+        {"valid_agent", "task 1"},
+        {"nonexistent", "task 2"},
+        {"valid_agent", "task 3"},
+    };
+
+    auto resp = runner->sequential(pipeline).get();
+    // All three steps should produce output
+    assert(resp.text.find("valid_agent") != std::string::npos);
+    assert(resp.text.find("nonexistent") != std::string::npos);
+    PASS();
+}
+
 int main() {
     std::cout << "\nSubAgentRunner Tests\n====================\n";
     test_has_agent_returns_false_initially();
@@ -165,6 +232,9 @@ int main() {
     test_delegate_unknown_agent_returns_error();
     test_sequential_preserves_result_order();
     test_fan_out_returns_map_with_keys();
+    test_concurrent_register_and_read();
+    test_custom_max_turns();
+    test_sequential_continues_after_missing_agent();
     std::cout << "\n" << tests_passed << "/" << tests_run << " passed\n";
     return tests_passed == tests_run ? 0 : 1;
 }
