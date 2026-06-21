@@ -37,6 +37,7 @@ ToolMeta EnterPlanModeTool::meta() const {
     m.intents = {IntentType::Introspect};
     m.scope = Scope::Local;
     m.schema_tokens = 15;
+    m.domain = ToolDomain::General;
     return m;
 }
 
@@ -106,6 +107,7 @@ ToolMeta ExitPlanModeTool::meta() const {
     m.intents = {IntentType::Introspect};
     m.scope = Scope::Local;
     m.schema_tokens = 20;
+    m.domain = ToolDomain::General;
     return m;
 }
 

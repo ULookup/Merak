@@ -22,6 +22,8 @@ void ToolRegistry::register_tool(std::unique_ptr<Tool> tool) {
     }
 
     source_[name] = spec.source;
+    auto meta = tool->meta();
+    domains_[name] = meta.domain;
     tools_[name] = std::move(tool);
     spdlog::info("ToolRegistry: registered tool '{}' (source={})", name, spec.source);
 }
