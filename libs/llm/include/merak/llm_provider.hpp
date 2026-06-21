@@ -28,6 +28,11 @@ struct ChatRequest {
     bool enable_thinking = true;
 };
 
+struct RetryConfig {
+    int max_retries = 3;
+    int base_delay_ms = 1000;
+};
+
 class LlmProvider {
 public:
     virtual ~LlmProvider() = default;

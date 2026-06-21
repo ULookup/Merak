@@ -25,20 +25,19 @@ AgentLoop::AgentLoop(
     , worldbuilding_(std::move(worldbuilding))
     , skills_(std::move(skills))
     , pipeline_(std::make_unique<ContextPipeline>())
+    , token_counter_(std::make_shared<TokenCounter>(config_.default_model))
 {
     pipeline_->set_compactor(compactor_);
 }
 
 void AgentLoop::restore_history(std::vector<Message> history) {
     session_history_ = std::move(history);
+    compaction_summaries_.clear();
+    token_counter_->update_authoritative(0, 0);
 }
 
 void AgentLoop::set_system_prompt(const std::string& prompt) {
-    if (!session_history_.empty() && session_history_[0].role == "system") {
-        session_history_[0].content = prompt;
-    } else {
-        session_history_.insert(session_history_.begin(), {"system", prompt, {}, {}, ""});
-    }
+    system_prompt_ = prompt;
 }
 
 void AgentLoop::transition_to(TurnState next, RunControl& control) {
@@ -103,8 +102,9 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         if (config_.enable_cache) {
             auto split = CacheAwareContext::split(context_messages);
-            spdlog::debug("Loop: turn {} — {}", turn_count,
-                CacheAwareContext::info(split));
+            context_messages = split.static_prefix;
+            context_messages.insert(context_messages.end(),
+                split.dynamic_suffix.begin(), split.dynamic_suffix.end());
         }
 
         transition_to(TurnState::Thinking, control);
@@ -134,11 +134,6 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
 
         std::vector<ToolCall> accumulated_tool_calls;
 
-        // Snapshot: if LLM streaming fails mid-flight, chunks already emitted
-        // via the callback would be duplicated by the retry. Save and restore
-        // the pre-attempt text length so only the successful response is kept.
-        const auto text_len_before_attempt = response.text.size();
-
         auto llm_future = llm_->chat(req,
             [&](StreamChunk chunk) {
                 auto token = control.cancellation_token();
@@ -151,69 +146,19 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
             }, control.cancellation_token());
 
         AgentResponse llm_response;
-        int attempt = 0;
-        while (true) {
-            try {
-                llm_response = llm_future.get();
-                break;
-            } catch (const std::exception& e) {
-                // Restore text to pre-attempt state so retry doesn't duplicate
-                // partial chunks already emitted by the failed future.
-                response.text.resize(text_len_before_attempt);
-                attempt++;
-                int http_status = 0;
-                std::string msg = e.what();
-                auto pos = msg.rfind("(HTTP ");
-                if (pos != std::string::npos) {
-                    http_status = std::stoi(msg.substr(pos + 6));
-                }
-                auto error_class = turn_ingestor_.classify_error(http_status, msg);
-
-                if (attempt > config_.max_retries) {
-                    spdlog::error("Loop: max retries ({}) exceeded", config_.max_retries);
-                    throw;
-                }
-
-                switch (error_class) {
-                case LlmErrorClass::Auth:
-                case LlmErrorClass::Cancelled:
-                    throw; // never retry these
-                case LlmErrorClass::ContextWindow:
-                    spdlog::warn("Loop: context window error, triggering compaction");
-                    maybe_compact(control);
-                    break;
-                case LlmErrorClass::RateLimit:
-                case LlmErrorClass::StreamTransport:
-                case LlmErrorClass::StreamIdle:
-                case LlmErrorClass::Unknown:
-                default: {
-                    int delay_ms = std::min(2000 * (1 << (attempt - 1)), 30000);
-                    spdlog::warn("Loop: retry {}/{} after {}ms ({}: {})",
-                        attempt, config_.max_retries, delay_ms,
-                        (int)error_class, e.what());
-                    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
-                    break;
-                }
-                case LlmErrorClass::None:
-                    break;
-                }
-
-                llm_future = llm_->chat(req,
-                    [&](StreamChunk chunk) {
-                        auto token = control.cancellation_token();
-                        if (token && token->should_stop()) return;
-                        if (chunk.is_final) return;
-                        if (!chunk.is_tool_call) {
-                            control.emit_text_delta(chunk.text);
-                            response.text += chunk.text;
-                        }
-                    }, control.cancellation_token());
-            }
+        try {
+            llm_response = llm_future.get();
+        } catch (const std::exception&) {
+            spdlog::error("Loop: LLM request failed after provider retries");
+            throw;
         }
         response.total_input_tokens += llm_response.total_input_tokens;
         response.total_output_tokens += llm_response.total_output_tokens;
         response.has_usage = response.has_usage || llm_response.has_usage;
         response.usage_missing = response.usage_missing || !llm_response.has_usage;
+        token_counter_->update_authoritative(
+            llm_response.total_input_tokens,
+            (int)context_messages.size());
         control.emit_usage(llm_response.total_input_tokens,
             llm_response.total_output_tokens, llm_response.has_usage);
         if (auto token = control.cancellation_token(); token && token->should_stop()) throw AgentError(ErrorType::INTERNAL_ERROR, "Run cancelled");
@@ -500,11 +445,22 @@ std::vector<Message> AgentLoop::build_context() {
     }
     sources.conversation_messages = memory_->recent_history(config_.max_turns);
 
+    // Use runtime-updated system prompt if set, otherwise config default
+    const std::string& effective_system_prompt = system_prompt_.empty()
+        ? config_.system_prompt : system_prompt_;
+
     auto payload = pipeline_->planned_assemble(
-        config_.system_prompt, config_.default_model,
+        effective_system_prompt, config_.default_model,
         config_.model_max_tokens, session_history_, sources);
 
-    return payload.messages;
+    // Prepend compaction summaries before returning (they are NOT part
+    // of session_history_ to avoid index conflicts)
+    auto messages = payload.messages;
+    if (!compaction_summaries_.empty()) {
+        messages.insert(messages.begin(),
+            compaction_summaries_.begin(), compaction_summaries_.end());
+    }
+    return messages;
 }
 
 std::vector<ToolResult> AgentLoop::handle_tool_calls(
@@ -643,8 +599,7 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
 void AgentLoop::maybe_compact(RunControl& control) {
     if (!config_.enable_compaction) return;
 
-    TokenCounter counter(config_.default_model);
-    int total_tokens = counter.count(session_history_);
+    int total_tokens = token_counter_->count(session_history_);
 
     // Microcompact is handled by ContextOptimizer during pipeline assembly.
     // Here we trigger LLM-based compaction when token pressure is high.
@@ -656,7 +611,7 @@ void AgentLoop::maybe_compact(RunControl& control) {
             Message summary_msg;
             summary_msg.role = "system";
             summary_msg.content = "[Previous conversation summary]\n" + result.summary;
-            session_history_.insert(session_history_.begin(), summary_msg);
+            compaction_summaries_.push_back(summary_msg);
             control.record_compaction(static_cast<int>(result.replaced.size()));
         }
     }

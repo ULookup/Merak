@@ -227,7 +227,7 @@ Merak 使用 `~/.merak` 作为用户级配置和数据目录。首次运行：
   },
   "memory": {
     "enabled": true,
-    "db_connection": "postgresql://merak:merak123@127.0.0.1:5432/merak"
+    "db_connection": "postgresql://merak:<your-password>@127.0.0.1:5432/merak"
   }
 }
 ```
@@ -343,7 +343,7 @@ Tauri 配置当前面向 Windows MSI 和 NSIS 安装包。打包前需要 Rust/C
 
 Merak 的 worldbuilding 和 memory 能力依赖 PostgreSQL。你可以使用外部 PostgreSQL，也可以通过 Docker 启动开发数据库。
 
-`docker-compose.yml` 已包含一个开发用 PostgreSQL 服务，默认用户为 `merak`，默认密码为 `merak123`。也可以直接运行：
+`docker-compose.yml` 已包含一个开发用 PostgreSQL 服务，默认用户为 `merak`，密码通过 `${PG_PASSWORD}` 环境变量设置。也可以直接运行：
 
 ```bash
 docker compose up -d
@@ -355,7 +355,7 @@ docker compose up -d
 {
   "memory": {
     "enabled": true,
-    "db_connection": "postgresql://merak:merak123@127.0.0.1:5432/merak"
+    "db_connection": "postgresql://merak:<your-password>@127.0.0.1:5432/merak"
   }
 }
 ```
@@ -363,7 +363,7 @@ docker compose up -d
 环境变量示例：
 
 ```powershell
-$env:MERAK_DB_CONNECTION="postgresql://merak:merak123@127.0.0.1:5432/merak"
+$env:MERAK_DB_CONNECTION="postgresql://merak:<your-password>@127.0.0.1:5432/merak"
 ```
 
 ## API 与事件

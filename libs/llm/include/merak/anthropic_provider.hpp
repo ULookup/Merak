@@ -23,11 +23,11 @@ public:
     bool test_connection() override;
     const CacheStats& cache_stats() const { return stats_; }
 
+    nlohmann::json build_request_body(const ChatRequest& request) const;
+
 private:
     LLMConfig config_;
     CacheStats stats_;
-
-    nlohmann::json build_request_body(const ChatRequest& request) const;
 };
 
 } // namespace merak

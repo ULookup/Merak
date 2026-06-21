@@ -2,10 +2,39 @@
 /Debug/
 /config/*
 !/config/skills/
-/config.json
+config.json
 CMakeUserPresets.json
 .merak/
 .claude/
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.*
+*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+dist/
+
+# Documentation (generated)
 /docs/
 .superpowers/
+
+# Worktrees
 .worktrees/

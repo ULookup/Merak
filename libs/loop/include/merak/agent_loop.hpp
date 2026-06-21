@@ -7,6 +7,7 @@
 #include <merak/tool_registry.hpp>
 #include <merak/memory_store.hpp>
 #include <merak/context_pipeline.hpp>
+#include <merak/token_counter.hpp>
 #include <merak/compactor.hpp>
 #include <merak/cache_aware_context.hpp>
 #include <merak/stall_detector.hpp>
@@ -50,7 +51,7 @@ public:
     // Load history from persistent storage (journal restore).
     void restore_history(std::vector<Message> history);
 
-    // Replace or insert system message at position 0.
+    // Store the runtime system prompt (used by build_context if non-empty).
     void set_system_prompt(const std::string& prompt);
 
     // Set a callback that provides narrative working memory context text.
@@ -88,6 +89,7 @@ private:
     std::shared_ptr<ToolRegistry> tools_;
     std::shared_ptr<MemoryStore> memory_;
     std::shared_ptr<Compactor> compactor_;
+    std::shared_ptr<TokenCounter> token_counter_;
 
     std::unique_ptr<ContextPipeline> pipeline_;
     StallDetector stall_detector_;
@@ -95,6 +97,8 @@ private:
     TurnIngestor turn_ingestor_;
 
     std::vector<Message> session_history_;
+    std::string system_prompt_;
+    std::vector<Message> compaction_summaries_;
     std::shared_ptr<std::atomic<bool>> plan_mode_;
     std::function<std::string()> working_memory_provider_;
     std::shared_ptr<worldbuilding::WorldbuildingService> worldbuilding_;

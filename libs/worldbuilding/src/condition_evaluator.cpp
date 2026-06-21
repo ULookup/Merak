@@ -106,6 +106,13 @@ void ConditionEvaluator::register_all_builtins() {
     registry_["orphaned_foreshadowing"] = eval_orphaned_foreshadowing;
     registry_["scene_completeness"] = eval_scene_completeness;
 
+    // all_checks_passed is a compound type dispatched inside evaluate()
+    // (checks check_registry_ directly). Registered so list_condition_types()
+    // includes it; the function below is never actually called.
+    registry_["all_checks_passed"] = [](const ConditionDef&, const PipelineState&, pqxx::connection&) {
+        return ConditionResult{"all_checks_passed", true, std::nullopt, std::nullopt, {}};
+    };
+
     // ─── KG condition types ───
     registry_["kg_relation_count"] = [this](const ConditionDef& cond,
                                              const PipelineState& state,
@@ -614,7 +621,7 @@ ConditionResult eval_relation_currency(const ConditionDef& cond,
 
         auto row = txn.exec_params1(R"(
             SELECT COUNT(*) FROM agent_relations ar
-            JOIN agents a ON (ar.agent_a_id = a.id OR ar.agent_b_id = a.id)
+            JOIN agents a ON (ar.agent_id = a.id OR ar.target_id = a.id)
             WHERE a.world_id = $1 AND ar.updated_at < $2
         )", state.world_id, chapter_start);
         int stale = row[0].as<int>();

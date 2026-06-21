@@ -23,12 +23,12 @@ public:
     bool test_connection() override;
     const CacheStats& cache_stats() const { return stats_; }
 
+    nlohmann::json build_messages(const std::vector<Message>& msgs) const;
+    nlohmann::json build_tools(const std::vector<ToolSpec>& tools) const;
+
 private:
     LLMConfig config_;
     CacheStats stats_;
-
-    nlohmann::json build_messages(const std::vector<Message>& msgs) const;
-    nlohmann::json build_tools(const std::vector<ToolSpec>& tools) const;
 };
 
 } // namespace merak
