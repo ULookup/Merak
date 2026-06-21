@@ -73,19 +73,31 @@ std::future<std::map<std::string, AgentResponse>> SubAgentRunner::fan_out(
         -> std::map<std::string, AgentResponse>
     {
         std::map<std::string, AgentResponse> results;
-        std::vector<std::future<std::pair<std::string, AgentResponse>>> futures;
+        constexpr int max_parallel = 8;
 
-        for (auto& d : tasks) {
-            futures.push_back(std::async(std::launch::async,
-                [this, d]() -> std::pair<std::string, AgentResponse> {
-                    auto resp = delegate(d.agent_id, d.task).get();
-                    return {d.agent_id, resp};
-                }));
-        }
-
-        for (auto& f : futures) {
-            auto [id, resp] = f.get();
-            results[id] = resp;
+        size_t idx = 0;
+        while (idx < tasks.size()) {
+            size_t batch_start = idx;
+            std::vector<std::future<std::pair<std::string, AgentResponse>>> batch;
+            for (int i = 0; i < max_parallel && idx < tasks.size(); i++, idx++) {
+                batch.push_back(std::async(std::launch::async,
+                    [this, d = tasks[idx]]() -> std::pair<std::string, AgentResponse> {
+                        auto resp = delegate(d.agent_id, d.task).get();
+                        return {d.agent_id, resp};
+                    }));
+            }
+            for (size_t i = 0; i < batch.size(); i++) {
+                try {
+                    auto result = batch[i].get();
+                    results[result.first] = result.second;
+                } catch (const std::exception& e) {
+                    AgentResponse err;
+                    err.text = std::string("Sub-agent error: ") + e.what();
+                    results[tasks[batch_start + i].agent_id] = err;
+                    spdlog::warn("SubAgentRunner: fan_out task '{}' failed: {}",
+                        tasks[batch_start + i].agent_id, e.what());
+                }
+            }
         }
 
         spdlog::info("SubAgentRunner: fan_out {} tasks completed", tasks.size());

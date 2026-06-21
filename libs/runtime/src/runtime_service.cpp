@@ -387,6 +387,7 @@ RunRecord RuntimeService::create_run_record(const std::string&s,const std::strin
         }
     }
     return r;}
+RunRecord RuntimeService::resume_run(const std::string&run_id){auto existing=store_->get_run(run_id);if(!existing)throw RuntimeError("run_not_found","Run does not exist");if(existing->status!=RunStatus::Interrupted&&existing->status!=RunStatus::Failed)throw RuntimeError("run_not_resumable","Run is not in a resumable state");auto new_run=store_->create_run(existing->session_id,existing->user_message,existing->id,existing->delegation_id,existing->agent_id,existing->run_kind);if(!loop_factory_)throw RuntimeError("runtime_unconfigured","Agent loop is not configured");std::thread([self=shared_from_this(),r=new_run,model=existing->agent_id]{self->execute_run(r,model);}).detach();return new_run;}
 RunRecord RuntimeService::start_run(const std::string&s,const std::string&m,const std::string&model){auto r=create_run_record(s,m);if(!loop_factory_)throw RuntimeError("runtime_unconfigured","Agent loop is not configured");std::thread([self=shared_from_this(),r,model]{self->execute_run(r,model);}).detach();return r;}
 std::vector<AgentMetadata> RuntimeService::agents() const {
 	std::vector<AgentMetadata> out;

@@ -101,6 +101,7 @@ public:
     std::optional<SessionRecord> get_session(const std::string& id) const;
     std::optional<RunRecord> get_run(const std::string& id) const;
     RunRecord create_run_record(const std::string& session_id, const std::string& message);
+    RunRecord resume_run(const std::string& run_id);
     RunRecord start_run(const std::string& session_id, const std::string& message,
                         const std::string& model = "");
     DelegationStart start_delegation(
