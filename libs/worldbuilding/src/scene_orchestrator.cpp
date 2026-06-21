@@ -263,7 +263,7 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                     auto agent = agents_.get_agent(pid);
                     if (agent) participant_names.push_back(agent->name);
                 } catch (const std::exception& e) {
-                    spdlog::debug("get_agent for KG participant names skipped: {}", e.what());
+                    spdlog::warn("get_agent for KG participant names skipped: {}", e.what());
                 }
             }
             if (participant_names.size() > 1) {
@@ -275,7 +275,7 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                         god << md << "\n";
                     }
                 } catch (const std::exception& e) {
-                    spdlog::debug("KG query_subgraph skipped: {}", e.what());
+                    spdlog::warn("KG query_subgraph skipped: {}", e.what());
                 }
             }
         }
@@ -302,7 +302,7 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
             auto card = agents_.load_character_card(pid);
             prompt << card_to_prompt(card);
         } catch (const std::exception& e) {
-            spdlog::debug("load_character_card({}) skipped: {}", pid, e.what());
+            spdlog::warn("load_character_card({}) skipped: {}", pid, e.what());
             // Agent may be a manager or group; skip card for non-characters
             prompt << "代理人: " << pid << "\n";
         }
@@ -339,7 +339,7 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                 }
             }
         } catch (const std::exception& e) {
-            spdlog::debug("diary index loading skipped: {}", e.what());
+            spdlog::warn("diary index loading skipped: {}", e.what());
         }
 
         // Group shared memory: if agent is a group member, load shared refs
@@ -349,7 +349,7 @@ SceneOrchestrator::prepare_scene(const std::string& world_id,
                 view.loaded_memory_refs.push_back(ref);
             }
         } catch (const std::exception& e) {
-            spdlog::debug("shared_memory_refs_for skipped: {}", e.what());
+            spdlog::warn("shared_memory_refs_for skipped: {}", e.what());
         }
 
         // Append character behavior prompt
@@ -463,7 +463,8 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
             try {
                 voice_.update(pid, dialogue_lines);
             } catch (const std::exception& e) {
-                spdlog::debug("voice fingerprint update skipped: {}", e.what());
+                spdlog::warn("voice fingerprint update skipped for {}: {}", pid, e.what());
+                wrap.warnings.push_back("角色 " + pid + " 语音指纹更新失败");
             }
         }
     }
@@ -488,7 +489,8 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
                 auto planted = foreshadowing_.plant(world_id, proposal);
                 wrap.proposed_foreshadowing.push_back(planted);
             } catch (const std::exception& e) {
-                spdlog::debug("foreshadowing proposal plant skipped: {}", e.what());
+                spdlog::warn("foreshadowing proposal plant skipped: {}", e.what());
+                wrap.warnings.push_back("伏笔提案写入失败: " + std::string(e.what()));
             }
         }
     }
@@ -512,6 +514,7 @@ SceneWrapUp SceneOrchestrator::finish_scene(const std::string& world_id,
             }
         } catch (const std::exception& e) {
             spdlog::warn("auto-compression failed for agent {}: {}", pid, e.what());
+            wrap.warnings.push_back("角色 " + pid + " 记忆自动压缩失败");
         }
     }
 

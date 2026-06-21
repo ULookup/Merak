@@ -153,6 +153,10 @@ VoiceFingerprint VoiceAnalyzer::update(const std::string& agent_id,
         auto diff = wc - fp.avg_sentence_length;
         variance += diff * diff;
     }
+    // Uses population variance (N) not sample variance (N-1).
+    // Intentional: VoiceAnalyzer is a relative comparison tool, not a statistical
+    // inference tool. All agents share the same formula so rankings are monotonic.
+    // See https://github.com/ULookup/Merak/issues/28
     fp.sentence_variance = variance / total_turns;
 
     // Question frequency

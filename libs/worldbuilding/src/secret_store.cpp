@@ -101,6 +101,46 @@ bool actor_is_suspicious(const Secret& secret, const std::string& character_id) 
                       character_id) != secret.suspicious_character_ids.end();
 }
 
+// Check if a CJK boundary character (。！？，；、) or ASCII boundary starts at idx
+bool is_boundary_at(const std::string& text, size_t idx) {
+    if (idx >= text.size()) return true;
+    unsigned char c = static_cast<unsigned char>(text[idx]);
+    if (c == '\n' || std::ispunct(c)) return true;
+    // 3-byte CJK punctuation: compare full UTF-8 sequence
+    if (idx + 3 <= text.size()) {
+        std::string_view sv(&text[idx], 3);
+        return sv == "。" || sv == "！" || sv == "？"
+            || sv == "，" || sv == "；" || sv == "、";
+    }
+    return false;
+}
+
+// Check if the character ending just before idx is a boundary character.
+// For single-byte ASCII: check text[idx-1].
+// For 3-byte CJK punctuation: check the 3 bytes ending at idx.
+bool preceded_by_boundary(const std::string& text, size_t idx) {
+    if (idx == 0) return true;
+    unsigned char c = static_cast<unsigned char>(text[idx - 1]);
+    if (c == '\n' || std::ispunct(c)) return true;
+    if (idx >= 3) {
+        std::string_view sv(&text[idx - 3], 3);
+        if (sv == "。" || sv == "！" || sv == "？"
+            || sv == "，" || sv == "；" || sv == "、") return true;
+    }
+    return false;
+}
+
+bool match_at_boundary(const std::string& text, const std::string& pattern, size_t& pos) {
+    pos = text.find(pattern);
+    while (pos != std::string::npos) {
+        if (preceded_by_boundary(text, pos) && is_boundary_at(text, pos + pattern.size())) {
+            return true;
+        }
+        pos = text.find(pattern, pos + 1);
+    }
+    return false;
+}
+
 } // namespace
 
 SecretStore::SecretStore(WorldStore& worlds,
@@ -439,15 +479,28 @@ SecretStore::check_leak_risk(const std::string& world_id,
         for (const auto& pid : scene.participant_ids) {
             if (actor_knows_truth(secret, pid)) continue;
 
-            // Simple substring check for truth and key terms
-            auto pos = draft_text.find(secret.truth);
-            if (pos != std::string::npos && secret.truth.size() >= 3) {
-                LeakRisk risk;
-                risk.secret_id = secret.id;
-                risk.character_id = pid;
-                risk.reason = "场景文本暴露了 " + secret.holder_id + " 的秘密: " + secret.truth;
-                risks.push_back(risk);
+            // Boundary-aware matching: truth must appear as a semantic segment
+            size_t pos = 0;
+            if (!match_at_boundary(draft_text, secret.truth, pos)) continue;
+
+            LeakRisk risk;
+            risk.secret_id = secret.id;
+            risk.character_id = pid;
+            risk.reason = "场景文本暴露了 " + secret.holder_id + " 的秘密: " + secret.truth;
+
+            // Public-version disambiguation: if truth and public_version coexist nearby,
+            // the passage may be an intentional contrast — lower confidence
+            if (!secret.public_version.empty()) {
+                auto pv_pos = draft_text.find(secret.public_version);
+                if (pv_pos != std::string::npos) {
+                    auto dist = static_cast<int>(pos) - static_cast<int>(pv_pos);
+                    if (std::abs(dist) < 200) {
+                        risk.reason += " (靠近公开版本，置信度较低)";
+                    }
+                }
             }
+
+            risks.push_back(risk);
         }
     }
 

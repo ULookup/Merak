@@ -194,14 +194,6 @@ static bool is_known_exit_1_tool(const std::string& command) {
 
 // ---------- Read-only cache (static globals) ----------
 
-struct CacheEntry {
-    std::string output;
-    int exit_code;
-    std::chrono::steady_clock::time_point timestamp;
-};
-
-static std::map<std::string, CacheEntry> readonly_cache;
-static std::mutex readonly_cache_mutex;
 static constexpr int kCacheTTLSeconds = 60;
 
 // ---------- Execute ----------
@@ -235,7 +227,7 @@ ToolMeta BashTool::meta() const {
 }
 
 std::future<ToolResult> BashTool::execute(ToolCall call, ToolExecutionContext context) {
-    return std::async(std::launch::async, [call = std::move(call), context]() -> ToolResult {
+    return std::async(std::launch::async, [this, call = std::move(call), context]() -> ToolResult {
         auto start_time = std::chrono::steady_clock::now();
         ToolResult result;
         result.call_id = call.id;
@@ -257,9 +249,9 @@ std::future<ToolResult> BashTool::execute(ToolCall call, ToolExecutionContext co
 
             // ——— Read-only command cache (60s TTL) ———
             if (is_safe_readonly(command)) {
-                std::lock_guard<std::mutex> lock(readonly_cache_mutex);
-                auto it = readonly_cache.find(command);
-                if (it != readonly_cache.end()) {
+                std::lock_guard<std::mutex> lock(cache_mutex_);
+                auto it = readonly_cache_.find(command);
+                if (it != readonly_cache_.end()) {
                     auto age = std::chrono::steady_clock::now() - it->second.timestamp;
                     if (age < std::chrono::seconds(kCacheTTLSeconds)) {
                         result.output = it->second.output;
@@ -382,8 +374,8 @@ std::future<ToolResult> BashTool::execute(ToolCall call, ToolExecutionContext co
 
             // ——— Store in read-only cache ———
             if (is_safe_readonly(command)) {
-                std::lock_guard<std::mutex> lock(readonly_cache_mutex);
-                readonly_cache[command] = {result.output, exit_code, std::chrono::steady_clock::now()};
+                std::lock_guard<std::mutex> lock(cache_mutex_);
+                readonly_cache_[command] = {result.output, exit_code, std::chrono::steady_clock::now()};
             }
 
             result.duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
