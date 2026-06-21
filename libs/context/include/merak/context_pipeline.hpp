@@ -9,6 +9,7 @@
 #include <memory>
 #include <filesystem>
 #include <optional>
+#include <mutex>
 
 namespace merak {
 
@@ -43,6 +44,7 @@ private:
   SpillStore spill_store_;
   std::optional<CacheAwareContext::Split> prev_split_;
   std::shared_ptr<Compactor> compactor_;
+  mutable std::mutex mutex_;
   int current_tokens_ = 0;
   int turn_index_ = 0;
 };
