@@ -135,6 +135,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
         // SSE 累积状态
         std::string response_text;
         int input_tokens = 0, output_tokens = 0;
+        int cache_read_tokens = 0, cache_write_tokens = 0;
         bool has_usage = false;
         struct PendingTool {
             std::string id;
@@ -159,11 +160,11 @@ std::future<AgentResponse> AnthropicProvider::chat(
                         auto& usage = j["message"]["usage"];
                         input_tokens = usage.value("input_tokens", 0);
                         has_usage = true;
-                        int cache_read = usage.value("cache_read_input_tokens", 0);
-                        int cache_write = usage.value("cache_creation_input_tokens", 0);
-                        if (cache_read > 0) stats_.cache_hits++;
-                        stats_.cache_read_tokens += cache_read;
-                        stats_.cache_write_tokens += cache_write;
+                        cache_read_tokens = usage.value("cache_read_input_tokens", 0);
+                        cache_write_tokens = usage.value("cache_creation_input_tokens", 0);
+                        if (cache_read_tokens > 0) stats_.cache_hits++;
+                        stats_.cache_read_tokens += cache_read_tokens;
+                        stats_.cache_write_tokens += cache_write_tokens;
                     }
                 }
                 else if (event_type == "content_block_start") {
@@ -365,6 +366,8 @@ std::future<AgentResponse> AnthropicProvider::chat(
         response.text = response_text;
         response.total_input_tokens = input_tokens;
         response.total_output_tokens = output_tokens;
+        response.total_cache_read_tokens = cache_read_tokens;
+        response.total_cache_write_tokens = cache_write_tokens;
         response.has_usage = has_usage;
         if (!preserved_content_blocks.empty()) {
             auto blocks = nlohmann::json::array();

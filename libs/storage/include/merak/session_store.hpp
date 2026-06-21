@@ -55,6 +55,11 @@ struct ApprovalRecord {
     std::string resolved_at;
 };
 
+struct RunListResult {
+    std::vector<RunRecord> runs;
+    int total = 0;
+};
+
 class SessionStore {
 public:
     explicit SessionStore(std::shared_ptr<pqxx::connection> conn);
@@ -77,6 +82,11 @@ public:
         const std::string& agent_id = "",
         const std::string& run_kind = "user");
     std::optional<RunRecord> get_run(const std::string& id) const;
+    RunListResult list_runs(
+        const std::string& session_id = "",
+        const std::string& status_filter = "",
+        int limit = 20,
+        int offset = 0) const;
     bool has_unfinished_run(const std::string& session_id) const;
     void update_run_status(const std::string& id, RunStatus status, const std::string& error = "");
 

@@ -77,7 +77,7 @@ std::future<ToolResult> ForkSkillTool::execute(
 
         NullRunControl control;
         try {
-            auto response = sub_loop.run(call.arguments, control).get();
+            auto response = sub_loop.run(call.arguments, control);
             ToolResult result;
             result.call_id = call.id;
             result.output = response.text;

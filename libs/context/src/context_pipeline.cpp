@@ -19,6 +19,8 @@ SerializedPayload ContextPipeline::planned_assemble(
     const std::vector<Message>& history,
     const BindSources& sources) {
 
+  std::lock_guard<std::mutex> lock(mutex_);
+
   TokenCounter counter(model);
   current_tokens_ = counter.count(history) + counter.count(system_prompt);
 
@@ -78,6 +80,25 @@ SerializedPayload ContextPipeline::planned_assemble(
     opt_stats.tokens_after += static_cast<int>(msg.content.size() / 3.5);
   }
   opt_stats.tokens_after += static_cast<int>(system_prompt.size() / 3.5);
+
+  // Hard trim: enforce model_max_tokens as hard ceiling
+  if (opt_stats.tokens_after > model_max_tokens) {
+      auto& msgs = bound.provider_messages;
+      int removed = 0;
+      while (opt_stats.tokens_after > model_max_tokens && msgs.size() > 2) {
+          // Skip system messages
+          size_t target = 1;
+          while (target < msgs.size() && msgs[target].role == "system") target++;
+          if (target >= msgs.size()) break;
+
+          opt_stats.tokens_after -= static_cast<int>(msgs[target].content.size() / 3.5);
+          msgs.erase(msgs.begin() + static_cast<long>(target));
+          removed++;
+      }
+      stats_.hard_trims += removed;
+      spdlog::warn("ContextPipeline: hard trim removed {} messages to fit budget "
+                   "(tokens_after={}, max={})", removed, opt_stats.tokens_after, model_max_tokens);
+  }
 
   // Record feedback for next-turn planning
   ContextFeedback fb{};

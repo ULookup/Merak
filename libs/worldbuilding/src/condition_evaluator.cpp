@@ -10,6 +10,12 @@
 
 namespace merak::worldbuilding {
 
+// Forward declaration: used in lambdas before full definition
+ConditionResult eval_scene_completeness(const ConditionDef& cond,
+                                         const PipelineState& state,
+                                         pqxx::connection& conn,
+                                         const std::filesystem::path& worlds_base_dir);
+
 // ═══════════════════════════════════════════════════════════════
 // entity_count table name whitelist
 // ═══════════════════════════════════════════════════════════════

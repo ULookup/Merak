@@ -3,11 +3,12 @@
 namespace merak {
 
 int TurnGuard::penalty_for(int count) const {
-  if (count >= 4) return -999;
+  if (count >= config_.max_warnings_before_critical) return -999;
   return -(2 * count);
 }
 
 TurnGuard::Verdict TurnGuard::evaluate(const RoundInput& in) {
+  std::lock_guard<std::mutex> lock(mutex_);
   Verdict v;
 
   if (in.stall.level == StallLevel::ForceStop) {
@@ -16,27 +17,27 @@ TurnGuard::Verdict TurnGuard::evaluate(const RoundInput& in) {
     return v;
   }
 
-  if (in.consecutive_world_query_rounds >= 5) {
+  if (in.consecutive_world_query_rounds >= config_.max_consecutive_world_query_rounds) {
     v.severity = Severity::Critical;
-    v.reason = "5+ rounds of world-only queries without narrative output";
-    v.restricted_tools = {"query_map", "query_world", "query_history", "query_magic", "query_faction"};
+    v.reason = std::to_string(config_.max_consecutive_world_query_rounds) + "+ rounds of world-only queries without narrative output";
+    v.restricted_domains = ToolDomain::WorldQuery;
     v.turn_penalty = -4;
     return v;
   }
 
-  if (in.consecutive_read_only_rounds >= 3) {
+  if (in.consecutive_read_only_rounds >= config_.max_consecutive_read_only_rounds) {
     v.severity = Severity::Warning;
-    v.reason = "3+ rounds without write operations";
-    v.nudge = "你已经观察了很多信息，现在是时候写内容了。";
+    v.reason = std::to_string(config_.max_consecutive_read_only_rounds) + "+ rounds without write operations";
+    v.nudge = config_.nudge_prefix + config_.nudge_write_now;
   }
 
-  if (in.consecutive_content_avoidance >= 3) {
+  if (in.consecutive_content_avoidance >= config_.max_consecutive_content_avoidance) {
     v.severity = Severity::Warning;
-    v.reason = "3x refusal to advance narrative";
-    v.nudge = "接受不完美，先写下来，后面可以改。";
+    v.reason = std::to_string(config_.max_consecutive_content_avoidance) + "x refusal to advance narrative";
+    v.nudge = config_.nudge_prefix + config_.nudge_accept_imperfection;
   }
 
-  if (in.tool_count >= 15) {
+  if (in.tool_count >= config_.max_tool_calls_per_round) {
     v.severity = Severity::Warning;
     v.reason = "excessive tool calls in single round";
     v.turn_penalty = -2;
@@ -44,17 +45,17 @@ TurnGuard::Verdict TurnGuard::evaluate(const RoundInput& in) {
 
   if (in.had_duplicate_creation) {
     if (v.severity < Severity::Warning) v.severity = Severity::Warning;
-    v.nudge = "检查是否已存在同名角色或地点。";
+    v.nudge = config_.nudge_prefix + config_.nudge_check_duplicates;
   }
 
   if (in.had_tone_drift) {
     if (v.severity < Severity::Info) v.severity = Severity::Info;
-    v.nudge = "留意你的叙事语气，保持与场景时代背景一致。";
+    v.nudge = config_.nudge_prefix + config_.nudge_tone_consistency;
   }
 
   if (in.stall.level == StallLevel::SigStall) {
     if (v.severity < Severity::Warning) v.severity = Severity::Warning;
-    if (!v.nudge) v.nudge = "试着调用 write_file 把想法写出来。";
+    if (!v.nudge) v.nudge = config_.nudge_prefix + config_.nudge_try_write_tool;
   }
 
   if (v.severity >= Severity::Warning) {
@@ -62,9 +63,9 @@ TurnGuard::Verdict TurnGuard::evaluate(const RoundInput& in) {
     if (!v.turn_penalty) {
       v.turn_penalty = penalty_for(warning_count_);
     }
-    if (warning_count_ >= 4) {
+    if (warning_count_ >= config_.max_warnings_before_critical) {
       v.severity = Severity::Critical;
-      v.reason = "4+ warnings in this run";
+      v.reason = std::to_string(config_.max_warnings_before_critical) + "+ warnings in this run";
     }
   }
 
@@ -72,6 +73,7 @@ TurnGuard::Verdict TurnGuard::evaluate(const RoundInput& in) {
 }
 
 void TurnGuard::reset() {
+  std::lock_guard<std::mutex> lock(mutex_);
   warning_count_ = 0;
 }
 

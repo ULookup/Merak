@@ -30,6 +30,7 @@ bool StallDetector::rounds_match(const std::vector<ToolCallSignature>& a,
 }
 
 StallResult StallDetector::check(const std::vector<ToolCall>& current_round) {
+  std::lock_guard<std::mutex> lock(mutex_);
   auto current_sigs = signatures_of(current_round);
 
   // Count consecutive identical rounds going backward
@@ -59,6 +60,7 @@ StallResult StallDetector::check(const std::vector<ToolCall>& current_round) {
 }
 
 void StallDetector::reset() {
+  std::lock_guard<std::mutex> lock(mutex_);
   recent_rounds_.clear();
   turn_counter_ = 0;
 }

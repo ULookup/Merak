@@ -15,6 +15,7 @@
 #include <merak/turn_ingestor.hpp>
 #include <merak/skills/skill_registry.hpp>
 #include <merak/execution.hpp>
+#include <chrono>
 #include <optional>
 #include <atomic>
 #include <functional>
@@ -34,8 +35,32 @@ public:
         int max_output_tokens = 4096;
         int max_retries = 3;
         int model_max_tokens = 128000;
+        int circuit_breaker_threshold = 3;
         bool enable_compaction = true;
         bool enable_cache = true;
+        int tool_timeout_ms = 30000;
+        struct ToolRateLimit {
+            int max_calls_per_turn = 50;
+            int max_calls_per_run = 500;
+        };
+        ToolRateLimit tool_rate_limit;
+    };
+
+    struct RunMetrics {
+        int turns_completed = 0;
+        int total_input_tokens = 0;
+        int total_output_tokens = 0;
+        int total_cache_read_tokens = 0;
+        int total_cache_write_tokens = 0;
+        int total_tool_calls = 0;
+        int tool_errors = 0;
+        int compactions_triggered = 0;
+        int messages_compacted = 0;
+        int circuit_breaker_trips = 0;
+        int stall_force_stops = 0;
+        int turn_guard_warnings = 0;
+        int abandoned_tasks = 0;
+        std::chrono::milliseconds total_llm_latency{0};
     };
 
     AgentLoop(
@@ -73,6 +98,7 @@ public:
     AgentResponse resume(RunControl& control);
 
     TurnState current_state() const { return state_; }
+    const RunMetrics& metrics() const { return run_metrics_; }
     std::shared_ptr<ToolRegistry> tools() { return tools_; }
     const std::vector<Message>& session_history() const { return session_history_; }
 
@@ -112,17 +138,21 @@ private:
     std::optional<std::string> active_scene_id_;
     std::optional<std::string> caller_agent_id_;
     std::map<std::string, int> tool_failure_streak_;
-    static constexpr int kCircuitBreakerThreshold = 3;
 
     int consecutive_read_only_rounds_ = 0;
     int consecutive_world_query_rounds_ = 0;
     int consecutive_content_avoidance_ = 0;
+    int run_call_count_ = 0;
+    std::vector<std::future<ToolResult>> abandoned_tasks_;
+    static constexpr size_t kMaxAbandonedTasks = 32;
     int current_turn_ = 0;
 
-    // H2: last compaction summary text for checkpoint recovery
+    std::string last_user_query_;
     std::string last_compaction_text_;
+    int turn_call_count_ = 0;
 
-    std::vector<std::string> restricted_tools_;
+    ToolDomain restricted_domains_ = ToolDomain::General;
+    RunMetrics run_metrics_;
 
     void transition_to(TurnState next, RunControl& control);
     std::vector<Message> build_context();
@@ -131,6 +161,7 @@ private:
         RunControl& control
     );
     void maybe_compact(RunControl& control);
+    void drain_abandoned_tasks();
 
     AgentResponse run_loop(RunControl& control);
 };

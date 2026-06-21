@@ -100,7 +100,13 @@ public:
     std::vector<SessionRecord> list_sessions(const std::string& world_id = "") const;
     std::optional<SessionRecord> get_session(const std::string& id) const;
     std::optional<RunRecord> get_run(const std::string& id) const;
+    RunListResult list_runs(
+        const std::string& session_id = "",
+        const std::string& status = "",
+        int limit = 20,
+        int offset = 0) const;
     RunRecord create_run_record(const std::string& session_id, const std::string& message);
+    RunRecord resume_run(const std::string& run_id);
     RunRecord start_run(const std::string& session_id, const std::string& message,
                         const std::string& model = "");
     DelegationStart start_delegation(

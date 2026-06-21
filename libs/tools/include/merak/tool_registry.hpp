@@ -28,6 +28,10 @@ public:
     std::vector<ToolSpec> all_tools() const;
     nlohmann::json all_tools_json() const;
     std::optional<ToolSpec> find_spec(const std::string& name) const;
+    ToolDomain domain_of(const std::string& name) const {
+        auto it = domains_.find(name);
+        return it != domains_.end() ? it->second : ToolDomain::General;
+    }
     Tool* get_tool(const std::string& name) {
         auto it = tools_.find(name);
         return it != tools_.end() ? it->second.get() : nullptr;
@@ -56,6 +60,7 @@ public:
 private:
     std::map<std::string, std::unique_ptr<Tool>> tools_;
     std::map<std::string, std::string> source_;
+    std::map<std::string, ToolDomain> domains_;
     std::string permission_mode_ = "ask";
 };
 

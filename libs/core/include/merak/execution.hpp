@@ -1,7 +1,9 @@
 #pragma once
 #include <merak/message.hpp>
 #include <merak/interruption.hpp>
+#include <spdlog/spdlog.h>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -28,6 +30,7 @@ struct ToolExecutionContext {
     std::string world_id;
     std::string scene_id;
     std::string caller_agent_id;
+    std::chrono::milliseconds timeout{30000};
 };
 
 enum class LlmErrorClass : uint8_t {
@@ -66,7 +69,10 @@ public:
 
 class NullRunControl final : public RunControl {
 public:
-    NullRunControl() : token_(std::make_shared<CancellationToken>()) {}
+    NullRunControl() : token_(std::make_shared<CancellationToken>()) {
+        spdlog::warn("NullRunControl: sub-agent observability disabled, "
+                     "all tool approvals auto-granted, no cancellation support");
+    }
     void emit_state(TurnState, TurnState) override {}
     void emit_text_delta(std::string) override {}
     void emit_tool_started(const ToolCall&) override {}
