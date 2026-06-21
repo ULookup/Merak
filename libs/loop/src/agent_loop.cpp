@@ -57,6 +57,7 @@ std::future<AgentResponse> AgentLoop::run(
             Message user_msg;
             user_msg.role = "user";
             user_msg.content = user_message;
+            last_user_query_ = user_message;
             session_history_.push_back(user_msg);
             memory_->append_message(user_msg);
             control.append_message(user_msg);
@@ -111,6 +112,7 @@ AgentResponse AgentLoop::run_loop(RunControl& control) {
         transition_to(TurnState::Thinking, control);
         turn_count++;
         current_turn_ = turn_count;
+        turn_call_count_ = 0;
 
         ChatRequest req;
         req.model = config_.default_model;
@@ -455,12 +457,7 @@ std::vector<Message> AgentLoop::build_context() {
     };
     sources.memory_store = memory_;
 
-    for (int i = (int)session_history_.size() - 1; i >= 0; i--) {
-        if (session_history_[i].role == "user") {
-            sources.search_query = session_history_[i].content;
-            break;
-        }
-    }
+    sources.search_query = last_user_query_;
     sources.conversation_messages = memory_->recent_history(config_.max_turns);
 
     // Use runtime-updated system prompt if set, otherwise config default
@@ -503,6 +500,31 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
                     continue;
                 }
             }
+        }
+
+        // Rate limit check — per-run
+        run_call_count_++;
+        if (run_call_count_ > config_.tool_rate_limit.max_calls_per_run) {
+            ToolResult limited;
+            limited.call_id = call.id;
+            limited.is_error = true;
+            limited.output = "Tool call limit exceeded (" +
+                std::to_string(config_.tool_rate_limit.max_calls_per_run) +
+                " per run).";
+            results.push_back(limited);
+            control.emit_tool_completed(call, limited);
+            continue;
+        }
+        // Rate limit check — per-turn
+        turn_call_count_++;
+        if (turn_call_count_ > config_.tool_rate_limit.max_calls_per_turn) {
+            ToolResult skipped;
+            skipped.call_id = call.id;
+            skipped.is_error = true;
+            skipped.output = "Skipped: turn tool call limit reached.";
+            results.push_back(skipped);
+            control.emit_tool_completed(call, skipped);
+            continue;
         }
 
         auto token = control.cancellation_token();
@@ -569,7 +591,22 @@ std::vector<ToolResult> AgentLoop::handle_tool_calls(
         ctx.world_id = active_world_id_.value_or("");
         ctx.scene_id = active_scene_id_.value_or("");
         ctx.caller_agent_id = caller_agent_id_.value_or("");
+        ctx.timeout = std::chrono::milliseconds(config_.tool_timeout_ms);
+
+        auto timeout_dur = ctx.timeout;
         auto result_future = tools_->execute(call, std::move(ctx));
+        auto status = result_future.wait_for(timeout_dur);
+        if (status == std::future_status::timeout) {
+            ToolResult timeout_result;
+            timeout_result.call_id = call.id;
+            timeout_result.is_error = true;
+            timeout_result.output = "Tool '" + call.name + "' timed out after " +
+                std::to_string(timeout_dur.count()) + "ms";
+            results.push_back(timeout_result);
+            control.emit_tool_completed(call, timeout_result);
+            tool_failure_streak_[call.name]++;
+            continue;
+        }
         auto result = result_future.get();
 
         if (call.name == "ask_user") {
@@ -624,17 +661,21 @@ void AgentLoop::maybe_compact(RunControl& control) {
     // Microcompact is handled by ContextOptimizer during pipeline assembly.
     // Here we trigger LLM-based compaction when token pressure is high.
     if (total_tokens > config_.model_max_tokens * 0.75 && compactor_) {
-        spdlog::info("Loop: triggering LLM compaction at {} tokens", total_tokens);
-        int keep_recent = config_.max_turns * 2;
-        auto result = compactor_->compact_history(session_history_, keep_recent).get();
-        if (!result.summary.empty()) {
-            run_metrics_.compactions_triggered++;
-            run_metrics_.messages_compacted += static_cast<int>(result.replaced.size());
-            Message summary_msg;
-            summary_msg.role = "system";
-            summary_msg.content = "[Previous conversation summary]\n" + result.summary;
-            compaction_summaries_.push_back(summary_msg);
-            control.record_compaction(static_cast<int>(result.replaced.size()));
+        try {
+            spdlog::info("Loop: triggering LLM compaction at {} tokens", total_tokens);
+            int keep_recent = config_.max_turns * 2;
+            auto result = compactor_->compact_history(session_history_, keep_recent).get();
+            if (!result.summary.empty()) {
+                run_metrics_.compactions_triggered++;
+                run_metrics_.messages_compacted += static_cast<int>(result.replaced.size());
+                Message summary_msg;
+                summary_msg.role = "system";
+                summary_msg.content = "[Previous conversation summary]\n" + result.summary;
+                compaction_summaries_.push_back(summary_msg);
+                control.record_compaction(static_cast<int>(result.replaced.size()));
+            }
+        } catch (const std::exception& e) {
+            spdlog::warn("Compaction failed, continuing without summary: {}", e.what());
         }
     }
 }

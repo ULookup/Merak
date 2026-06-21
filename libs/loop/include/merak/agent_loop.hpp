@@ -38,6 +38,12 @@ public:
         int circuit_breaker_threshold = 3;
         bool enable_compaction = true;
         bool enable_cache = true;
+        int tool_timeout_ms = 30000;
+        struct ToolRateLimit {
+            int max_calls_per_turn = 50;
+            int max_calls_per_run = 500;
+        };
+        ToolRateLimit tool_rate_limit;
     };
 
     struct RunMetrics {
@@ -131,6 +137,10 @@ private:
     int consecutive_world_query_rounds_ = 0;
     int consecutive_content_avoidance_ = 0;
     int current_turn_ = 0;
+
+    std::string last_user_query_;
+    int run_call_count_ = 0;
+    int turn_call_count_ = 0;
 
     std::vector<std::string> restricted_tools_;
     RunMetrics run_metrics_;

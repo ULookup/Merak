@@ -3,6 +3,7 @@
 #include <merak/interruption.hpp>
 #include <spdlog/spdlog.h>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -29,6 +30,7 @@ struct ToolExecutionContext {
     std::string world_id;
     std::string scene_id;
     std::string caller_agent_id;
+    std::chrono::milliseconds timeout{30000};
 };
 
 enum class LlmErrorClass : uint8_t {
