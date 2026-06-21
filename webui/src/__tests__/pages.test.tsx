@@ -459,6 +459,24 @@ describe('Files page', () => {
     }
   });
 
+  it('gives every responsive rail page an explicit positioning context', () => {
+    for (const page of [
+      'CharactersPage',
+      'FilesPage',
+      'ScenesPage',
+      'ForeshadowingPage',
+      'SecretsPage',
+    ]) {
+      const css = readFileSync(join(process.cwd(), `src/pages/${page}.module.css`), 'utf8');
+      expect(css, page).toMatch(/\.(?:workspace|page)\s*\{[^}]*position:\s*relative/s);
+    }
+    const paneCss = readFileSync(
+      join(process.cwd(), 'src/components/layout/ResponsivePane.module.css'),
+      'utf8',
+    );
+    expect(paneCss).toMatch(/\.pane\s*\{[^}]*overflow:\s*auto/s);
+  });
+
   it('keeps all page styles on approved global palette tokens', () => {
     const pagesDir = join(process.cwd(), 'src/pages');
     const files = readdirSync(pagesDir).filter((name) => name.endsWith('.module.css'));
@@ -1677,6 +1695,33 @@ describe('DetailPane', () => {
     expect(screen.queryByRole('complementary', { name: 'Relations' })).toBeNull();
     expect(toggle).toHaveFocus();
   });
+
+  it('traps Tab in a compact inspector', () => {
+    vi.stubGlobal('matchMedia', () => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    render(
+      <DetailPane
+        title="Lian"
+        inspector={<button type="button">Last control</button>}
+        inspectorLabel="Relations"
+      >
+        <p>Details</p>
+      </DetailPane>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Show Relations' }));
+    const dialog = screen.getByRole('dialog', { name: 'Relations' });
+    const controls = within(dialog).getAllByRole('button');
+    controls.at(-1)?.focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(controls[0]).toHaveFocus();
+    controls[0].focus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(controls.at(-1)).toHaveFocus();
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('ResponsivePane', () => {
@@ -1698,6 +1743,27 @@ describe('ResponsivePane', () => {
     expect(within(dialog).getByRole('button', { name: 'Close Story resources' })).toHaveFocus();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'Story resources' })).toBeNull();
+    expect(trigger).toHaveFocus();
+    vi.unstubAllGlobals();
+  });
+
+  it('returns focus to its trigger when selection closes the compact pane', () => {
+    vi.stubGlobal('matchMedia', () => ({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    render(
+      <ResponsivePane label="Resources" closeOnSelect>
+        <div role="option" tabIndex={0}>
+          Selected resource
+        </div>
+      </ResponsivePane>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Open Resources' });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('option'));
+    expect(screen.queryByRole('dialog', { name: 'Resources' })).toBeNull();
     expect(trigger).toHaveFocus();
     vi.unstubAllGlobals();
   });

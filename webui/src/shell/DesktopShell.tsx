@@ -3,6 +3,7 @@ import { ChevronDown, Globe2, Menu, Search, X } from 'lucide-react';
 import type { AppPage } from '../AppState';
 import { useAppState } from '../AppState';
 import merakLogo from '../assets/merak-logo.svg';
+import { useModalFocusTrap } from '../hooks/useModalFocusTrap';
 import { useSafeNavigation } from '../hooks/useSafePageNavigation';
 import { useI18n } from '../i18n';
 import styles from './DesktopShell.module.css';
@@ -24,21 +25,14 @@ export default function DesktopShell({ page, onNavigate, children, overlays }: D
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationTriggerRef = useRef<HTMLButtonElement>(null);
   const navigationCloseRef = useRef<HTMLButtonElement>(null);
+  const navigationRef = useRef<HTMLElement>(null);
   const closeNavigation = (restoreFocus = true) => {
     setNavigationOpen(false);
     if (restoreFocus) navigationTriggerRef.current?.focus();
   };
 
   useEffect(() => setNavigationOpen(false), [page]);
-  useEffect(() => {
-    if (!navigationOpen) return;
-    navigationCloseRef.current?.focus();
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeNavigation();
-    };
-    document.addEventListener('keydown', escape);
-    return () => document.removeEventListener('keydown', escape);
-  }, [navigationOpen]);
+  useModalFocusTrap(navigationRef, navigationOpen, closeNavigation);
 
   return (
     <div className={styles.shell}>
@@ -61,6 +55,7 @@ export default function DesktopShell({ page, onNavigate, children, overlays }: D
         />
       ) : null}
       <aside
+        ref={navigationRef}
         className={styles.sidebar}
         data-open={navigationOpen}
         role={navigationOpen ? 'dialog' : undefined}
@@ -111,7 +106,7 @@ export default function DesktopShell({ page, onNavigate, children, overlays }: D
         </nav>
       </aside>
 
-      <div className={styles.stage}>
+      <div className={styles.stage} inert={navigationOpen}>
         <header className={styles.topbar}>
           <label className={styles.worldSelector}>
             <Globe2 size={16} aria-hidden="true" />

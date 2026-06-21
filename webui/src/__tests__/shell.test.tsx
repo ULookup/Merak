@@ -363,6 +363,19 @@ describe('desktop shell', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('traps forward and reverse Tab inside open navigation', () => {
+    renderShell('overview');
+    fireEvent.click(screen.getByRole('button', { name: 'Open navigation' }));
+    const dialog = screen.getByRole('dialog', { name: /navigation|导航/i });
+    const controls = within(dialog).getAllByRole('button');
+    controls.at(-1)?.focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(controls[0]).toHaveFocus();
+    controls[0].focus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(controls.at(-1)).toHaveFocus();
+  });
+
   it('defines the approved shared visual tokens and responsive shell contracts', () => {
     const globalCss = readFileSync('src/styles/global.css', 'utf8');
     const shellCss = readFileSync('src/shell/DesktopShell.module.css', 'utf8');

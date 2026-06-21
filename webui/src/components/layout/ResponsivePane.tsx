@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 import styles from './ResponsivePane.module.css';
 
 type Props = {
@@ -11,9 +12,6 @@ type Props = {
   inert?: boolean;
   'aria-hidden'?: boolean | 'true';
 };
-
-const focusable =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export default function ResponsivePane({
   label,
@@ -48,31 +46,7 @@ export default function ResponsivePane({
     return () => query.removeEventListener?.('change', update);
   }, [breakpoint]);
 
-  useEffect(() => {
-    if (!compact || !open) return;
-    paneRef.current?.querySelector<HTMLElement>(focusable)?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        close();
-        return;
-      }
-      if (event.key !== 'Tab') return;
-      const nodes = [...(paneRef.current?.querySelectorAll<HTMLElement>(focusable) ?? [])];
-      if (!nodes.length) return;
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [compact, open]);
+  useModalFocusTrap(paneRef, compact && open, close);
 
   return (
     <>
@@ -106,7 +80,7 @@ export default function ResponsivePane({
         inert={inert}
         onClickCapture={(event) => {
           if (closeOnSelect && compact && (event.target as Element).closest('[role="option"]'))
-            close(false);
+            close();
         }}
       >
         <button

@@ -1,4 +1,5 @@
 .workspace {
+  position: relative;
   display: grid;
   grid-template-columns: 260px minmax(420px, 1fr) 280px;
   height: 100%;

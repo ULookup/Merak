@@ -4,6 +4,7 @@
   background: var(--surface-muted);
 }
 .workspace {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
   min-height: 100%;

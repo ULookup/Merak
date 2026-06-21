@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useModalFocusTrap } from '../../hooks/useModalFocusTrap';
 import styles from './DetailPane.module.css';
 
 export type DetailPaneProps = {
@@ -43,20 +44,7 @@ export default function DetailPane({
     query.addEventListener?.('change', update);
     return () => query.removeEventListener?.('change', update);
   }, []);
-
-  useEffect(() => {
-    if (!compact || !inspectorOpen) return;
-    inspectorRef.current
-      ?.querySelector<HTMLElement>(
-        'button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      )
-      ?.focus();
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeInspector(true);
-    };
-    document.addEventListener('keydown', escape);
-    return () => document.removeEventListener('keydown', escape);
-  }, [compact, inspectorOpen]);
+  useModalFocusTrap(inspectorRef, compact && inspectorOpen, () => closeInspector(true));
 
   return (
     <section
@@ -88,7 +76,9 @@ export default function DetailPane({
         ) : null}
       </header>
       <div className={styles.body}>
-        <div className={styles.content}>{children}</div>
+        <div className={styles.content} inert={compact && inspectorOpen}>
+          {children}
+        </div>
         {inspectorOpen ? (
           <button
             type="button"
