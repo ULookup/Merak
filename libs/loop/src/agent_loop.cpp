@@ -1,5 +1,6 @@
 #include <merak/agent_loop.hpp>
 #include <merak/worldbuilding/worldbuilding_service.hpp>
+#include <merak/prompts/core_prompt.hpp>
 #include <spdlog/spdlog.h>
 #include <chrono>
 #include <sstream>
@@ -439,7 +440,24 @@ void AgentLoop::set_skill_registry(std::shared_ptr<skills::SkillRegistry> skills
 std::vector<Message> AgentLoop::build_context() {
     BindSources sources;
     sources.identity_text = [this]() {
-        return config_.system_prompt.substr(0, std::min<size_t>(500, config_.system_prompt.size()));
+        // Load core identity from config/prompts/merak_core.md via the prompt pipeline.
+        // Identity is owned by the project (industrial-grade), not by user config.
+        prompts::PromptProfile profile;
+        profile.category = prompts::AgentCategory::Platform;
+        profile.platform_role = prompts::PlatformRole::Core;
+
+        auto sections = prompts::build_core_sections(profile);
+        std::ostringstream oss;
+        for (size_t i = 0; i < sections.size(); ++i) {
+            if (i > 0) oss << "\n\n";
+            oss << sections[i].text;
+        }
+        std::string core = oss.str();
+
+        if (!config_.system_prompt.empty()) {
+            core += "\n\n[User-Defined Instructions]\n" + config_.system_prompt;
+        }
+        return core;
     };
     sources.constraints_text = [this]() {
         if (config_.system_prompt.size() > 500) {
