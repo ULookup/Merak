@@ -110,3 +110,10 @@ add_executable(merak-sub-agent-runner-test
 )
 target_link_libraries(merak-sub-agent-runner-test PRIVATE merak-loop)
 add_test(NAME merak-sub-agent-runner-test COMMAND merak-sub-agent-runner-test)
+
+# MemoryStore recent_history tests (no DB)
+add_executable(merak-memory-history-test
+    ${CMAKE_SOURCE_DIR}/libs/memory/tests/test_memory_history.cpp
+)
+target_link_libraries(merak-memory-history-test PRIVATE merak-memory)
+add_test(NAME merak-memory-history-test COMMAND merak-memory-history-test)
