@@ -1,9 +1,12 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { api } from './api/client';
 import styles from './App.module.css';
-import { AppStateProvider, useAppState, type AppState } from './AppState';
+import { AppStateProvider, useAppState, type AppPage, type AppState } from './AppState';
+import AskUserPrompt from './components/AskUserPrompt';
+import ChapterEditor from './components/ChapterEditor';
 import ConnectionBanner from './components/ConnectionBanner';
+import CreationRequestDialog from './components/CreationRequestDialog';
 import ErrorBoundary from './components/ErrorBoundary';
 import InspectorPanel from './components/InspectorPanel';
 import MainPanel from './components/MainPanel';
@@ -12,16 +15,26 @@ import { ToastProvider } from './components/Toast';
 import WorldDashboard from './components/WorldDashboard';
 import WorldOnboarding from './components/WorldOnboarding';
 import WorldSidebar from './components/WorldSidebar';
-import SettingsPage from './components/SettingsPage';
-import ChapterEditor from './components/ChapterEditor';
 import DesktopBoot from './DesktopBoot';
+import { useSafePageNavigation } from './hooks/useSafePageNavigation';
 import { useSSE } from './hooks/useSSE';
 import { I18nProvider } from './i18n';
+import DesktopShell from './shell/DesktopShell';
 
 const HelpDrawer = lazy(() => import('./components/HelpDrawer'));
 const SetupWizard = lazy(() => import('./components/SetupWizard'));
 const ChapterReviewBanner = lazy(() => import('./components/ChapterReviewBanner'));
 const ExportDialog = lazy(() => import('./components/ExportDialog'));
+const OverviewPage = lazy(() => import('./pages/OverviewPage'));
+const SessionsPage = lazy(() => import('./pages/SessionsPage'));
+const WorldPage = lazy(() => import('./pages/WorldPage'));
+const CharactersPage = lazy(() => import('./pages/CharactersPage'));
+const ChaptersPage = lazy(() => import('./pages/ChaptersPage'));
+const ScenesPage = lazy(() => import('./pages/ScenesPage'));
+const ForeshadowingPage = lazy(() => import('./pages/ForeshadowingPage'));
+const SecretsPage = lazy(() => import('./pages/SecretsPage'));
+const FilesPage = lazy(() => import('./pages/FilesPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 export function shouldReportWorldbuildingPartialFailure(
   overviewLoaded: boolean,
@@ -36,8 +49,13 @@ export function shouldWarnBeforeClose(state: AppState) {
   return runActive || editorUnsafe;
 }
 
+export function shouldRenderSessionsPage(page: AppPage, phase: AppState['appPhase']) {
+  return page === 'sessions' && phase !== 'loading' && phase !== 'no_world';
+}
+
 function AppInner() {
   const { state, dispatch } = useAppState();
+  const safeNavigate = useSafePageNavigation();
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [inspectorOpen, setInspectorOpen] = useState(window.innerWidth >= 1180);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -56,13 +74,14 @@ function AppInner() {
         dispatch({ type: 'SHOW_SETUP_WIZARD', show: true });
       }
 
-      const [metadataRes, worldsRes, sessionsRes, capabilitiesRes, prefsRes] = await Promise.allSettled([
-        api.metadata(),
-        api.listWorlds(),
-        api.listSessions(),
-        api.capabilities(),
-        api.getPreferences(),
-      ]);
+      const [metadataRes, worldsRes, sessionsRes, capabilitiesRes, prefsRes] =
+        await Promise.allSettled([
+          api.metadata(),
+          api.listWorlds(),
+          api.listSessions(),
+          api.capabilities(),
+          api.getPreferences(),
+        ]);
 
       if (metadataRes.status === 'fulfilled') {
         dispatch({ type: 'SET_METADATA', metadata: metadataRes.value });
@@ -172,10 +191,7 @@ function AppInner() {
         fallback: overviewRes.status === 'fulfilled' ? overviewRes.value.fallback : false,
       });
       if (
-        shouldReportWorldbuildingPartialFailure(
-          overviewRes.status === 'fulfilled',
-          secondaryFailed,
-        )
+        shouldReportWorldbuildingPartialFailure(overviewRes.status === 'fulfilled', secondaryFailed)
       ) {
         dispatch({
           type: 'SET_WORLDBUILDING_STATUS',
@@ -219,25 +235,87 @@ function AppInner() {
 
   const connState = useSSE(sseUrl, dispatch, state.lastSeq);
 
+  const inDesktopShell = (children: ReactNode, overlays?: ReactNode) => (
+    <DesktopShell page={state.currentPage} onNavigate={safeNavigate} overlays={overlays}>
+      {children}
+    </DesktopShell>
+  );
+
+  const narrativePageOverlays = (
+    <>
+      <Suspense>
+        <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
+      </Suspense>
+      <Suspense>
+        {state.showSetupWizard ? (
+          <SetupWizard
+            onComplete={() => dispatch({ type: 'SET_LLM_CONFIGURED', configured: true })}
+          />
+        ) : null}
+      </Suspense>
+      <Suspense>
+        {state.chapterReview && state.worldId ? (
+          <ChapterReviewBanner
+            worldId={state.worldId}
+            chapterId={state.chapterReview.chapter_id}
+            chapterTitle={state.chapterReview.title}
+            onNewChapter={() => {
+              dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
+              if (state.sessionId) {
+                api
+                  .startRun(state.sessionId, 'Start the next chapter', state.selectedModel)
+                  .catch(() => {});
+              }
+            }}
+            onRevise={() => dispatch({ type: 'SET_CHAPTER_REVIEW', review: null })}
+            onExport={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: true })}
+            onClose={() => dispatch({ type: 'SET_CHAPTER_REVIEW', review: null })}
+          />
+        ) : null}
+      </Suspense>
+      {state.pendingAsk ? (
+        <AskUserPrompt
+          request={state.pendingAsk}
+          onResolved={(callId) => dispatch({ type: 'RESOLVE_ASK', callId })}
+        />
+      ) : null}
+      {state.pendingCreation ? (
+        <CreationRequestDialog
+          request={state.pendingCreation}
+          onResolved={(creationId) => dispatch({ type: 'RESOLVE_CREATION', creationId })}
+        />
+      ) : null}
+      <Suspense>
+        {state.showExportDialog && state.worldId ? (
+          <ExportDialog
+            worldId={state.worldId}
+            chapters={[]}
+            onClose={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: false })}
+          />
+        ) : null}
+      </Suspense>
+    </>
+  );
+
   // Page-based rendering (overrides phase when navigating away from workbench)
   if (state.currentPage === 'settings') {
-    return <SettingsPage />;
+    return inDesktopShell(
+      <Suspense fallback={<Skeleton />}>
+        <SettingsPage />
+      </Suspense>,
+      narrativePageOverlays,
+    );
   }
 
   if (state.currentPage === 'editor' && state.activeEditorChapterId && state.worldId) {
     return (
       <div className={styles.editorOverlay}>
         <div className={styles.editorHeader}>
-          <button
-            className={styles.editorBackBtn}
-            onClick={() => dispatch({ type: 'SET_PAGE', page: 'workbench' })}
-          >
+          <button className={styles.editorBackBtn} onClick={() => safeNavigate('overview')}>
             <ArrowLeft size={15} aria-hidden="true" strokeWidth={2.3} />
             返回工作台
           </button>
-          <h1 className={styles.editorTitle}>
-            {state.activeEditorChapterTitle || '章节编辑'}
-          </h1>
+          <h1 className={styles.editorTitle}>{state.activeEditorChapterTitle || '章节编辑'}</h1>
         </div>
         <div className={styles.editorBody}>
           <ChapterEditor chapterId={state.activeEditorChapterId} worldId={state.worldId} />
@@ -248,23 +326,122 @@ function AppInner() {
 
   // Phase-based rendering (workbench page)
   if (!bootstrapped || state.appPhase === 'loading') {
-    return <Skeleton />;
+    return inDesktopShell(<Skeleton />);
   }
 
   if (state.appPhase === 'no_world') {
     return (
       <ToastProvider>
-        <WorldOnboarding onOpenGuide={() => setHelpOpen(true)} />
-        <Suspense>{helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}</Suspense>
+        {inDesktopShell(
+          <WorldOnboarding onOpenGuide={() => setHelpOpen(true)} />,
+          <Suspense>
+            {helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}
+          </Suspense>,
+        )}
       </ToastProvider>
     );
   }
 
-  if (state.appPhase === 'no_agent') {
+  if (state.currentPage === 'overview' && state.worldId) {
+    return inDesktopShell(
+      <Suspense fallback={<Skeleton />}>
+        <OverviewPage worldId={state.worldId} sessions={state.sessions} onNavigate={safeNavigate} />
+      </Suspense>,
+      narrativePageOverlays,
+    );
+  }
+
+  if (state.currentPage === 'world' && state.worldId) {
+    return inDesktopShell(
+      <Suspense fallback={<Skeleton />}>
+        <WorldPage worldId={state.worldId} />
+      </Suspense>,
+      narrativePageOverlays,
+    );
+  }
+
+  if (state.currentPage === 'characters' && state.worldId) {
+    return inDesktopShell(
+      <Suspense fallback={<Skeleton />}>
+        <CharactersPage worldId={state.worldId} />
+      </Suspense>,
+      narrativePageOverlays,
+    );
+  }
+
+  if (state.currentPage === 'chapters' && state.worldId) {
     return (
       <ToastProvider>
-        <WorldDashboard onOpenGuide={() => setHelpOpen(true)} />
-        <Suspense>{helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}</Suspense>
+        {inDesktopShell(
+          <Suspense fallback={<Skeleton />}>
+            <ChaptersPage worldId={state.worldId} />
+          </Suspense>,
+          narrativePageOverlays,
+        )}
+      </ToastProvider>
+    );
+  }
+
+  if (state.currentPage === 'scenes' && state.worldId) {
+    return (
+      <ToastProvider>
+        {inDesktopShell(
+          <Suspense fallback={<Skeleton />}>
+            <ScenesPage worldId={state.worldId} />
+          </Suspense>,
+          narrativePageOverlays,
+        )}
+      </ToastProvider>
+    );
+  }
+
+  if (state.currentPage === 'foreshadowing' && state.worldId) {
+    return (
+      <ToastProvider>
+        {inDesktopShell(
+          <Suspense fallback={<Skeleton />}>
+            <ForeshadowingPage worldId={state.worldId} />
+          </Suspense>,
+          narrativePageOverlays,
+        )}
+      </ToastProvider>
+    );
+  }
+
+  if (state.currentPage === 'secrets' && state.worldId) {
+    return (
+      <ToastProvider>
+        {inDesktopShell(
+          <Suspense fallback={<Skeleton />}>
+            <SecretsPage worldId={state.worldId} />
+          </Suspense>,
+          narrativePageOverlays,
+        )}
+      </ToastProvider>
+    );
+  }
+
+  if (state.currentPage === 'files' && state.worldId) {
+    return inDesktopShell(
+      <Suspense fallback={<Skeleton />}>
+        <FilesPage worldId={state.worldId} />
+      </Suspense>,
+      narrativePageOverlays,
+    );
+  }
+
+  if (
+    state.appPhase === 'no_agent' &&
+    !shouldRenderSessionsPage(state.currentPage, state.appPhase)
+  ) {
+    return (
+      <ToastProvider>
+        {inDesktopShell(
+          <WorldDashboard onOpenGuide={() => setHelpOpen(true)} />,
+          <Suspense>
+            {helpOpen && <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />}
+          </Suspense>,
+        )}
       </ToastProvider>
     );
   }
@@ -272,68 +449,97 @@ function AppInner() {
   // appPhase === 'ready': three-column Workbench
   return (
     <ToastProvider>
-      <div className={styles.layout}>
-        <ErrorBoundary>
-          <WorldSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        </ErrorBoundary>
-        <ErrorBoundary>
-          <div className={styles.workspace}>
-            <ConnectionBanner state={connState} />
-            <MainPanel
-              onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
-              onToggleInspector={() => setInspectorOpen((prev) => !prev)}
-              onOpenGuide={() => setHelpOpen(true)}
-              sidebarOpen={sidebarOpen}
-              inspectorOpen={inspectorOpen}
-              connectionState={connState}
-            />
+      {inDesktopShell(
+        state.currentPage === 'sessions' ? (
+          <Suspense fallback={<Skeleton />}>
+            <SessionsPage connectionState={connState} onOpenGuide={() => setHelpOpen(true)} />
+          </Suspense>
+        ) : (
+          <div className={styles.layout}>
+            <ErrorBoundary>
+              <WorldSidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <div className={styles.workspace}>
+                <ConnectionBanner state={connState} />
+                <MainPanel
+                  onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+                  onToggleInspector={() => setInspectorOpen((prev) => !prev)}
+                  onOpenGuide={() => setHelpOpen(true)}
+                  sidebarOpen={sidebarOpen}
+                  inspectorOpen={inspectorOpen}
+                  connectionState={connState}
+                />
+              </div>
+            </ErrorBoundary>
+            <ErrorBoundary>
+              <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
+            </ErrorBoundary>
           </div>
-        </ErrorBoundary>
-        <Suspense><HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} /></Suspense>
-        <ErrorBoundary>
-          <InspectorPanel open={inspectorOpen} onClose={() => setInspectorOpen(false)} />
-        </ErrorBoundary>
-      </div>
+        ),
+        <>
+          <Suspense>
+            <HelpDrawer open={helpOpen} onClose={() => setHelpOpen(false)} />
+          </Suspense>
 
-      {/* Setup Wizard — shown when LLM is not configured */}
-      <Suspense>
-        {state.showSetupWizard && (
-          <SetupWizard onComplete={() => dispatch({ type: 'SET_LLM_CONFIGURED', configured: true })} />
-        )}
-      </Suspense>
+          {/* Setup Wizard — shown when LLM is not configured */}
+          <Suspense>
+            {state.showSetupWizard && (
+              <SetupWizard
+                onComplete={() => dispatch({ type: 'SET_LLM_CONFIGURED', configured: true })}
+              />
+            )}
+          </Suspense>
 
-      {/* Chapter Review Banner — shown after chapter completion */}
-      <Suspense>
-        {state.chapterReview && state.worldId && (
-          <ChapterReviewBanner
-            worldId={state.worldId}
-            chapterId={state.chapterReview.chapter_id}
-            chapterTitle={state.chapterReview.title}
-            onNewChapter={() => {
-              dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
-              if (state.sessionId) {
-                api.startRun(state.sessionId, '开始写下一章', state.selectedModel).catch(() => {});
-              }
-            }}
-            onRevise={() => {
-              dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
-            }}
-            onExport={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: true })}
-            onClose={() => dispatch({ type: 'SET_CHAPTER_REVIEW', review: null })}
-          />
-        )}
-      </Suspense>
+          {/* Chapter Review Banner — shown after chapter completion */}
+          <Suspense>
+            {state.chapterReview && state.worldId && (
+              <ChapterReviewBanner
+                worldId={state.worldId}
+                chapterId={state.chapterReview.chapter_id}
+                chapterTitle={state.chapterReview.title}
+                onNewChapter={() => {
+                  dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
+                  if (state.sessionId) {
+                    api
+                      .startRun(state.sessionId, '开始写下一章', state.selectedModel)
+                      .catch(() => {});
+                  }
+                }}
+                onRevise={() => {
+                  dispatch({ type: 'SET_CHAPTER_REVIEW', review: null });
+                }}
+                onExport={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: true })}
+                onClose={() => dispatch({ type: 'SET_CHAPTER_REVIEW', review: null })}
+              />
+            )}
+          </Suspense>
 
-      {/* Export Dialog */}
-      <Suspense>
-        {state.showExportDialog && state.worldId && (
-          <ExportDialog
-            worldId={state.worldId}
-            chapters={[] /* TODO: populate from full chapter list when available in state */}
-            onClose={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: false })}
-          />
-        )}
-      </Suspense>
+          {state.pendingAsk && (
+            <AskUserPrompt
+              request={state.pendingAsk}
+              onResolved={(callId) => dispatch({ type: 'RESOLVE_ASK', callId })}
+            />
+          )}
+          {state.pendingCreation && (
+            <CreationRequestDialog
+              request={state.pendingCreation}
+              onResolved={(creationId) => dispatch({ type: 'RESOLVE_CREATION', creationId })}
+            />
+          )}
+
+          {/* Export Dialog */}
+          <Suspense>
+            {state.showExportDialog && state.worldId && (
+              <ExportDialog
+                worldId={state.worldId}
+                chapters={[] /* TODO: populate from full chapter list when available in state */}
+                onClose={() => dispatch({ type: 'SET_SHOW_EXPORT_DIALOG', show: false })}
+              />
+            )}
+          </Suspense>
+        </>,
+      )}
     </ToastProvider>
   );
 }

@@ -4,6 +4,27 @@ export interface SseFrame {
   payload: Record<string, unknown>;
 }
 
+export interface PendingAsk {
+  runId: string;
+  callId: string;
+  question: string;
+  choices?: string[];
+  multiSelect: boolean;
+}
+
+export interface PendingCreation {
+  id: string;
+  runId: string;
+  toolName: string;
+  preview?: Record<string, unknown>;
+}
+
+export interface AskResponse {
+  ok: boolean;
+  run_id: string;
+  call_id: string;
+}
+
 export type MessageKind = 'user' | 'assistant' | 'tool' | 'system' | 'approval' | 'status_pill';
 
 export type StatusLabel =
@@ -223,6 +244,7 @@ export interface OkResponse {
 export interface OpenWorkspacePathResponse {
   ok: boolean;
   path: string;
+  error?: string;
 }
 
 export interface UiCapabilities {
@@ -495,12 +517,26 @@ export interface DiaryListResponse {
 
 export interface MemorySummary {
   id: string;
-  agent_id: string;
   period_start: string;
   period_end: string;
   summary: string;
   source_diary_ids: string[];
   created_at: string;
+}
+
+export interface VoiceFingerprint {
+  avg_sentence_length: number;
+  sentence_variance: number;
+  question_frequency: number;
+  modifier_ratio: number;
+  sample_count: number;
+  signature_words: string[];
+  tone_profile: Record<string, number>;
+}
+
+export interface VoiceFingerprintResponse {
+  ok: boolean;
+  voice: VoiceFingerprint | null;
 }
 
 export interface MemorySummaryListResponse {
@@ -682,3 +718,108 @@ export interface ExportResult {
   file_path: string;
   total_chars: number;
 }
+
+export interface ResourceListResponse<T> {
+  ok?: boolean;
+  items?: T[];
+}
+
+export interface LocationItem {
+  id: string;
+  name: string;
+  description?: string;
+  version?: number;
+}
+
+export interface KnowledgeItem {
+  id: string;
+  title: string;
+  content?: string;
+  tags?: string[];
+  version?: number;
+}
+
+export interface FactionItem {
+  id: string;
+  name: string;
+  description?: string;
+  version?: number;
+}
+
+export interface TimelineEvent {
+  id: string;
+  title: string;
+  world_time?: string;
+  description?: string;
+}
+
+export interface GraphEntity {
+  id: string;
+  type: string;
+  name: string;
+}
+
+export interface WorldFileLinkInput {
+  file_path: string;
+  entity_type?: string;
+  entity_id?: string;
+}
+
+export type WorldFileLink = WorldFileLinkInput;
+
+export interface KnowledgeRecord {
+  id: string;
+  category: string;
+  content: string;
+  tags?: string[];
+  aliases?: string[];
+  related_ids?: string[];
+  created_at?: string;
+}
+
+export interface TimelineEventRecord {
+  id: string;
+  world_time: string;
+  description: string;
+  recorded_by?: string;
+  affected_character_ids?: string[];
+  related_scene_ids?: string[];
+}
+
+export interface WorldFileLinkRecord {
+  file_path: string;
+  target_type: string;
+  target_id: string;
+  created_at?: string;
+}
+
+export type LocationListResponse = ResourceListResponse<LocationItem> & {
+  locations?: LocationItem[];
+};
+
+export type KnowledgeListResponse = ResourceListResponse<KnowledgeRecord> & {
+  knowledge?: KnowledgeRecord[];
+};
+
+export type FactionListResponse = ResourceListResponse<FactionItem> & {
+  factions?: FactionItem[];
+};
+
+export interface TimelineCurrentTime {
+  day: number;
+  period: number;
+  label: string;
+}
+
+export type TimelineResponse = ResourceListResponse<TimelineEventRecord> & {
+  current_time: TimelineCurrentTime;
+  events?: TimelineEventRecord[];
+};
+
+export type GraphEntityListResponse = ResourceListResponse<GraphEntity> & {
+  entities?: GraphEntity[];
+};
+
+export type WorldFileListResponse = ResourceListResponse<WorldFileLinkRecord> & {
+  files?: WorldFileLinkRecord[];
+};

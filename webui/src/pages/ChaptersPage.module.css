@@ -1,0 +1,147 @@
+.page {
+  min-height: 100%;
+  padding: 28px;
+  background: var(--surface-muted);
+  color: var(--ink);
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.header h1 {
+  margin: 3px 0 5px;
+  font-size: 28px;
+}
+.header p {
+  margin: 0;
+  color: var(--muted);
+}
+.eyebrow {
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.refresh,
+.actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  min-height: 36px;
+  padding: 0 11px;
+  cursor: pointer;
+}
+.refresh svg,
+.actions svg {
+  width: 15px;
+  height: 15px;
+}
+.warning {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(183, 121, 31, 0.25);
+  border-radius: 8px;
+  background: var(--amber-soft);
+}
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.summary div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-strong);
+}
+.summary svg {
+  grid-row: 1 / 3;
+  width: 20px;
+  color: var(--brand);
+}
+.summary strong {
+  font-size: 21px;
+}
+.summary span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+}
+.card,
+.selectedCard {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-strong);
+}
+.selectedCard {
+  border-color: var(--brand);
+  box-shadow: var(--ring);
+}
+.cardTop {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+}
+.status {
+  text-transform: capitalize;
+}
+.card h2,
+.selectedCard h2 {
+  margin: 15px 0 7px;
+  font-size: 16px;
+}
+.card p,
+.selectedCard p {
+  margin: 0 0 15px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.actions {
+  display: flex;
+  gap: 7px;
+}
+.actions button:first-child {
+  margin-right: auto;
+}
+.actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.editor {
+  height: 520px;
+  margin-top: 22px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-strong);
+}
+@media (max-width: 700px) {
+  .page {
+    padding: 18px;
+  }
+  .header {
+    flex-direction: column;
+  }
+  .summary {
+    grid-template-columns: 1fr;
+  }
+}

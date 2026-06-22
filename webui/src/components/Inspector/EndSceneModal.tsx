@@ -1,5 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
 import { BookOpen, CheckCircle2, Loader2, ScrollText, Users, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 import type { EndSceneResponse } from '../../api/types';
 import { useAppState } from '../../AppState';
@@ -10,22 +10,53 @@ interface Props {
   sceneId: string;
   sceneTitle: string;
   onClose: () => void;
+  onEnded?: (result: EndSceneResponse) => void;
 }
 
-export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }: Props) {
+export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose, onEnded }: Props) {
   const { state, dispatch } = useAppState();
   const [finalMarkdown, setFinalMarkdown] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<EndSceneResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const initialFocusRef = useRef<HTMLTextAreaElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const submittingRef = useRef(submitting);
+  onCloseRef.current = onClose;
+  submittingRef.current = submitting;
 
   useEffect(() => {
+    openerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    initialFocusRef.current?.focus();
+
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !submitting) onClose();
+      if (e.key === 'Escape' && !submittingRef.current) onCloseRef.current();
+      if (e.key !== 'Tab') return;
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), textarea:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, submitting]);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      openerRef.current?.focus();
+    };
+  }, []);
 
   async function handleEnd() {
     setSubmitting(true);
@@ -36,6 +67,7 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }:
         session_id: state.sessionId,
       });
       setResult(res);
+      onEnded?.(res);
       dispatch({ type: 'SET_STORY_VERSION' });
     } catch (e) {
       setError((e as Error).message);
@@ -47,7 +79,13 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }:
   if (result) {
     return (
       <div className={styles.scrim} role="presentation">
-        <section className={styles.modal} role="dialog" aria-modal="true" aria-label="Scene ended">
+        <section
+          ref={dialogRef}
+          className={styles.modal}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Scene ended"
+        >
           <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
             <X size={17} aria-hidden="true" strokeWidth={2.4} />
           </button>
@@ -79,14 +117,17 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }:
             <div className={styles.foreshadowList}>
               <div className={styles.listTitle}>Suggested Foreshadowing</div>
               {result.proposed_foreshadowing.map((f) => (
-                <div key={f.id} className={styles.foreshadowItem}>{f.content}</div>
+                <div key={f.id} className={styles.foreshadowItem}>
+                  {f.content}
+                </div>
               ))}
             </div>
           )}
 
           {result.leak_risks > 0 && (
             <div className={styles.leakNotice}>
-              {result.leak_risks} secret leak risk{result.leak_risks > 1 ? 's' : ''} detected. Review knowledge boundaries.
+              {result.leak_risks} secret leak risk{result.leak_risks > 1 ? 's' : ''} detected.
+              Review knowledge boundaries.
             </div>
           )}
 
@@ -100,8 +141,19 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }:
 
   return (
     <div className={styles.scrim} role="presentation">
-      <section className={styles.modal} role="dialog" aria-modal="true" aria-label="End scene">
-        <button className={styles.closeBtn} onClick={onClose} aria-label="Cancel" disabled={submitting}>
+      <section
+        ref={dialogRef}
+        className={styles.modal}
+        role="dialog"
+        aria-modal="true"
+        aria-label="End scene"
+      >
+        <button
+          className={styles.closeBtn}
+          onClick={onClose}
+          aria-label="Cancel"
+          disabled={submitting}
+        >
           <X size={17} aria-hidden="true" strokeWidth={2.4} />
         </button>
         <div className={styles.iconWrap}>
@@ -109,11 +161,15 @@ export default function EndSceneModal({ worldId, sceneId, sceneTitle, onClose }:
         </div>
         <div className={styles.kicker}>End Scene</div>
         <h2>{sceneTitle}</h2>
-        <p>Ending this scene will write character diaries, update relationships, and suggest new foreshadowing threads.</p>
+        <p>
+          Ending this scene will write character diaries, update relationships, and suggest new
+          foreshadowing threads.
+        </p>
 
         <label className={styles.field}>
           <span>Final text (optional)</span>
           <textarea
+            ref={initialFocusRef}
             className={styles.textarea}
             value={finalMarkdown}
             onChange={(e) => setFinalMarkdown(e.target.value)}

@@ -6,6 +6,10 @@ export type Locale = 'zh' | 'en';
 type Dictionary = Record<string, string>;
 
 const zh: Dictionary = {
+  'shell.primaryNavigation': '主导航',
+  'shell.worldSelector': '选择世界',
+  'shell.noWorld': '未选择世界',
+  'shell.search': '搜索',
   'app.workbench': '创作工作台',
   'app.runtimeReady': '本地服务已连接',
   'app.connecting': '连接中',
@@ -251,6 +255,10 @@ const zh: Dictionary = {
 }
 
 const en: Dictionary = {
+  'shell.primaryNavigation': 'Primary navigation',
+  'shell.worldSelector': 'Select world',
+  'shell.noWorld': 'No world selected',
+  'shell.search': 'Search',
   'app.workbench': 'Workbench',
   'app.runtimeReady': 'Local service connected',
   'app.connecting': 'Connecting',
@@ -350,8 +358,8 @@ const en: Dictionary = {
   'composer.hint': 'Enter to send · Shift+Enter for a new line',
   'inspector.kicker': 'Inspector',
   'inspector.story': 'Story',
-  'inspector.files': 'Drafts',
-  'inspector.agents': 'Characters',
+  'inspector.files': 'Files',
+  'inspector.agents': 'Agents',
   'inspector.creation': 'Create',
   'inspector.run': 'Run',
   'inspector.storyTitle': 'Story Context',

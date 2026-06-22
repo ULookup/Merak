@@ -122,6 +122,7 @@ body::before {
 }
 
 button,
+input,
 select,
 textarea {
   font: inherit;
@@ -132,6 +133,8 @@ button {
 }
 
 button:focus-visible,
+input:focus-visible,
+a:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: none;

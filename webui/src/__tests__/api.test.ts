@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { filesApi, worldbuildingApi } from '../api';
+import { request } from '../api/http';
 
 describe('api client', () => {
   beforeEach(() => {
@@ -9,8 +11,33 @@ describe('api client', () => {
     vi.unstubAllGlobals();
   });
 
+  it.each([
+    [
+      { error: { code: 'world_not_found', message: 'World not found', retryable: false } },
+      'world_not_found',
+    ],
+    [
+      { ok: false, error: { code: 'file_conflict', message: 'Conflict', retryable: true } },
+      'file_conflict',
+    ],
+    [{ error: 'session not found' }, undefined],
+  ])('normalizes documented error shapes', async (payload, code) => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify(payload), { status: 409 }));
+    await expect(request('GET', '/failure')).rejects.toMatchObject({ status: 409, code });
+  });
+
+  it('rejects non-success 3xx responses with ApiError', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 304 }));
+
+    await expect(request('GET', '/not-modified')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 304,
+    });
+  });
+
   it('metadata() calls GET /v1/runtime', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 200,
       json: async () => ({ model: 'gpt-4o' }),
     } as Response);
@@ -26,6 +53,7 @@ describe('api client', () => {
 
   it('createSession() calls POST /v1/sessions', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 201,
       json: async () => ({ session_id: 's1' }),
     } as Response);
@@ -82,6 +110,7 @@ describe('api client', () => {
 
   it('worldbuilding readers call the selected world endpoints', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 200,
       json: async () => ({ ok: true, agents: [] }),
     } as Response);
@@ -116,6 +145,7 @@ describe('api client', () => {
 
   it('saveConfig() sends max_output_tokens to the backend', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 200,
       json: async () => ({ ok: true }),
     } as Response);
@@ -146,6 +176,7 @@ describe('api client', () => {
 
   it('deleteWorld() calls DELETE /api/worldbuilding/worlds/:id', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 200,
       json: async () => ({ ok: true, deleted: 'world_1' }),
     } as Response);
@@ -161,6 +192,7 @@ describe('api client', () => {
 
   it('advanceWorldTime() calls POST /api/worldbuilding/:worldId/time/advance', async () => {
     vi.mocked(fetch).mockResolvedValue({
+      ok: true,
       status: 200,
       json: async () => ({ ok: true, world_time: 'Day 2 Dawn' }),
     } as Response);
@@ -175,5 +207,191 @@ describe('api client', () => {
         body: JSON.stringify({ world_time: 'Day 2 Dawn' }),
       }),
     );
+  });
+
+  it('reorders chapters with the documented body', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    await worldbuildingApi.reorderChapters('w 1', ['c1', 'c2']);
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      expect.stringContaining('/api/worldbuilding/w%201/chapters/reorder'),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ order: ['c1', 'c2'] }),
+      }),
+    );
+  });
+
+  it('requires target metadata when deleting a linked file', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    const unlinkWithoutTarget = filesApi.unlinkWorldFile as (
+      worldId: string,
+      filePath: string,
+    ) => Promise<unknown>;
+
+    await expect(unlinkWithoutTarget('w1', '章节/第一章.md')).rejects.toThrow(
+      'File link target is required',
+    );
+  });
+
+  it('encodes a linked file path and target when deleting it', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    await filesApi.unlinkWorldFile('w1', '章节/第一章.md', {
+      entity_type: 'chapter',
+      entity_id: 'c1',
+    });
+
+    expect(vi.mocked(fetch).mock.calls[0][0]).toContain(encodeURIComponent('章节/第一章.md'));
+    expect(vi.mocked(fetch).mock.calls[0][1]).toMatchObject({
+      method: 'DELETE',
+      body: JSON.stringify({ target_type: 'chapter', target_id: 'c1' }),
+    });
+  });
+
+  it('preserves named resource arrays and truthful knowledge fields', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true, locations: [{ id: 'l1', name: 'Harbor' }] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            knowledge: [{ id: 'k1', category: 'history', content: 'Founded at dawn' }],
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const locations = await worldbuildingApi.listLocations('w1');
+    const knowledge = await worldbuildingApi.listKnowledge('w1');
+
+    expect(locations.locations?.[0].name).toBe('Harbor');
+    expect(locations.items).toEqual(locations.locations);
+    expect(knowledge.knowledge?.[0].category).toBe('history');
+    expect(knowledge.items).toEqual(knowledge.knowledge);
+  });
+
+  it('preserves timeline metadata with truthful event fields', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          current_time: { day: 2, period: 1, label: 'Day 2' },
+          events: [{ id: 'e1', world_time: 'Day 2', description: 'The gates opened' }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const timeline = await worldbuildingApi.getTimeline('w1');
+
+    expect(timeline.current_time.label).toBe('Day 2');
+    expect(timeline.events?.[0].description).toBe('The gates opened');
+    expect(timeline.items).toEqual(timeline.events);
+  });
+
+  it('uses the implemented agent memory, voice, and delete endpoints', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            summaries: [
+              {
+                id: 'm1',
+                period_start: 'Day 1',
+                period_end: 'Day 2',
+                summary: 'Kept watch.',
+                source_diary_ids: ['d1'],
+                created_at: '2026-06-20',
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            voice: {
+              avg_sentence_length: 8.5,
+              sentence_variance: 1.2,
+              question_frequency: 0.1,
+              modifier_ratio: 0.2,
+              sample_count: 4,
+              signature_words: ['steady'],
+              tone_profile: { question_ratio: 0.1 },
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const { api } = await import('../api/client');
+
+    const memory = await api.fetchMemorySummaries('world one', 'agent/two');
+    const voice = await api.fetchAgentVoice('world one', 'agent/two');
+    await api.deleteAgent('world one', 'agent/two');
+
+    expect(memory.summaries[0].summary).toBe('Kept watch.');
+    expect(voice.voice.signature_words).toEqual(['steady']);
+    expect(vi.mocked(fetch).mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+      ['/api/worldbuilding/world%20one/agents/agent%2Ftwo/memory-summaries', 'GET'],
+      ['/api/worldbuilding/world%20one/agents/agent%2Ftwo/voice', 'GET'],
+      ['/api/worldbuilding/world%20one/agents/agent%2Ftwo', 'DELETE'],
+    ]);
+  });
+
+  it('normalizes only voice endpoint 404 to an empty fingerprint', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { code: 'not_found', message: 'Voice fingerprint not found' } }),
+          { status: 404 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error: { code: 'database_error', message: 'Voice store failed' } }),
+          { status: 500 },
+        ),
+      );
+    const { api } = await import('../api/client');
+
+    await expect(api.fetchAgentVoice('w1', 'a1')).resolves.toEqual({ ok: true, voice: null });
+    await expect(api.fetchAgentVoice('w1', 'a1')).rejects.toMatchObject({
+      status: 500,
+      message: 'Voice store failed',
+    });
+  });
+
+  it('preserves documented file-link target fields', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          files: [{ file_path: 'chapter.md', target_type: 'chapter', target_id: 'c1' }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const files = await filesApi.listWorldFiles('w1');
+
+    expect(files.files?.[0].target_type).toBe('chapter');
+    expect(files.items?.[0].target_id).toBe('c1');
   });
 });

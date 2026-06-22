@@ -6,8 +6,6 @@ config.json
 CMakeUserPresets.json
 .merak/
 .claude/
-/docs/
-.superpowers/
 
 # Dependencies
 node_modules/
@@ -33,6 +31,10 @@ Thumbs.db
 
 # Build artifacts
 dist/
+
+# Documentation (generated)
+/docs/
+.superpowers/
 
 # Worktrees
 .worktrees/

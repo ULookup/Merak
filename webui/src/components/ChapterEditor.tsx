@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { api } from '../api/client';
+import type { StoryChapter } from '../api/types';
 import { useAppState } from '../AppState';
 import styles from './ChapterEditor.module.css';
 
@@ -10,6 +11,7 @@ function chapterFilePath(worldId: string, chapterId: string) {
 interface Props {
   chapterId: string;
   worldId: string;
+  chapter?: StoryChapter;
 }
 
 interface ContextEntity {
@@ -19,17 +21,21 @@ interface ContextEntity {
   detail?: string;
 }
 
-export default function ChapterEditor({ chapterId, worldId }: Props) {
-  const { state } = useAppState();
-  const chapter = state.storyOverview?.current_chapter;
+export default function ChapterEditor({ chapterId, worldId, chapter: chapterProp }: Props) {
+  const { state, dispatch } = useAppState();
+  const chapter = chapterProp ?? state.storyOverview?.current_chapter;
   const scene = state.storyOverview?.current_scene;
 
   const [title, setTitle] = useState(chapter?.title ?? '');
+  const [originalTitle, setOriginalTitle] = useState(chapter?.title ?? '');
   const [content, setContent] = useState('');
   const [contentLoaded, setContentLoaded] = useState(false);
+  const [originalContent, setOriginalContent] = useState('');
+  const [version, setVersion] = useState<string | undefined>();
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [showContext, setShowContext] = useState(false);
   const [entities, setEntities] = useState<ContextEntity[]>([]);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     const items: ContextEntity[] = [];
@@ -62,6 +68,7 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
 
   useEffect(() => {
     setTitle(chapter?.title ?? '');
+    setOriginalTitle(chapter?.title ?? '');
   }, [chapter?.title]);
 
   useEffect(() => {
@@ -74,19 +81,27 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
       .then((data) => {
         if (!cancelled) {
           setContent(data.file.content);
+          setOriginalContent(data.file.content);
+          setVersion(data.file.version);
           setContentLoaded(true);
+          setSaveError(null);
+          dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'idle' });
         }
       })
       .catch(() => {
         if (!cancelled) {
           setContent('');
+          setOriginalContent('');
+          setVersion(undefined);
           setContentLoaded(true);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [chapterId, worldId]);
+  }, [chapterId, dispatch, worldId]);
+
+  const dirty = content !== originalContent || title !== originalTitle;
 
   const trimmed = content.trim();
   const cjkChars = (trimmed.match(/[一-鿿]/g) || []).length;
@@ -108,16 +123,34 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
 
   const handleSave = async () => {
     setSaveStatus('saving');
+    setSaveError(null);
+    dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saving' });
     try {
       const path = chapterFilePath(worldId, chapterId);
-      await api.saveWorkspaceFile(path, content);
-      if (title !== (chapter?.title ?? '')) {
-        await api.patchChapter(worldId, chapterId, { title }).catch(() => {});
+      const response = await api.saveWorkspaceFile(path, content, version);
+      setOriginalContent(content);
+      setVersion(response.file.version);
+      if (title !== originalTitle) {
+        try {
+          await api.patchChapter(worldId, chapterId, { title });
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : 'Unable to update title.';
+          const message = `Chapter text saved, but title update failed: ${detail}`;
+          setSaveError(message);
+          setSaveStatus('idle');
+          dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'error', error: message });
+          return;
+        }
       }
+      setOriginalTitle(title);
       setSaveStatus('saved');
+      dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'saved' });
       setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to save chapter.';
+      setSaveError(message);
       setSaveStatus('idle');
+      dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'error', error: message });
     }
   };
 
@@ -134,8 +167,12 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
         <input
           className={styles.titleInput}
           value={title}
-          onChange={(event) => setTitle(event.target.value)}
+          onChange={(event) => {
+            setTitle(event.target.value);
+            dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'dirty' });
+          }}
           placeholder="Chapter title"
+          aria-label="Chapter title"
         />
         <div className={styles.toolbarRight}>
           <span className={styles.stats}>
@@ -154,19 +191,30 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
           <button
             className={styles.saveBtn}
             onClick={handleSave}
-            disabled={saveStatus === 'saving' || !contentLoaded}
+            disabled={saveStatus === 'saving' || !contentLoaded || !dirty}
             type="button"
+            aria-label="Save chapter"
           >
             {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save'}
           </button>
         </div>
       </div>
 
+      {dirty ? <div className={styles.dirty}>Unsaved changes</div> : null}
+      {saveError ? (
+        <div className={styles.saveError} role="alert">
+          {saveError}
+        </div>
+      ) : null}
+
       <div className={styles.editorBody}>
         <textarea
           className={styles.textarea}
           value={content}
-          onChange={(event) => setContent(event.target.value)}
+          onChange={(event) => {
+            setContent(event.target.value);
+            dispatch({ type: 'SET_EDITOR_SAVE_STATUS', status: 'dirty' });
+          }}
           onKeyDown={handleKeyDown}
           placeholder={[
             'Write here...',
@@ -176,6 +224,7 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
             'Use @secret{id=secret_id} to reference a secret',
           ].join('\n')}
           spellCheck={false}
+          aria-label="Chapter content"
         />
 
         {showContext && (
@@ -221,11 +270,7 @@ export default function ChapterEditor({ chapterId, worldId }: Props) {
                     title={entity.detail}
                     type="button"
                   >
-                    {entity.kind === 'agent'
-                      ? '@'
-                      : entity.kind === 'foreshadow'
-                        ? '#'
-                        : 'key'}{' '}
+                    {entity.kind === 'agent' ? '@' : entity.kind === 'foreshadow' ? '#' : 'key'}{' '}
                     {entity.label}
                   </button>
                 ))}
