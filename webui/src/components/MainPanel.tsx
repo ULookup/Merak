@@ -144,7 +144,9 @@ export default function MainPanel({
         </div>
       )}
 
-      <ChatTimeline connectionState={connectionState} />
+      <div key={state.agentId} className={styles.agentSwitch}>
+        <ChatTimeline connectionState={connectionState} />
+      </div>
       <Composer />
     </main>
   );
