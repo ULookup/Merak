@@ -21,6 +21,7 @@
   --muted-strong: #55524c;
   --border: #e0dfdc;
   --border-strong: #c7c5bf;
+  /* ⚠️ DEPRECATED aliases — kept for backward compat. Prefer --ink / --muted-strong / --surface-muted directly. */
   --teal: #171717;
   --teal-strong: #171717;
   --teal-soft: #ededeb;
@@ -76,6 +77,16 @@
   --color-error-bg: var(--ruby-soft);
   --color-error-border: #fecaca;
   --color-success: var(--green);
+
+  /* ---- Subtle border (replaces hardcoded rgba(224,223,220,0.92) in components) ---- */
+  --border-subtle: rgba(224, 223, 220, 0.92);
+
+  /* ---- Animation tokens ---- */
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --anim-lift-sm: translateY(-1px);
+  --anim-lift-md: translateY(-3px);
+  --anim-press: scale(0.98);
+  --anim-fade-in: 200ms var(--ease) both;
 }
 
 html,
