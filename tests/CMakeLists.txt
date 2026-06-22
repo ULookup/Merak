@@ -117,3 +117,10 @@ add_executable(merak-memory-history-test
 )
 target_link_libraries(merak-memory-history-test PRIVATE merak-memory)
 add_test(NAME merak-memory-history-test COMMAND merak-memory-history-test)
+
+# ContextPipeline hard trim tests
+add_executable(merak-context-pipeline-test
+    ${CMAKE_SOURCE_DIR}/libs/context/tests/test_pipeline_hard_trim.cpp
+)
+target_link_libraries(merak-context-pipeline-test PRIVATE merak-context)
+add_test(NAME merak-context-pipeline-test COMMAND merak-context-pipeline-test)
