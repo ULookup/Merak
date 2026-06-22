@@ -62,7 +62,7 @@
   display: grid;
   place-items: center;
   padding: 18px;
-  background: rgba(15, 23, 42, 0.24);
+  background: rgba(23, 23, 23, 0.38);
 }
 
 .modal {
@@ -153,12 +153,12 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-color: #fecaca;
-  background: #fff1f2;
+  border-color: var(--color-error-border);
+  background: var(--color-error-bg);
   color: var(--ruby);
 }
 
 .actions .danger:hover {
-  border-color: #fca5a5;
-  background: #ffe4e6;
+  border-color: var(--color-error-border);
+  background: var(--ruby-soft);
 }

@@ -450,7 +450,7 @@
   padding: 14px;
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: var(--brand-wash);
+  background: var(--surface-muted);
   animation: characterIn 220ms var(--ease-spring);
 }
 

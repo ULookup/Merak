@@ -138,8 +138,8 @@
 
 .sessionItemActive {
   background: linear-gradient(90deg, var(--brand-soft), var(--surface));
-  border-color: rgba(122, 79, 19, 0.22);
-  color: var(--brand);
+  border-color: var(--border-strong);
+  color: var(--ink);
   box-shadow: var(--shadow-sm);
 }
 

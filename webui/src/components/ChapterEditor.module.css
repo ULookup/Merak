@@ -59,7 +59,7 @@
 
 .contextBtn:hover,
 .reviewBtn:hover {
-  background: var(--hover);
+  background: rgba(23, 23, 23, 0.055);
   border-color: var(--border-strong);
   transform: translateY(-1px);
 }
@@ -175,7 +175,7 @@
 }
 
 .entityTag:hover {
-  background: var(--hover);
+  background: rgba(23, 23, 23, 0.055);
   border-color: var(--border-strong);
   transform: translateY(-1px);
 }
@@ -191,8 +191,8 @@
 }
 
 .entityTag.secret {
-  border-color: var(--violet);
-  color: var(--violet);
+  border-color: var(--muted-strong);
+  color: var(--muted-strong);
 }
 
 .location {
