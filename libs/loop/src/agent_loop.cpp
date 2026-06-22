@@ -496,9 +496,16 @@ std::vector<Message> AgentLoop::build_context() {
         effective_system_prompt, config_.default_model,
         config_.model_max_tokens, session_history_, sources);
 
-    // Prepend compaction summaries before returning (they are NOT part
-    // of session_history_ to avoid index conflicts)
+    // Prepend system prompt before conversation messages.
+    // The pipeline serializes it but does not inject it into payload.messages,
+    // so we must do it here for it to reach the LLM.
     auto messages = payload.messages;
+    if (!payload.system_text.empty()) {
+        Message sys_msg;
+        sys_msg.role = "system";
+        sys_msg.content = payload.system_text;
+        messages.insert(messages.begin(), sys_msg);
+    }
     if (!compaction_summaries_.empty()) {
         messages.insert(messages.begin(),
             compaction_summaries_.begin(), compaction_summaries_.end());

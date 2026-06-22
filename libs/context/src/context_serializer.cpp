@@ -22,6 +22,7 @@ SerializedPayload ContextSerializer::serialize(
   if (!system_prompt_full.empty()) {
     system_text = system_prompt_full + "\n\n" + system_text;
   }
+  payload.system_text = system_text;
 
   payload.messages = ctx.provider_messages;
   payload.tool_schemas = ctx.tool_schemas;
