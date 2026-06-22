@@ -73,7 +73,7 @@ int main() {
         std::cout << "Test 2 passed: with tool calls, starts on user boundary\n";
     }
 
-    // Test 3: Orphan tool at head — expands to parent assistant
+    // Test 3: Well-formed rounds — no orphan at head
     {
         auto store = make_store();
         store->append_message(make_user("u_old"));
@@ -91,15 +91,24 @@ int main() {
     // Test 4: Orphan tool at head, parent too far — drops orphan
     {
         auto store = make_store();
-        store->append_message(make_assistant_with_tool("", "call_far"));
-        for (int i = 0; i < 20; i++) {
-            store->append_message(make_assistant_text("filler" + std::to_string(i)));
+        // No user messages — fallback path will be used.
+        // Parent assistant at idx 0, then many fillers, then orphan tool_result at idx 11.
+        // With max_turns=1: start = max(0, 13 - 2) = 11 → tool_result! Orphan at head.
+        // Parent distance = 11. max_turns*2 + 4 = 6. 11 > 6 → DROP path triggered.
+        store->append_message(make_assistant_with_tool("", "call_far"));  // idx 0
+        for (int i = 0; i < 10; i++) {
+            store->append_message(make_assistant_text("filler" + std::to_string(i)));  // idx 1-10
         }
-        store->append_message(make_tool_result("call_far", "orphan_result"));
-        store->append_message(make_assistant_text("tail"));
+        store->append_message(make_tool_result("call_far", "orphan_result"));  // idx 11
+        store->append_message(make_assistant_text("tail"));  // idx 12
+        // total = 13, max_turns = 1, start = 13 - 2 = 11 (tool message)
 
-        auto hist = store->recent_history(2);
+        auto hist = store->recent_history(1);
         assert(no_orphan_tool_at_head(hist));
+        // The orphan tool_result should be dropped; hist should start with "tail"
+        assert(!hist.empty());
+        assert(hist[0].role == "assistant");
+        assert(hist[0].content == "tail");
         std::cout << "Test 4 passed: orphan tool at head with far parent, dropped\n";
     }
 
@@ -111,15 +120,25 @@ int main() {
         std::cout << "Test 5 passed: empty memory returns empty\n";
     }
 
-    // Test 6: No user messages — fallback to tail with orphan handling
+    // Test 6: No user messages — fallback expands to nearby parent assistant
     {
         auto store = make_store();
-        store->append_message(make_assistant_with_tool("", "call_nouser"));
-        store->append_message(make_tool_result("call_nouser", "r"));
-        store->append_message(make_assistant_text("tail"));
-        auto hist = store->recent_history(2);
+        // Parent assistant at idx 0, orphan tool_result at idx 1, tail at idx 2.
+        // max_turns=1: start = max(0, 3 - 2) = 1 → tool_result! Orphan at head.
+        // Parent distance = 1. max_turns*2 + 4 = 6. 1 <= 6 → EXPAND path triggered.
+        // Should expand to include parent assistant at idx 0.
+        store->append_message(make_assistant_with_tool("", "call_nouser"));  // idx 0
+        store->append_message(make_tool_result("call_nouser", "r"));  // idx 1
+        store->append_message(make_assistant_text("tail"));  // idx 2
+
+        auto hist = store->recent_history(1);
         assert(no_orphan_tool_at_head(hist));
-        std::cout << "Test 6 passed: no user messages, fallback handles orphans\n";
+        // Should have expanded to include the parent assistant.
+        // hist[0] should be the parent assistant (idx 0).
+        assert(hist.size() == 3);
+        assert(hist[0].role == "assistant");
+        assert(!hist[0].tool_calls.empty());
+        std::cout << "Test 6 passed: no user messages, fallback expands to nearby parent\n";
     }
 
     std::cout << "All MemoryStore recent_history tests passed.\n";
