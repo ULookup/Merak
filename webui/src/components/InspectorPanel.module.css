@@ -1,7 +1,7 @@
 .panel {
   width: 360px;
   min-width: 360px;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(242, 242, 240, 0.82)),
@@ -51,7 +51,7 @@
 .closeBtn {
   display: grid;
   place-items: center;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   background: rgba(255, 255, 255, 0.78);
   color: var(--muted);
   width: 28px;
@@ -88,7 +88,7 @@
   grid-template-columns: repeat(5, minmax(0, 1fr));
   padding: 3px;
   background: rgba(233, 227, 216, 0.78);
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
 }
 
@@ -164,11 +164,12 @@
   flex-direction: column;
   gap: 10px;
   padding-right: 2px;
+  animation: tabFadeIn 180ms var(--ease) both;
 }
 
 .empty {
   margin-top: 32px;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   background: rgba(255, 255, 255, 0.76);
   color: var(--muted);
   border-radius: 6px;
@@ -182,7 +183,7 @@
 .runCard {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(250, 250, 250, 0.84)), var(--surface);
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 12px;
   box-shadow: 0 8px 22px rgba(23, 23, 23, 0.035);
@@ -325,7 +326,7 @@
 .storyStats span,
 .contextGrid div {
   min-width: 0;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   background: rgba(255, 255, 255, 0.66);
   border-radius: 6px;
   padding: 8px;
@@ -458,7 +459,7 @@
 
 .fileItem {
   width: 100%;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   background: rgba(255, 255, 255, 0.72);
   border-radius: 6px;
   padding: 9px;
@@ -578,7 +579,7 @@
   min-height: 340px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(250, 250, 250, 0.84)), var(--surface);
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   padding: 12px;
   display: flex;
@@ -689,7 +690,7 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   background: var(--surface-strong);
   color: var(--muted-strong);
@@ -955,7 +956,7 @@
 }
 
 .timelineItem {
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.68);
   padding: 10px;
@@ -1099,7 +1100,8 @@
   .section,
   .runCard,
   .outputCard,
-  .editorPanel {
+  .editorPanel,
+  .content {
     animation: none;
   }
 }
@@ -1242,4 +1244,15 @@
 
 .timeInput:disabled {
   opacity: 0.5;
+}
+
+@keyframes tabFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }

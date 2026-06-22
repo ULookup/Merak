@@ -508,7 +508,11 @@ void Application::init_pipeline() {
                 auto primary = exe_dir / "pipelines";
                 if (!exe_dir.empty() && std::filesystem::exists(primary))
                     return primary;
-                return exe_dir / ".." / "config" / "pipelines";
+                // From build/cli/ or $PREFIX/bin/: try ../config/pipelines first,
+                // then ../../config/pipelines (project-root layout during dev).
+                auto fallback1 = exe_dir / ".." / "config" / "pipelines";
+                if (std::filesystem::exists(fallback1)) return fallback1;
+                return exe_dir / ".." / ".." / "config" / "pipelines";
             }(),
             .worlds_base_dir = options_.home_dir / "worldbuilding",
             .condition_evaluator = condition_evaluator,

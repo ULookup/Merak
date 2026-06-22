@@ -7,28 +7,29 @@
 }
 
 :root {
-  --page: #ffffff;
-  --page-warm: #f1f5f9;
+  --page: #f6f6f4;
+  --page-warm: #ededeb;
   --surface: #ffffff;
-  --surface-muted: #f1f5f9;
-  --surface-strong: #f8fafc;
+  --surface-muted: #f2f2f0;
+  --surface-strong: #fafafa;
   --surface-raised: #ffffff;
   --glass: rgba(255, 255, 255, 0.74);
   --glass-strong: rgba(255, 255, 255, 0.9);
-  --ink: #0f172a;
-  --ink-soft: #1e293b;
-  --muted: #64748b;
-  --muted-strong: #475569;
-  --border: #e2e8f0;
-  --border-strong: #cbd5e1;
+  --ink: #171717;
+  --ink-soft: #333333;
+  --muted: #77756f;
+  --muted-strong: #55524c;
+  --border: #e0dfdc;
+  --border-strong: #c7c5bf;
+  /* ⚠️ DEPRECATED aliases — kept for backward compat. Prefer --ink / --muted-strong / --surface-muted directly. */
   --teal: #171717;
   --teal-strong: #171717;
   --teal-soft: #ededeb;
   --teal-wash: #f7f7f5;
-  --brand: #06266f;
-  --brand-strong: #041c55;
-  --brand-soft: #dbe7ff;
-  --brand-wash: #f3f7ff;
+  --brand: #343434;
+  --brand-strong: #171717;
+  --brand-soft: #e8e7e4;
+  --brand-wash: #f7f7f5;
   --amber: #8a5a12;
   --amber-soft: #fbf2dc;
   --amber-wash: #fafafa;
@@ -42,11 +43,11 @@
   --purple-soft: #f0efed;
   --green: #16a34a;
   --green-soft: #dcfce7;
-  --hover: rgba(6, 38, 111, 0.06);
+  --hover: rgba(23, 23, 23, 0.055);
   --shadow-sm: 0 1px 2px rgba(23, 23, 23, 0.06);
   --shadow-md: 0 12px 28px rgba(23, 23, 23, 0.1);
   --shadow-lg: 0 18px 46px rgba(23, 23, 23, 0.12);
-  --ring: 0 0 0 3px rgba(6, 38, 111, 0.2);
+  --ring: 0 0 0 3px rgba(23, 23, 23, 0.12);
   --rounded-sm: 4px;
   --rounded-md: 6px;
   --rounded-lg: 8px;
@@ -71,11 +72,21 @@
   --color-text-primary: var(--ink);
   --color-text-secondary: var(--muted-strong);
   --color-text-tertiary: var(--muted);
-  --color-accent: var(--brand);
+  --color-accent: var(--ink);
   --color-error: var(--ruby);
   --color-error-bg: var(--ruby-soft);
   --color-error-border: #fecaca;
   --color-success: var(--green);
+
+  /* ---- Subtle border (replaces hardcoded rgba(224,223,220,0.92) in components) ---- */
+  --border-subtle: rgba(224, 223, 220, 0.92);
+
+  /* ---- Animation tokens ---- */
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --anim-lift-sm: translateY(-1px);
+  --anim-lift-md: translateY(-3px);
+  --anim-press: scale(0.98);
+  --anim-fade-in: 200ms var(--ease-out) both;
 }
 
 html,
@@ -96,6 +107,18 @@ body,
 
 body {
   overflow: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(23, 23, 23, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23, 23, 23, 0.03) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(circle at 50% 36%, #000 0%, transparent 68%);
 }
 
 button,

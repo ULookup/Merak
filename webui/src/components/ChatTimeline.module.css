@@ -26,7 +26,7 @@
   max-width: 100%;
   text-align: left;
   color: var(--muted);
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(250, 250, 250, 0.86)), var(--surface);
   border-radius: 7px;

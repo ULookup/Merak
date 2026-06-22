@@ -81,7 +81,7 @@
 .foreshadowItem {
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--brand-wash), #fff);
+  background: linear-gradient(135deg, var(--surface-muted), #fff);
   padding: 10px 12px;
   font-size: 12px;
   line-height: 1.45;

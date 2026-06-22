@@ -51,8 +51,9 @@ nlohmann::json AnthropicProvider::build_request_body(const ChatRequest& request)
         nlohmann::json item;
         item["role"] = m.role;
 
-        // assistant 消息可能包含 tool_use content blocks
-        if (m.role == "assistant" && !m.tool_calls.empty()) {
+        // assistant 消息可能包含 thinking / tool_use content blocks
+        if (m.role == "assistant" &&
+            (!m.tool_calls.empty() || !m.provider_content_blocks_json.empty())) {
             nlohmann::json content_arr = nlohmann::json::array();
             if (!m.provider_content_blocks_json.empty()) {
                 auto preserved_blocks = nlohmann::json::parse(
@@ -134,6 +135,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
 
         // SSE 累积状态
         std::string response_text;
+        std::string error_body; // raw response captured for error diagnostics
         int input_tokens = 0, output_tokens = 0;
         int cache_read_tokens = 0, cache_write_tokens = 0;
         bool has_usage = false;
@@ -237,6 +239,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
         };
 
         auto write_callback = [&](const std::string& data) {
+            error_body += data;
             line_buffer += data;
             size_t newline = 0;
             while ((newline = line_buffer.find('\n')) != std::string::npos) {
@@ -267,6 +270,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
 
         for (int attempt = 0; attempt <= retry.max_retries; attempt++) {
             response_text.clear();
+            error_body.clear();
             input_tokens = 0;
             output_tokens = 0;
             has_usage = false;
@@ -341,8 +345,9 @@ std::future<AgentResponse> AnthropicProvider::chat(
 
             // Not retryable: other 4xx
             if (http_code >= 400 && http_code < 500 && http_code != 429) {
+                spdlog::error("Anthropic API error body: {}", error_body);
                 throw AgentError(ErrorType::LLM_ERROR,
-                    "LLM API error (HTTP " + std::to_string(http_code) + ")");
+                    "LLM API error (HTTP " + std::to_string(http_code) + "): " + error_body);
             }
 
             // Exhausted retries
@@ -351,7 +356,7 @@ std::future<AgentResponse> AnthropicProvider::chat(
                     throw AgentError(ErrorType::LLM_ERROR, curl_easy_strerror(res));
                 }
                 throw AgentError(ErrorType::LLM_ERROR,
-                    "LLM API error after retries (HTTP " + std::to_string(http_code) + ")");
+                    "LLM API error after retries (HTTP " + std::to_string(http_code) + "): " + error_body);
             }
 
             // Backoff and retry

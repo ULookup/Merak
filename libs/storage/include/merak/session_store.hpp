@@ -119,7 +119,7 @@ public:
 private:
     std::shared_ptr<pqxx::connection> conn_;
     std::filesystem::path root_;
-    mutable std::mutex mutex_;
+    mutable std::recursive_mutex mutex_;
     mutable std::mutex plan_mutex_;
     std::string plan_text_;
     void exec(const std::string& sql);
