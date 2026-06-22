@@ -59,6 +59,7 @@ int main() {
         sources.conversation_messages = history;
         auto payload = pipeline.planned_assemble("system", "claude-sonnet-4-6",
                                                   500, history, sources);
+        assert(pipeline.stats().hard_trims > 0);
         assert(all_tool_messages_paired(payload.messages));
         assert(!payload.messages.empty());
         assert(payload.messages.front().role == "user");
@@ -78,7 +79,9 @@ int main() {
         sources.conversation_messages = history;
         auto payload = pipeline.planned_assemble("system", "claude-sonnet-4-6",
                                                   10, history, sources);
+        assert(pipeline.stats().hard_trims > 0);
         assert(!payload.messages.empty());
+        assert(payload.messages.front().role == "user");
         std::cout << "Test 2 passed: hard trim preserves at least one round\n";
     }
 
@@ -98,6 +101,7 @@ int main() {
         sources.conversation_messages = history;
         auto payload = pipeline.planned_assemble("system", "claude-sonnet-4-6",
                                                   500, history, sources);
+        assert(pipeline.stats().hard_trims > 0);
         std::vector<std::string> produced_ids;
         const auto& msgs = payload.anthropic_json["messages"];
         bool ok = true;

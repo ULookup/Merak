@@ -94,11 +94,9 @@ SerializedPayload ContextPipeline::planned_assemble(
           if (rs.size() <= 1) break;  // preserve at least one round
 
           size_t del_end = rs[1];
-          int chars = 0;
           for (size_t i = rs[0]; i < del_end; i++) {
-              chars += static_cast<int>(msgs[i].content.size());
+              opt_stats.tokens_after -= static_cast<int>(msgs[i].content.size() / 3.5);
           }
-          opt_stats.tokens_after -= chars / 3.5;
           msgs.erase(msgs.begin() + static_cast<long>(rs[0]),
                      msgs.begin() + static_cast<long>(del_end));
           removed += static_cast<int>(del_end - rs[0]);
