@@ -86,7 +86,7 @@
   --anim-lift-sm: translateY(-1px);
   --anim-lift-md: translateY(-3px);
   --anim-press: scale(0.98);
-  --anim-fade-in: 200ms var(--ease) both;
+  --anim-fade-in: 200ms var(--ease-out) both;
 }
 
 html,
