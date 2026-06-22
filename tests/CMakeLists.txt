@@ -21,6 +21,13 @@ add_executable(merak-context-test
 target_link_libraries(merak-context-test PRIVATE merak-context)
 add_test(NAME merak-context-test COMMAND merak-context-test)
 
+# Context serializer orphan safety net tests
+add_executable(merak-context-serializer-test
+    ${CMAKE_SOURCE_DIR}/libs/context/tests/test_serializer_orphans.cpp
+)
+target_link_libraries(merak-context-serializer-test PRIVATE merak-context)
+add_test(NAME merak-context-serializer-test COMMAND merak-context-serializer-test)
+
 add_executable(merak-storage-test
     ${CMAKE_SOURCE_DIR}/libs/storage/tests/test_storage.cpp
 )
