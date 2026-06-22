@@ -11,6 +11,7 @@ namespace merak {
 struct SerializedPayload {
   nlohmann::json openai_json;
   nlohmann::json anthropic_json;
+  std::string system_text;
   std::vector<Message> messages;
   std::vector<ToolSpec> tool_schemas;
   bool is_anthropic = false;
