@@ -26,7 +26,7 @@
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 250, 250, 0.92)), var(--surface);
   align-self: flex-start;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   color: var(--ink);
   border-bottom-left-radius: 4px;
   position: relative;
@@ -156,7 +156,7 @@
 }
 
 .inlineCode {
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 4px;
   background: var(--surface-muted);
   color: var(--ink);
@@ -169,7 +169,7 @@
 .codeBlock {
   margin: 10px 0;
   overflow: hidden;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 7px;
   background: #f7f7f5;
 }
@@ -306,7 +306,7 @@
   align-self: flex-start;
   background:
     linear-gradient(135deg, rgba(247, 247, 245, 0.82), rgba(255, 255, 255, 0.92)), var(--surface);
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 9px 11px;
   font-size: 12px;

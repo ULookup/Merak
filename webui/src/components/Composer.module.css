@@ -1,6 +1,6 @@
 .area {
   min-width: 0;
-  border-top: 1px solid rgba(224, 223, 220, 0.9);
+  border-top: 1px solid var(--border-subtle);
   padding: 11px 14px 13px;
   background:
     linear-gradient(180deg, rgba(250, 250, 250, 0.72), rgba(255, 255, 255, 0.92)), var(--surface);
@@ -20,7 +20,7 @@
   align-items: center;
   gap: 2px;
   padding: 2px;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   background: rgba(245, 242, 236, 0.8);
 }
@@ -75,7 +75,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.72);
   color: var(--muted-strong);
@@ -116,7 +116,7 @@
   grid-template-columns: minmax(0, 1.6fr) 150px;
   gap: 8px;
   margin-bottom: 8px;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   border-radius: 6px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(247, 247, 245, 0.74)),
@@ -214,7 +214,7 @@
   display: flex;
   gap: 10px;
   align-items: flex-end;
-  border: 1px solid rgba(224, 223, 220, 0.92);
+  border: 1px solid var(--border-subtle);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 250, 250, 0.9)), var(--surface);
   border-radius: 7px;
