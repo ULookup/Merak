@@ -183,6 +183,12 @@ if (opt_stats.tokens_after > model_max_tokens) {
 
 每次循环重新扫描 O(n)，最坏 O(n²)。hard trim 是异常路径（正常 pipeline 不触发），可接受。
 
+### 隐含修复：`serialize()` 调用位置
+
+原代码中 `serializer_.serialize()` 在 hard trim **之前**调用（line 72），hard trim 在 **之后**修改 `bound.provider_messages`（lines 84-101）。由于 `payload` 已经构建，hard trim 对实际发往 API 的 payload 是 **no-op** —— 只更新 `stats_.hard_trims` 和 `opt_stats.tokens_after`，不影响序列化输出。
+
+Layer 2 修复将 `serialize()` 移到 hard trim **之后**，使 hard trim 真正影响 payload。这是修复 latent bug 的必要改动，但意味着 hard trim 首次在生产中实际生效。Layer 3 安全网作为兜底，即使 round-aware 逻辑有边界情况 bug，也会在序列化前丢弃孤儿。
+
 ### 保留行为
 
 - 跳过 system 消息：`round_starts` 不计入 system（role != "user"）。第一轮 user 前的 system 消息不会被删。

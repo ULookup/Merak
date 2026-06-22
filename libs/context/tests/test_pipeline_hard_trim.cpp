@@ -126,6 +126,35 @@ int main() {
         std::cout << "Test 3 passed: end-to-end no orphan tool_result (ISSUE #171 repro)\n";
     }
 
+    // Test 4: Hard trim does not delete system messages
+    {
+        ContextPipeline pipeline;
+        std::vector<Message> history;
+        // Leading system message
+        Message sys; sys.role = "system"; sys.content = "system prompt";
+        history.push_back(sys);
+        // 3 rounds with large content to force hard trim.
+        // Uses <4 rounds so drop_rounds (min_rounds_to_keep=4 default) is a
+        // no-op (drop_count <= 0 returns immediately). This isolates the spec
+        // behavior under test: hard trim erases from rs[0] (first user index)
+        // to rs[1], so a leading system message at index 0 is never touched.
+        for (int r = 0; r < 3; r++) {
+            std::string rid = "r" + std::to_string(r);
+            history.push_back(make_user(std::string(2000, 'u') + rid));
+            history.push_back(make_assistant_text(std::string(2000, 'a')));
+        }
+        BindSources sources;
+        sources.conversation_messages = history;
+        auto payload = pipeline.planned_assemble("system", "claude-sonnet-4-6",
+                                                  500, history, sources);
+        assert(pipeline.stats().hard_trims > 0);
+        // System message must survive — check payload.messages
+        assert(!payload.messages.empty());
+        assert(payload.messages.front().role == "system");
+        assert(payload.messages.front().content == "system prompt");
+        std::cout << "Test 4 passed: hard trim does not delete system messages\n";
+    }
+
     std::cout << "All ContextPipeline hard trim tests passed.\n";
     return 0;
 }

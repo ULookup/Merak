@@ -14,56 +14,62 @@ namespace {
 // - Pass 2: drop tool_calls from the last assistant message if none of its
 //   ids have a matching tool_result afterwards (orphan tool_use at tail).
 std::vector<Message> sanitize_orphans(std::vector<Message> msgs) {
-    std::set<std::string> produced_ids;
-    for (const auto& m : msgs) {
-        if (m.role == "assistant") {
-            for (const auto& tc : m.tool_calls) produced_ids.insert(tc.id);
-        }
-    }
-
-    std::set<std::string> referenced_ids;
-    for (const auto& m : msgs) {
-        if (m.role == "tool" && m.tool_call_id) {
-            referenced_ids.insert(*m.tool_call_id);
-        }
-    }
-
-    // Pass 1: leading orphan tool messages
-    size_t i = 0;
-    while (i < msgs.size() && msgs[i].role == "tool") {
-        const auto& id = msgs[i].tool_call_id;
-        if (!id.has_value() || produced_ids.count(*id) == 0) {
-            spdlog::warn("ContextSerializer: dropping orphan tool_result "
-                         "(tool_use_id={}) at head",
-                         id.value_or("<none>"));
-            msgs.erase(msgs.begin() + static_cast<long>(i));
-        } else {
-            break;
-        }
-    }
-
-    // Pass 2: last assistant's orphan tool_use
-    int last_assistant = -1;
-    for (int k = static_cast<int>(msgs.size()) - 1; k >= 0; k--) {
-        if (msgs[k].role == "assistant") { last_assistant = k; break; }
-    }
-    if (last_assistant >= 0) {
-        auto& last_a = msgs[last_assistant];
-        bool all_orphan = !last_a.tool_calls.empty();
-        for (const auto& tc : last_a.tool_calls) {
-            if (referenced_ids.count(tc.id) > 0) { all_orphan = false; break; }
-        }
-        if (all_orphan) {
-            spdlog::warn("ContextSerializer: dropping {} orphan tool_use at tail",
-                         last_a.tool_calls.size());
-            last_a.tool_calls.clear();
-            if (last_a.content.empty()) {
-                msgs.erase(msgs.begin() + static_cast<long>(last_assistant));
+    try {
+        std::set<std::string> produced_ids;
+        for (const auto& m : msgs) {
+            if (m.role == "assistant") {
+                for (const auto& tc : m.tool_calls) produced_ids.insert(tc.id);
             }
         }
-    }
 
-    return msgs;
+        std::set<std::string> referenced_ids;
+        for (const auto& m : msgs) {
+            if (m.role == "tool" && m.tool_call_id) {
+                referenced_ids.insert(*m.tool_call_id);
+            }
+        }
+
+        // Pass 1: leading orphan tool messages
+        size_t i = 0;
+        while (i < msgs.size() && msgs[i].role == "tool") {
+            const auto& id = msgs[i].tool_call_id;
+            if (!id.has_value() || produced_ids.count(*id) == 0) {
+                spdlog::warn("ContextSerializer: dropping orphan tool_result "
+                             "(tool_use_id={}) at head",
+                             id.value_or("<none>"));
+                msgs.erase(msgs.begin() + static_cast<long>(i));
+            } else {
+                break;
+            }
+        }
+
+        // Pass 2: last assistant's orphan tool_use
+        int last_assistant = -1;
+        for (int k = static_cast<int>(msgs.size()) - 1; k >= 0; k--) {
+            if (msgs[k].role == "assistant") { last_assistant = k; break; }
+        }
+        if (last_assistant >= 0) {
+            auto& last_a = msgs[last_assistant];
+            bool all_orphan = !last_a.tool_calls.empty();
+            for (const auto& tc : last_a.tool_calls) {
+                if (referenced_ids.count(tc.id) > 0) { all_orphan = false; break; }
+            }
+            if (all_orphan) {
+                spdlog::warn("ContextSerializer: dropping {} orphan tool_use at tail",
+                             last_a.tool_calls.size());
+                last_a.tool_calls.clear();
+                if (last_a.content.empty()) {
+                    msgs.erase(msgs.begin() + static_cast<long>(last_assistant));
+                }
+            }
+        }
+
+        return msgs;
+    } catch (const std::exception& e) {
+        spdlog::error("ContextSerializer: sanitize_orphans failed, returning "
+                      "messages unchanged: {}", e.what());
+        return msgs;
+    }
 }
 
 } // anonymous namespace
