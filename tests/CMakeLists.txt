@@ -21,6 +21,13 @@ add_executable(merak-context-test
 target_link_libraries(merak-context-test PRIVATE merak-context)
 add_test(NAME merak-context-test COMMAND merak-context-test)
 
+# Context serializer orphan safety net tests
+add_executable(merak-context-serializer-test
+    ${CMAKE_SOURCE_DIR}/libs/context/tests/test_serializer_orphans.cpp
+)
+target_link_libraries(merak-context-serializer-test PRIVATE merak-context)
+add_test(NAME merak-context-serializer-test COMMAND merak-context-serializer-test)
+
 add_executable(merak-storage-test
     ${CMAKE_SOURCE_DIR}/libs/storage/tests/test_storage.cpp
 )
@@ -103,3 +110,17 @@ add_executable(merak-sub-agent-runner-test
 )
 target_link_libraries(merak-sub-agent-runner-test PRIVATE merak-loop)
 add_test(NAME merak-sub-agent-runner-test COMMAND merak-sub-agent-runner-test)
+
+# MemoryStore recent_history tests (no DB)
+add_executable(merak-memory-history-test
+    ${CMAKE_SOURCE_DIR}/libs/memory/tests/test_memory_history.cpp
+)
+target_link_libraries(merak-memory-history-test PRIVATE merak-memory)
+add_test(NAME merak-memory-history-test COMMAND merak-memory-history-test)
+
+# ContextPipeline hard trim tests
+add_executable(merak-context-pipeline-test
+    ${CMAKE_SOURCE_DIR}/libs/context/tests/test_pipeline_hard_trim.cpp
+)
+target_link_libraries(merak-context-pipeline-test PRIVATE merak-context)
+add_test(NAME merak-context-pipeline-test COMMAND merak-context-pipeline-test)

@@ -27,15 +27,84 @@ void MemoryStore::append_message(const Message& msg) {
 
 std::vector<Message> MemoryStore::recent_history(int max_turns) const {
     std::lock_guard lock(working_memory_mutex_);
-    int msg_count = max_turns * 2;
-    int total = (int)working_memory_.size();
-    int start = std::max(0, total - msg_count);
+    int total = static_cast<int>(working_memory_.size());
+    if (total == 0 || max_turns <= 0) return {};
+
+    // 1. Collect user message indices (round boundaries)
+    std::vector<int> user_indices;
+    for (int i = 0; i < total; i++) {
+        if (working_memory_[i].role == "user") user_indices.push_back(i);
+    }
+
+    int start = 0;
+    if (!user_indices.empty()) {
+        int keep_rounds = std::min(max_turns, static_cast<int>(user_indices.size()));
+        if (keep_rounds <= 0) return {};
+        start = user_indices[static_cast<int>(user_indices.size()) - keep_rounds];
+    } else {
+        // No user messages — fall back to last max_turns*2 messages
+        start = std::max(0, total - max_turns * 2);
+    }
+
+    start = adjust_for_orphan_tools(working_memory_, start, max_turns);
 
     std::vector<Message> result;
     for (int i = start; i < total; i++) {
         result.push_back(working_memory_[i]);
     }
     return result;
+}
+
+int MemoryStore::adjust_for_orphan_tools(const std::vector<Message>& msgs,
+                                          int start, int max_turns) {
+    if (start >= static_cast<int>(msgs.size())) return start;
+    if (msgs[start].role != "tool") return start;
+
+    // Collect leading orphan tool ids
+    std::vector<std::string> orphan_ids;
+    int probe = start;
+    while (probe < static_cast<int>(msgs.size()) && msgs[probe].role == "tool") {
+        if (msgs[probe].tool_call_id) {
+            orphan_ids.push_back(*msgs[probe].tool_call_id);
+        }
+        probe++;
+    }
+    if (orphan_ids.empty()) return start;
+
+    // Search backward for the most recent assistant with matching tool_calls
+    int parent_idx = -1;
+    for (int i = start - 1; i >= 0; i--) {
+        if (msgs[i].role != "assistant") continue;
+        bool covers_all = true;
+        for (const auto& oid : orphan_ids) {
+            bool found = false;
+            for (const auto& tc : msgs[i].tool_calls) {
+                if (tc.id == oid) { found = true; break; }
+            }
+            if (!found) { covers_all = false; break; }
+        }
+        if (covers_all) { parent_idx = i; break; }
+    }
+
+    const int max_distance = max_turns * 2 + 4;
+    if (parent_idx >= 0 && (start - parent_idx) <= max_distance) {
+        spdlog::debug("MemoryStore: expanded window from {} to {} to cover "
+                      "orphan tool_result ({} ids)",
+                      start, parent_idx, orphan_ids.size());
+        return parent_idx;
+    }
+
+    // Drop leading orphan tool messages
+    int new_start = start;
+    while (new_start < static_cast<int>(msgs.size()) &&
+           msgs[new_start].role == "tool") {
+        new_start++;
+    }
+    spdlog::warn("MemoryStore: dropped {} orphan tool messages at head "
+                 "(max_turns={}, parent_distance={})",
+                 new_start - start, max_turns,
+                 parent_idx >= 0 ? (start - parent_idx) : -1);
+    return new_start;
 }
 
 int MemoryStore::message_count() const {

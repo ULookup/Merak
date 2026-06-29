@@ -69,8 +69,6 @@ SerializedPayload ContextPipeline::planned_assemble(
   }
   prev_split_ = split;
 
-  auto payload = serializer_.serialize(bound, model, system_prompt);
-
   // Compute tokens_after from final state (post-drop/microcompact/spill)
   opt_stats.tokens_after = 0;
   for (auto& sec : bound.sections) {
@@ -81,24 +79,35 @@ SerializedPayload ContextPipeline::planned_assemble(
   }
   opt_stats.tokens_after += static_cast<int>(system_prompt.size() / 3.5);
 
-  // Hard trim: enforce model_max_tokens as hard ceiling
+  // Hard trim: enforce model_max_tokens as hard ceiling.
+  // Round-aware: deletes whole rounds (user-led) to preserve tool_use/tool_result
+  // pairing. Re-scans round_starts each iteration to avoid index drift.
+  // Runs BEFORE serialize() so the trimmed message list is what gets serialized.
   if (opt_stats.tokens_after > model_max_tokens) {
       auto& msgs = bound.provider_messages;
       int removed = 0;
-      while (opt_stats.tokens_after > model_max_tokens && msgs.size() > 2) {
-          // Skip system messages
-          size_t target = 1;
-          while (target < msgs.size() && msgs[target].role == "system") target++;
-          if (target >= msgs.size()) break;
+      while (opt_stats.tokens_after > model_max_tokens) {
+          std::vector<size_t> rs;
+          for (size_t i = 0; i < msgs.size(); i++) {
+              if (msgs[i].role == "user") rs.push_back(i);
+          }
+          if (rs.size() <= 1) break;  // preserve at least one round
 
-          opt_stats.tokens_after -= static_cast<int>(msgs[target].content.size() / 3.5);
-          msgs.erase(msgs.begin() + static_cast<long>(target));
-          removed++;
+          size_t del_end = rs[1];
+          for (size_t i = rs[0]; i < del_end; i++) {
+              opt_stats.tokens_after -= static_cast<int>(msgs[i].content.size() / 3.5);
+          }
+          msgs.erase(msgs.begin() + static_cast<long>(rs[0]),
+                     msgs.begin() + static_cast<long>(del_end));
+          removed += static_cast<int>(del_end - rs[0]);
       }
       stats_.hard_trims += removed;
-      spdlog::warn("ContextPipeline: hard trim removed {} messages to fit budget "
-                   "(tokens_after={}, max={})", removed, opt_stats.tokens_after, model_max_tokens);
+      spdlog::warn("ContextPipeline: hard trim removed {} messages (round-aware) "
+                   "(tokens_after={}, max={})",
+                   removed, opt_stats.tokens_after, model_max_tokens);
   }
+
+  auto payload = serializer_.serialize(bound, model, system_prompt);
 
   // Record feedback for next-turn planning
   ContextFeedback fb{};

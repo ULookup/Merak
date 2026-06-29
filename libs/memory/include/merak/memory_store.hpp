@@ -72,6 +72,13 @@ private:
 
     pqxx::connection open_conn() const;
     std::expected<void, AgentError> create_tables();
+
+    // Adjusts the start index forward if the window begins with orphan tool
+    // messages whose parent assistant is missing or too far away.
+    // - Expands window backward if parent assistant is within max_turns*2 + 4.
+    // - Otherwise drops the leading orphan tool messages.
+    static int adjust_for_orphan_tools(const std::vector<Message>& msgs,
+                                        int start, int max_turns);
 };
 
 } // namespace merak
